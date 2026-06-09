@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Resistor Circuit Quiz</title>
+  <title>Resistor Circuit Quiz 1</title>
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
   <link rel="icon" href="data:,">
   <style>
@@ -107,6 +107,61 @@
       .q-grid{grid-template-columns:auto 1fr;gap:.8rem;}
       .q-grid .options{grid-column:1/-1;}
     }
+
+    /* ── Zoom hint on circuit panel ── */
+    .circuit-panel{position:relative;cursor:zoom-in;}
+    .zoom-hint{
+      position:absolute;bottom:.6rem;right:.7rem;
+      font-family:'Orbitron',sans-serif;font-size:.55rem;letter-spacing:.12em;
+      color:var(--label);text-transform:uppercase;
+      display:flex;align-items:center;gap:.35rem;
+      pointer-events:none;opacity:.7;
+    }
+    .zoom-hint svg{width:13px;height:13px;fill:var(--label);}
+
+    /* ── Modal overlay ── */
+    .diagram-modal{
+      display:none;position:fixed;inset:0;z-index:1000;
+      background:rgba(5,8,16,.88);
+      backdrop-filter:blur(4px);
+      align-items:center;justify-content:center;
+      padding:1.2rem;
+    }
+    .diagram-modal.open{display:flex;}
+    .modal-inner{
+      position:relative;
+      background:rgba(0,0,0,.35);
+      border:1px solid var(--border);
+      border-radius:6px;
+      padding:.8rem;
+      max-width:min(92vw,1000px);
+      max-height:92vh;
+      width:100%;
+      display:flex;flex-direction:column;gap:.5rem;
+      box-shadow:0 0 60px rgba(0,229,255,.08);
+      cursor:zoom-out;
+    }
+    .modal-inner svg{
+      width:100%;height:auto;
+      max-height:calc(92vh - 5rem);
+      display:block;
+    }
+    .modal-header{
+      display:flex;align-items:center;justify-content:space-between;
+      padding-bottom:.4rem;border-bottom:1px solid var(--border);
+    }
+    .modal-title{
+      font-family:'Orbitron',sans-serif;font-size:.65rem;letter-spacing:.18em;
+      color:var(--label);text-transform:uppercase;
+    }
+    .modal-close{
+      font-family:'Share Tech Mono',monospace;font-size:.68rem;letter-spacing:.1em;
+      text-transform:uppercase;cursor:pointer;
+      background:rgba(255,61,154,.08);border:1px solid rgba(255,61,154,.35);
+      color:var(--accent4);border-radius:3px;padding:.3rem .7rem;
+      transition:background .15s;
+    }
+    .modal-close:hover{background:rgba(255,61,154,.18);}
   </style>
 </head>
 <body>
@@ -119,8 +174,17 @@
 
   <!-- LEFT COLUMN: circuit diagram (sticky on desktop) -->
   <div class="circuit-col">
-    <div class="circuit-panel">
+    <div class="circuit-panel" onclick="openModal()" title="Click to zoom">
       <div class="panel-label">Circuit Diagram — <span id="panelVoltLabel">10 V</span> Source</div>
+      <div class="zoom-hint">
+        <svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.8" fill="none"/>
+          <line x1="12.5" y1="12.5" x2="17" y2="17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <line x1="6" y1="8" x2="10" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="8" y1="6" x2="8" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        Zoom
+      </div>
       <svg id="circuitSvg" viewBox="0 0 960 880" xmlns="http://www.w3.org/2000/svg"
            font-family="'Share Tech Mono',monospace">
         <defs>
@@ -480,6 +544,21 @@
     </div><!-- end .q-row -->
    </div><!-- end .card -->
   </div><!-- end .questions-col -->
+
+  <!-- ── Diagram zoom modal (placed after the live SVG so duplicated
+       element IDs in the clone never shadow the originals) ── -->
+  <div class="diagram-modal" id="diagramModal" onclick="handleModalClick(event)">
+    <div class="modal-inner" id="modalInner">
+      <div class="modal-header">
+        <span class="modal-title">Circuit Diagram — <span id="modalVoltLabel">10 V</span> Source</span>
+        <button class="modal-close" onclick="closeModal()">✕ Close</button>
+      </div>
+      <svg id="modalSvg" viewBox="0 0 960 880" xmlns="http://www.w3.org/2000/svg"
+           font-family="'Share Tech Mono',monospace">
+        <!-- populated by JS openModal() -->
+      </svg>
+    </div>
+  </div>
 
 </div><!-- end .quiz-wrap -->
 
@@ -1362,6 +1441,29 @@ function showQ3(){
   document.getElementById('q3Check').disabled=true;
   renderOptions('q3Options',currentQ.q3Options,'q3');
 }
+
+// ══ Diagram zoom modal ══
+function openModal(){
+  const src=document.getElementById('circuitSvg');
+  const dst=document.getElementById('modalSvg');
+  dst.innerHTML=src.innerHTML;
+  dst.setAttribute('viewBox', src.getAttribute('viewBox'));
+  const pvl=document.getElementById('panelVoltLabel');
+  document.getElementById('modalVoltLabel').textContent=pvl?pvl.textContent:'';
+  document.getElementById('diagramModal').classList.add('open');
+  document.body.style.overflow='hidden';
+}
+function closeModal(){
+  document.getElementById('diagramModal').classList.remove('open');
+  // Clear the clone so duplicated SVG element IDs never shadow the live diagram
+  document.getElementById('modalSvg').innerHTML='';
+  document.body.style.overflow='';
+}
+function handleModalClick(e){
+  if(e.target.closest('.modal-close')) return;
+  closeModal();
+}
+document.addEventListener('keydown',e=>{if(e.key==='Escape') closeModal();});
 
 newQuestion();
 </script>
