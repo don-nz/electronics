@@ -1,0 +1,1457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Resistor Troubleshooter Quiz</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      --bg:#0a0d14;--panel:#0f1420;--border:#1e2d4a;
+      --accent:#00e5ff;--accent2:#ff6b35;--accent3:#00ff99;
+      --accent4:#ff3d9a;--accent5:#a78bfa;
+      --grid:rgba(0,229,255,0.06);--text:#c8d8e8;--label:#5a7a9a;
+    }
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{
+      background:var(--bg);color:var(--text);
+      font-family:'Share Tech Mono',monospace;
+      min-height:100vh;display:flex;flex-direction:column;
+      align-items:center;padding:2rem 1rem;
+      background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+      background-size:40px 40px;
+    }
+    header{text-align:center;margin-bottom:2rem;width:100%;}
+    header h1{font-family:'Orbitron',sans-serif;font-size:clamp(1.4rem,4vw,2.2rem);font-weight:900;letter-spacing:.12em;color:var(--accent);text-shadow:0 0 30px rgba(0,229,255,.5);text-transform:uppercase;}
+    header p{margin-top:.5rem;color:var(--label);font-size:.75rem;letter-spacing:.2em;text-transform:uppercase;}
+
+    .quiz-wrap{width:100%;max-width:1400px;display:flex;flex-direction:column;gap:1.5rem;}
+    @media(min-width:900px){
+      .quiz-wrap{display:grid;grid-template-columns:minmax(340px,54%) 1fr;gap:1.2rem;align-items:start;}
+      .circuit-col{position:sticky;top:1.5rem;}
+      .questions-col .card{padding:1rem 1.1rem;}
+      .questions-col .option-btn{padding:.4rem .65rem;font-size:.74rem;}
+      .questions-col .q-text{font-size:.82rem;}
+      .questions-col .result-banner{font-size:.72rem;padding:.5rem .8rem;}
+      .questions-col .btn{width:110px;font-size:.64rem;}
+      .questions-col .working-box{padding:.75rem .9rem;}
+      .questions-col .options{gap:.35rem;}
+    }
+
+    .card{background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:1.6rem;}
+    .circuit-panel{background:rgba(0,0,0,.25);border:1px solid var(--border);border-radius:4px;padding:.8rem;}
+    .circuit-panel svg{width:100%;height:auto;display:block;}
+    .panel-label{font-size:.58rem;letter-spacing:.18em;color:var(--label);text-transform:uppercase;text-align:center;margin-bottom:6px;}
+
+    .q-panel{display:flex;flex-direction:column;gap:1rem;}
+    .q-header{display:flex;align-items:flex-start;gap:1rem;}
+    .q-num{font-family:'Orbitron',sans-serif;font-size:1.1rem;font-weight:700;color:var(--accent);white-space:nowrap;padding-top:.15rem;}
+    .q-text{color:#d0e4f0;font-size:.9rem;font-weight:bold;line-height:1.5;}
+    .q-hint{font-size:.75rem;color:var(--label);font-weight:normal;margin-top:.3rem;}
+
+    .options{display:flex;flex-direction:column;gap:.6rem;}
+    .option-btn{width:100%;padding:.7rem 1rem;border-radius:3px;border:1px solid var(--border);background:rgba(255,255,255,.02);color:var(--text);font-family:'Share Tech Mono',monospace;font-size:.82rem;text-align:left;cursor:pointer;transition:border-color .15s,background .15s;display:flex;align-items:center;gap:.7rem;}
+    .option-btn:hover:not(:disabled){border-color:rgba(0,229,255,.4);background:rgba(0,229,255,.05);}
+    .option-btn.selected{border-color:rgba(0,229,255,.6);background:rgba(0,229,255,.08);color:var(--accent);}
+    .option-btn.correct{border-color:var(--accent3);background:rgba(0,255,153,.08);color:var(--accent3);}
+    .option-btn.wrong{border-color:var(--accent4);background:rgba(255,61,154,.08);color:var(--accent4);}
+    .option-btn.dimmed{opacity:.35;}
+    .option-letter{font-family:'Orbitron',sans-serif;font-size:.7rem;font-weight:700;min-width:22px;}
+    .result-icon{font-size:1.1rem;margin-left:auto;}
+
+    .result-banner{display:none;padding:.65rem 1rem;border-radius:3px;font-size:.78rem;font-family:'Orbitron',sans-serif;align-items:center;gap:.6rem;line-height:1.5;}
+    .result-banner.correct{display:flex;background:rgba(0,255,153,.08);border:1px solid rgba(0,255,153,.3);color:var(--accent3);}
+    .result-banner.wrong{display:flex;background:rgba(255,61,154,.08);border:1px solid rgba(255,61,154,.3);color:var(--accent4);}
+
+    .working-box{display:none;background:rgba(0,0,0,.2);border:1px solid var(--border);border-radius:4px;padding:1.1rem 1.3rem;}
+    .working-box.visible{display:block;}
+    .working-title{font-family:'Orbitron',sans-serif;font-size:.62rem;letter-spacing:.2em;color:var(--label);text-transform:uppercase;margin-bottom:.7rem;padding-bottom:.4rem;border-bottom:1px solid var(--border);}
+    .wline{font-size:.8rem;line-height:1.8;}
+    .wline.total{margin-top:.4rem;padding-top:.4rem;border-top:1px solid var(--border);}
+
+    .btn-row{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;}
+    .btn-row-inner{display:flex;gap:.6rem;flex-wrap:wrap;}
+    .btn{padding:.5rem 0;border-radius:3px;font-family:'Share Tech Mono',monospace;font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;transition:all .15s;border:1px solid;width:130px;text-align:center;}
+    .btn-check{background:rgba(0,255,153,.1);border-color:rgba(0,255,153,.4);color:#00ff99;}
+    .btn-check:hover:not(:disabled){background:rgba(0,255,153,.2);}
+    .btn-check:disabled{opacity:.35;cursor:default;}
+    .btn-next{background:rgba(0,229,255,.1);border-color:rgba(0,229,255,.4);color:var(--accent);display:none;}
+    .btn-next:hover{background:rgba(0,229,255,.2);}
+    .btn-prev{background:rgba(90,122,154,.1);border-color:rgba(90,122,154,.4);color:var(--label);}
+    .btn-prev:hover{background:rgba(90,122,154,.2);}
+    .btn-shuffle{background:rgba(255,107,53,.1);border-color:rgba(255,107,53,.4);color:var(--accent2);margin-left:auto;}
+    .btn-shuffle:hover{background:rgba(255,107,53,.2);}
+    .btn-summary{background:rgba(167,139,250,.1);border-color:rgba(167,139,250,.4);color:var(--accent5);}
+    .btn-summary:hover{background:rgba(167,139,250,.2);}
+
+    .progress-wrap{display:flex;gap:.4rem;align-items:center;margin-bottom:.8rem;}
+    .progress-dot{width:10px;height:10px;border-radius:50%;border:1.5px solid var(--border);background:transparent;transition:background .2s,border-color .2s;}
+    .progress-dot.done{background:var(--accent3);border-color:var(--accent3);}
+    .progress-dot.active{background:var(--accent);border-color:var(--accent);box-shadow:0 0 6px rgba(0,229,255,.6);}
+    .progress-label{font-size:.65rem;color:var(--label);margin-left:.4rem;letter-spacing:.1em;}
+
+    @keyframes pulse-ring{0%{opacity:.9;}50%{opacity:.35;}100%{opacity:.9;}}
+    .target-pulse{animation:pulse-ring 1.2s ease-in-out infinite;}
+
+    .summary-item{margin-bottom:1.2rem;padding-bottom:1.2rem;border-bottom:1px solid var(--border);}
+    .summary-item:last-child{border-bottom:none;}
+    .summary-q{font-family:'Orbitron',sans-serif;font-size:.75rem;color:var(--accent);margin-bottom:.3rem;}
+    .summary-question{font-size:.8rem;color:#d0e4f0;margin-bottom:.4rem;line-height:1.5;}
+    .summary-answer{font-size:.78rem;margin-bottom:.5rem;}
+
+    /* ── Zoom hint on circuit panel ── */
+    .circuit-panel{position:relative;cursor:zoom-in;}
+    .zoom-hint{
+      position:absolute;bottom:.6rem;right:.7rem;
+      font-family:'Orbitron',sans-serif;font-size:.55rem;letter-spacing:.12em;
+      color:var(--label);text-transform:uppercase;
+      display:flex;align-items:center;gap:.35rem;
+      pointer-events:none;opacity:.7;
+    }
+    .zoom-hint svg{width:13px;height:13px;fill:var(--label);}
+
+    /* ── Modal overlay ── */
+    .diagram-modal{
+      display:none;position:fixed;inset:0;z-index:1000;
+      background:rgba(5,8,16,.88);
+      backdrop-filter:blur(4px);
+      align-items:center;justify-content:center;
+      padding:1.2rem;
+    }
+    .diagram-modal.open{display:flex;}
+    .modal-inner{
+      position:relative;
+      background:rgba(0,0,0,.35);
+      border:1px solid var(--border);
+      border-radius:6px;
+      padding:.8rem;
+      max-width:min(92vw,900px);
+      max-height:92vh;
+      width:100%;
+      display:flex;flex-direction:column;gap:.5rem;
+      box-shadow:0 0 60px rgba(0,229,255,.08);
+      cursor:zoom-out;
+    }
+    .modal-inner svg{
+      width:100%;height:auto;
+      max-height:calc(92vh - 5rem);
+      display:block;
+    }
+    .modal-header{
+      display:flex;align-items:center;justify-content:space-between;
+      padding-bottom:.4rem;border-bottom:1px solid var(--border);
+    }
+    .modal-title{
+      font-family:'Orbitron',sans-serif;font-size:.65rem;letter-spacing:.18em;
+      color:var(--label);text-transform:uppercase;
+    }
+    .modal-close{
+      font-family:'Share Tech Mono',monospace;font-size:.68rem;letter-spacing:.1em;
+      text-transform:uppercase;cursor:pointer;
+      background:rgba(255,61,154,.08);border:1px solid rgba(255,61,154,.35);
+      color:var(--accent4);border-radius:3px;padding:.3rem .7rem;
+      transition:background .15s;
+    }
+    .modal-close:hover{background:rgba(255,61,154,.18);}
+  </style>
+</head>
+<body>
+<header>
+  <h1>Resistor Troubleshooter Quiz</h1>
+  <p>Read the virtual meters — identify the correct voltage</p>
+</header>
+
+<div class="quiz-wrap">
+
+  <!-- ════════════════════════════════════════════════
+       LEFT COLUMN: circuit diagram (sticky on desktop)
+
+       IEC convention: empty rectangle body, label above, value below.
+
+       Wire naming standard (clockwise from battery +):
+         Cyan   C1–C12  — main series rail
+         Purple P1–P8   — R4/R5/R6 parallel bank
+         Orange O1–O8   — R7/R8/R9 parallel bank
+       Meter probe naming:
+         M-Rx-L / M-Rx-R   left/right vertical drops
+         M-Rx-HL / M-Rx-HR  horizontal shelf segments to badge
+
+       ════════════════════════════════════════════════
+       SVG coordinate reference (box = resistor rect)
+       ────────────────────────────────────────────────
+       Top rail y=200
+         R1  box x100–190  y182–218  label-above y=170  value-below y=236  mid-x=145
+         R2  box x230–320  y182–218  label-above y=170  value-below y=236  mid-x=275
+         R3  box x360–450  y182–218  label-above y=170  value-below y=236  mid-x=405
+       Purple bank  left-rail x=520  right-rail x=720
+         R6  box x560–680  y42–78   label-above y=30   value-below y=96   mid-x=620
+         R5  box x560–680  y182–218 label-above y=170  value-below y=236  mid-x=620
+         R4  box x560–680  y322–358 label-above y=310  value-below y=376  mid-x=620
+       Bottom rail y=720
+         R10 box x180–340  y702–738 label-above y=690  value-below y=756  mid-x=260
+       Orange bank  left-rail x=520  right-rail x=720
+         R8  box x530–610  y572–608 label-above y=560  value-below y=626  mid-x=570
+         R9  box x630–710  y572–608 label-above y=560  value-below y=626  mid-x=670
+         R7  box x570–670  y818–854 label-above y=806  value-below y=872  mid-x=620
+
+       Meter layout — IEC value sits 18px below box bottom.
+       Probe verticals start at box bottom, clear the value text,
+       then reach the shelf. Shelf = value-below y + 24.
+         R1,R2,R3,R5  shelf y=260  badge top y=260
+         R6            shelf y=120  badge top y=120
+         R4            shelf y=400  badge top y=400
+         R10           shelf y=780  badge top y=780
+         R8,R9         shelf y=650  badge top y=650
+         R7            shelf y=896  badge top y=896
+       Badge: 58 wide × 28 tall, centred on mid-x.
+              badge-left = mid-x − 29
+       ════════════════════════════════════════════════ -->
+
+  <!-- ── Diagram zoom modal ── -->
+  <div class="diagram-modal" id="diagramModal" onclick="handleModalClick(event)">
+    <div class="modal-inner" id="modalInner">
+      <div class="modal-header">
+        <span class="modal-title">Circuit Diagram — <span id="modalVoltLabel">10 V</span> Source</span>
+        <button class="modal-close" onclick="closeModal()">✕ Close</button>
+      </div>
+      <svg id="modalSvg" viewBox="0 0 1010 1000" xmlns="http://www.w3.org/2000/svg"
+           font-family="'Share Tech Mono',monospace">
+        <!-- populated by JS cloneCircuit() -->
+      </svg>
+      <div class="modal-hint"></div>
+    </div>
+  </div>
+
+  <div class="circuit-col">
+    <div class="circuit-panel" onclick="openModal()" title="Click to zoom">
+      <div class="panel-label">Circuit Diagram — <span id="panelVoltLabel">10 V</span> Source</div>
+      <div class="zoom-hint">
+        <svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.8" fill="none"/>
+          <line x1="12.5" y1="12.5" x2="17" y2="17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <line x1="6" y1="8" x2="10" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="8" y1="6" x2="8" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        Zoom
+      </div>
+
+      <svg id="circuitSvg" viewBox="0 0 1010 1000" xmlns="http://www.w3.org/2000/svg"
+           font-family="'Share Tech Mono',monospace">
+        <defs>
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="2" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+
+        <!-- ══ translate(0,30): shifts entire circuit down 30px so R6 label is visible ══ -->
+        <g transform="translate(0,30)">
+        <line id="C1"  x1="50"  y1="424" x2="50"  y2="200" stroke="#00e5ff" stroke-width="2"/><!-- battery+ → top-left -->
+        <line id="C2"  x1="50"  y1="200" x2="100" y2="200" stroke="#00e5ff" stroke-width="2"/><!-- top-left → left of R1 -->
+        <line id="C3"  x1="190" y1="200" x2="230" y2="200" stroke="#00e5ff" stroke-width="2"/><!-- right R1 → left R2 -->
+        <line id="C4"  x1="320" y1="200" x2="360" y2="200" stroke="#00e5ff" stroke-width="2"/><!-- right R2 → left R3 -->
+        <line id="C5"  x1="450" y1="200" x2="500" y2="200" stroke="#00e5ff" stroke-width="2"/><!-- right R3 → purple left junction -->
+        <line id="C6"  x1="740" y1="200" x2="900" y2="200" stroke="#00e5ff" stroke-width="2"/><!-- purple right junction → top-right -->
+        <line id="C7"  x1="900" y1="200" x2="900" y2="720" stroke="#00e5ff" stroke-width="2"/><!-- right wall -->
+        <line id="C8"  x1="900" y1="720" x2="760" y2="720" stroke="#00e5ff" stroke-width="2"/><!-- bottom-right → orange right -->
+        <line id="C9"  x1="480" y1="720" x2="340" y2="720" stroke="#00e5ff" stroke-width="2"/><!-- orange left → right of R10 -->
+        <line id="C11" x1="180" y1="720" x2="50"  y2="720" stroke="#00e5ff" stroke-width="2"/><!-- left of R10 → bottom-left -->
+        <line id="C12" x1="50"  y1="720" x2="50"  y2="456" stroke="#00e5ff" stroke-width="2"/><!-- bottom-left → battery− -->
+
+        <!-- ══ R1 — IEC: empty box, label above, value below ══ -->
+        <rect id="box-r1" x="100" y="182" width="90" height="36" rx="3" fill="#0f1420" stroke="#00e5ff" stroke-width="2" filter="url(#glow)"/>
+        <text x="145" y="170" fill="#00e5ff" text-anchor="middle" font-size="16" font-weight="bold">R1</text>
+        <text id="lblR1" x="145" y="236" fill="#00e5ff" text-anchor="middle" font-size="15">—</text>
+
+        <!-- ══ R2 ══ -->
+        <rect id="box-r2" x="230" y="182" width="90" height="36" rx="3" fill="#0f1420" stroke="#00e5ff" stroke-width="2" filter="url(#glow)"/>
+        <text x="275" y="170" fill="#00e5ff" text-anchor="middle" font-size="16" font-weight="bold">R2</text>
+        <text id="lblR2" x="275" y="236" fill="#00e5ff" text-anchor="middle" font-size="15">—</text>
+
+        <!-- ══ R3 ══ -->
+        <rect id="box-r3" x="360" y="182" width="90" height="36" rx="3" fill="#0f1420" stroke="#00e5ff" stroke-width="2" filter="url(#glow)"/>
+        <text x="405" y="170" fill="#00e5ff" text-anchor="middle" font-size="16" font-weight="bold">R3</text>
+        <text id="lblR3" x="405" y="236" fill="#00e5ff" text-anchor="middle" font-size="15">—</text>
+
+        <!-- ══ PURPLE BANK — P wires ══ -->
+        <line id="P7" x1="500" y1="10"  x2="500" y2="390" stroke="#a78bfa" stroke-width="2"/><!-- left rail -->
+        <line id="P8" x1="740" y1="10"  x2="740" y2="390" stroke="#a78bfa" stroke-width="2"/><!-- right rail -->
+        <line id="P1" x1="500" y1="10"  x2="560" y2="10"  stroke="#a78bfa" stroke-width="2"/><!-- left jn → left R6 -->
+        <line id="P2" x1="680" y1="10"  x2="740" y2="10"  stroke="#a78bfa" stroke-width="2"/><!-- right R6 → right jn -->
+        <line id="P3" x1="500" y1="200" x2="560" y2="200" stroke="#a78bfa" stroke-width="2"/><!-- left jn → left R5 -->
+        <line id="P4" x1="680" y1="200" x2="740" y2="200" stroke="#a78bfa" stroke-width="2"/><!-- right R5 → right jn -->
+        <line id="P5" x1="500" y1="390" x2="560" y2="390" stroke="#a78bfa" stroke-width="2"/><!-- left jn → left R4 -->
+        <line id="P6" x1="680" y1="390" x2="740" y2="390" stroke="#a78bfa" stroke-width="2"/><!-- right R4 → right jn -->
+
+        <!-- ══ R6 (shifted up 20px more: box y=−8–28, branch y=10) ══ -->
+        <rect id="box-r6" x="560" y="-8" width="120" height="36" rx="3" fill="#0f1420" stroke="#a78bfa" stroke-width="2" filter="url(#glow)"/>
+        <text x="620" y="-18" fill="#a78bfa" text-anchor="middle" font-size="16" font-weight="bold">R6</text>
+        <text id="lblR6" x="620" y="46" fill="#a78bfa" text-anchor="middle" font-size="15">—</text>
+
+        <!-- ══ R5 ══ -->
+        <rect id="box-r5" x="560" y="182" width="120" height="36" rx="3" fill="#0f1420" stroke="#a78bfa" stroke-width="2" filter="url(#glow)"/>
+        <text x="620" y="170" fill="#a78bfa" text-anchor="middle" font-size="16" font-weight="bold">R5</text>
+        <text id="lblR5" x="620" y="236" fill="#a78bfa" text-anchor="middle" font-size="15">—</text>
+
+        <!-- ══ R4 (shifted down 20px more: box y=372–408, branch y=390) ══ -->
+        <rect id="box-r4" x="560" y="372" width="120" height="36" rx="3" fill="#0f1420" stroke="#a78bfa" stroke-width="2" filter="url(#glow)"/>
+        <text x="620" y="360" fill="#a78bfa" text-anchor="middle" font-size="16" font-weight="bold">R4</text>
+        <text id="lblR4" x="620" y="426" fill="#a78bfa" text-anchor="middle" font-size="15">—</text>
+
+        <!-- Purple junction dots -->
+        <circle cx="500" cy="200" r="7" fill="#a78bfa" filter="url(#glow)"/>
+        <circle cx="740" cy="200" r="7" fill="#a78bfa" filter="url(#glow)"/>
+
+        <!-- ══ BATTERY ══ -->
+        <line x1="26" y1="424" x2="74" y2="424" stroke="#ff3333" stroke-width="4"/>
+        <line x1="34" y1="456" x2="66" y2="456" stroke="#ff3333" stroke-width="2"/>
+        <text x="84" y="428" fill="#ff3333" font-size="16" font-weight="bold">+</text>
+        <text x="84" y="460" fill="#ff3333" font-size="16" font-weight="bold">−</text>
+
+        <!-- ══ BATTERY VOLTAGE CIRCLE — r=42, centred left of battery ══ -->
+        <!-- Probe from + terminal (y=424) down to circle top edge (y=398) -->
+        <!-- Probe from − terminal (y=456) up to circle bottom edge (y=482) -->
+        <!-- Circle centred at x=50, y=440 — sits on the left wall wire -->
+        <line x1="50" y1="424" x2="50" y2="398" stroke="#ff3333" stroke-width="1.5" stroke-dasharray="4,3" opacity=".85"/>
+        <line x1="50" y1="456" x2="50" y2="482" stroke="#ff3333" stroke-width="1.5" stroke-dasharray="4,3" opacity=".85"/>
+        <circle cx="50" cy="440" r="42" fill="#200808" stroke="#ff3333" stroke-width="2" filter="url(#glow)"/>
+        <text id="BattVoltLabel" x="50" y="445" fill="#ff4444" text-anchor="middle" font-size="18" font-weight="bold">10V</text>
+        <!-- + and − on the right side of the circle -->
+        <text x="102" y="420" fill="#ff3333" font-size="42" font-weight="bold" text-anchor="middle">+</text>
+        <text x="102" y="484" fill="#ff3333" font-size="42" font-weight="bold" text-anchor="middle">−</text>
+
+        <!-- ══ R10 — bottom rail ══ -->
+        <rect id="box-r10" x="180" y="702" width="160" height="36" rx="3" fill="#0f1420" stroke="#00e5ff" stroke-width="2" filter="url(#glow)"/>
+        <text x="260" y="690" fill="#00e5ff" text-anchor="middle" font-size="16" font-weight="bold">R10</text>
+        <text id="lblR10" x="260" y="756" fill="#00e5ff" text-anchor="middle" font-size="15">—</text>
+
+        <!-- ══ ORANGE BANK — O wires ══ -->
+        <line id="O1"  x1="480" y1="590" x2="520" y2="590" stroke="#ff6b35" stroke-width="2"/><!-- top left segment -->
+        <line id="O2"  x1="600" y1="590" x2="640" y2="590" stroke="#ff6b35" stroke-width="2"/><!-- top middle segment -->
+        <line id="O3"  x1="720" y1="590" x2="760" y2="590" stroke="#ff6b35" stroke-width="2"/><!-- top right segment -->
+        <line id="O5a" x1="480" y1="850" x2="760" y2="850" stroke="#ff6b35" stroke-width="2"/><!-- bottom rail -->
+        <line id="O7"  x1="480" y1="590" x2="480" y2="850" stroke="#ff6b35" stroke-width="2"/><!-- left rail -->
+        <line id="O8"  x1="760" y1="590" x2="760" y2="850" stroke="#ff6b35" stroke-width="2"/><!-- right rail -->
+
+        <!-- ══ R8 (box: x520–600, mid=560) ══ -->
+        <rect id="box-r8" x="520" y="572" width="80" height="36" rx="3" fill="#0f1420" stroke="#ff6b35" stroke-width="2" filter="url(#glow)"/>
+        <text x="560" y="560" fill="#ff6b35" text-anchor="middle" font-size="16" font-weight="bold">R8</text>
+        <text id="lblR8" x="560" y="626" fill="#ff6b35" text-anchor="middle" font-size="15">—</text>
+
+        <!-- ══ R9 (box: x640–720, mid=680) ══ -->
+        <rect id="box-r9" x="640" y="572" width="80" height="36" rx="3" fill="#0f1420" stroke="#ff6b35" stroke-width="2" filter="url(#glow)"/>
+        <text x="680" y="560" fill="#ff6b35" text-anchor="middle" font-size="16" font-weight="bold">R9</text>
+        <text id="lblR9" x="680" y="626" fill="#ff6b35" text-anchor="middle" font-size="15">—</text>
+
+        <!-- ══ R7 (box: x570–670, mid=620 — unchanged) ══ -->
+        <rect id="box-r7" x="570" y="818" width="100" height="36" rx="3" fill="#0f1420" stroke="#ff6b35" stroke-width="2" filter="url(#glow)"/>
+        <text x="620" y="806" fill="#ff6b35" text-anchor="middle" font-size="16" font-weight="bold">R7</text>
+        <text id="lblR7" x="620" y="872" fill="#ff6b35" text-anchor="middle" font-size="15">—</text>
+
+        <!-- Orange junction dots -->
+        <circle cx="480" cy="720" r="7" fill="#ff6b35" filter="url(#glow)"/>
+        <circle cx="760" cy="720" r="7" fill="#ff6b35" filter="url(#glow)"/>
+
+        <!-- ════════════════════════════════════════════════
+             METER BADGES — below each resistor (IEC style)
+             Probes drop from box bottom, clear value text,
+             reach shelf, then horizontal segments meet badge.
+
+             R1  box-bot=218  value y=236  shelf=260  mid-x=145  badge-left=116
+             R2  box-bot=218  value y=236  shelf=260  mid-x=275  badge-left=246
+             R3  box-bot=218  value y=236  shelf=260  mid-x=405  badge-left=376
+             R5  box-bot=218  value y=236  shelf=260  mid-x=620  badge-left=591
+             R6  box-bot=78   value y=96   shelf=120  mid-x=620  badge-left=591
+             R4  box-bot=358  value y=376  shelf=400  mid-x=620  badge-left=591
+             R10 box-bot=738  value y=756  shelf=780  mid-x=260  badge-left=231
+             R8  box-bot=608  value y=626  shelf=650  mid-x=560  badge-left=531
+             R9  box-bot=608  value y=626  shelf=650  mid-x=680  badge-left=651
+             R7  box-bot=854  value y=872  shelf=896  mid-x=620  badge-left=591
+             Badge size: 58 × 28
+             Probe left-x = box left+5, probe right-x = box right−5
+        ════════════════════════════════════════════════ -->
+
+        <!-- ════════════════════════════════════════════════
+             METER BADGES — circles r=32, font-size=15
+             Vertical probes:   box_bot → cy  (meet at circle centre y)
+             Horizontal probes: probe_x → mid±32  (meet at circle edge)
+             Both sets of probes converge at the same y=cy
+
+             R1  mid=145  cy=276  vert x=105,185  horiz→113,177
+             R2  mid=275  cy=276  vert x=235,315  horiz→243,307
+             R3  mid=405  cy=276  vert x=365,445  horiz→373,437
+             R6  mid=620  cy=136  vert x=565,675  horiz→588,652
+             R5  mid=620  cy=276  vert x=565,675  horiz→588,652
+             R4  mid=620  cy=416  vert x=565,675  horiz→588,652
+             R10 mid=260  cy=796  vert x=185,335  horiz→228,292
+             R8  mid=560  cy=666  vert x=525,595  horiz→528,592
+             R9  mid=680  cy=666  vert x=645,715  horiz→648,712
+             R7  mid=620  cy=912  vert x=575,665  horiz→588,652
+        ════════════════════════════════════════════════ -->
+
+        <!-- ── R1 meter  mid=145  cy=276 ── -->
+        <g id="meter-r1">
+          <line id="M-R1-L"  x1="105" y1="218" x2="105" y2="276" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <line id="M-R1-R"  x1="185" y1="218" x2="185" y2="276" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <line id="M-R1-HL" x1="105" y1="276" x2="113" y2="276" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <line id="M-R1-HR" x1="185" y1="276" x2="177" y2="276" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <circle cx="145" cy="276" r="32" fill="#1a0505" stroke="#ff4444" stroke-width="1.5" filter="url(#glow)"/>
+          <text id="meterR1" x="145" y="281" fill="#ff6666" text-anchor="middle" font-size="15" font-weight="bold">—</text>
+        </g>
+
+        <!-- ── R2 meter  mid=275  cy=276 ── -->
+        <g id="meter-r2">
+          <line id="M-R2-L"  x1="235" y1="218" x2="235" y2="276" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <line id="M-R2-R"  x1="315" y1="218" x2="315" y2="276" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <line id="M-R2-HL" x1="235" y1="276" x2="243" y2="276" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <line id="M-R2-HR" x1="315" y1="276" x2="307" y2="276" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <circle cx="275" cy="276" r="32" fill="#1a0505" stroke="#ff4444" stroke-width="1.5" filter="url(#glow)"/>
+          <text id="meterR2" x="275" y="281" fill="#ff6666" text-anchor="middle" font-size="15" font-weight="bold">—</text>
+        </g>
+
+        <!-- ── R3 meter  mid=405  cy=276 ── -->
+        <g id="meter-r3">
+          <line id="M-R3-L"  x1="365" y1="218" x2="365" y2="276" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <line id="M-R3-R"  x1="445" y1="218" x2="445" y2="276" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <line id="M-R3-HL" x1="365" y1="276" x2="373" y2="276" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <line id="M-R3-HR" x1="445" y1="276" x2="437" y2="276" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <circle cx="405" cy="276" r="32" fill="#1a0505" stroke="#ff4444" stroke-width="1.5" filter="url(#glow)"/>
+          <text id="meterR3" x="405" y="281" fill="#ff6666" text-anchor="middle" font-size="15" font-weight="bold">—</text>
+        </g>
+
+        <!-- ── R6 meter  mid=620  cy=86 ── -->
+        <g id="meter-r6">
+          <line id="M-R6-L"  x1="565" y1="28"  x2="565" y2="86" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <line id="M-R6-R"  x1="675" y1="28"  x2="675" y2="86" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <line id="M-R6-HL" x1="565" y1="86" x2="588" y2="86" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <line id="M-R6-HR" x1="675" y1="86" x2="652" y2="86" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <circle cx="620" cy="86" r="32" fill="#1a0505" stroke="#ff4444" stroke-width="1.5" filter="url(#glow)"/>
+          <text id="meterR6" x="620" y="91" fill="#ff6666" text-anchor="middle" font-size="15" font-weight="bold">—</text>
+        </g>
+
+        <!-- ── R5 meter  mid=620  cy=276 ── -->
+        <g id="meter-r5">
+          <line id="M-R5-L"  x1="565" y1="218" x2="565" y2="276" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <line id="M-R5-R"  x1="675" y1="218" x2="675" y2="276" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <line id="M-R5-HL" x1="565" y1="276" x2="588" y2="276" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <line id="M-R5-HR" x1="675" y1="276" x2="652" y2="276" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <circle cx="620" cy="276" r="32" fill="#1a0505" stroke="#ff4444" stroke-width="1.5" filter="url(#glow)"/>
+          <text id="meterR5" x="620" y="281" fill="#ff6666" text-anchor="middle" font-size="15" font-weight="bold">—</text>
+        </g>
+
+        <!-- ── R4 meter  mid=620  cy=466 ── -->
+        <g id="meter-r4">
+          <line id="M-R4-L"  x1="565" y1="408" x2="565" y2="466" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <line id="M-R4-R"  x1="675" y1="408" x2="675" y2="466" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <line id="M-R4-HL" x1="565" y1="466" x2="588" y2="466" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <line id="M-R4-HR" x1="675" y1="466" x2="652" y2="466" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <circle cx="620" cy="466" r="32" fill="#1a0505" stroke="#ff4444" stroke-width="1.5" filter="url(#glow)"/>
+          <text id="meterR4" x="620" y="471" fill="#ff6666" text-anchor="middle" font-size="15" font-weight="bold">—</text>
+        </g>
+
+        <!-- ── R10 meter  mid=260  cy=796 ── -->
+        <g id="meter-r10">
+          <line id="M-R10-L"  x1="185" y1="738" x2="185" y2="796" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <line id="M-R10-R"  x1="335" y1="738" x2="335" y2="796" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <line id="M-R10-HL" x1="185" y1="796" x2="228" y2="796" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <line id="M-R10-HR" x1="335" y1="796" x2="292" y2="796" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <circle cx="260" cy="796" r="32" fill="#1a0505" stroke="#ff4444" stroke-width="1.5" filter="url(#glow)"/>
+          <text id="meterR10" x="260" y="801" fill="#ff6666" text-anchor="middle" font-size="15" font-weight="bold">—</text>
+        </g>
+
+        <!-- ── R8 meter  mid=560  cy=666 ── -->
+        <g id="meter-r8">
+          <line id="M-R8-L"  x1="525" y1="608" x2="525" y2="666" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <line id="M-R8-R"  x1="595" y1="608" x2="595" y2="666" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <line id="M-R8-HL" x1="525" y1="666" x2="528" y2="666" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <line id="M-R8-HR" x1="595" y1="666" x2="592" y2="666" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <circle cx="560" cy="666" r="32" fill="#1a0505" stroke="#ff4444" stroke-width="1.5" filter="url(#glow)"/>
+          <text id="meterR8" x="560" y="671" fill="#ff6666" text-anchor="middle" font-size="15" font-weight="bold">—</text>
+        </g>
+
+        <!-- ── R9 meter  mid=680  cy=666 ── -->
+        <g id="meter-r9">
+          <line id="M-R9-L"  x1="645" y1="608" x2="645" y2="666" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <line id="M-R9-R"  x1="715" y1="608" x2="715" y2="666" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <line id="M-R9-HL" x1="645" y1="666" x2="648" y2="666" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <line id="M-R9-HR" x1="715" y1="666" x2="712" y2="666" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <circle cx="680" cy="666" r="32" fill="#1a0505" stroke="#ff4444" stroke-width="1.5" filter="url(#glow)"/>
+          <text id="meterR9" x="680" y="671" fill="#ff6666" text-anchor="middle" font-size="15" font-weight="bold">—</text>
+        </g>
+
+        <!-- ── R7 meter  mid=620  cy=912 ── -->
+        <g id="meter-r7">
+          <line id="M-R7-L"  x1="575" y1="854" x2="575" y2="912" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <line id="M-R7-R"  x1="665" y1="854" x2="665" y2="912" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <line id="M-R7-HL" x1="575" y1="912" x2="588" y2="912" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <line id="M-R7-HR" x1="665" y1="912" x2="652" y2="912" stroke="#ff4444" stroke-width="1.5" stroke-dasharray="4,3" opacity=".75"/>
+          <circle cx="620" cy="912" r="32" fill="#1a0505" stroke="#ff4444" stroke-width="1.5" filter="url(#glow)"/>
+          <text id="meterR7" x="620" y="917" fill="#ff6666" text-anchor="middle" font-size="15" font-weight="bold">—</text>
+        </g>
+
+        <!-- ══ CURRENT INDICATORS — left wall (up arrow) and right wall (down arrow) ══ -->
+        <!-- Left wall: midpoint between top rail y=200 and battery+ y=424 → centre y=312 -->
+        <g id="currentIndicators">
+          <!-- Ammeter symbol left: narrow I-bar, centred x=20 -->
+          <line x1="13"  y1="295" x2="27" y2="295" stroke="#00ff99" stroke-width="2.5"/>
+          <line x1="20"  y1="295" x2="20" y2="309" stroke="#00ff99" stroke-width="2.5"/>
+          <line x1="13"  y1="309" x2="27" y2="309" stroke="#00ff99" stroke-width="2.5"/>
+          <!-- Up arrow -->
+          <text x="20" y="342" fill="#00ff99" text-anchor="middle" font-size="26" font-weight="bold" stroke="#00ff99" stroke-width="1">↑</text>
+          <!-- Current value and unit — centred under I-bar and arrow -->
+          <text id="iLeftValue" x="20" y="368" fill="#00ff99" text-anchor="middle" font-size="14">—</text>
+          <text id="iLeftUnit"  x="20" y="386" fill="#00ff99" text-anchor="middle" font-size="14">—</text>
+
+          <!-- Ammeter symbol right: narrow I-bar, centred x=932 -->
+          <line x1="925" y1="310" x2="939" y2="310" stroke="#00ff99" stroke-width="2.5"/>
+          <line x1="932" y1="310" x2="932" y2="324" stroke="#00ff99" stroke-width="2.5"/>
+          <line x1="925" y1="324" x2="939" y2="324" stroke="#00ff99" stroke-width="2.5"/>
+          <!-- Down arrow — current flows downward on right wall -->
+          <text x="932" y="357" fill="#00ff99" text-anchor="middle" font-size="26" font-weight="bold" stroke="#00ff99" stroke-width="1">↓</text>
+          <!-- Current value and unit — centred under I-bar and arrow -->
+          <text id="iRightValue" x="932" y="383" fill="#00ff99" text-anchor="middle" font-size="14">—</text>
+          <text id="iRightUnit"  x="932" y="401" fill="#00ff99" text-anchor="middle" font-size="14">—</text>
+
+          <!-- Ammeter symbol bottom: identical style to left indicator -->
+          <!-- Centred between Vs circle bottom (y=482) and bottom rail (y=720) → y=601 -->
+          <!-- Current flows downward along C12 from battery− toward bottom rail -->
+          <line x1="13" y1="594" x2="27" y2="594" stroke="#00ff99" stroke-width="2.5"/>
+          <line x1="20" y1="594" x2="20" y2="608" stroke="#00ff99" stroke-width="2.5"/>
+          <line x1="13" y1="608" x2="27" y2="608" stroke="#00ff99" stroke-width="2.5"/>
+          <!-- Up arrow — current flows upward along C12 toward battery− -->
+          <text x="20" y="640" fill="#00ff99" text-anchor="middle" font-size="26" font-weight="bold" stroke="#00ff99" stroke-width="1">↑</text>
+          <!-- Current value and unit — centred under I-bar and arrow -->
+          <text id="iBottomValue" x="20" y="666" fill="#00ff99" text-anchor="middle" font-size="14">—</text>
+          <text id="iBottomUnit"  x="20" y="684" fill="#00ff99" text-anchor="middle" font-size="14">—</text>
+        </g>
+
+        <!-- TARGET HIGHLIGHT -->
+        <rect id="targetHighlight" x="0" y="0" width="0" height="0" rx="6"
+              fill="none" stroke="#ffff00" stroke-width="3"
+              stroke-dasharray="8,4" opacity="0"/>
+
+        <!-- ══ ORIGINAL CIRCUIT CURRENT LABEL — above R1, at R6 meter level ══ -->
+        <!-- Pre-translate y=76/96 → screen y=106/126, centred on R6 circle y=116 -->
+        <text x="100" y="76" fill="#00ff99" font-size="16" font-family="'Share Tech Mono',monospace">Original Circuit Current</text>
+        <text x="100" y="96" font-size="16" font-weight="bold" font-family="'Share Tech Mono',monospace">
+          <tspan fill="#00ff99">I = </tspan><tspan id="iOrigValue" fill="#00ff99">—</tspan><tspan id="iOrigUnit" fill="#00ff99"> —</tspan>
+        </text>
+
+        </g><!-- end translate(0,20) -->
+
+      </svg>
+    </div><!-- end .circuit-panel -->
+  </div><!-- end .circuit-col -->
+
+  <!-- RIGHT COLUMN: questions -->
+  <div class="questions-col">
+    <div class="card">
+      <div class="progress-wrap" id="progressWrap"></div>
+      <div class="q-panel" id="questionPanel">
+        <div class="q-header">
+          <div class="q-num" id="qNum">Q1</div>
+          <div>
+            <div class="q-text" id="qText">—</div>
+            <div class="q-hint" id="qHint"></div>
+          </div>
+        </div>
+        <div class="options" id="qOptions"></div>
+        <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+        <div class="working-box" id="qWorking">
+          <div class="working-title">Fault Analysis</div>
+          <div id="qWorkingContent"></div>
+        </div>
+        <div class="btn-row">
+          <div class="btn-row-inner">
+            <button class="btn btn-check"   id="btnCheck"   onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next"    id="btnNext"    onclick="goNext()"      style="display:none">Next →</button>
+            <button class="btn btn-summary" id="btnSummary" onclick="showSummary()" style="display:none">⊞ Summary</button>
+          </div>
+          <button class="btn btn-shuffle" onclick="newQuiz()">↺ New Quiz</button>
+        </div>
+      </div>
+      <div id="summaryPanel" style="display:none;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:.8rem 0;border-bottom:1px solid var(--border);margin-bottom:1rem;">
+          <div style="font-family:'Orbitron',sans-serif;font-size:1rem;font-weight:700;color:var(--accent);letter-spacing:.15em;text-transform:uppercase;">Quiz Complete</div>
+          <button class="btn btn-shuffle" onclick="newQuiz()">↺ New Quiz</button>
+        </div>
+        <div id="summaryContent"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ══ Constants ══
+const E12_BASE=[10,12,15,18,22,27,33,39,47,56,68,82];
+const E12=[];
+[1,10,100].forEach(m=>E12_BASE.forEach(v=>E12.push(v*m)));
+
+function pickN(arr,n){const a=[...arr],r=[];for(let i=0;i<n;i++){const idx=Math.floor(Math.random()*a.length);r.push(a.splice(idx,1)[0]);}return r;}
+function par(...v){return 1/v.reduce((s,x)=>s+1/x,0);}
+
+function fmtVS(v){
+  const a=Math.abs(v);
+  if(a===0) return '0V';
+  if(a>=10)    return v.toFixed(2)+'V';
+  if(a>=1)     return v.toFixed(3)+'V';
+  if(a>=0.001) return (v*1000).toFixed(1)+'mV';
+  if(a>=0.000001) return (v*1e6).toFixed(0)+'µV';
+  return '0V'; // truly negligible
+}
+function fmtΩ(v){return v>=1000?(v/1000).toFixed(2)+'kΩ':v+'Ω';}
+function fmtA(a){
+  const abs=Math.abs(a);
+  if(abs===0) return '0A';
+  if(abs>=1)     return a.toFixed(3)+' A';
+  if(abs>=0.001) return (a*1000).toFixed(3)+' mA';
+  return (a*1e6).toFixed(3)+' µA';
+}
+function fmtAShort(a){
+  const abs=Math.abs(a);
+  if(abs===0) return {num:'0',unit:'A'};
+  if(abs>=1)     return {num:a.toFixed(3),       unit:'A'};
+  if(abs>=0.001) return {num:(a*1000).toFixed(3), unit:'mA'};
+  return {num:(a*1e6).toFixed(1), unit:'µA'};
+}
+
+const LETTERS=['A','B','C','D'];
+const CLR_NORMAL ='#ff4444';
+const CLR_UP     ='#ffaa00'; // amber — reading went up
+const CLR_DOWN   ='#e8e8d0'; // off-white — reading went down
+const CLR_STROKE_NORMAL='#ff4444';
+const CLR_STROKE_UP    ='#ffaa00';
+const CLR_STROKE_DOWN  ='#e8e8d0';
+
+let Q={}, questions=[], currentIdx=0, answers=[];
+
+// ══ Highlight box coords ══
+const BOX={
+  r1: {x:94,  y:176, w:102, h:48},
+  r2: {x:224, y:176, w:102, h:48},
+  r3: {x:354, y:176, w:102, h:48},
+  r4: {x:554, y:366, w:132, h:48},
+  r5: {x:554, y:176, w:132, h:48},
+  r6: {x:554, y:-14, w:132, h:48},
+  r7: {x:564, y:812, w:112, h:48},
+  r8: {x:514, y:566, w:92,  h:48},
+  r9: {x:634, y:566, w:92,  h:48},
+  r10:{x:174, y:696, w:172, h:48},
+};
+
+function highlightResistor(key){
+  const h=document.getElementById('targetHighlight');
+  // Always fully reset first
+  h.classList.remove('target-pulse');
+  h.setAttribute('opacity','0');
+  h.setAttribute('width','0');
+  h.setAttribute('height','0');
+  if(!key) return;
+  const c=BOX[key];
+  h.setAttribute('x',c.x); h.setAttribute('y',c.y);
+  h.setAttribute('width',c.w); h.setAttribute('height',c.h);
+  // Use setTimeout to ensure browser registers the removal before re-adding
+  setTimeout(()=>{
+    h.setAttribute('opacity','1');
+    h.classList.add('target-pulse');
+  }, 20);
+}
+
+// ══ Circuit calculation ══
+// Returns {vR1..vR10, vR456, vR789, iTotal, i89} for a given set of resistor values
+function calcCircuit(r1,r2,r3,r4,r5,r6,r7,r8,r9,r10,vs){
+  // Handle open (Infinity) in parallel banks gracefully
+  function safePar(...vals){
+    const finite=vals.filter(x=>isFinite(x));
+    if(finite.length===0) return Infinity;
+    if(finite.length===vals.length) return par(...vals);
+    return par(...finite);
+  }
+
+  const r456=safePar(r4,r5,r6);
+  const r89=r8+r9; // series sub-branch
+  const r789=safePar(r7,r89);
+
+  // If any series resistor is open, no current flows
+  const seriesSum=r1+r2+r3+r10;
+  const bankSum=(isFinite(r456)?r456:0)+(isFinite(r789)?r789:0);
+  const rTotal=seriesSum+bankSum;
+
+  // Check for open in series path
+  const seriesOpen=[r1,r2,r3,r10].some(x=>!isFinite(x));
+
+  let iTotal, vR1,vR2,vR3,vR4,vR5,vR6,vR7,vR8,vR9,vR10;
+  let vR456val, vR789val, i89;
+
+  if(seriesOpen){
+    // No current — full Vs appears across the open series resistor
+    iTotal=0; i89=0;
+    vR1=!isFinite(r1)?vs:0;
+    vR2=!isFinite(r2)?vs:0;
+    vR3=!isFinite(r3)?vs:0;
+    vR10=!isFinite(r10)?vs:0;
+    vR4=0; vR5=0; vR6=0; vR7=0; vR8=0; vR9=0;
+    vR456val=0; vR789val=0;
+  } else {
+    iTotal=vs/rTotal;
+    vR1=iTotal*r1; vR2=iTotal*r2; vR3=iTotal*r3; vR10=iTotal*r10;
+    vR456val=isFinite(r456)?iTotal*r456:0;
+    vR789val=isFinite(r789)?iTotal*r789:0;
+
+    // Parallel bank voltages — same across all open branches too
+    vR4=vR456val; vR5=vR456val; vR6=vR456val;
+    vR7=vR789val;
+
+    // R8/R9 sub-branch
+    if(!isFinite(r7)&&!isFinite(r89)){
+      // Entire orange bank open — shouldn't happen but safe
+      vR8=0; vR9=0; i89=0;
+    } else if(!isFinite(r89)){
+      // R8+R9 branch open, R7 carries all
+      vR8=vR789val/2; vR9=vR789val/2; i89=0; // open branch — show bank voltage split
+      vR8=0; vR9=0; i89=0;
+    } else {
+      i89=vR789val/r89;
+      vR8=i89*r8; vR9=i89*r9;
+    }
+  }
+
+  return {vR1,vR2,vR3,vR4,vR5,vR6,vR7,vR8,vR9,vR10,vR456:vR456val,vR789:vR789val,iTotal,i89};
+}
+
+// ══ Apply faulted resistor value ══
+function faultedResistors(faultKey, faultType){
+  const mult=10+Math.random()*10; // 10×–20× for 'high' — ensures visible change on series resistors
+  const vals={
+    r1:Q.r1,r2:Q.r2,r3:Q.r3,r4:Q.r4,r5:Q.r5,r6:Q.r6,
+    r7:Q.r7,r8:Q.r8,r9:Q.r9,r10:Q.r10
+  };
+  if(faultType==='open'){
+    vals[faultKey]=Infinity;
+  } else {
+    // Round to match fmtΩ display: 0 dp for <1000Ω, 2 dp for kΩ
+    const raw=Q[faultKey]*mult;
+    vals[faultKey]=raw>=1000 ? Math.round(raw/10)*10 : Math.round(raw);
+  }
+  return vals;
+}
+
+// ══ Update meter circles with colour coding ══
+function applyMeterDisplay(healthy, faulted){
+  const meterKeys=[
+    ['meterR1','vR1'],['meterR2','vR2'],['meterR3','vR3'],
+    ['meterR4','vR4'],['meterR5','vR5'],['meterR6','vR6'],
+    ['meterR7','vR7'],['meterR8','vR8'],['meterR9','vR9'],['meterR10','vR10'],
+  ];
+
+  // Step 1: hard reset every meter to normal red with healthy value
+  meterKeys.forEach(([id,key])=>{
+    const el=document.getElementById(id); if(!el) return;
+    const parent=el.parentElement;
+    [...parent.children].filter(c=>c.tagName.toLowerCase()==='g').forEach(g=>g.remove());
+    el.textContent=fmtVS(healthy[key]??0);
+    el.setAttribute('fill',CLR_NORMAL);
+    const circ=[...parent.children].find(c=>c.tagName.toLowerCase()==='circle');
+    if(circ) circ.setAttribute('stroke',CLR_STROKE_NORMAL);
+  });
+
+  // Step 2: apply faulted values with colour coding
+  meterKeys.forEach(([id,key])=>{
+    const el=document.getElementById(id); if(!el) return;
+    const parent=el.parentElement;
+    const circ=[...parent.children].find(c=>c.tagName.toLowerCase()==='circle');
+    const hv=healthy[key]??0, fv=faulted[key]??0;
+    const changed=(hv===0&&fv!==0)||(hv!==0&&Math.abs(fv-hv)/hv>0.0005); // >0.05% change
+
+    el.textContent=fmtVS(fv);
+    if(!changed){
+      el.setAttribute('fill',CLR_NORMAL);
+      if(circ) circ.setAttribute('stroke',CLR_STROKE_NORMAL);
+    } else {
+      const wentUp=fv>hv;
+      const clr=wentUp?CLR_UP:CLR_DOWN;
+      el.setAttribute('fill',clr);
+      if(circ) circ.setAttribute('stroke',clr);
+      addGhost(id, hv, fv, wentUp, clr);
+    }
+  });
+}
+
+// Ghost element: arrow + delta amount on same line below circle
+function addGhost(meterId, healthyVal, faultedVal, wentUp, clr){
+  const txt=document.getElementById(meterId);
+  if(!txt) return;
+
+  // Remove existing ghost
+  const existing=document.getElementById(meterId+'Ghost');
+  if(existing) existing.remove();
+
+  const parent=txt.parentElement;
+  const circ=[...parent.children].find(c=>c.tagName.toLowerCase()==='circle');
+  if(!circ) return;
+  const cy=parseFloat(circ.getAttribute('cy'));
+  const cx=parseFloat(circ.getAttribute('cx'));
+  const r=parseFloat(circ.getAttribute('r'));
+
+  const delta=Math.abs(faultedVal-healthyVal);
+  const deltaStr=(wentUp?'+':'-')+fmtVS(delta);
+
+  const ns='http://www.w3.org/2000/svg';
+  const g=document.createElementNS(ns,'g');
+  g.id=meterId+'Ghost';
+
+  // Single text line: arrow + space + delta, centred below circle
+  const line=document.createElementNS(ns,'text');
+  line.setAttribute('x',cx); line.setAttribute('y',cy+r+22);
+  line.setAttribute('fill',clr); line.setAttribute('text-anchor','middle');
+  line.setAttribute('font-size','22'); line.setAttribute('font-weight','bold');
+  line.setAttribute('stroke',clr); line.setAttribute('stroke-width','0.8');
+  line.setAttribute('font-family',"'Share Tech Mono',monospace");
+  line.textContent=`${wentUp?'↑':'↓'} ${deltaStr}`;
+
+  g.appendChild(line);
+  parent.appendChild(g);
+}
+
+function removeAllGhosts(){
+  const meterIds=['meterR1','meterR2','meterR3','meterR4','meterR5','meterR6',
+                  'meterR7','meterR8','meterR9','meterR10'];
+  meterIds.forEach(id=>{
+    const el=document.getElementById(id); if(!el) return;
+    const parent=el.parentElement;
+    [...parent.children].filter(c=>c.tagName.toLowerCase()==='g').forEach(g=>g.remove());
+    el.setAttribute('fill',CLR_NORMAL);
+    const circ=[...parent.children].find(c=>c.tagName.toLowerCase()==='circle');
+    if(circ) circ.setAttribute('stroke',CLR_STROKE_NORMAL);
+  });
+}
+
+// ══ Update current indicators with colour coding ══
+function applyCurrentDisplay(healthyI, faultedI){
+  const wentUp=faultedI>healthyI*1.0005;
+  const wentDown=faultedI<healthyI*0.9995;
+  const clr=wentUp?CLR_UP:wentDown?CLR_DOWN:'#00ff99';
+  const f=fmtAShort(faultedI);
+  ['iLeftValue','iRightValue','iBottomValue'].forEach(id=>{
+    const el=document.getElementById(id); if(!el) return;
+    el.textContent=f.num; el.setAttribute('fill',clr);
+  });
+  ['iLeftUnit','iRightUnit','iBottomUnit'].forEach(id=>{
+    const el=document.getElementById(id); if(!el) return;
+    el.textContent=f.unit; el.setAttribute('fill',clr);
+  });
+}
+
+function resetCurrentDisplay(iTotal){
+  const f=fmtAShort(iTotal);
+  ['iLeftValue','iRightValue','iBottomValue'].forEach(id=>{
+    const el=document.getElementById(id); if(!el) return;
+    el.textContent=f.num; el.setAttribute('fill','#00ff99');
+  });
+  ['iLeftUnit','iRightUnit','iBottomUnit'].forEach(id=>{
+    const el=document.getElementById(id); if(!el) return;
+    el.textContent=f.unit; el.setAttribute('fill','#00ff99');
+  });
+}
+
+// ══ Healthy circuit display ══
+function applyHealthyDisplay(){
+  removeAllGhosts();
+  const mMap={
+    meterR1:'vR1',meterR2:'vR2',meterR3:'vR3',
+    meterR4:'vR4',meterR5:'vR5',meterR6:'vR6',
+    meterR7:'vR7',meterR8:'vR8',meterR9:'vR9',meterR10:'vR10'
+  };
+  Object.entries(mMap).forEach(([id,key])=>{
+    const el=document.getElementById(id); if(!el) return;
+    el.textContent=fmtVS(Q[key]);
+    el.setAttribute('fill',CLR_NORMAL);
+    const circ=[...el.parentElement.children].find(c=>c.tagName.toLowerCase()==='circle');
+    if(circ) circ.setAttribute('stroke',CLR_STROKE_NORMAL);
+  });
+  resetCurrentDisplay(Q.iTotal);
+  // iOrig label — always green, always healthy value
+  const f=fmtAShort(Q.iTotal);
+  const iOV=document.getElementById('iOrigValue'); if(iOV){iOV.textContent=f.num; iOV.setAttribute('fill','#00ff99');}
+  const iOU=document.getElementById('iOrigUnit');  if(iOU){iOU.textContent=' '+f.unit; iOU.setAttribute('fill','#00ff99');}
+}
+
+// ══ Neighbour lookup for distractors ══
+const SERIES_RESISTORS=['r1','r2','r3','r10'];
+const PURPLE_RESISTORS=['r4','r5','r6'];
+const ORANGE_RESISTORS=['r7','r8','r9'];
+
+function getNeighbour(rKey){
+  if(SERIES_RESISTORS.includes(rKey)){
+    const others=SERIES_RESISTORS.filter(x=>x!==rKey);
+    return others[Math.floor(Math.random()*others.length)];
+  }
+  if(PURPLE_RESISTORS.includes(rKey)){
+    const others=PURPLE_RESISTORS.filter(x=>x!==rKey);
+    return others[Math.floor(Math.random()*others.length)];
+  }
+  const others=ORANGE_RESISTORS.filter(x=>x!==rKey);
+  return others[Math.floor(Math.random()*others.length)];
+}
+
+// ══ Build fault explanation text ══
+function buildFaultExplanation(q){
+  const fv=q.faultedVals;
+  const faultKey=q.faultKey;
+  const faultType=q.faultType;
+  const rl=labelFromKey(faultKey);
+  const freshFaulted=calcCircuit(fv.r1,fv.r2,fv.r3,fv.r4,fv.r5,fv.r6,fv.r7,fv.r8,fv.r9,fv.r10,Q.vs);
+
+  const allKeys=['r1','r2','r3','r4','r5','r6','r7','r8','r9','r10'];
+  const healthyVals={r1:Q.vR1,r2:Q.vR2,r3:Q.vR3,r4:Q.vR4,r5:Q.vR5,r6:Q.vR6,
+                     r7:Q.vR7,r8:Q.vR8,r9:Q.vR9,r10:Q.vR10};
+  const faultedVoltages={r1:freshFaulted.vR1,r2:freshFaulted.vR2,r3:freshFaulted.vR3,
+                          r4:freshFaulted.vR4,r5:freshFaulted.vR5,r6:freshFaulted.vR6,
+                          r7:freshFaulted.vR7,r8:freshFaulted.vR8,r9:freshFaulted.vR9,
+                          r10:freshFaulted.vR10};
+
+  // Find changed resistors
+  const increased=[], decreased=[];
+  allKeys.forEach(k=>{
+    const hv=healthyVals[k]??0, fv2=faultedVoltages[k]??0;
+    const changed=(hv===0&&fv2!==0)||(hv!==0&&Math.abs(fv2-hv)/hv>0.0005);
+    if(!changed) return;
+    if(fv2>hv) increased.push({k,hv,fv:fv2});
+    else decreased.push({k,hv,fv:fv2});
+  });
+
+  let html='<div style="font-size:.8rem;line-height:1.8;">';
+
+  if(faultType==='open'){
+    if(SERIES_RESISTORS.includes(faultKey)){
+      html+=`<div><b style="color:#ffaa00;">${rl}</b> went <b>open circuit</b>.</div>`;
+      html+=`<div style="margin-top:.3rem;">No current can flow — ${rl} shows the full source voltage (${fmtVS(Q.vs)}) and all other resistors show 0V.</div>`;
+    } else {
+      html+=`<div><b style="color:#ffaa00;">${rl}</b> went <b>open circuit</b>.</div>`;
+      html+=`<div style="margin-top:.3rem;">Current continues through the remaining parallel branches. The total circuit resistance increased to <b>${freshFaulted.iTotal>0?(Q.vs/freshFaulted.iTotal).toFixed(2)+'Ω':'∞'}</b>.</div>`;
+      html+=`<div style="margin-top:.3rem;color:#e8e8d0;">All parallel branches show the same voltage — we can't tell which one opened from voltage alone.</div>`;
+      if(decreased.length){
+        html+=`<div style="margin-top:.4rem;">The following potential differences <b style="color:#e8e8d0;">decreased</b>:</div>`;
+        html+=`<div style="margin-top:.2rem;">`+decreased.map(({k,hv,fv:fv2})=>`<span style="color:#e8e8d0;">${labelFromKey(k)}: ${fmtVS(hv)} → ${fmtVS(fv2)}</span>`).join('&nbsp;&nbsp;')+'</div>';
+      }
+      if(increased.length){
+        html+=`<div style="margin-top:.4rem;">The following potential differences <b style="color:#ffaa00;">increased</b>:</div>`;
+        html+=`<div style="margin-top:.2rem;">`+increased.map(({k,hv,fv:fv2})=>`<span style="color:#ffaa00;">${labelFromKey(k)}: ${fmtVS(hv)} → ${fmtVS(fv2)}</span>`).join('&nbsp;&nbsp;')+'</div>';
+      }
+    }
+  } else {
+    // Gone high
+    const newR=fv[faultKey];
+    const newRTotal=Q.vs/freshFaulted.iTotal;
+    html+=`<div><b style="color:#ffaa00;">${rl}</b> went high to <b>${fmtΩ(newR)}</b>.</div>`;
+    html+=`<div style="margin-top:.3rem;">This caused the total circuit resistance to increase to <b>${newRTotal.toFixed(2)}Ω</b>.</div>`;
+
+    // Add deduction reasoning for orange bank cases
+    if(faultKey==='r7'){
+      html+=`<div style="margin-top:.5rem;padding:.4rem .6rem;border-left:2px solid #ffaa00;background:rgba(255,170,0,.05);">
+        <b>How to deduce R7 went high:</b><br>
+        R7 is a standalone parallel branch. When R7 goes high it takes more voltage (<span style="color:#ffaa00;">↑</span>).<br>
+        The reduced current through R7 means the orange bank draws less total current, so more voltage is available across the bank — R8 and R9 also go up (<span style="color:#ffaa00;">↑ ↑</span>).<br>
+        All three orange resistors increasing together points to R7, not the R8+R9 branch.
+      </div>`;
+    } else if(faultKey==='r8'||faultKey==='r9'){
+      const partner=faultKey==='r8'?'R9':'R8';
+      html+=`<div style="margin-top:.5rem;padding:.4rem .6rem;border-left:2px solid #ffaa00;background:rgba(255,170,0,.05);">
+        <b>How to deduce ${rl} went high:</b><br>
+        R8 and R9 are in <b>series</b> with each other, forming one branch parallel to R7.<br>
+        When ${rl} goes high it takes a larger share of the branch voltage → <span style="color:#ffaa00;">${rl} ↑</span>.<br>
+        The reduced branch current means ${partner} receives less voltage → <span style="color:#e8e8d0;">${partner} ↓</span>.<br>
+        R7 sees the increased bank voltage → <span style="color:#ffaa00;">R7 ↑</span>.<br>
+        The pattern <b>${rl} ↑, ${partner} ↓, R7 ↑</b> uniquely identifies ${rl} as the faulty component.
+      </div>`;
+    } else if(PURPLE_RESISTORS.includes(faultKey)){
+      // Show the actual high value used, plus the open circuit equivalent
+      const newR=fv[faultKey];
+      const r4v=fv.r4, r5v=fv.r5, r6v=fv.r6;
+      // Healthy bank resistance
+      const rBankHealthy=1/(1/Q.r4+1/Q.r5+1/Q.r6);
+      // Faulted bank (high)
+      const rBankHigh=1/(1/r4v+1/r5v+1/r6v);
+      // Open circuit equivalent — remove the faulted resistor
+      const othersOpen=PURPLE_RESISTORS.filter(k=>k!==faultKey).map(k=>Q[k]);
+      const rBankOpen=1/othersOpen.reduce((s,v)=>s+1/v,0);
+      // Bank voltages
+      const vBankHigh=freshFaulted.iTotal*rBankHigh;
+      const iTotalOpen=Q.vs/(Q.r1+Q.r2+Q.r3+rBankOpen+Q.r789+Q.r10);
+      const vBankOpen=iTotalOpen*rBankOpen;
+
+      html+=`<div style="margin-top:.5rem;padding:.4rem .6rem;border-left:2px solid #ffaa00;background:rgba(255,170,0,.05);">
+        <b>Why the answer is "high or open" — not just one:</b><br><br>
+        <b>What actually happened — ${rl} went high to ${fmtΩ(newR)}:</b><br>
+        R_bank = ${fmtΩ(Q.r4)} ∥ ${fmtΩ(Q.r5)} ∥ ${fmtΩ(Q.r6)} (with ${rl}=${fmtΩ(newR)}) = <b>${rBankHigh.toFixed(2)}Ω</b><br>
+        V_bank = ${fmtA(freshFaulted.iTotal)} × ${rBankHigh.toFixed(2)}Ω = <b>${fmtVS(vBankHigh)}</b><br>
+        All three branches show this same voltage. Current still flows through all three branches.<br><br>
+        <b>If instead ${rl} went open:</b><br>
+        R_bank = ∞ ∥ ${othersOpen.map(v=>fmtΩ(v)).join(' ∥ ')} = <b>${rBankOpen.toFixed(2)}Ω</b><br>
+        V_bank = ${fmtA(iTotalOpen)} × ${rBankOpen.toFixed(2)}Ω = <b>${fmtVS(vBankOpen)}</b><br>
+        ${rl} is still connected across the same two nodes — so it shows the same bank voltage.<br>
+        Current continues through the other two branches normally.<br><br>
+        <b>Conclusion:</b> Both faults produce the same voltage pattern across R4, R5 and R6.
+        Branch current measurements would be needed to identify the exact fault.
+      </div>`;
+    }
+
+    if(decreased.length){
+      html+=`<div style="margin-top:.4rem;">The following potential differences <b style="color:#e8e8d0;">decreased</b>:</div>`;
+      html+=`<div style="margin-top:.2rem;">`+decreased.map(({k,hv,fv:fv2})=>`<span style="color:#e8e8d0;">${labelFromKey(k)}: ${fmtVS(hv)} → ${fmtVS(fv2)}</span>`).join('&nbsp;&nbsp;')+'</div>';
+    }
+    if(increased.length){
+      html+=`<div style="margin-top:.4rem;">The following potential differences <b style="color:#ffaa00;">increased</b>:</div>`;
+      html+=`<div style="margin-top:.2rem;">`+increased.map(({k,hv,fv:fv2})=>`<span style="color:#ffaa00;">${labelFromKey(k)}: ${fmtVS(hv)} → ${fmtVS(fv2)}</span>`).join('&nbsp;&nbsp;')+'</div>';
+    }
+  }
+
+  html+='</div>';
+  return html;
+}
+
+function rLabel(key){return key.replace('r','R').replace('r1','R1');}
+function labelFromKey(key){return key.replace(/^r/,'R');}
+
+// ══ Build fault question ══
+function buildFaultQuestion(faultKey, faultType){
+  const fv=faultedResistors(faultKey, faultType);
+
+  const purpleKeys=['r4','r5','r6'];
+  const orangeKeys=['r7','r8','r9'];
+  const rl=labelFromKey(faultKey);
+  const opposite=faultType==='open'?'high':'open';
+
+  let correctLabel, opts;
+  const seriesDistractors=[...SERIES_RESISTORS].sort(()=>Math.random()-.5);
+
+  if(purpleKeys.includes(faultKey)){
+    // Purple bank — can never tell high from open, or which resistor, from voltage alone
+    correctLabel='One of R4, R5, R6 has gone high or open';
+    opts=[
+      {label:correctLabel,                                                          type:'correct'},
+      {label:'One of R7, R8, R9 has gone high or open',                            type:'wrong'},
+      {label:`${labelFromKey(seriesDistractors[0])} has gone open`,                type:'wrong'},
+      {label:`${labelFromKey(seriesDistractors[1])} has gone high`,                type:'wrong'},
+    ];
+  } else if(orangeKeys.includes(faultKey)){
+    if(faultType==='open'){
+      // Orange open — bank level, can't tell which one
+      correctLabel='One of R7, R8, R9 has gone open';
+      opts=[
+        {label:correctLabel,                                                   type:'correct'},
+        {label:'One of R7, R8, R9 has gone high',                             type:'wrong'},
+        {label:`${labelFromKey(seriesDistractors[0])} has gone open`,         type:'wrong'},
+        {label:`${labelFromKey(seriesDistractors[1])} has gone high`,         type:'wrong'},
+      ];
+    } else {
+      // Orange HIGH — all three are distinguishable:
+      // R7 high: R7↑, R8↑, R9↑
+      // R8 high: R8↑, R9↓, R7↑
+      // R9 high: R9↑, R8↓, R7↑
+      if(faultKey==='r7'){
+        correctLabel='R7 has gone high';
+        opts=[
+          {label:correctLabel,                                                 type:'correct'},
+          {label:'One of R8, R9 has gone high',                               type:'wrong'},
+          {label:'One of R7, R8, R9 has gone open',                           type:'wrong'},
+          {label:`${labelFromKey(seriesDistractors[0])} has gone high`,       type:'wrong'},
+        ];
+      } else if(faultKey==='r8'){
+        correctLabel='R8 has gone high';
+        opts=[
+          {label:correctLabel,                                                 type:'correct'},
+          {label:'R9 has gone high',                                           type:'wrong'},
+          {label:'R7 has gone high',                                           type:'wrong'},
+          {label:'One of R7, R8, R9 has gone open',                           type:'wrong'},
+        ];
+      } else {
+        // r9
+        correctLabel='R9 has gone high';
+        opts=[
+          {label:correctLabel,                                                 type:'correct'},
+          {label:'R8 has gone high',                                           type:'wrong'},
+          {label:'R7 has gone high',                                           type:'wrong'},
+          {label:'One of R7, R8, R9 has gone open',                           type:'wrong'},
+        ];
+      }
+    }
+  } else {
+    // Series resistor — specific label, neighbour as distractor
+    correctLabel=`${rl} has gone ${faultType}`;
+    const neighbour=getNeighbour(faultKey);
+    const nl=labelFromKey(neighbour);
+    opts=[
+      {label:correctLabel,                      type:'correct'},
+      {label:`${rl} has gone ${opposite}`,      type:'wrong'},
+      {label:`${nl} has gone ${faultType}`,     type:'wrong'},
+      {label:`${nl} has gone ${opposite}`,      type:'wrong'},
+    ];
+  }
+
+  opts=opts.sort(()=>Math.random()-.5);
+
+  return {
+    key:null, faultKey, label:rl, color:'#ffff00',
+    type:'fault', faultType, faultedVals:fv,
+    opts, correctIdx:opts.findIndex(o=>o.type==='correct'),
+    qText:`Based on these readings, what fault has occurred?`,
+    qHint:`Study the meter circles — compare colours and values carefully.`,
+    correctV:null,
+  };
+}
+
+// ══ Check if fault produces visible change on series resistors (≥0.1%) ══
+function faultIsVisible(faultKey, faultType){
+  const fv=faultedResistors(faultKey, faultType);
+  const faulted=calcCircuit(fv.r1,fv.r2,fv.r3,fv.r4,fv.r5,fv.r6,fv.r7,fv.r8,fv.r9,fv.r10,Q.vs);
+  // Check series resistors for visible change
+  const THRESHOLD=0.001; // 0.1%
+  const seriesChecks=[
+    [Q.vR1, faulted.vR1],
+    [Q.vR2, faulted.vR2],
+    [Q.vR3, faulted.vR3],
+    [Q.vR10, faulted.vR10],
+  ];
+  return seriesChecks.some(([hv,fv2])=>
+    hv!==0 && Math.abs(fv2-hv)/hv >= THRESHOLD
+  );
+}
+
+// ══ Build Qn pool (19 questions: all combos minus R1 open) ══
+function buildPool(){
+  const allKeys=['r1','r2','r3','r4','r5','r6','r7','r8','r9','r10'];
+  const pool=[];
+  allKeys.forEach(key=>{
+    if(!(key==='r1'&&'open'==='open')) pool.push({key,fault:'open'});  // skip r1 open
+    pool.push({key,fault:'high'});
+  });
+  // Remove r1 open explicitly
+  const candidates=pool.filter(x=>!(x.key==='r1'&&x.fault==='open'));
+  // Filter out faults that produce no visible change on series resistors
+  return candidates.filter(({key,fault})=>faultIsVisible(key,fault));
+}
+
+// ══ Build Q3 (fixed: R1 open) ══
+function buildQ3(){
+  const fv=faultedResistors('r1','open');
+  const faulted=calcCircuit(fv.r1,fv.r2,fv.r3,fv.r4,fv.r5,fv.r6,fv.r7,fv.r8,fv.r9,fv.r10,Q.vs);
+  const opts=[
+    {label:'R1 has gone open',  type:'correct'},
+    {label:'R1 has gone high',  type:'wrong'},
+    {label:'R10 has gone open', type:'wrong'},
+    {label:'R10 has gone high', type:'wrong'},
+  ].sort(()=>Math.random()-.5);
+  return {
+    key:null, faultKey:'r1', label:'R1', color:'#ffff00',
+    type:'fault', faultType:'open',
+    faultedVals:fv,
+    opts, correctIdx:opts.findIndex(o=>o.type==='correct'),
+    qText:'Based on these readings, what fault has occurred?',
+    qHint:'Study the meter circles — compare colours and values carefully.',
+    correctV:null,
+  };
+}
+
+// ══ makePDOpts ══
+function makePDOpts(correct, allVoltages){
+  const used=new Set([fmtVS(correct)]);
+  const distractors=[];
+  [...allVoltages].sort(()=>Math.random()-.5).forEach(v=>{
+    const lbl=fmtVS(v);
+    if(!used.has(lbl)&&distractors.length<3){used.add(lbl);distractors.push(lbl);}
+  });
+  const scales=[1.5,0.5,2.0]; let si=0;
+  while(distractors.length<3){
+    const lbl=fmtVS(correct*scales[si++]);
+    if(!used.has(lbl)){used.add(lbl);distractors.push(lbl);}
+  }
+  const opts=[{label:fmtVS(correct),type:'correct'},...distractors.map(l=>({label:l,type:'wrong'}))].sort(()=>Math.random()-.5);
+  return {opts, correctIdx:opts.findIndex(o=>o.type==='correct')};
+}
+
+// ══ buildWorkingPD ══
+function buildWorkingPD(rKey,rLabel,color,v){
+  const series=['r1','r2','r3','r10'];
+  if(series.includes(rKey)){
+    return `<div class="wline"><span style="color:${color}">${rLabel}</span> is a <b>series</b> resistor.</div>
+      <div class="wline" style="margin-top:.3rem;">I<sub>total</sub> = ${Q.vs}V ÷ ${Q.rTotal.toFixed(2)}Ω = ${fmtA(Q.iTotal)}</div>
+      <div class="wline" style="margin-top:.3rem;">V = ${fmtA(Q.iTotal)} × ${fmtΩ(Q[rKey])}</div>
+      <div class="wline total"><b style="color:${color}">V<sub>${rLabel}</sub> = ${fmtVS(v)}</b></div>`;
+  }
+  if(['r4','r5','r6'].includes(rKey)){
+    return `<div class="wline"><span style="color:${color}">${rLabel}</span> is in the parallel bank R4∥R5∥R6 — all branches share the same PD.</div>
+      <div class="wline" style="margin-top:.3rem;">V<sub>bank</sub> = ${fmtA(Q.iTotal)} × ${Q.r456.toFixed(2)}Ω</div>
+      <div class="wline total"><b style="color:${color}">V<sub>${rLabel}</sub> = ${fmtVS(v)}</b></div>`;
+  }
+  if(rKey==='r7'){
+    return `<div class="wline"><span style="color:${color}">R7</span> is in parallel with R8+R9 — shares the same PD.</div>
+      <div class="wline" style="margin-top:.3rem;">V<sub>R789</sub> = ${fmtA(Q.iTotal)} × ${Q.r789.toFixed(2)}Ω</div>
+      <div class="wline total"><b style="color:${color}">V<sub>R7</sub> = ${fmtVS(v)}</b></div>`;
+  }
+  return `<div class="wline"><span style="color:${color}">${rLabel}</span> is in the series sub-branch R8+R9.</div>
+    <div class="wline" style="margin-top:.3rem;">V<sub>branch</sub> = ${fmtVS(Q.vR789)}, I<sub>89</sub> = ${fmtA(Q.i89)}</div>
+    <div class="wline" style="margin-top:.3rem;">V = ${fmtA(Q.i89)} × ${fmtΩ(Q[rKey])}</div>
+    <div class="wline total"><b style="color:${color}">V<sub>${rLabel}</sub> = ${fmtVS(v)}</b></div>`;
+}
+
+// ══ newQuiz ══
+function newQuiz(){
+  // Reset circuit display immediately so old state doesn't linger
+  highlightResistor(null);
+  removeAllGhosts();
+
+  const vals=pickN(E12,10);
+  const [r1,r2,r3,r4,r5,r6,r7,r8,r9,r10]=vals;
+  const r456=par(r4,r5,r6), r89=r8+r9, r789=par(r7,r89);
+  const rTotal=r1+r2+r3+r456+r789+r10;
+  const vsOpts=[6,8,9,10,12,15,18];
+  const vs=vsOpts[Math.floor(Math.random()*vsOpts.length)];
+  const iTotal=vs/rTotal;
+  const vR1=iTotal*r1, vR2=iTotal*r2, vR3=iTotal*r3;
+  const vR456=iTotal*r456;
+  const vR789=iTotal*r789, i89=vR789/r89;
+  const vR8=i89*r8, vR9=i89*r9;
+  const vR10=iTotal*r10;
+
+  Q={r1,r2,r3,r4,r5,r6,r7,r8,r9,r10,r456,r89,r789,rTotal,vs,iTotal,i89,
+     vR1,vR2,vR3,vR4:vR456,vR5:vR456,vR6:vR456,vR7:vR789,vR8,vR9,vR10,vR789};
+
+  [['R1',r1],['R2',r2],['R3',r3],['R4',r4],['R5',r5],['R6',r6],
+   ['R7',r7],['R8',r8],['R9',r9],['R10',r10]].forEach(([k,v])=>{
+    const el=document.getElementById('lbl'+k); if(el) el.textContent=fmtΩ(v);
+  });
+  document.getElementById('BattVoltLabel').textContent=vs+'V';
+  document.getElementById('panelVoltLabel').textContent=vs+' V';
+
+  applyHealthyDisplay();
+
+  const allVoltages=[vR1,vR2,vR3,vR456,vR789,vR8,vR9,vR10];
+
+  // ── Q1: PD across random series resistor ──
+  const seriesPool=[
+    {key:'r1',label:'R1',color:'#00e5ff',v:vR1},
+    {key:'r2',label:'R2',color:'#00e5ff',v:vR2},
+    {key:'r3',label:'R3',color:'#00e5ff',v:vR3},
+    {key:'r10',label:'R10',color:'#00e5ff',v:vR10},
+  ];
+  const q1r=seriesPool[Math.floor(Math.random()*seriesPool.length)];
+  const q1opts=makePDOpts(q1r.v, allVoltages.filter(x=>fmtVS(x)!==fmtVS(q1r.v)));
+  const q1={key:q1r.key,label:q1r.label,color:q1r.color,type:'pd',correctV:q1r.v,
+    opts:q1opts.opts,correctIdx:q1opts.correctIdx,
+    qText:`What is the potential difference across <span style="color:${q1r.color};font-weight:bold;">${q1r.label}</span>?`,
+    qHint:'Find the highlighted resistor and read its meter circle.',
+    working:buildWorkingPD(q1r.key,q1r.label,q1r.color,q1r.v)};
+
+  // ── Q2: PD across random parallel resistor ──
+  const parallelPool=[
+    {key:'r4',label:'R4',color:'#a78bfa',v:vR456},
+    {key:'r5',label:'R5',color:'#a78bfa',v:vR456},
+    {key:'r6',label:'R6',color:'#a78bfa',v:vR456},
+    {key:'r7',label:'R7',color:'#ff6b35',v:vR789},
+    {key:'r8',label:'R8',color:'#ff6b35',v:vR8},
+    {key:'r9',label:'R9',color:'#ff6b35',v:vR9},
+  ];
+  const q2r=parallelPool[Math.floor(Math.random()*parallelPool.length)];
+  const q2opts=makePDOpts(q2r.v, allVoltages.filter(x=>fmtVS(x)!==fmtVS(q2r.v)));
+  const q2={key:q2r.key,label:q2r.label,color:q2r.color,type:'pd',correctV:q2r.v,
+    opts:q2opts.opts,correctIdx:q2opts.correctIdx,
+    qText:`What is the potential difference across <span style="color:${q2r.color};font-weight:bold;">${q2r.label}</span>?`,
+    qHint:'Find the highlighted resistor and read its meter circle.',
+    working:buildWorkingPD(q2r.key,q2r.label,q2r.color,q2r.v)};
+
+  // ── Q3: fixed R1 open ──
+  const q3=buildQ3();
+
+  // ── Qn pool: filtered to visible faults, pick up to 7 ──
+  const pool=buildPool();
+  const chosen=pickN(pool, Math.min(7, pool.length));
+  const qnQuestions=chosen.map(({key,fault})=>buildFaultQuestion(key,fault));
+
+  questions=[q1,q2,q3,...qnQuestions];
+  answers=questions.map(()=>({selectedIdx:null,correct:null}));
+  currentIdx=0;
+  buildProgress();
+  document.getElementById('summaryPanel').style.display='none';
+  document.getElementById('questionPanel').style.display='flex';
+  renderQuestion(0);
+}
+
+// ══ Progress ══
+function buildProgress(){
+  const wrap=document.getElementById('progressWrap'); wrap.innerHTML='';
+  questions.forEach((_,i)=>{
+    const d=document.createElement('div');
+    d.className='progress-dot'+(i===0?' active':''); d.id='pdot'+i; wrap.appendChild(d);
+  });
+  const lbl=document.createElement('div');
+  lbl.className='progress-label'; lbl.id='plabel';
+  lbl.textContent='1 / '+questions.length; wrap.appendChild(lbl);
+}
+function updateProgress(){
+  questions.forEach((_,i)=>{
+    const d=document.getElementById('pdot'+i); if(!d) return;
+    d.className='progress-dot';
+    if(i===currentIdx) d.classList.add('active');
+    else if(answers[i].correct!==null) d.classList.add('done');
+  });
+  const lbl=document.getElementById('plabel');
+  if(lbl) lbl.textContent=(currentIdx+1)+' / '+questions.length;
+}
+
+// ══ Apply circuit state for current question ══
+function applyQuestionState(q){
+  highlightResistor(null); // always clear first
+  applyHealthyDisplay();   // always reset to healthy before applying any fault
+  if(q.type==='fault'){
+    // Recompute faulted circuit fresh each time using current Q values
+    const fv=q.faultedVals;
+    const freshFaulted=calcCircuit(fv.r1,fv.r2,fv.r3,fv.r4,fv.r5,fv.r6,fv.r7,fv.r8,fv.r9,fv.r10,Q.vs);
+    applyMeterDisplay(Q, freshFaulted);
+    applyCurrentDisplay(Q.iTotal, freshFaulted.iTotal);
+  } else {
+    highlightResistor(q.key);
+  }
+}
+
+// ══ renderQuestion ══
+function renderQuestion(idx){
+  const q=questions[idx], ans=answers[idx];
+  document.getElementById('qNum').textContent='Q'+(idx+1);
+  document.getElementById('qText').innerHTML=q.qText;
+  document.getElementById('qHint').textContent=q.qHint;
+
+  applyQuestionState(q);
+
+  const opts=document.getElementById('qOptions'); opts.innerHTML='';
+  q.opts.forEach((opt,i)=>{
+    const btn=document.createElement('button'); btn.className='option-btn';
+    btn.innerHTML=`<span class="option-letter">${LETTERS[i]}</span><span>${opt.label}</span>`;
+    if(ans.correct!==null){
+      btn.disabled=true;
+      if(i===q.correctIdx){btn.classList.add('correct');btn.innerHTML+=`<span class="result-icon">✓</span>`;}
+      else if(i===ans.selectedIdx&&!ans.correct){btn.classList.add('wrong');btn.innerHTML+=`<span class="result-icon">✗</span>`;}
+      else btn.classList.add('dimmed');
+    } else {
+      if(i===ans.selectedIdx) btn.classList.add('selected');
+      btn.addEventListener('click',()=>selectOpt(idx,i));
+    }
+    opts.appendChild(btn);
+  });
+
+  const banner=document.getElementById('qBanner'); banner.className='result-banner';
+  const wbox=document.getElementById('qWorking');
+  if(wbox) wbox.className='working-box';
+  if(ans.correct!==null){
+    document.getElementById('qIcon').textContent=ans.correct?'✓':'✗';
+    if(q.type==='fault'){
+      const correctLabel=q.opts[q.correctIdx].label;
+      if(ans.correct){banner.className='result-banner correct';document.getElementById('qBannerText').textContent=`Correct! ${correctLabel}`;}
+      else{banner.className='result-banner wrong';document.getElementById('qBannerText').textContent=`The correct answer is: ${correctLabel}`;}
+      // Show fault analysis
+      if(wbox){wbox.className='working-box visible';document.getElementById('qWorkingContent').innerHTML=buildFaultExplanation(q);}
+    } else {
+      const answerStr=fmtVS(q.correctV);
+      if(ans.correct){banner.className='result-banner correct';document.getElementById('qBannerText').textContent=`Correct! The potential difference is ${answerStr}`;}
+      else{banner.className='result-banner wrong';document.getElementById('qBannerText').textContent=`The correct answer is ${answerStr}`;}
+    }
+  }
+
+  document.getElementById('btnCheck').disabled=(ans.selectedIdx===null||ans.correct!==null);
+  document.getElementById('btnCheck').style.display=ans.correct!==null?'none':'inline-block';
+  document.getElementById('btnNext').style.display=(ans.correct!==null&&idx<questions.length-1)?'inline-block':'none';
+  document.getElementById('btnSummary').style.display=(ans.correct!==null&&idx===questions.length-1)?'inline-block':'none';
+  updateProgress();
+}
+
+function selectOpt(qIdx,optIdx){
+  if(answers[qIdx].correct!==null) return;
+  answers[qIdx].selectedIdx=optIdx;
+  document.getElementById('btnCheck').disabled=false;
+  document.querySelectorAll('#qOptions .option-btn').forEach((b,i)=>b.classList.toggle('selected',i===optIdx));
+}
+
+function checkAnswer(){
+  const idx=currentIdx, q=questions[idx], ans=answers[idx];
+  if(ans.selectedIdx===null||ans.correct!==null) return;
+  const ok=ans.selectedIdx===q.correctIdx; ans.correct=ok;
+  document.querySelectorAll('#qOptions .option-btn').forEach((btn,i)=>{
+    btn.disabled=true;
+    if(i===q.correctIdx){btn.classList.remove('selected');btn.classList.add('correct');btn.innerHTML+=`<span class="result-icon">✓</span>`;}
+    else if(i===ans.selectedIdx&&!ok){btn.classList.remove('selected');btn.classList.add('wrong');btn.innerHTML+=`<span class="result-icon">✗</span>`;}
+    else btn.classList.add('dimmed');
+  });
+  document.getElementById('qIcon').textContent=ok?'✓':'✗';
+  const banner=document.getElementById('qBanner');
+  const wbox=document.getElementById('qWorking');
+  if(q.type==='fault'){
+    const correctLabel=q.opts[q.correctIdx].label;
+    if(ok){banner.className='result-banner correct';document.getElementById('qBannerText').textContent=`Correct! ${correctLabel}`;}
+    else{banner.className='result-banner wrong';document.getElementById('qBannerText').textContent=`The correct answer is: ${correctLabel}`;}
+    if(wbox){wbox.className='working-box visible';document.getElementById('qWorkingContent').innerHTML=buildFaultExplanation(q);}
+  } else {
+    const answerStr=fmtVS(q.correctV);
+    if(ok){banner.className='result-banner correct';document.getElementById('qBannerText').textContent=`Correct! The potential difference is ${answerStr}`;}
+    else{banner.className='result-banner wrong';document.getElementById('qBannerText').textContent=`The correct answer is ${answerStr}`;}
+  }
+  document.getElementById('btnCheck').style.display='none';
+  if(idx<questions.length-1) document.getElementById('btnNext').style.display='inline-block';
+  else document.getElementById('btnSummary').style.display='inline-block';
+  updateProgress();
+}
+
+function goNext(){if(currentIdx<questions.length-1){currentIdx++;renderQuestion(currentIdx);}}
+function goPrev(){if(currentIdx>0){currentIdx--;renderQuestion(currentIdx);}}
+
+function showSummary(){
+  document.getElementById('questionPanel').style.display='none';
+  document.getElementById('summaryPanel').style.display='block';
+  applyHealthyDisplay();
+  highlightResistor(null);
+  const score=answers.filter(a=>a.correct).length, total=questions.length;
+  let html=`<div style="text-align:center;padding:1rem 0 1.4rem;border-bottom:1px solid var(--border);margin-bottom:1.2rem;">
+    <div style="font-family:'Orbitron',sans-serif;font-size:2rem;font-weight:900;color:${score===total?'var(--accent3)':'var(--accent)'};">
+      ${score} <span style="font-size:1.2rem;color:var(--label);">/ ${total}</span></div>
+    <div style="font-size:.7rem;color:var(--label);letter-spacing:.15em;margin-top:.3rem;">CORRECT</div></div>`;
+  questions.forEach((q,i)=>{
+    const ans=answers[i], chosen=q.opts[ans.selectedIdx], ok=ans.correct;
+    const correctLabel=q.type==='fault'?q.opts[q.correctIdx].label:fmtVS(q.correctV);
+    html+=`<div class="summary-item">
+      <div class="summary-q">Q${i+1}${q.type==='fault'?` — <span style="color:#ffaa00;">⚡ Fault</span>`:` — <span style="color:${q.color};">${q.label}</span>`}</div>
+      <div class="summary-question">${q.qText}</div>
+      <div class="summary-answer" style="color:${ok?'var(--accent3)':'var(--accent4)'};">
+        You answered: ${chosen?.label??'—'} &nbsp;${ok?'✓':'✗'}
+        ${!ok?`<span style="color:var(--label);"> → Correct: ${correctLabel}</span>`:''}
+      </div>
+    </div>`;
+  });
+  document.getElementById('summaryContent').innerHTML=html;
+}
+
+// ══ Modal zoom ══
+function openModal(){
+  const src=document.getElementById('circuitSvg');
+  const dst=document.getElementById('modalSvg');
+  dst.innerHTML=src.innerHTML;
+  dst.setAttribute('viewBox', src.getAttribute('viewBox'));
+  const pvl=document.getElementById('panelVoltLabel');
+  document.getElementById('modalVoltLabel').textContent=pvl?pvl.textContent:'';
+  document.getElementById('diagramModal').classList.add('open');
+  document.body.style.overflow='hidden';
+}
+function closeModal(){
+  document.getElementById('diagramModal').classList.remove('open');
+  document.body.style.overflow='';
+}
+function handleModalClick(e){
+  if(e.target.closest('.modal-close')) return;
+  closeModal();
+}
+document.addEventListener('keydown',e=>{if(e.key==='Escape') closeModal();});
+
+newQuiz();
+</script>
+</body>
+</html>
