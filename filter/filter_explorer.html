@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>First Order Filter Explorer</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      --bg: #0a0d14;
+      --panel: #0f1420;
+      --panel2: #0c1119;
+      --border: #1e2d4a;
+      --accent: #00e5ff;
+      --accent2: #ff6b35;
+      --accent3: #00ff99;
+      --accent4: #ff3d9a;
+      --accent5: #a78bfa;
+      --accent6: #ffe600;
+      --grid: rgba(0,229,255,0.06);
+      --text: #c8d8e8;
+      --label: #5a7a9a;
+      --glow: 0 0 20px rgba(0,229,255,0.3);
+    }
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{
+      background:var(--bg);
+      color:var(--text);
+      font-family:'Share Tech Mono',monospace;
+      min-height:100vh;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      padding:2rem 1rem;
+      background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+      background-size:40px 40px;
+    }
+    header{text-align:center;margin-bottom:1.8rem;}
+    header h1{
+      font-family:'Orbitron',sans-serif;
+      font-size:clamp(1.3rem,4vw,2.2rem);
+      font-weight:900;
+      letter-spacing:.12em;
+      color:var(--accent);
+      text-shadow:0 0 30px rgba(0,229,255,.5);
+      text-transform:uppercase;
+    }
+    header p{margin-top:.4rem;color:var(--label);font-size:.75rem;letter-spacing:.2em;text-transform:uppercase;}
+
+    .explorer-wrap{width:100%;max-width:1300px;display:flex;flex-direction:column;gap:1.2rem;}
+
+    /* ── Controls row ── */
+    .controls{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:4px;
+      padding:1.2rem 1.5rem;
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+      gap:1.2rem 2rem;
+      align-items:end;
+    }
+
+    .ctrl-group{display:flex;flex-direction:column;gap:.5rem;}
+    .ctrl-label{font-size:.6rem;letter-spacing:.2em;color:var(--label);text-transform:uppercase;}
+    .ctrl-value{
+      font-family:'Orbitron',sans-serif;
+      font-size:1.05rem;
+      font-weight:700;
+      color:var(--accent);
+      min-width:60px;
+      display:inline-block;
+    }
+    .ctrl-value.orange{color:var(--accent2);}
+    .ctrl-value.green{color:var(--accent3);}
+    .ctrl-value.purple{color:var(--accent5);}
+
+    /* Toggle buttons */
+    .toggle-row{display:flex;gap:.5rem;flex-wrap:wrap;}
+    .tog-btn{
+      padding:.4rem 1rem;
+      border-radius:3px;
+      font-family:'Share Tech Mono',monospace;
+      font-size:.72rem;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      cursor:pointer;
+      border:1px solid var(--border);
+      background:transparent;
+      color:var(--label);
+      transition:all .15s;
+    }
+    .tog-btn.active-lp{border-color:rgba(0,229,255,.5);background:rgba(0,229,255,.1);color:var(--accent);}
+    .tog-btn.active-hp{border-color:rgba(255,107,53,.5);background:rgba(255,107,53,.1);color:var(--accent2);}
+    .tog-btn.active-oct{border-color:rgba(167,139,250,.5);background:rgba(167,139,250,.1);color:var(--accent5);}
+    .tog-btn.active-dec{border-color:rgba(0,255,153,.5);background:rgba(0,255,153,.1);color:var(--accent3);}
+
+    /* Sliders */
+    input[type=range]{
+      -webkit-appearance:none;
+      width:100%;
+      height:4px;
+      border-radius:2px;
+      background:var(--border);
+      outline:none;
+      cursor:pointer;
+    }
+    input[type=range]::-webkit-slider-thumb{
+      -webkit-appearance:none;
+      width:16px;height:16px;
+      border-radius:50%;
+      background:var(--accent);
+      box-shadow:0 0 8px rgba(0,229,255,.6);
+      cursor:pointer;
+      transition:transform .1s;
+    }
+    input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.25);}
+    input[type=range].orange-thumb::-webkit-slider-thumb{background:var(--accent2);box-shadow:0 0 8px rgba(255,107,53,.6);}
+    input[type=range].purple-thumb::-webkit-slider-thumb{background:var(--accent5);box-shadow:0 0 8px rgba(167,139,250,.6);}
+    input[type=range].cyan-thumb::-webkit-slider-thumb{background:var(--accent3);box-shadow:0 0 8px rgba(0,255,153,.6);}
+
+    /* Value+unit row */
+    .val-row{display:flex;align-items:baseline;gap:.4rem;}
+    .val-unit{font-size:.7rem;color:var(--label);}
+
+    /* ── Graph area ── */
+    .graph-wrap{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:4px;
+      padding:.8rem;
+    }
+    .graph-label{font-size:.6rem;letter-spacing:.15em;color:var(--label);text-transform:uppercase;text-align:center;margin-bottom:4px;}
+    canvas#explorerGraph{width:100%;display:block;border-radius:2px;}
+
+    /* ── Warning banner ── */
+    .warn-banner{
+      display:none;
+      padding:.7rem 1.1rem;
+      border-radius:3px;
+      font-size:.8rem;
+      line-height:1.7;
+      border:1px solid rgba(255,61,154,.4);
+      background:rgba(255,61,154,.07);
+      color:var(--accent4);
+    }
+    .warn-banner.visible{display:block;}
+    .warn-title{
+      font-family:'Orbitron',sans-serif;
+      font-size:.62rem;
+      letter-spacing:.15em;
+      margin-bottom:.3rem;
+      text-transform:uppercase;
+    }
+
+    /* ── Readout panel ── */
+    .readout{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:4px;
+      padding:1rem 1.5rem;
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+      gap:.8rem 2rem;
+    }
+    .ro-item{display:flex;flex-direction:column;gap:.3rem;}
+    .ro-label{font-size:.58rem;letter-spacing:.2em;color:var(--label);text-transform:uppercase;}
+    .ro-val{font-family:'Orbitron',sans-serif;font-size:1.1rem;font-weight:700;}
+    .ro-val.cyan{color:var(--accent);}
+    .ro-val.orange{color:var(--accent2);}
+    .ro-val.green{color:var(--accent3);}
+    .ro-val.yellow{color:var(--accent6);}
+    .ro-val.purple{color:var(--accent5);}
+    .ro-val.dim{color:var(--label);font-size:.85rem;}
+
+    footer{margin-top:2rem;font-size:.65rem;color:var(--label);opacity:.5;letter-spacing:.15em;text-transform:uppercase;}
+  </style>
+</head>
+<body>
+<header>
+  <h1>First Order Filter Explorer</h1>
+  <p>First Order Passive Filter · Interactive Gain Simulation</p>
+</header>
+
+<div class="explorer-wrap">
+
+  <!-- Controls -->
+  <div class="controls">
+
+    <!-- Filter type -->
+    <div class="ctrl-group">
+      <div class="ctrl-label">Filter Type</div>
+      <div class="toggle-row">
+        <button class="tog-btn active-lp" id="btnLP" onclick="setFilter('low')">Low Pass</button>
+        <button class="tog-btn" id="btnHP" onclick="setFilter('high')">High Pass</button>
+      </div>
+    </div>
+
+    <!-- Insertion loss -->
+    <div class="ctrl-group">
+      <div class="ctrl-label">Passband Gain (Insertion Loss)</div>
+      <div class="val-row">
+        <span class="ctrl-value" id="ilVal">0</span>
+        <span class="val-unit">dB &nbsp;(max 0 dB — passive filter)</span>
+      </div>
+      <input type="range" id="ilSlider" min="-40" max="0" value="0" step="1" oninput="onIL()">
+    </div>
+
+    <!-- Cutoff freq -->
+    <div class="ctrl-group">
+      <div class="ctrl-label">Cutoff Frequency (f<sub>c</sub>)</div>
+      <div class="val-row">
+        <span class="ctrl-value green" id="fcVal">1000</span>
+        <span class="val-unit" id="fcUnit">Hz</span>
+      </div>
+      <!-- log slider: 1Hz–100kHz mapped to 0–500 -->
+      <input type="range" class="cyan-thumb" id="fcSlider" min="0" max="500" value="400" step="1" oninput="onFC()">
+    </div>
+
+    <!-- Selected frequency -->
+    <div class="ctrl-group">
+      <div class="ctrl-label">Selected Frequency (f<sub>A</sub>)</div>
+      <div class="val-row">
+        <span class="ctrl-value orange" id="faVal">4000</span>
+        <span class="val-unit" id="faUnit">Hz</span>
+      </div>
+      <input type="range" class="orange-thumb" id="faSlider" min="0" max="500" value="460" step="1" oninput="onFA()">
+    </div>
+
+    <!-- Octaves / Decades toggle -->
+    <div class="ctrl-group">
+      <div class="ctrl-label">Step Mode</div>
+      <div class="toggle-row">
+        <button class="tog-btn active-oct" id="btnOct" onclick="setMode('octaves')">Octaves</button>
+        <button class="tog-btn" id="btnDec" onclick="setMode('decades')">Decades</button>
+      </div>
+    </div>
+
+    <!-- Number of steps -->
+    <div class="ctrl-group">
+      <div class="ctrl-label">Number of <span id="stepModeLabel">Octaves</span></div>
+      <div class="val-row">
+        <span class="ctrl-value purple" id="stepsVal">1</span>
+        <span class="val-unit" id="stepsUnit">octaves</span>
+      </div>
+      <input type="range" class="purple-thumb" id="stepsSlider" min="1" max="6" value="1" step="1" oninput="onSteps()">
+    </div>
+
+  </div>
+
+  <!-- Warning banner -->
+  <div class="warn-banner" id="warnBanner">
+    <div class="warn-title">⚠ Invalid Frequency Selected</div>
+    <div id="warnText">—</div>
+  </div>
+
+  <!-- Graph -->
+  <div class="graph-wrap">
+    <div class="graph-label">Gain vs Frequency — First Order RC Filter</div>
+    <canvas id="explorerGraph" height="520"></canvas>
+  </div>
+
+  <!-- Readout -->
+  <div class="readout">
+    <div class="ro-item">
+      <div class="ro-label">Passband Gain</div>
+      <div class="ro-val yellow" id="roPB">−3 dB</div>
+    </div>
+    <div class="ro-item">
+      <div class="ro-label">Cutoff Freq (f<sub>c</sub>)</div>
+      <div class="ro-val green" id="roFC">1000 Hz</div>
+    </div>
+    <div class="ro-item">
+      <div class="ro-label">Selected Freq (f<sub>A</sub>)</div>
+      <div class="ro-val orange" id="roFA">— Hz</div>
+    </div>
+    <div class="ro-item">
+      <div class="ro-label">Gain at f<sub>A</sub></div>
+      <div class="ro-val orange" id="roGainA">— dB</div>
+    </div>
+    <div class="ro-item">
+      <div class="ro-label">Projected Freq (f<sub>B</sub>)</div>
+      <div class="ro-val purple" id="roFB">— Hz</div>
+    </div>
+    <div class="ro-item">
+      <div class="ro-label">Gain at f<sub>B</sub></div>
+      <div class="ro-val purple" id="roGainB">— dB</div>
+    </div>
+    <div class="ro-item">
+      <div class="ro-label">Roll-off Applied</div>
+      <div class="ro-val dim" id="roRolloff">—</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // ── State ─────────────────────────────────────────────────────────────────
+  let filterType = 'low';   // 'low' | 'high'
+  let stepMode   = 'octaves'; // 'octaves' | 'decades'
+  let il         = 0;      // insertion loss dB (≤ 0)
+  let fc         = 10000;    // cutoff Hz
+  let fA         = 40000;    // selected Hz
+  let steps      = 1;       // octaves or decades
+
+  const IL_MIN = -40, IL_MAX = 0;
+
+  // log slider helpers: 0–500 → 1 Hz – 100 kHz
+  const LOG_MIN = 0, LOG_MAX = 500;
+  const FREQ_MIN = 1, FREQ_MAX = 100000;
+
+  function sliderToFreq(v) {
+    return Math.round(FREQ_MIN * Math.pow(FREQ_MAX / FREQ_MIN, v / LOG_MAX));
+  }
+  function freqToSlider(f) {
+    return Math.round(LOG_MAX * Math.log(f / FREQ_MIN) / Math.log(FREQ_MAX / FREQ_MIN));
+  }
+
+  function formatFreq(f) {
+    if (f >= 1000) {
+      const k = f / 1000;
+      return (k % 1 === 0 ? k : parseFloat(k.toFixed(2))) + ' kHz';
+    }
+    return f + ' Hz';
+  }
+
+  // ── Filter math ───────────────────────────────────────────────────────────
+  // The passband gain of a passive RC filter is 0 dB (no loss ideally),
+  // but we model insertion loss by treating the effective max gain as `il` dB.
+  // The -3dB point is at fc regardless. We define:
+  //   gain(f) = il + 20*log10( H(f) )
+  // where H is the standard first-order response normalised to unity at passband.
+
+  function gainAt(f) {
+    const ratio = f / fc;
+    let H;
+    if (filterType === 'low')  H = 1 / Math.sqrt(1 + ratio * ratio);
+    else                       H = ratio / Math.sqrt(1 + ratio * ratio);
+    return il + 20 * Math.log10(Math.max(H, 1e-10));
+  }
+
+  // Projected frequency
+  function fB() {
+    if (stepMode === 'octaves') {
+      return filterType === 'low' ? fA * Math.pow(2, steps) : fA / Math.pow(2, steps);
+    } else {
+      return filterType === 'low' ? fA * Math.pow(10, steps) : fA / Math.pow(10, steps);
+    }
+  }
+
+  // Roll-off in dB for chosen steps
+  function rolloffDb() {
+    return stepMode === 'octaves' ? steps * 6 : steps * 20;
+  }
+
+  // ── Validation ────────────────────────────────────────────────────────────
+  // Valid zone: gain at fA must be at least 6 dB below passband (il)
+  // i.e. gainAt(fA) ≤ il − 6
+  // Also fA must be on the correct side of fc for the filter type.
+
+  function validate() {
+    const gA    = gainAt(fA);
+    const limit = il - 6;
+
+    // Check if fA is in passband direction (wrong side of fc)
+    const inPassband = filterType === 'low' ? fA < fc : fA > fc;
+    if (inPassband) {
+      return {
+        ok: false,
+        msg: `<strong>${formatFreq(fA)}</strong> is inside the <strong>passband</strong> of this ` +
+             `${filterType === 'low' ? 'low-pass' : 'high-pass'} filter. ` +
+             `The passband extends ${filterType === 'low' ? 'below' : 'above'} the cutoff frequency ` +
+             `(f<sub>c</sub> = ${formatFreq(fc)}). ` +
+             `Select a frequency ${filterType === 'low' ? 'above' : 'below'} f<sub>c</sub> where the filter is actively rolling off.`
+      };
+    }
+
+    // Check transition / not-yet-linear region: gain within 6 dB of passband
+    if (gA > limit) {
+      const diff = (gA - limit).toFixed(1);
+      return {
+        ok: false,
+        msg: `<strong>${formatFreq(fA)}</strong> is in the <strong>transition region</strong> — only ` +
+             `<strong>${(gA - il).toFixed(1)} dB</strong> below the passband gain, but the roll-off rate ` +
+             `of −20 dB/decade (−6 dB/octave) is not yet established. ` +
+             `A first-order filter only approaches its asymptotic slope well beyond f<sub>c</sub>. ` +
+             `Move further into the stopband (at least 6 dB below passband = ${limit.toFixed(0)} dB) ` +
+             `to select a point on the linear portion of the slope. You are ${diff} dB too close to the passband.`
+      };
+    }
+
+    return { ok: true };
+  }
+
+  // ── UI helpers ────────────────────────────────────────────────────────────
+  // Default state per filter type
+  const DEFAULTS = {
+    low:  { fc: 10000, fA: 40000, fcSlider: 400, faSlider: 460 },
+    high: { fc:  1000, fA:   100, fcSlider: 300, faSlider: 200 }
+  };
+
+  function setFilter(type) {
+    filterType = type;
+    document.getElementById('btnLP').className = 'tog-btn' + (type==='low'  ? ' active-lp' : '');
+    document.getElementById('btnHP').className = 'tog-btn' + (type==='high' ? ' active-hp' : '');
+    // Apply sensible defaults for the chosen filter type
+    const d = DEFAULTS[type];
+    fc = d.fc; fA = d.fA;
+    document.getElementById('fcSlider').value = d.fcSlider;
+    document.getElementById('faSlider').value = d.faSlider;
+    update();
+  }
+  function setMode(mode) {
+    stepMode = mode;
+    document.getElementById('btnOct').className = 'tog-btn' + (mode==='octaves'  ? ' active-oct' : '');
+    document.getElementById('btnDec').className = 'tog-btn' + (mode==='decades' ? ' active-dec' : '');
+    document.getElementById('stepModeLabel').textContent = mode === 'octaves' ? 'Octaves' : 'Decades';
+    document.getElementById('stepsUnit').textContent     = mode === 'octaves' ? 'octaves' : 'decades';
+    update();
+  }
+  function onIL()    { il    = parseInt(document.getElementById('ilSlider').value);    update(); }
+  function onFC()    { fc    = sliderToFreq(document.getElementById('fcSlider').value); update(); }
+  function onFA()    { fA    = sliderToFreq(document.getElementById('faSlider').value); update(); }
+  function onSteps() { steps = parseInt(document.getElementById('stepsSlider').value); update(); }
+
+  function update() {
+    // Sync display values
+    document.getElementById('ilVal').textContent    = il <= 0 ? il : '+'+il;
+    document.getElementById('fcVal').textContent    = fc >= 1000 ? (fc/1000%1===0?fc/1000:(fc/1000).toFixed(2)) : fc;
+    document.getElementById('fcUnit').textContent   = fc >= 1000 ? 'kHz' : 'Hz';
+    document.getElementById('faVal').textContent    = fA >= 1000 ? (fA/1000%1===0?fA/1000:(fA/1000).toFixed(2)) : fA;
+    document.getElementById('faUnit').textContent   = fA >= 1000 ? 'kHz' : 'Hz';
+    document.getElementById('stepsVal').textContent = steps;
+
+    const v = validate();
+    const banner = document.getElementById('warnBanner');
+    if (!v.ok) {
+      banner.classList.add('visible');
+      document.getElementById('warnText').innerHTML = v.msg;
+    } else {
+      banner.classList.remove('visible');
+    }
+
+    const gA  = gainAt(fA);
+    const fBv = fB();
+    const gB  = gainAt(fBv);
+    const ro  = rolloffDb();
+
+    // Readout
+    document.getElementById('roPB').textContent    = il + ' dB';
+    document.getElementById('roFC').textContent    = formatFreq(fc);
+    document.getElementById('roFA').textContent    = formatFreq(fA);
+    document.getElementById('roFB').textContent    = v.ok ? formatFreq(fBv) : '—';
+    document.getElementById('roGainA').textContent = gA.toFixed(1) + ' dB';
+    document.getElementById('roGainB').textContent = v.ok ? gB.toFixed(1) + ' dB' : '—';
+    document.getElementById('roRolloff').textContent = v.ok
+      ? `−${ro} dB (${steps} ${stepMode})`
+      : '—';
+
+    drawGraph(v.ok);
+  }
+
+  // ── Canvas drawing ────────────────────────────────────────────────────────
+  const canvas = document.getElementById('explorerGraph');
+  const ctx    = canvas.getContext('2d');
+  const GP     = { left: 72, right: 28, top: 44, bottom: 60 };
+
+  const C_CYAN   = '#00e5ff';
+  const C_ORANGE = '#ff6b35';
+  const C_GREEN  = '#00ff99';
+  const C_YELLOW = '#ffe600';
+  const C_PURPLE = '#a78bfa';
+  const C_PINK   = '#ff3d9a';
+
+  function resizeCanvas() {
+    const dpr  = window.devicePixelRatio || 1;
+    const rect = canvas.parentElement.getBoundingClientRect();
+    canvas.width  = rect.width * dpr;
+    canvas.height = 520 * dpr;
+    canvas.style.height = '520px';
+    ctx.scale(dpr, dpr);
+  }
+
+  function dLine(x1,y1,x2,y2,col,w,dash){
+    ctx.strokeStyle=col; ctx.lineWidth=w||1.2;
+    ctx.setLineDash(dash||[5,4]);
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  function sLine(x1,y1,x2,y2,col,w){
+    ctx.strokeStyle=col; ctx.lineWidth=w||1;
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+  }
+  function drawDot(x,y,col,r,glow){
+    ctx.fillStyle=col; ctx.shadowColor=glow||col; ctx.shadowBlur=14;
+    ctx.beginPath(); ctx.arc(x,y,r||7,0,Math.PI*2); ctx.fill();
+    ctx.shadowBlur=0;
+  }
+  function yLbl(txt,y,col){
+    ctx.fillStyle=col; ctx.font='bold 12px Share Tech Mono'; ctx.textAlign='right';
+    ctx.fillText(txt, GP.left-8, y+5);
+  }
+
+  function drawGraph(validFA) {
+    const dpr   = window.devicePixelRatio||1;
+    const fullW = canvas.width/dpr;
+    const fullH = canvas.height/dpr;
+    const plotW = fullW - GP.left - GP.right;
+    const plotH = fullH - GP.top  - GP.bottom;
+
+    ctx.clearRect(0,0,fullW,fullH);
+
+    // Frequency axis range: 2 decades around fc
+    const logFc   = Math.log10(fc);
+    const logFmin = logFc - 2.2;
+    const logFmax = logFc + 2.2;
+
+    // dB axis range
+    const dbTop = Math.max(5, il + 8);
+    const dbBot = il - 55;
+    const dbRange = dbTop - dbBot;
+
+    function dbToY(db){ return GP.top + plotH * (1-(db-dbBot)/dbRange); }
+    function lfToX(lf){ return GP.left + plotW * (lf-logFmin)/(logFmax-logFmin); }
+    function fToX(f)  { return lfToX(Math.log10(f)); }
+
+    const xFc = fToX(fc);
+    const yFc = dbToY(il - 3);
+
+    // ── Grid ────────────────────────────────────────────────────────────────
+    ctx.setLineDash([2,5]);
+    for (let db = Math.ceil(dbBot/10)*10; db <= dbTop; db+=10){
+      const y = dbToY(db);
+      if (y<GP.top||y>GP.top+plotH) continue;
+      ctx.strokeStyle='rgba(30,45,74,0.5)'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(GP.left,y); ctx.lineTo(GP.left+plotW,y); ctx.stroke();
+      ctx.fillStyle='rgba(90,122,154,0.4)'; ctx.font='9px Share Tech Mono'; ctx.textAlign='right';
+      ctx.fillText(db+'dB', GP.left-10, y+4);
+    }
+    for (let lf=Math.floor(logFmin); lf<=Math.ceil(logFmax); lf++){
+      const x = lfToX(lf);
+      if (x<GP.left||x>GP.left+plotW) continue;
+      ctx.strokeStyle='rgba(30,45,74,0.5)'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(x,GP.top); ctx.lineTo(x,GP.top+plotH); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+
+    // Plot border
+    ctx.strokeStyle='rgba(0,229,255,0.18)'; ctx.lineWidth=1;
+    ctx.strokeRect(GP.left,GP.top,plotW,plotH);
+
+    // ── Passband gain line — YELLOW ─────────────────────────────────────────
+    const yPb = dbToY(il);
+    if (yPb>=GP.top && yPb<=GP.top+plotH){
+      dLine(GP.left,yPb,GP.left+plotW,yPb,'rgba(255,230,0,0.45)',1.5);
+      ctx.fillStyle=C_YELLOW; ctx.font='bold 11px Share Tech Mono'; ctx.textAlign='left';
+      ctx.fillText(`Passband ${il}dB`, GP.left+6, yPb-5);
+    }
+
+    // ── 0dB line — cyan subtle ──────────────────────────────────────────────
+    const y0 = dbToY(0);
+    if (y0>=GP.top && y0<=GP.top+plotH){
+      dLine(GP.left,y0,GP.left+plotW,y0,'rgba(0,229,255,0.3)',1,[3,6]);
+    }
+
+    // ── Filter curve (glow + sharp) ─────────────────────────────────────────
+    const samples = Math.floor(plotW*3);
+    function drawCurve(col, lw, blur){
+      ctx.shadowColor=col; ctx.shadowBlur=blur||0;
+      ctx.strokeStyle=col; ctx.lineWidth=lw;
+      ctx.beginPath(); let s=false;
+      for(let px=0;px<=samples;px++){
+        const lf = logFmin+(px/samples)*(logFmax-logFmin);
+        const f  = Math.pow(10,lf);
+        const x  = lfToX(lf);
+        const y  = Math.max(GP.top, Math.min(GP.top+plotH, dbToY(gainAt(f))));
+        if(!s){ctx.moveTo(x,y);s=true;}else ctx.lineTo(x,y);
+      }
+      ctx.stroke(); ctx.shadowBlur=0;
+    }
+    drawCurve('rgba(0,229,255,0.18)',6,10);
+    drawCurve(C_CYAN,2.2,0);
+
+    // ── Cutoff marker — green ───────────────────────────────────────────────
+    if (xFc>=GP.left && xFc<=GP.left+plotW){
+      dLine(xFc, yFc, xFc, GP.top+plotH, 'rgba(0,255,153,0.4)', 1.2);
+      ctx.fillStyle='rgba(0,255,153,0.7)'; ctx.font='bold 11px Share Tech Mono'; ctx.textAlign='center';
+      ctx.fillText('fc', xFc, GP.top+plotH+14);
+      ctx.fillText(formatFreq(fc), xFc, GP.top+plotH+28);
+      drawDot(xFc, yFc, C_GREEN, 5, 'rgba(0,255,153,0.8)');
+    }
+
+    // ── fA crosshairs & dot ─────────────────────────────────────────────────
+    const xA  = fToX(fA);
+    const gA  = gainAt(fA);
+    const yA  = dbToY(gA);
+    const col = validFA ? C_ORANGE : C_PINK;
+    const colA = validFA ? 'rgba(255,107,53,0.5)' : 'rgba(255,61,154,0.5)';
+
+    if (xA>=GP.left && xA<=GP.left+plotW){
+      dLine(xA, Math.max(GP.top,yA), xA, GP.top+plotH, colA, 1.3);
+      dLine(GP.left, yA, Math.min(xA,GP.left+plotW), yA, colA, 1.3);
+      drawDot(xA, yA, col, 7, col);
+
+      ctx.fillStyle=col; ctx.font='bold 13px Share Tech Mono'; ctx.textAlign='center';
+      ctx.fillText('fA', xA, GP.top+plotH+14);
+      ctx.fillText(formatFreq(fA), xA, GP.top+plotH+28);
+
+      yLbl(gA.toFixed(1)+'dB', yA, col);
+    }
+
+    // ── fB crosshairs & dot (only if valid) ────────────────────────────────
+    if (validFA){
+      const fBv = fB();
+      const gB  = gainAt(fBv);
+      const xB  = fToX(fBv);
+      const yB  = dbToY(gB);
+
+      if (xB>=GP.left && xB<=GP.left+plotW){
+        dLine(xB, Math.max(GP.top,yB), xB, GP.top+plotH, 'rgba(167,139,250,0.5)', 1.3);
+        dLine(GP.left, yB, Math.min(xB,GP.left+plotW), yB, 'rgba(167,139,250,0.5)', 1.3);
+        drawDot(xB, yB, C_PURPLE, 7, 'rgba(167,139,250,0.9)');
+
+        ctx.fillStyle=C_PURPLE; ctx.font='bold 13px Share Tech Mono'; ctx.textAlign='center';
+        ctx.fillText('fB', xB, GP.top+plotH+14);
+        ctx.fillText(formatFreq(fBv), xB, GP.top+plotH+28);
+        yLbl(gB.toFixed(1)+'dB', yB, C_PURPLE);
+
+        // Roll-off annotation between A and B
+        // LPF slopes down to the right so label sits right of centre; HPF slopes up to the right so label sits left
+        const midX = (xA+xB)/2;
+        const midY = (yA+yB)/2;
+        const lblX  = filterType === 'low' ? midX + 24 : midX - 24;
+        const lblAlign = filterType === 'low' ? 'left' : 'right';
+        ctx.fillStyle='rgba(200,220,240,0.55)'; ctx.font='bold 11px Share Tech Mono'; ctx.textAlign=lblAlign;
+        ctx.fillText(`−${rolloffDb()} dB`, lblX, midY-10);
+        ctx.font='9px Share Tech Mono'; ctx.fillStyle='rgba(200,220,240,0.35)'; ctx.textAlign=lblAlign;
+        ctx.fillText(`(${steps} ${stepMode})`, lblX, midY+4);
+
+        // Arrow between A and B on the curve
+        sLine(xA,yA,xB,yB,'rgba(200,220,240,0.2)',1.5);
+      }
+    }
+
+    // ── X axis decade labels ────────────────────────────────────────────────
+    ctx.fillStyle='rgba(200,220,240,0.28)'; ctx.font='9px Share Tech Mono'; ctx.textAlign='center';
+    for (let lf=Math.floor(logFmin); lf<=Math.ceil(logFmax); lf++){
+      const x=lfToX(lf);
+      if (x<GP.left||x>GP.left+plotW) continue;
+      ctx.fillText(formatFreq(Math.pow(10,lf)), x, GP.top+plotH+44);
+    }
+
+    // Axis titles
+    ctx.fillStyle='rgba(200,220,240,0.28)'; ctx.font='8px Share Tech Mono'; ctx.textAlign='center';
+    ctx.fillText('FREQUENCY', GP.left+plotW/2, fullH-2);
+    ctx.save(); ctx.translate(10, GP.top+plotH/2); ctx.rotate(-Math.PI/2);
+    ctx.fillText('GAIN (dB)',0,0); ctx.restore();
+  }
+
+  // ── Init ──────────────────────────────────────────────────────────────────
+  window.addEventListener('resize', ()=>{
+    resizeCanvas();
+    update();
+  });
+
+  resizeCanvas();
+  update();
+</script>
+</body>
+</html>

@@ -1,0 +1,1136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RC Filter Simulator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0d14;
+      --panel: #0f1420;
+      --border: #1e2d4a;
+      --accent: #00e5ff;
+      --accent2: #ff6b35;
+      --accent3: #00ff99;
+      --accent4: #a78bfa;
+      --grid: rgba(0, 229, 255, 0.06);
+      --text: #c8d8e8;
+      --label: #5a7a9a;
+      --glow: 0 0 20px rgba(0, 229, 255, 0.3);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Share Tech Mono', monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+      background-image:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+
+    header { text-align: center; margin-bottom: 2.5rem; }
+
+    header h1 {
+      font-family: 'Orbitron', sans-serif;
+      font-size: clamp(1.6rem, 4vw, 2.8rem);
+      font-weight: 900;
+      letter-spacing: 0.12em;
+      color: var(--accent);
+      text-shadow: 0 0 30px rgba(0, 229, 255, 0.5);
+      text-transform: uppercase;
+    }
+
+    header p {
+      margin-top: 0.5rem;
+      color: var(--label);
+      font-size: 0.8rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+    }
+
+    .main-layout {
+      width: 100%;
+      max-width: 1200px;
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      grid-template-rows: auto auto;
+      gap: 1.5rem;
+    }
+
+    .controls {
+      grid-column: 1;
+      grid-row: 1 / 3;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.8rem;
+    }
+
+    .chart-area {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    /* Formula box — full width below both columns */
+    .formula-box {
+      grid-column: 1 / -1;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1.5rem;
+    }
+
+    .formula-box-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.75rem;
+      letter-spacing: 0.15em;
+      color: var(--label);
+      text-transform: uppercase;
+      margin-bottom: 1.2rem;
+      padding-bottom: 0.6rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .formula-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1.2rem;
+    }
+
+    .formula-card {
+      background: rgba(0,229,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+    }
+
+    .formula-card-title {
+      font-size: 0.65rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      margin-bottom: 0.7rem;
+      padding-bottom: 0.4rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .formula-card-title.peak   { color: var(--accent); }
+    .formula-card-title.cutoff { color: var(--accent2); }
+    .formula-card-title.db20   { color: var(--accent4); }
+    .formula-card-title.fc-calc { color: var(--accent3); }
+
+    .formula-line {
+      font-size: 0.72rem;
+      color: var(--label);
+      line-height: 1.9;
+    }
+
+    .formula-line .eq {
+      color: var(--text);
+    }
+
+    .formula-line .val {
+      color: var(--accent);
+    }
+
+    .formula-line .val2 { color: var(--accent2); }
+    .formula-line .val3 { color: var(--accent3); }
+    .formula-line .val4 { color: var(--accent4); }
+
+    .control-group label {
+      display: block;
+      font-size: 0.7rem;
+      letter-spacing: 0.2em;
+      color: var(--label);
+      text-transform: uppercase;
+      margin-bottom: 0.5rem;
+    }
+
+    .control-group .value-display {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--accent);
+      text-shadow: var(--glow);
+      margin-bottom: 0.6rem;
+      line-height: 1;
+    }
+
+    .control-group .unit {
+      font-size: 0.75rem;
+      color: var(--label);
+      margin-left: 4px;
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 10px rgba(0,229,255,0.6);
+      cursor: pointer;
+      transition: transform 0.1s;
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.3); }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 10px rgba(0,229,255,0.6);
+      border: none; cursor: pointer;
+    }
+
+    .range-limits {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.65rem;
+      color: var(--label);
+      margin-top: 4px;
+      opacity: 0.6;
+    }
+
+    .cap-row { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+
+    .cap-btn {
+      flex: 1;
+      padding: 5px 0;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      color: var(--label);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.7rem;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.15s;
+      letter-spacing: 0.05em;
+    }
+
+    .cap-btn.active {
+      background: rgba(0,229,255,0.1);
+      border-color: rgba(0,229,255,0.5);
+      color: var(--accent);
+    }
+
+    .filter-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+
+    .filter-btn {
+      padding: 0.6rem;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      color: var(--label);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.15s;
+      text-align: center;
+    }
+
+    .filter-btn.active {
+      background: rgba(0,229,255,0.1);
+      border-color: rgba(0,229,255,0.5);
+      color: var(--accent);
+    }
+
+    .divider { border: none; border-top: 1px solid var(--border); }
+
+    .readout-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+
+    .readout {
+      background: rgba(0,229,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 0.6rem 0.8rem;
+    }
+
+    .readout-label {
+      font-size: 0.6rem;
+      letter-spacing: 0.15em;
+      color: var(--label);
+      text-transform: uppercase;
+    }
+
+    .readout-value {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--accent2);
+      margin-top: 3px;
+    }
+
+    .chart-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .chart-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.75rem;
+      letter-spacing: 0.15em;
+      color: var(--label);
+      text-transform: uppercase;
+    }
+
+    .badge-row { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+
+    .badge {
+      font-size: 0.65rem;
+      padding: 3px 8px;
+      border-radius: 2px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .badge-cyan {
+      background: rgba(0,229,255,0.1);
+      border: 1px solid rgba(0,229,255,0.3);
+      color: var(--accent);
+    }
+
+    .badge-orange {
+      background: rgba(255,107,53,0.1);
+      border: 1px solid rgba(255,107,53,0.3);
+      color: var(--accent2);
+    }
+
+    canvas { width: 100%; border-radius: 2px; display: block; }
+
+    footer {
+      margin-top: 2rem;
+      font-size: 0.65rem;
+      color: var(--label);
+      opacity: 0.5;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    @media (max-width: 700px) {
+      .main-layout { grid-template-columns: 1fr; }
+      .controls { grid-row: auto; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>RC Filter Simulator</h1>
+  <p>Low Pass · High Pass · Frequency Response</p>
+</header>
+
+<div class="main-layout">
+
+  <div class="controls">
+    <div class="control-group">
+      <label>Filter Type</label>
+      <div class="filter-toggle">
+        <button class="filter-btn active" id="btnLP" onclick="setFilter('low')">Low Pass</button>
+        <button class="filter-btn" id="btnHP" onclick="setFilter('high')">High Pass</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <label>Voltage (Peak to Peak)</label>
+      <div class="value-display" id="volt-val">8<span class="unit">V</span></div>
+      <input type="range" id="volt" min="2" max="14" step="1" value="8">
+      <div class="range-limits"><span>2V</span><span>14V</span></div>
+    </div>
+
+    <div class="control-group">
+      <label>Resistance</label>
+      <div class="value-display" id="res-val">1000<span class="unit">Ω</span></div>
+      <input type="range" id="res" min="100" max="5000" step="100" value="1000">
+      <div class="range-limits"><span>100Ω</span><span>5kΩ</span></div>
+    </div>
+
+    <div class="control-group">
+      <label>Capacitance</label>
+      <div class="value-display" id="cap-val">1.0<span class="unit" id="cap-unit-label">μF</span></div>
+      <input type="range" id="cap" min="1" max="100" step="1" value="10">
+      <div class="range-limits"><span>1.0</span><span>10.0</span></div>
+      <div class="cap-row">
+        <button class="cap-btn active" id="btnMicro" onclick="setCapUnit('micro')">μF</button>
+        <button class="cap-btn" id="btnNano"  onclick="setCapUnit('nano')">nF</button>
+        <button class="cap-btn" id="btnPico"  onclick="setCapUnit('pico')">pF</button>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <div class="readout-grid">
+      <div class="readout">
+        <div class="readout-label">Cutoff Freq</div>
+        <div class="readout-value" id="ro-fc">—</div>
+      </div>
+      <div class="readout">
+        <div class="readout-label">Time Const τ</div>
+        <div class="readout-value" id="ro-tau">—</div>
+      </div>
+      <div class="readout">
+        <div class="readout-label">−3dB Point</div>
+        <div class="readout-value" id="ro-3db">—</div>
+      </div>
+      <div class="readout">
+        <div class="readout-label">−20dB Point</div>
+        <div class="readout-value" id="ro-20db">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bode plot -->
+  <div class="chart-area">
+    <div class="chart-header">
+      <div class="chart-title">Frequency Response</div>
+      <div class="badge-row">
+        <span class="badge badge-cyan" id="badge-filter">Low Pass</span>
+        <span class="badge badge-orange" id="badge-fc">fc = —</span>
+      </div>
+    </div>
+    <canvas id="bodeCanvas" height="280"></canvas>
+  </div>
+
+  <!-- Circuit diagram -->
+  <div class="chart-area">
+    <div class="chart-header">
+      <div class="chart-title">Circuit Diagram</div>
+    </div>
+    <canvas id="circuitCanvas" height="220"></canvas>
+  </div>
+
+  <!-- Formula box — spans full width -->
+  <div class="formula-box">
+    <div class="formula-box-title">Worked Calculations</div>
+    <div class="formula-grid" id="formulaGrid">
+      <!-- populated by updateFormulas() -->
+    </div>
+  </div>
+
+</div>
+
+
+<script>
+  const bodeCanvas    = document.getElementById('bodeCanvas');
+  const bodeCtx       = bodeCanvas.getContext('2d');
+  const circuitCanvas = document.getElementById('circuitCanvas');
+  const circuitCtx    = circuitCanvas.getContext('2d');
+
+  const voltSlider = document.getElementById('volt');
+  const resSlider  = document.getElementById('res');
+  const capSlider  = document.getElementById('cap');
+
+  const voltVal    = document.getElementById('volt-val');
+  const resVal     = document.getElementById('res-val');
+  const capVal     = document.getElementById('cap-val');
+  const capUnitLbl = document.getElementById('cap-unit-label');
+
+  const PAD_LEFT   = 54;
+  const PAD_RIGHT  = 20;
+  const PAD_TOP    = 16;
+  const PAD_BOTTOM = 40;
+
+  let filterType = 'low';
+  let capUnit    = 'micro';
+
+  const unitMultiplier = { micro: 1e-6, nano: 1e-9, pico: 1e-12 };
+  const unitLabel      = { micro: 'μF', nano: 'nF', pico: 'pF' };
+
+  const wireColour  = '#00e5ff';
+  const compColour  = '#00e5ff';
+  const labelColour = 'rgba(200,220,240,0.85)';
+
+  function setFilter(type) {
+    filterType = type;
+    document.getElementById('btnLP').classList.toggle('active', type === 'low');
+    document.getElementById('btnHP').classList.toggle('active', type === 'high');
+    update();
+  }
+
+  function setCapUnit(unit) {
+    capUnit = unit;
+    document.getElementById('btnMicro').classList.toggle('active', unit === 'micro');
+    document.getElementById('btnNano').classList.toggle('active',  unit === 'nano');
+    document.getElementById('btnPico').classList.toggle('active',  unit === 'pico');
+    update();
+  }
+
+  function getParams() {
+    const Vpp = parseFloat(voltSlider.value);
+    const R   = parseFloat(resSlider.value);
+    const raw = parseFloat(capSlider.value) / 10;
+    const C   = raw * unitMultiplier[capUnit];
+    const fc  = 1 / (2 * Math.PI * R * C);
+    const tau = R * C;
+    return { Vpp, R, C, raw, fc, tau };
+  }
+
+  function formatFreq(f) {
+    if (f >= 1e6) return (f/1e6).toFixed(2) + ' MHz';
+    if (f >= 1e3) return (f/1e3).toFixed(2) + ' kHz';
+    return f.toFixed(2) + ' Hz';
+  }
+
+  function formatTime(t) {
+    if (t < 1e-6) return (t*1e9).toFixed(2) + ' ns';
+    if (t < 1e-3) return (t*1e6).toFixed(2) + ' μs';
+    if (t < 1)    return (t*1e3).toFixed(2) + ' ms';
+    return t.toFixed(4) + ' s';
+  }
+
+  function formatImpedance(z) {
+    if (z >= 1e6) return (z/1e6).toFixed(2) + ' MΩ';
+    if (z >= 1e3) return (z/1e3).toFixed(2) + ' kΩ';
+    return z.toFixed(1) + ' Ω';
+  }
+
+  function formatVoltage(v) { return v.toFixed(3) + ' V'; }
+
+  // Calculate gain for a given frequency
+  function getGain(f, fc) {
+    const ratio = f / fc;
+    return filterType === 'low'
+      ? 1 / Math.sqrt(1 + ratio * ratio)
+      : ratio / Math.sqrt(1 + ratio * ratio);
+  }
+
+  // Find frequency at a given dB level (Newton's method)
+  function freqAtDb(targetDb, fc) {
+    const targetGain = Math.pow(10, targetDb / 20);
+    // For low pass: gain = 1/sqrt(1+(f/fc)^2) → f = fc*sqrt(1/g^2 - 1)
+    // For high pass: gain = (f/fc)/sqrt(1+(f/fc)^2) → same formula
+    const ratio = Math.sqrt(1 / (targetGain * targetGain) - 1);
+    return filterType === 'low' ? fc * ratio : fc / ratio;
+  }
+
+  function resizeCanvases() {
+    const dpr = window.devicePixelRatio || 1;
+    const rb = bodeCanvas.parentElement.getBoundingClientRect();
+    bodeCanvas.width  = rb.width * dpr;
+    bodeCanvas.height = 280 * dpr;
+    bodeCanvas.style.height = '280px';
+    bodeCtx.scale(dpr, dpr);
+
+    const rc = circuitCanvas.parentElement.getBoundingClientRect();
+    circuitCanvas.width  = rc.width * dpr;
+    circuitCanvas.height = 220 * dpr;
+    circuitCanvas.style.height = '220px';
+    circuitCtx.scale(dpr, dpr);
+  }
+
+  // ── Bode plot ─────────────────────────────────────────────────────────────
+
+  function drawBode() {
+    const dpr   = window.devicePixelRatio || 1;
+    const fullW = bodeCanvas.width  / dpr;
+    const fullH = bodeCanvas.height / dpr;
+    const plotW = fullW - PAD_LEFT - PAD_RIGHT;
+    const plotH = fullH - PAD_TOP  - PAD_BOTTOM;
+
+    const { Vpp, fc } = getParams();
+    const Vpeak   = Vpp / 2;
+    const logFc   = Math.log10(fc);
+    // −20dB frequency
+    const f20db   = freqAtDb(-20, fc);
+    const logF20  = Math.log10(f20db);   
+    const logFmin = Math.max(-2, Math.min(logFc - 3, logF20 - 1));
+    const logFmax = Math.min(9,  Math.max(logFc + 3, logF20 + 1));
+
+
+
+    bodeCtx.clearRect(0, 0, fullW, fullH);
+    bodeCtx.save();
+    bodeCtx.translate(PAD_LEFT, PAD_TOP);
+
+    const dbMin = -60, dbMax = 6, dbRange = dbMax - dbMin;
+    function dbToY(db) { return plotH * (1 - (db - dbMin) / dbRange); }
+    function logFtoX(lf) { return plotW * (lf - logFmin) / (logFmax - logFmin); }
+
+    // Grid lines
+    const dbTicks = [6, 0, -3, -10, -20, -40, -60];
+    bodeCtx.font      = '9px Share Tech Mono';
+    bodeCtx.textAlign = 'right';
+
+    dbTicks.forEach(db => {
+      const y = dbToY(db);
+      bodeCtx.strokeStyle = db === 0
+        ? 'rgba(0,229,255,0.15)'
+        : db === -3  ? 'rgba(255,107,53,0.25)'
+        : db === -20 ? 'rgba(167,139,250,0.2)'
+        : 'rgba(30,45,74,0.8)';
+      bodeCtx.lineWidth = (db === 0 || db === -3 || db === -20) ? 1.5 : 1;
+      bodeCtx.beginPath(); bodeCtx.moveTo(0, y); bodeCtx.lineTo(plotW, y); bodeCtx.stroke();
+      bodeCtx.fillStyle = db === -3 ? 'rgba(255,107,53,0.8)'
+        : db === -20 ? 'rgba(167,139,250,0.8)'
+        : 'rgba(200,220,240,0.7)';
+      bodeCtx.fillText(`${db}dB`, -4, y + 3);
+    });
+
+    // Vertical grid lines
+    bodeCtx.textAlign = 'center';
+    for (let lf = Math.ceil(logFmin); lf <= Math.floor(logFmax); lf++) {
+      const x = logFtoX(lf);
+      bodeCtx.strokeStyle = 'rgba(30,45,74,0.8)';
+      bodeCtx.lineWidth   = 1;
+      bodeCtx.beginPath(); bodeCtx.moveTo(x, 0); bodeCtx.lineTo(x, plotH); bodeCtx.stroke();
+      const f = Math.pow(10, lf);
+      bodeCtx.fillStyle = 'rgba(200,220,240,0.7)';
+      bodeCtx.font      = '9px Share Tech Mono';
+      bodeCtx.fillText(formatFreq(f), x, plotH + 14);
+    }
+
+    const samples = plotW * 2;
+
+    // Glow pass
+    bodeCtx.shadowColor = 'rgba(0,229,255,0.5)';
+    bodeCtx.shadowBlur  = 8;
+    bodeCtx.strokeStyle = 'rgba(0,229,255,0.3)';
+    bodeCtx.lineWidth   = 4;
+    bodeCtx.beginPath();
+    for (let px = 0; px < samples; px++) {
+      const lf   = logFmin + (px / samples) * (logFmax - logFmin);
+      const f    = Math.pow(10, lf);
+      const gain = getGain(f, fc);
+      const db   = 20 * Math.log10(Math.max(gain, 1e-10));
+      const x    = logFtoX(lf);
+      const y    = Math.max(0, Math.min(plotH, dbToY(db)));
+      px === 0 ? bodeCtx.moveTo(x, y) : bodeCtx.lineTo(x, y);
+    }
+    bodeCtx.stroke();
+
+    // Sharp pass
+    bodeCtx.shadowBlur  = 0;
+    bodeCtx.strokeStyle = '#00e5ff';
+    bodeCtx.lineWidth   = 2;
+    bodeCtx.beginPath();
+    for (let px = 0; px < samples; px++) {
+      const lf   = logFmin + (px / samples) * (logFmax - logFmin);
+      const f    = Math.pow(10, lf);
+      const gain = getGain(f, fc);
+      const db   = 20 * Math.log10(Math.max(gain, 1e-10));
+      const x    = logFtoX(lf);
+      const y    = Math.max(0, Math.min(plotH, dbToY(db)));
+      px === 0 ? bodeCtx.moveTo(x, y) : bodeCtx.lineTo(x, y);
+    }
+    bodeCtx.stroke();
+
+    // ── Voltage annotations on Y axis ─────────────────────────────────────
+    // Peak voltage (0dB line)
+    const peakY = dbToY(0);
+    bodeCtx.fillStyle = 'rgba(0,229,255,0.6)';
+    bodeCtx.font      = '9px Share Tech Mono';
+    bodeCtx.textAlign = 'left';
+    bodeCtx.fillText(`${formatVoltage(Vpeak)} pk`, 4, peakY - 3);
+
+    // −3dB voltage
+    const v3db  = Vpeak * getGain(fc, fc);
+    const y3dbV = dbToY(-3);
+    bodeCtx.fillStyle = 'rgba(255,107,53,0.7)';
+    bodeCtx.fillText(`${formatVoltage(v3db)} pk`, 4, y3dbV + 12);
+
+    // −20dB voltage
+    const v20db  = Vpeak * Math.pow(10, -20/20);
+    const y20dbV = dbToY(-20);
+    bodeCtx.fillStyle = 'rgba(167,139,250,0.7)';
+    bodeCtx.fillText(`${formatVoltage(v20db)} pk`, 4, y20dbV - 3);
+
+    // ── fc marker (orange) ────────────────────────────────────────────────
+    const fcX = logFtoX(logFc);
+    const fcY = dbToY(-3);
+
+    bodeCtx.strokeStyle = 'rgba(255,107,53,0.7)';
+    bodeCtx.lineWidth   = 1.5;
+    bodeCtx.setLineDash([4, 4]);
+    bodeCtx.beginPath(); bodeCtx.moveTo(fcX, 0); bodeCtx.lineTo(fcX, plotH); bodeCtx.stroke();
+    bodeCtx.setLineDash([]);
+
+    bodeCtx.fillStyle   = '#ff6b35';
+    bodeCtx.shadowColor = 'rgba(255,107,53,0.8)';
+    bodeCtx.shadowBlur  = 10;
+    bodeCtx.beginPath();
+    bodeCtx.arc(fcX, fcY, 5, 0, Math.PI * 2);
+    bodeCtx.fill();
+    bodeCtx.shadowBlur = 0;
+
+    bodeCtx.fillStyle = 'rgba(255,107,53,0.9)';
+    bodeCtx.font      = '10px Share Tech Mono';
+    bodeCtx.textAlign = fcX > plotW * 0.7 ? 'right' : 'left';
+    const lOff        = fcX > plotW * 0.7 ? -8 : 8;
+    bodeCtx.fillText(`fc = ${formatFreq(fc)}`, fcX + lOff, fcY + 44);
+    bodeCtx.fillText(`−3dB`, fcX + lOff, fcY + 24);
+
+    // ── −20dB marker (purple) ─────────────────────────────────────────────
+    if (logF20 >= logFmin && logF20 <= logFmax) {
+      const x20 = logFtoX(logF20);
+      const y20 = dbToY(-20);
+
+      bodeCtx.strokeStyle = 'rgba(167,139,250,0.7)';
+      bodeCtx.lineWidth   = 1.5;
+      bodeCtx.setLineDash([4, 4]);
+      bodeCtx.beginPath(); bodeCtx.moveTo(x20, 0); bodeCtx.lineTo(x20, plotH); bodeCtx.stroke();
+      bodeCtx.setLineDash([]);
+
+      bodeCtx.fillStyle   = '#a78bfa';
+      bodeCtx.shadowColor = 'rgba(167,139,250,0.8)';
+      bodeCtx.shadowBlur  = 10;
+      bodeCtx.beginPath();
+      bodeCtx.arc(x20, y20, 5, 0, Math.PI * 2);
+      bodeCtx.fill();
+      bodeCtx.shadowBlur = 0;
+
+      bodeCtx.fillStyle = 'rgba(167,139,250,0.9)';
+      bodeCtx.font      = '10px Share Tech Mono';
+      bodeCtx.textAlign = x20 > plotW * 0.7 ? 'right' : 'left';
+      const lOff20      = x20 > plotW * 0.7 ? -8 : 8;
+      bodeCtx.fillText(`f₋₂₀ = ${formatFreq(f20db)}`, x20 + lOff20, y20 + 54);
+      bodeCtx.fillText(`−20dB`, x20 + lOff20, y20 + 34);
+    }
+
+    bodeCtx.restore();
+
+    // Y axis title
+    bodeCtx.save();
+    bodeCtx.translate(12, PAD_TOP + plotH / 2);
+    bodeCtx.rotate(-Math.PI / 2);
+    bodeCtx.fillStyle = 'rgba(200,220,240,0.5)';
+    bodeCtx.font      = '9px Share Tech Mono';
+    bodeCtx.textAlign = 'center';
+    bodeCtx.fillText('GAIN (dB)', 0, 0);
+    bodeCtx.restore();
+
+    bodeCtx.fillStyle = 'rgba(200,220,240,0.5)';
+    bodeCtx.font      = '9px Share Tech Mono';
+    bodeCtx.textAlign = 'center';
+    bodeCtx.fillText('FREQUENCY', PAD_LEFT + plotW / 2, fullH - 4);
+  }
+
+  // ── Formula box ───────────────────────────────────────────────────────────
+
+  function updateFormulas() {
+    const { Vpp, R, C, raw, fc, tau } = getParams();
+    const Vpeak  = Vpp / 2;
+    const f20db  = freqAtDb(-20, fc);
+
+    // Frequencies of interest
+    const fPeak  = filterType === 'low' ? fc / 10 : fc * 10; // well into passband
+    const fCut   = fc;
+    const f20    = f20db;
+
+    // Xc at each frequency
+    const XcPeak = 1 / (2 * Math.PI * fPeak * C);
+    const XcCut  = 1 / (2 * Math.PI * fCut  * C);
+    const Xc20   = 1 / (2 * Math.PI * f20   * C);
+
+    // Total impedance |Z| = sqrt(R² + Xc²)
+    const ZPeak  = Math.sqrt(R*R + XcPeak*XcPeak);
+    const ZCut   = Math.sqrt(R*R + XcCut*XcCut);
+    const Z20    = Math.sqrt(R*R + Xc20*Xc20);
+
+    // Output voltage at each point
+    const gainPeak = getGain(fPeak, fc);
+    const gainCut  = getGain(fCut,  fc);
+    const gain20   = getGain(f20,   fc);
+
+    const VoutPeak = Vpeak * gainPeak;
+    const VoutCut  = Vpeak * gainCut;
+    const Vout20   = Vpeak * gain20;
+
+    const fType = filterType === 'low' ? 'Low Pass' : 'High Pass';
+    const passLabel = filterType === 'low' ? 'fc ÷ 10 (passband)' : 'fc × 10 (passband)';
+
+    function fmt(v, unit) {
+      if (unit === 'Hz') return formatFreq(v);
+      if (unit === 'Ω')  return formatImpedance(v);
+      if (unit === 'V')  return formatVoltage(v);
+      if (unit === 's')  return formatTime(v);
+      return v.toFixed(4);
+    }
+
+    function rLabel() { return R >= 1000 ? `${(R/1000).toFixed(1)}kΩ` : `${R}Ω`; }
+    function cLabel() { return `${raw.toFixed(1)}${unitLabel[capUnit]}`; }
+
+    const grid = document.getElementById('formulaGrid');
+    grid.innerHTML = `
+
+      <!-- Cutoff frequency calculation -->
+      <div class="formula-card">
+        <div class="formula-card-title fc-calc">Cutoff Frequency</div>
+        <div class="formula-line">Formula: <span class="eq">fc = 1 / (2π × R × C)</span></div>
+        <div class="formula-line">R = <span class="val3">${rLabel()}</span> &nbsp; C = <span class="val3">${cLabel()}</span></div>
+        <div class="formula-line">fc = 1 / (2π × ${rLabel()} × ${cLabel()})</div>
+        <div class="formula-line">fc = 1 / (2π × ${(R * C).toExponential(3)})</div>
+        <div class="formula-line">fc = 1 / ${(2 * Math.PI * R * C).toExponential(3)}</div>
+        <div class="formula-line">fc = <span class="val3">${fmt(fc, 'Hz')}</span></div>
+        <div class="formula-line" style="margin-top:0.4rem;">τ = R × C = <span class="val3">${fmt(tau, 's')}</span></div>
+      </div>
+
+      <!-- Peak / Passband -->
+      <div class="formula-card">
+        <div class="formula-card-title peak">At Peak — ${passLabel}</div>
+        <div class="formula-line">f = <span class="val">${fmt(fPeak, 'Hz')}</span></div>
+        <div class="formula-line">Xc = 1/(2π × f × C)</div>
+        <div class="formula-line">Xc = 1/(2π × ${fmt(fPeak,'Hz')} × ${cLabel()})</div>
+        <div class="formula-line">Xc = <span class="val">${fmt(XcPeak, 'Ω')}</span></div>
+        <div class="formula-line">|Z| = √(R² + Xc²) = <span class="val">${fmt(ZPeak, 'Ω')}</span></div>
+        <div class="formula-line">Gain = <span class="val">${(gainPeak * 100).toFixed(1)}%</span> &nbsp; (${(20*Math.log10(gainPeak)).toFixed(1)} dB)</div>
+        <div class="formula-line">Vout = <span class="val">${fmt(VoutPeak, 'V')} pk</span> &nbsp; (${(VoutPeak*2).toFixed(3)} Vpp)</div>
+      </div>
+
+      <!-- At cutoff fc -->
+      <div class="formula-card">
+        <div class="formula-card-title cutoff">At Cutoff — fc (−3dB)</div>
+        <div class="formula-line">f = fc = <span class="val2">${fmt(fCut, 'Hz')}</span></div>
+        <div class="formula-line">Xc = 1/(2π × fc × C)</div>
+        <div class="formula-line">Xc = <span class="val2">${fmt(XcCut, 'Ω')}</span> &nbsp; (= R at fc)</div>
+        <div class="formula-line">|Z| = √(R² + R²) = R√2 = <span class="val2">${fmt(ZCut, 'Ω')}</span></div>
+        <div class="formula-line">Gain = <span class="val2">70.7%</span> &nbsp; (−3.01 dB)</div>
+        <div class="formula-line">Vout = <span class="val2">${fmt(VoutCut, 'V')} pk</span> &nbsp; (${(VoutCut*2).toFixed(3)} Vpp)</div>
+      </div>
+
+      <!-- At −20dB -->
+      <div class="formula-card">
+        <div class="formula-card-title db20">At −20dB Point</div>
+        <div class="formula-line">f = <span class="val4">${fmt(f20, 'Hz')}</span></div>
+        <div class="formula-line">Xc = 1/(2π × f × C)</div>
+        <div class="formula-line">Xc = <span class="val4">${fmt(Xc20, 'Ω')}</span></div>
+        <div class="formula-line">|Z| = √(R² + Xc²) = <span class="val4">${fmt(Z20, 'Ω')}</span></div>
+        <div class="formula-line">Gain = <span class="val4">10%</span> &nbsp; (−20 dB)</div>
+        <div class="formula-line">Vout = <span class="val4">${fmt(Vout20, 'V')} pk</span> &nbsp; (${(Vout20*2).toFixed(3)} Vpp)</div>
+      </div>
+
+    `;
+  }
+
+  // ── Circuit diagram ───────────────────────────────────────────────────────
+
+  function line(x1, y1, x2, y2, col, lw) {
+    circuitCtx.strokeStyle = col || wireColour;
+    circuitCtx.lineWidth   = lw  || 1.8;
+    circuitCtx.lineCap     = 'round';
+    circuitCtx.beginPath();
+    circuitCtx.moveTo(x1, y1);
+    circuitCtx.lineTo(x2, y2);
+    circuitCtx.stroke();
+  }
+
+  function drawCircuit() {
+    const dpr = window.devicePixelRatio || 1;
+    const W   = circuitCanvas.width  / dpr;
+    const H   = circuitCanvas.height / dpr;
+    const { R, raw, Vpp } = getParams();
+
+    circuitCtx.clearRect(0, 0, W, H);
+
+    const margin  = 40;
+    const wireY   = H * 0.32;
+    const gndY    = H * 0.82;
+    const leftX   = margin;
+    const rightX  = W - margin;
+    const juncX   = W * 0.62;
+    const serMidX = (leftX + juncX) / 2;
+
+    function dot(x, y) {
+      circuitCtx.fillStyle = wireColour;
+      circuitCtx.beginPath();
+      circuitCtx.arc(x, y, 3.5, 0, Math.PI * 2);
+      circuitCtx.fill();
+    }
+
+    function terminalDot(x, y) {
+      circuitCtx.strokeStyle = wireColour;
+      circuitCtx.lineWidth   = 1.8;
+      circuitCtx.beginPath();
+      circuitCtx.arc(x, y, 4, 0, Math.PI * 2);
+      circuitCtx.stroke();
+    }
+
+    line(leftX,      wireY, serMidX - 30, wireY);
+    line(serMidX+30, wireY, juncX,        wireY);
+    line(juncX,      wireY, rightX,       wireY);
+    line(leftX,      gndY,  juncX,        gndY);
+    line(juncX,      gndY,  rightX,       gndY);
+    line(juncX,      wireY, juncX,        gndY);
+
+    terminalDot(leftX,  wireY);
+    terminalDot(leftX,  gndY);
+    terminalDot(rightX, wireY);
+    terminalDot(rightX, gndY);
+    dot(juncX, wireY);
+    dot(juncX, gndY);
+
+    if (filterType === 'low') {
+      drawZigzagResistor(serMidX, wireY);
+    } else {
+      drawPlateCapacitorInline(serMidX, wireY);
+    }
+
+    const shuntMidY = (wireY + gndY) / 2;
+    if (filterType === 'low') {
+      drawPlateCapacitorShunt(juncX, shuntMidY);
+    } else {
+      drawZigzagResistorShunt(juncX, shuntMidY);
+    }
+
+    drawGnd(juncX, gndY + 2);
+
+    const arrowX = juncX + (rightX - juncX) * 0.4;
+    drawArrow(arrowX, wireY);
+    drawVinLabel(leftX, wireY, gndY, Vpp);
+    drawVoutLabel(rightX, wireY, gndY);
+
+    circuitCtx.fillStyle = labelColour;
+    circuitCtx.font      = '11px Share Tech Mono';
+    circuitCtx.textAlign = 'center';
+
+    const rLabel = R >= 1000 ? `${(R/1000).toFixed(1)}kΩ` : `${R}Ω`;
+    const cLabel = `${raw.toFixed(1)}${unitLabel[capUnit]}`;
+
+    if (filterType === 'low') {
+      circuitCtx.fillText('Resistor, R', serMidX, wireY - 28);
+      circuitCtx.fillStyle = 'rgba(140,160,180,0.7)';
+      circuitCtx.font      = '10px Share Tech Mono';
+      circuitCtx.fillText(rLabel, serMidX, wireY - 16);
+      circuitCtx.fillStyle = labelColour;
+      circuitCtx.font      = '11px Share Tech Mono';
+      circuitCtx.textAlign = 'left';
+      circuitCtx.fillText('Capacitor, C', juncX + 22, shuntMidY - 4);
+      circuitCtx.fillStyle = 'rgba(140,160,180,0.7)';
+      circuitCtx.font      = '10px Share Tech Mono';
+      circuitCtx.fillText(cLabel, juncX + 22, shuntMidY + 10);
+    } else {
+      circuitCtx.fillText('Capacitor, C', serMidX, wireY - 28);
+      circuitCtx.fillStyle = 'rgba(140,160,180,0.7)';
+      circuitCtx.font      = '10px Share Tech Mono';
+      circuitCtx.fillText(cLabel, serMidX, wireY - 16);
+      circuitCtx.fillStyle = labelColour;
+      circuitCtx.font      = '11px Share Tech Mono';
+      circuitCtx.textAlign = 'left';
+      circuitCtx.fillText('Resistor, R', juncX + 22, shuntMidY - 4);
+      circuitCtx.fillStyle = 'rgba(140,160,180,0.7)';
+      circuitCtx.font      = '10px Share Tech Mono';
+      circuitCtx.fillText(rLabel, juncX + 22, shuntMidY + 10);
+    }
+  }
+
+  // ── Component drawing functions ───────────────────────────────────────────
+
+  function drawZigzagResistor(cx, cy) {
+    const peaks = 6, totalW = 60, h = 10;
+    const x0 = cx - totalW / 2, segW = totalW / peaks;
+    circuitCtx.strokeStyle = '#00e5ff';
+    circuitCtx.lineWidth   = 1.8;
+    circuitCtx.lineCap     = 'round';
+    circuitCtx.lineJoin    = 'round';
+    circuitCtx.beginPath();
+    circuitCtx.moveTo(x0, cy);
+    for (let i = 0; i < peaks; i++) {
+      const xMid  = x0 + segW * i + segW / 2;
+      const xEnd  = x0 + segW * (i + 1);
+      const yPeak = (i % 2 === 0) ? cy - h : cy + h;
+      circuitCtx.lineTo(xMid, yPeak);
+      circuitCtx.lineTo(xEnd, cy);
+    }
+    circuitCtx.stroke();
+  }
+
+  function drawZigzagResistorShunt(cx, cy) {
+    const peaks = 6, totalH = 60, w = 10;
+    const y0 = cy - totalH / 2, segH = totalH / peaks;
+    circuitCtx.strokeStyle = '#00e5ff';
+    circuitCtx.lineWidth   = 1.8;
+    circuitCtx.lineCap     = 'round';
+    circuitCtx.lineJoin    = 'round';
+    circuitCtx.beginPath();
+    circuitCtx.moveTo(cx, y0);
+    for (let i = 0; i < peaks; i++) {
+      const yMid  = y0 + segH * i + segH / 2;
+      const yEnd  = y0 + segH * (i + 1);
+      const xPeak = (i % 2 === 0) ? cx + w : cx - w;
+      circuitCtx.lineTo(xPeak, yMid);
+      circuitCtx.lineTo(cx, yEnd);
+    }
+    circuitCtx.stroke();
+  }
+
+  function drawPlateCapacitorInline(cx, cy) {
+    const gap = 6, plateH = 22, stubW = 22;
+    circuitCtx.strokeStyle = '#00e5ff';
+    circuitCtx.lineWidth   = 1.8;
+    line(cx - stubW - gap, cy, cx - gap, cy);
+    line(cx + gap, cy, cx + stubW + gap, cy);
+    circuitCtx.fillStyle = '#00e5ff';
+    circuitCtx.fillRect(cx - gap - 3, cy - plateH / 2, 4, plateH);
+    circuitCtx.fillRect(cx + gap - 1, cy - plateH / 2, 4, plateH);
+  }
+
+  function drawPlateCapacitorShunt(cx, cy) {
+    const gap = 6, plateW = 26;
+    circuitCtx.fillStyle = '#00e5ff';
+    circuitCtx.fillRect(cx - plateW / 2, cy - gap - 3, plateW, 4);
+    circuitCtx.fillRect(cx - plateW / 2, cy + gap - 1, plateW, 4);
+  }
+
+  function drawGnd(x, y) {
+    const gLines = [[20,0],[13,7],[6,14]];
+    circuitCtx.strokeStyle = 'rgba(0,229,255,0.65)';
+    circuitCtx.lineWidth   = 1.8;
+    circuitCtx.lineCap     = 'round';
+    gLines.forEach(([len, dy]) => {
+      circuitCtx.beginPath();
+      circuitCtx.moveTo(x - len/2, y + dy);
+      circuitCtx.lineTo(x + len/2, y + dy);
+      circuitCtx.stroke();
+    });
+  }
+
+  function drawArrow(x, y) {
+    const aLen = 18, aHead = 7;
+    circuitCtx.strokeStyle = 'rgba(200,220,240,0.6)';
+    circuitCtx.fillStyle   = 'rgba(200,220,240,0.6)';
+    circuitCtx.lineWidth   = 1.4;
+    circuitCtx.beginPath();
+    circuitCtx.moveTo(x - aLen/2, y - 10);
+    circuitCtx.lineTo(x + aLen/2, y - 10);
+    circuitCtx.stroke();
+    circuitCtx.beginPath();
+    circuitCtx.moveTo(x + aLen/2,         y - 10);
+    circuitCtx.lineTo(x + aLen/2 - aHead, y - 14);
+    circuitCtx.lineTo(x + aLen/2 - aHead, y - 6);
+    circuitCtx.closePath();
+    circuitCtx.fill();
+    circuitCtx.fillStyle  = 'rgba(200,220,240,0.6)';
+    circuitCtx.font       = '11px Share Tech Mono';
+    circuitCtx.textAlign  = 'center';
+    circuitCtx.fillText('I', x, y - 14);
+  }
+
+  function drawVinLabel(x, wireY, gndY, Vpp) {
+    const midY   = (wireY + gndY) / 2;
+    const labelX = x - 22;
+    circuitCtx.strokeStyle = 'rgba(0,229,255,0.5)';
+    circuitCtx.lineWidth   = 1.4;
+    circuitCtx.beginPath();
+    const sineH = 18, sineW = 28;
+    for (let i = 0; i <= 40; i++) {
+      const t  = (i / 40) * Math.PI * 2;
+      const px = labelX + 5 - sineW/2 + (sineW * i / 40);
+      const py = wireY + 40 + Math.sin(t) * sineH/2;
+      i === 0 ? circuitCtx.moveTo(px, py) : circuitCtx.lineTo(px, py);
+    }
+    circuitCtx.stroke();
+    circuitCtx.fillStyle  = 'rgba(200,220,240,0.85)';
+    circuitCtx.font       = 'italic 13px Share Tech Mono';
+    circuitCtx.textAlign  = 'center';
+    circuitCtx.fillText('V', labelX - 3, midY + 5);
+    circuitCtx.font       = '9px Share Tech Mono';
+    circuitCtx.fillText('in', labelX + 7, midY + 8);
+    circuitCtx.fillStyle  = 'rgba(140,160,180,0.6)';
+    circuitCtx.font       = '9px Share Tech Mono';
+    circuitCtx.fillText(`${Vpp}Vpp`, labelX, midY + 20);
+    circuitCtx.strokeStyle = 'rgba(200,220,240,0.5)';
+    circuitCtx.lineWidth   = 1.2;
+    circuitCtx.beginPath();
+    circuitCtx.moveTo(labelX, wireY + 4); circuitCtx.lineTo(labelX, midY - 18); circuitCtx.stroke();
+    circuitCtx.beginPath();
+    circuitCtx.moveTo(labelX, wireY + 4); circuitCtx.lineTo(labelX - 4, wireY + 12);
+    circuitCtx.moveTo(labelX, wireY + 4); circuitCtx.lineTo(labelX + 4, wireY + 12);
+    circuitCtx.stroke();
+    circuitCtx.beginPath();
+    circuitCtx.moveTo(labelX, gndY - 4); circuitCtx.lineTo(labelX, midY + 28); circuitCtx.stroke();
+    circuitCtx.beginPath();
+    circuitCtx.moveTo(labelX, gndY - 4); circuitCtx.lineTo(labelX - 4, gndY - 12);
+    circuitCtx.moveTo(labelX, gndY - 4); circuitCtx.lineTo(labelX + 4, gndY - 12);
+    circuitCtx.stroke();
+  }
+
+  function drawVoutLabel(x, wireY, gndY) {
+    const midY   = (wireY + gndY) / 2;
+    const labelX = x + 22;
+    circuitCtx.fillStyle  = 'rgba(0,255,153,0.85)';
+    circuitCtx.font       = 'italic 13px Share Tech Mono';
+    circuitCtx.textAlign  = 'center';
+    circuitCtx.fillText('V', labelX - 3, midY + 5);
+    circuitCtx.font       = '9px Share Tech Mono';
+    circuitCtx.fillText('out', labelX + 9, midY + 8);
+    circuitCtx.strokeStyle = 'rgba(0,255,153,0.5)';
+    circuitCtx.lineWidth   = 1.2;
+    circuitCtx.beginPath();
+    circuitCtx.moveTo(labelX, wireY + 4); circuitCtx.lineTo(labelX, midY - 14); circuitCtx.stroke();
+    circuitCtx.beginPath();
+    circuitCtx.moveTo(labelX, wireY + 4); circuitCtx.lineTo(labelX - 4, wireY + 12);
+    circuitCtx.moveTo(labelX, wireY + 4); circuitCtx.lineTo(labelX + 4, wireY + 12);
+    circuitCtx.stroke();
+    circuitCtx.beginPath();
+    circuitCtx.moveTo(labelX, gndY - 4); circuitCtx.lineTo(labelX, midY + 20); circuitCtx.stroke();
+    circuitCtx.beginPath();
+    circuitCtx.moveTo(labelX, gndY - 4); circuitCtx.lineTo(labelX - 4, gndY - 12);
+    circuitCtx.moveTo(labelX, gndY - 4); circuitCtx.lineTo(labelX + 4, gndY - 12);
+    circuitCtx.stroke();
+  }
+
+  // ── Update ────────────────────────────────────────────────────────────────
+
+  function update() {
+    const { Vpp, R, C, raw, fc, tau } = getParams();
+    const f20db = freqAtDb(-20, fc);
+
+    voltVal.innerHTML = `${Vpp}<span class="unit">V</span>`;
+    resVal.innerHTML  = R >= 1000
+      ? `${(R/1000).toFixed(1)}<span class="unit">kΩ</span>`
+      : `${R}<span class="unit">Ω</span>`;
+    capVal.innerHTML  = `${raw.toFixed(1)}<span class="unit">${unitLabel[capUnit]}</span>`;
+    capUnitLbl.textContent = unitLabel[capUnit];
+
+    document.getElementById('ro-fc').textContent   = formatFreq(fc);
+    document.getElementById('ro-tau').textContent  = formatTime(tau);
+    document.getElementById('ro-3db').textContent  = formatFreq(fc);
+    document.getElementById('ro-20db').textContent = formatFreq(f20db);
+
+    document.getElementById('badge-filter').textContent = filterType === 'low' ? 'Low Pass' : 'High Pass';
+    document.getElementById('badge-fc').textContent     = `fc = ${formatFreq(fc)}`;
+
+    drawBode();
+    drawCircuit();
+    updateFormulas();
+  }
+
+  voltSlider.addEventListener('input', update);
+  resSlider.addEventListener('input',  update);
+  capSlider.addEventListener('input',  update);
+  window.addEventListener('resize', () => { resizeCanvases(); update(); });
+
+  setTimeout(() => { resizeCanvases(); update(); }, 50);
+</script>
+</body>
+</html>

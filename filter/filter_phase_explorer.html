@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RC / RL Filter Phase Explorer</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      --bg:#0a0d14; --panel:#0f1420; --border:#1e2d4a;
+      --accent:#00e5ff; --accent2:#ff6b35; --accent3:#00ff99;
+      --accent4:#ff3d9a; --accent5:#a78bfa; --accent6:#ffe600;
+      --grid:rgba(0,229,255,0.05); --text:#c8d8e8; --label:#5a7a9a;
+    }
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{
+      background:var(--bg);color:var(--text);
+      font-family:'Share Tech Mono',monospace;
+      min-height:100vh;display:flex;flex-direction:column;align-items:center;
+      padding:1.2rem 1rem 2rem;
+      background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+      background-size:40px 40px;
+    }
+    header{text-align:center;margin-bottom:1rem;}
+    header h1{
+      font-family:'Orbitron',sans-serif;font-size:clamp(1rem,3vw,1.8rem);
+      font-weight:900;letter-spacing:.12em;color:var(--accent);
+      text-shadow:0 0 28px rgba(0,229,255,.5);text-transform:uppercase;
+    }
+    header p{margin-top:.25rem;color:var(--label);font-size:.62rem;letter-spacing:.2em;text-transform:uppercase;}
+
+    .wrap{width:100%;max-width:1340px;display:flex;flex-direction:column;gap:.8rem;}
+
+    .top-bar{
+      background:var(--panel);border:1px solid var(--border);border-radius:4px;
+      padding:.9rem 1.4rem;
+      display:flex;gap:2rem;align-items:center;flex-wrap:wrap;justify-content:center;
+    }
+    .ctrl-group{display:flex;flex-direction:column;gap:.4rem;align-items:center;}
+    .ctrl-label{font-size:.58rem;letter-spacing:.2em;color:var(--label);text-transform:uppercase;}
+    .toggle-row{display:flex;gap:.4rem;}
+    .tog-btn{
+      padding:.35rem 1rem;border-radius:3px;
+      font-family:'Share Tech Mono',monospace;font-size:.7rem;
+      letter-spacing:.08em;text-transform:uppercase;cursor:pointer;
+      border:1px solid var(--border);background:transparent;color:var(--label);transition:all .15s;
+    }
+    .tog-btn.active-lp{border-color:rgba(0,229,255,.5);background:rgba(0,229,255,.1);color:var(--accent);}
+    .tog-btn.active-hp{border-color:rgba(255,107,53,.5);background:rgba(255,107,53,.1);color:var(--accent2);}
+    .tog-btn.active-rc{border-color:rgba(0,255,153,.5);background:rgba(0,255,153,.1);color:var(--accent3);}
+    .tog-btn.active-rl{border-color:rgba(167,139,250,.5);background:rgba(167,139,250,.1);color:var(--accent5);}
+
+    .preset-info{display:flex;gap:1.4rem;align-items:center;flex-wrap:wrap;justify-content:center;}
+    .preset-chip{display:flex;flex-direction:column;gap:.15rem;align-items:center;}
+    .preset-chip-lbl{font-size:.52rem;letter-spacing:.15em;color:var(--label);text-transform:uppercase;}
+    .preset-chip-val{font-family:'Orbitron',sans-serif;font-size:.9rem;font-weight:700;color:var(--accent3);}
+    .preset-chip-val.orange{color:var(--accent2);}
+    .preset-chip-val.purple{color:var(--accent5);}
+
+    .row2{display:grid;grid-template-columns:380px 1fr;gap:.8rem;align-items:stretch;}
+    @media(max-width:820px){.row2{grid-template-columns:1fr;}}
+
+    .panel{background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:.8rem;}
+    .panel-title{font-size:.56rem;letter-spacing:.2em;color:var(--label);text-transform:uppercase;
+      margin-bottom:.6rem;padding-bottom:.35rem;border-bottom:1px solid var(--border);}
+
+    .freq-panel{display:flex;flex-direction:column;justify-content:center;gap:1rem;padding:1.2rem 1.6rem;}
+    .freq-big{font-family:'Orbitron',sans-serif;font-size:2.4rem;font-weight:900;
+      color:var(--accent6);text-shadow:0 0 20px rgba(255,230,0,.4);text-align:center;line-height:1;}
+    .freq-sub{text-align:center;font-size:.62rem;letter-spacing:.18em;color:var(--label);text-transform:uppercase;margin-top:.2rem;}
+
+    input[type=range]{
+      -webkit-appearance:none;width:100%;height:6px;border-radius:3px;
+      background:var(--border);outline:none;cursor:pointer;
+    }
+    input[type=range]::-webkit-slider-thumb{
+      -webkit-appearance:none;width:22px;height:22px;border-radius:50%;
+      background:var(--thumb-col,var(--accent6));box-shadow:0 0 12px rgba(255,230,0,.7);
+      cursor:pointer;transition:background .15s,transform .1s;
+    }
+    input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.2);}
+
+    .freq-ticks{display:flex;justify-content:space-between;font-size:.58rem;color:var(--label);margin-top:.3rem;opacity:.6;}
+
+    .phase-bar{
+      display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem;
+      background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:3px;padding:.6rem .8rem;
+    }
+    .pb-item{display:flex;flex-direction:column;gap:.18rem;align-items:center;}
+    .pb-lbl{font-size:.52rem;letter-spacing:.15em;color:var(--label);text-transform:uppercase;}
+    .pb-val{font-family:'Orbitron',sans-serif;font-size:1rem;font-weight:700;}
+
+    .graphs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.8rem;}
+    .graphs .panel{min-width:0;width:100%;}
+    @media(max-width:900px){.graphs{grid-template-columns:1fr;}}
+    @media(max-width:900px){.row2{grid-template-columns:1fr;}}
+
+    canvas{display:block;width:100%;max-width:100%;}
+
+    .slider-wrap{position:relative;}
+    .fc-tick{
+      position:absolute;bottom:-8px;width:2px;height:10px;
+      background:var(--accent3);border-radius:1px;
+      transform:translateX(-50%);pointer-events:none;
+      box-shadow:0 0 6px rgba(0,255,153,.7);
+    }
+
+    /* ── Workings panel ── */
+    .workings-grid{
+      display:grid;grid-template-columns:repeat(3,1fr);gap:1rem 1.5rem;
+      padding:.4rem 0;
+    }
+    @media(max-width:700px){.workings-grid{grid-template-columns:1fr;}}
+    .wk-block{display:flex;flex-direction:column;gap:.35rem;}
+    .wk-title{
+      font-family:'Orbitron',sans-serif;font-size:.65rem;font-weight:700;
+      letter-spacing:.15em;text-transform:uppercase;
+      padding-bottom:.35rem;border-bottom:1px solid var(--border);
+      margin-bottom:.1rem;
+    }
+    .wk-line{font-size:.75rem;line-height:1.8;color:var(--text);}
+    .wk-line .sym{color:var(--label);min-width:2.2rem;display:inline-block;}
+    .wk-line .eq{color:var(--label);margin:0 .3rem;}
+    .wk-line .formula{color:rgba(200,220,240,.5);}
+    .wk-line .calc{color:rgba(200,220,240,.7);}
+    .wk-line .result{font-family:'Orbitron',sans-serif;font-size:.8rem;font-weight:700;}
+
+    footer{margin-top:1.2rem;font-size:.6rem;color:var(--label);opacity:.4;letter-spacing:.15em;text-transform:uppercase;}
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>RC / RL Filter Phase Explorer</h1>
+  <p>Gain · Phase · Phasor — Fixed Values · Interactive Frequency</p>
+</header>
+
+<div class="wrap">
+
+  <div class="top-bar">
+    <div class="ctrl-group">
+      <div class="ctrl-label">Filter Type</div>
+      <div class="toggle-row">
+        <button class="tog-btn active-lp" id="btnLP" onclick="setFilter('low')">Low Pass</button>
+        <button class="tog-btn" id="btnHP" onclick="setFilter('high')">High Pass</button>
+      </div>
+    </div>
+    <div class="ctrl-group">
+      <div class="ctrl-label">Component</div>
+      <div class="toggle-row">
+        <button class="tog-btn active-rc" id="btnRC" onclick="setComp('RC')">RC (Capacitor)</button>
+        <button class="tog-btn" id="btnRL" onclick="setComp('RL')">RL (Inductor)</button>
+      </div>
+    </div>
+    <div class="preset-info">
+      <div class="preset-chip">
+        <div class="preset-chip-lbl">Resistance R</div>
+        <div class="preset-chip-val orange" id="rChip">1 kΩ</div>
+      </div>
+      <div class="preset-chip">
+        <div class="preset-chip-lbl" id="lcChipLbl">Capacitance C</div>
+        <div class="preset-chip-val purple" id="lcChip">159.15 nF</div>
+      </div>
+      <div class="preset-chip">
+        <div class="preset-chip-lbl">Cutoff Freq fc</div>
+        <div class="preset-chip-val" id="fcChip">1.000 kHz</div>
+      </div>
+      <div class="preset-chip">
+        <div class="preset-chip-lbl">Time const τ</div>
+        <div class="preset-chip-val" id="tauChip">159.15 μs</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row2">
+    <div class="panel">
+      <div class="panel-title">Circuit Diagram</div>
+      <canvas id="circuitCanvas" height="220"></canvas>
+    </div>
+    <div class="panel freq-panel">
+      <div>
+        <div class="freq-big" id="fBig">1.000 kHz</div>
+        <div class="freq-sub">Selected Frequency</div>
+      </div>
+      <div>
+        <div class="slider-wrap">
+          <input type="range" id="fSlider" min="0" max="500" value="300" oninput="onFreq()">
+          <div class="fc-tick" id="fcTick"></div>
+        </div>
+        <!-- Log-positioned tick labels -->
+        <div style="position:relative;height:1.4rem;margin-top:.4rem;">
+          <span style="position:absolute;left:0%;transform:translateX(-0%);font-size:.58rem;color:var(--label);opacity:.7">10 Hz</span>
+          <span style="position:absolute;left:25%;transform:translateX(-50%);font-size:.58rem;color:var(--label);opacity:.7">100 Hz</span>
+          <span style="position:absolute;left:50%;transform:translateX(-50%);font-size:.58rem;color:var(--accent3);opacity:.9">1 kHz</span>
+          <span style="position:absolute;left:75%;transform:translateX(-50%);font-size:.58rem;color:var(--label);opacity:.7">10 kHz</span>
+          <span style="position:absolute;left:100%;transform:translateX(-100%);font-size:.58rem;color:var(--label);opacity:.7">100 kHz</span>
+        </div>
+      </div>
+      <div class="phase-bar">
+        <div class="pb-item">
+          <div class="pb-lbl">f / fc</div>
+          <div class="pb-val" id="pbRatio" style="color:var(--accent)">—</div>
+        </div>
+        <div class="pb-item">
+          <div class="pb-lbl">Gain Av</div>
+          <div class="pb-val" id="pbGain" style="color:var(--accent2)">—</div>
+        </div>
+        <div class="pb-item">
+          <div class="pb-lbl">Phase φ</div>
+          <div class="pb-val" id="pbPhase" style="color:var(--accent5)">—</div>
+        </div>
+        <div class="pb-item">
+          <div class="pb-lbl">Vout / Vin</div>
+          <div class="pb-val" id="pbVout" style="color:var(--accent3)">—</div>
+        </div>
+      </div>
+      <div style="text-align:center;font-size:.75rem;color:var(--label);line-height:1.7;" id="llStatement">—</div>
+    </div>
+  </div>
+
+  <div class="graphs">
+    <div class="panel">
+      <div class="panel-title">Gain Response — Av (dB)</div>
+      <canvas id="bodeCanvas" height="280"></canvas>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Phase Response — φ (degrees)</div>
+      <canvas id="phaseCanvas" height="280"></canvas>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Phasor Diagram</div>
+      <canvas id="phasorCanvas" height="240"></canvas>
+      <div id="phasorInfo" style="display:grid;grid-template-columns:repeat(3,1fr);gap:.25rem .5rem;
+        padding:.45rem .6rem;border-top:1px solid #1e2d4a;margin-top:.2rem;">
+        <div><span style="font-size:.5rem;letter-spacing:.15em;color:#5a7a9a;text-transform:uppercase;display:block">Filter</span>
+          <span id="piFilter" style="font-family:Orbitron,sans-serif;font-size:.75rem;font-weight:700;color:#00e5ff">—</span></div>
+        <div><span style="font-size:.5rem;letter-spacing:.15em;color:#5a7a9a;text-transform:uppercase;display:block">Gain Av</span>
+          <span id="piGain" style="font-family:Orbitron,sans-serif;font-size:.75rem;font-weight:700;color:#ff6b35">—</span></div>
+        <div><span style="font-size:.5rem;letter-spacing:.15em;color:#5a7a9a;text-transform:uppercase;display:block">Phase φ</span>
+          <span id="piPhase" style="font-family:Orbitron,sans-serif;font-size:.75rem;font-weight:700;color:#a78bfa">—</span></div>
+        <div><span style="font-size:.5rem;letter-spacing:.15em;color:#5a7a9a;text-transform:uppercase;display:block">|Vout/Vin|</span>
+          <span id="piVout" style="font-family:Orbitron,sans-serif;font-size:.75rem;font-weight:700;color:#00ff99">—</span></div>
+        <div><span style="font-size:.5rem;letter-spacing:.15em;color:#5a7a9a;text-transform:uppercase;display:block">f / fc</span>
+          <span id="piRatio" style="font-family:Orbitron,sans-serif;font-size:.75rem;font-weight:700;color:#00e5ff">—</span></div>
+        <div><span style="font-size:.5rem;letter-spacing:.15em;color:#5a7a9a;text-transform:uppercase;display:block">Vout</span>
+          <span id="piLL" style="font-family:Orbitron,sans-serif;font-size:.75rem;font-weight:700">—</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Worked calculations panel ── -->
+  <div class="panel">
+    <div class="panel-title">Worked Calculations — at f = <span id="wkFreq">—</span></div>
+    <div class="workings-grid" id="workingsGrid"></div>
+  </div>
+
+</div>
+
+
+<script>
+const PRESETS = {
+  RC: { R:1000, LC:1/(2*Math.PI*1000*1000), fc:1000, Rlbl:'1 kΩ', LClbl:'159.15 nF', taulbl:'159.15 μs' },
+  RL: { R:1000, LC:1000/(2*Math.PI*1000),   fc:1000, Rlbl:'1 kΩ', LClbl:'159.15 mH', taulbl:'159.15 μs' },
+};
+
+let filterType='low', compType='RC', fVal=1000;
+
+const C_CYAN='#00e5ff', C_ORANGE='#ff6b35', C_GREEN='#00ff99',
+      C_YELLOW='#ffe600', C_PURPLE='#a78bfa', C_PINK='#ff3d9a', C_TEXT='#c8d8e8';
+
+// ── Frequency slider: log 5 Hz → 200 kHz ───────────────────────────────────
+const F_MIN=10, F_MAX=100000;
+const SLIDER_MAX=500;
+function fFromSlider(v){ return F_MIN*Math.pow(F_MAX/F_MIN,v/500); }
+function sliderFromF(f){ return 500*Math.log(f/F_MIN)/Math.log(F_MAX/F_MIN); }
+
+function formatFreq(f){
+  if(f>=1e6) return fmtN(f/1e6)+' MHz';
+  if(f>=1e3) return fmtN(f/1e3)+' kHz';
+  if(f>=1)   return fmtN(f)+' Hz';
+  return fmtN(f*1000)+' mHz';
+}
+function fmtN(n){ return parseFloat(n.toFixed(4)).toString(); }
+function formatImp(z){
+  if(z>=1e9) return (z/1e9).toFixed(2)+'GΩ';
+  if(z>=1e6) return (z/1e6).toFixed(2)+'MΩ';
+  if(z>=1e3) return (z/1e3).toFixed(2)+'kΩ';
+  return z.toFixed(1)+'Ω';
+}
+
+function calc(f){
+  const {R,LC,fc}=PRESETS[compType];
+  const isRL=compType==='RL', isHP=filterType==='high';
+  const X=isRL?2*Math.PI*f*LC:1/(2*Math.PI*f*LC);
+  const ratio=f/fc;
+  let gainLin;
+  if(!isHP) gainLin=isRL?R/Math.sqrt(R*R+X*X):X/Math.sqrt(R*R+X*X);
+  else      gainLin=isRL?X/Math.sqrt(R*R+X*X):R/Math.sqrt(R*R+X*X);
+  gainLin=Math.max(gainLin,1e-10);
+  const gainDb=20*Math.log10(gainLin);
+  const phaseRad=isHP?Math.atan(1/ratio):-Math.atan(ratio);
+  const phaseDeg=phaseRad*180/Math.PI;
+  return {fc,X,gainLin,gainDb,phaseRad,phaseDeg};
+}
+
+function setFilter(t){
+  filterType=t;
+  document.getElementById('btnLP').className='tog-btn'+(t==='low'?' active-lp':'');
+  document.getElementById('btnHP').className='tog-btn'+(t==='high'?' active-hp':'');
+  update();
+}
+function setComp(c){
+  compType=c;
+  document.getElementById('btnRC').className='tog-btn'+(c==='RC'?' active-rc':'');
+  document.getElementById('btnRL').className='tog-btn'+(c==='RL'?' active-rl':'');
+  update();
+}
+
+const SNAP_RADIUS=6;
+function fcSliderPos(fc){ return sliderFromF(fc); }
+
+function onFreq(){
+  const sl=document.getElementById('fSlider');
+  const raw=parseFloat(sl.value);
+  const fc=PRESETS[compType].fc;
+  const fcPos=fcSliderPos(fc);
+  const snapped=Math.abs(raw-fcPos)<=SNAP_RADIUS;
+  if(snapped){ sl.value=fcPos; fVal=fc; }
+  else { fVal=Math.round(fFromSlider(raw)); }
+  sl.style.setProperty('--thumb-col',snapped?'#00ff99':'#ffe600');
+  update();
+}
+
+function positionFcTick(){
+  const pos=fcSliderPos(PRESETS[compType].fc)/SLIDER_MAX*100;
+  document.getElementById('fcTick').style.left=pos+'%';
+}
+
+const DPR=()=>window.devicePixelRatio||1;
+function sizeCanvas(cv,h){
+  const d=DPR(),w=cv.parentElement.getBoundingClientRect().width-18;
+  cv.width=w*d; cv.height=h*d;
+  cv.style.width=w+'px'; cv.style.height=h+'px';
+  cv.getContext('2d').scale(d,d);
+}
+function cW(cv){return cv.width/DPR();} function cH(cv){return cv.height/DPR();}
+
+const bodeCanvas=document.getElementById('bodeCanvas');
+const phaseCanvas=document.getElementById('phaseCanvas');
+const phasorCanvas=document.getElementById('phasorCanvas');
+const circuitCanvas=document.getElementById('circuitCanvas');
+
+function resizeAll(){
+  sizeCanvas(bodeCanvas,280); sizeCanvas(phaseCanvas,280);
+  sizeCanvas(phasorCanvas,240); sizeCanvas(circuitCanvas,220);
+}
+
+const PAD={l:52,r:16,t:16,b:36};
+
+// ── Bode plot ─────────────────────────────────────────────────────────────────
+function drawBode(){
+  const cv=bodeCanvas,cx=cv.getContext('2d');
+  const fw=cW(cv),fh=cH(cv),pw=fw-PAD.l-PAD.r,ph=fh-PAD.t-PAD.b;
+  cx.clearRect(0,0,fw,fh);
+  const fc=PRESETS[compType].fc;
+  const logFc=Math.log10(fc),lmin=logFc-2.5,lmax=logFc+2.5;
+  const dbMin=-65,dbMax=8,dbR=dbMax-dbMin;
+  function dbY(db){return PAD.t+ph*(1-(db-dbMin)/dbR);}
+  function lfX(lf){return PAD.l+pw*(lf-lmin)/(lmax-lmin);}
+
+  [-60,-40,-20,-10,-3,0,6].forEach(db=>{
+    const y=dbY(db); if(y<PAD.t||y>PAD.t+ph)return;
+    cx.setLineDash(db===0?[]:[2,5]);
+    cx.strokeStyle=db===0?'rgba(0,229,255,.15)':db===-3?'rgba(255,107,53,.25)':'rgba(30,45,74,.7)';
+    cx.lineWidth=db===0||db===-3?1.4:1;
+    cx.beginPath();cx.moveTo(PAD.l,y);cx.lineTo(PAD.l+pw,y);cx.stroke();cx.setLineDash([]);
+    cx.fillStyle=db===-3?'rgba(255,107,53,.8)':'rgba(200,220,240,.5)';
+    cx.font='9px Share Tech Mono';cx.textAlign='right';cx.fillText(db+'dB',PAD.l-5,y+4);
+  });
+  for(let lf=Math.ceil(lmin);lf<=Math.floor(lmax);lf++){
+    const x=lfX(lf); if(x<PAD.l||x>PAD.l+pw)continue;
+    cx.strokeStyle='rgba(30,45,74,.7)';cx.lineWidth=1;cx.setLineDash([2,5]);
+    cx.beginPath();cx.moveTo(x,PAD.t);cx.lineTo(x,PAD.t+ph);cx.stroke();cx.setLineDash([]);
+    cx.fillStyle='rgba(200,220,240,.4)';cx.font='8px Share Tech Mono';cx.textAlign='center';
+    cx.fillText(formatFreq(Math.pow(10,lf)),x,PAD.t+ph+14);
+  }
+  const N=pw*3;
+  [[C_CYAN+'33',6,8],[C_CYAN,2,0]].forEach(([col,lw,bl])=>{
+    cx.shadowColor=C_CYAN;cx.shadowBlur=bl;cx.strokeStyle=col;cx.lineWidth=lw;
+    cx.beginPath();let s=false;
+    for(let i=0;i<=N;i++){
+      const lf=lmin+(i/N)*(lmax-lmin),f=Math.pow(10,lf);
+      const {gainDb}=calc(f);
+      const x=lfX(lf),y=Math.max(PAD.t,Math.min(PAD.t+ph,dbY(gainDb)));
+      s?cx.lineTo(x,y):cx.moveTo(x,y);s=true;
+    }
+    cx.stroke();cx.shadowBlur=0;
+  });
+  const xFc=lfX(logFc);
+  cx.strokeStyle='rgba(0,255,153,.5)';cx.lineWidth=1.2;cx.setLineDash([4,4]);
+  cx.beginPath();cx.moveTo(xFc,PAD.t);cx.lineTo(xFc,PAD.t+ph);cx.stroke();cx.setLineDash([]);
+  cx.fillStyle='rgba(0,255,153,.8)';cx.font='bold 9px Share Tech Mono';cx.textAlign='center';
+  cx.fillText('fc='+formatFreq(fc),xFc,PAD.t+ph+28);
+  const logF=Math.log10(Math.max(fVal,1e-9)),xF=lfX(logF);
+  const {gainDb:gdb}=calc(fVal);
+  const yF=Math.max(PAD.t,Math.min(PAD.t+ph,dbY(gdb)));
+  if(xF>=PAD.l&&xF<=PAD.l+pw){
+    cx.strokeStyle='rgba(255,230,0,.55)';cx.lineWidth=1;cx.setLineDash([3,4]);
+    cx.beginPath();cx.moveTo(xF,PAD.t);cx.lineTo(xF,PAD.t+ph);cx.stroke();
+    cx.beginPath();cx.moveTo(PAD.l,yF);cx.lineTo(PAD.l+pw,yF);cx.stroke();cx.setLineDash([]);
+    cx.fillStyle=C_YELLOW;cx.shadowColor=C_YELLOW;cx.shadowBlur=14;
+    cx.beginPath();cx.arc(xF,yF,6,0,Math.PI*2);cx.fill();cx.shadowBlur=0;
+    const align=xF>PAD.l+pw*0.75?'right':'left';
+    const off=align==='right'?-9:9;
+    cx.fillStyle=C_YELLOW;cx.font='bold 10px Share Tech Mono';cx.textAlign=align;
+    cx.fillText(gdb.toFixed(2)+'dB',xF+off,yF-6);
+  }
+  cx.save();cx.translate(11,PAD.t+ph/2);cx.rotate(-Math.PI/2);
+  cx.fillStyle='rgba(200,220,240,.3)';cx.font='8px Share Tech Mono';cx.textAlign='center';
+  cx.fillText('GAIN (dB)',0,0);cx.restore();
+}
+
+// ── Phase plot ────────────────────────────────────────────────────────────────
+function drawPhase(){
+  const cv=phaseCanvas,cx=cv.getContext('2d');
+  const fw=cW(cv),fh=cH(cv),pw=fw-PAD.l-PAD.r,ph=fh-PAD.t-PAD.b;
+  cx.clearRect(0,0,fw,fh);
+  const fc=PRESETS[compType].fc;
+  const logFc=Math.log10(fc),lmin=logFc-2.5,lmax=logFc+2.5;
+  const isHP=filterType==='high';
+  const phMin=isHP?-10:-95,phMax=isHP?95:10,phRange=phMax-phMin;
+  function phY(d){return PAD.t+ph*(1-(d-phMin)/phRange);}
+  function lfX(lf){return PAD.l+pw*(lf-lmin)/(lmax-lmin);}
+
+  const ticks=isHP?[90,45,0]:[0,-45,-90];
+  ticks.forEach(d=>{
+    const y=phY(d); if(y<PAD.t||y>PAD.t+ph)return;
+    cx.setLineDash(Math.abs(d)===45?[4,4]:[2,5]);
+    cx.strokeStyle=d===0?'rgba(0,229,255,.15)':Math.abs(d)===45?'rgba(167,139,250,.3)':'rgba(30,45,74,.7)';
+    cx.lineWidth=Math.abs(d)===45||d===0?1.4:1;
+    cx.beginPath();cx.moveTo(PAD.l,y);cx.lineTo(PAD.l+pw,y);cx.stroke();cx.setLineDash([]);
+    cx.fillStyle=Math.abs(d)===45?'rgba(167,139,250,.9)':'rgba(200,220,240,.5)';
+    cx.font='9px Share Tech Mono';cx.textAlign='right';cx.fillText(d+'°',PAD.l-5,y+4);
+  });
+  for(let lf=Math.ceil(lmin);lf<=Math.floor(lmax);lf++){
+    const x=lfX(lf); if(x<PAD.l||x>PAD.l+pw)continue;
+    cx.strokeStyle='rgba(30,45,74,.7)';cx.lineWidth=1;cx.setLineDash([2,5]);
+    cx.beginPath();cx.moveTo(x,PAD.t);cx.lineTo(x,PAD.t+ph);cx.stroke();cx.setLineDash([]);
+    cx.fillStyle='rgba(200,220,240,.4)';cx.font='8px Share Tech Mono';cx.textAlign='center';
+    cx.fillText(formatFreq(Math.pow(10,lf)),x,PAD.t+ph+14);
+  }
+  const N=pw*3;
+  [[C_PURPLE+'44',6,8],[C_PURPLE,2,0]].forEach(([col,lw,bl])=>{
+    cx.shadowColor=C_PURPLE;cx.shadowBlur=bl;cx.strokeStyle=col;cx.lineWidth=lw;
+    cx.beginPath();let s=false;
+    for(let i=0;i<=N;i++){
+      const lf=lmin+(i/N)*(lmax-lmin),f=Math.pow(10,lf);
+      const {phaseDeg}=calc(f);
+      const x=lfX(lf),y=Math.max(PAD.t,Math.min(PAD.t+ph,phY(phaseDeg)));
+      s?cx.lineTo(x,y):cx.moveTo(x,y);s=true;
+    }
+    cx.stroke();cx.shadowBlur=0;
+  });
+  const xFc=lfX(logFc);
+  cx.strokeStyle='rgba(0,255,153,.5)';cx.lineWidth=1.2;cx.setLineDash([4,4]);
+  cx.beginPath();cx.moveTo(xFc,PAD.t);cx.lineTo(xFc,PAD.t+ph);cx.stroke();cx.setLineDash([]);
+  const y45=phY(isHP?45:-45);
+  cx.fillStyle=C_GREEN;cx.shadowColor=C_GREEN;cx.shadowBlur=10;
+  cx.beginPath();cx.arc(xFc,y45,5,0,Math.PI*2);cx.fill();cx.shadowBlur=0;
+  cx.fillStyle='rgba(0,255,153,.8)';cx.font='bold 9px Share Tech Mono';cx.textAlign='center';
+  cx.fillText('fc='+formatFreq(fc),xFc,PAD.t+ph+28);
+  const logF=Math.log10(Math.max(fVal,1e-9)),xF=lfX(logF);
+  const {phaseDeg:pd}=calc(fVal);
+  const yF=Math.max(PAD.t,Math.min(PAD.t+ph,phY(pd)));
+  if(xF>=PAD.l&&xF<=PAD.l+pw){
+    // Phase marker — purple throughout
+    cx.strokeStyle='rgba(167,139,250,.55)';cx.lineWidth=1;cx.setLineDash([3,4]);
+    cx.beginPath();cx.moveTo(xF,PAD.t);cx.lineTo(xF,PAD.t+ph);cx.stroke();
+    cx.beginPath();cx.moveTo(PAD.l,yF);cx.lineTo(PAD.l+pw,yF);cx.stroke();cx.setLineDash([]);
+    cx.fillStyle=C_PURPLE;cx.shadowColor=C_PURPLE;cx.shadowBlur=14;
+    cx.beginPath();cx.arc(xF,yF,6,0,Math.PI*2);cx.fill();cx.shadowBlur=0;
+    const align=xF>PAD.l+pw*0.75?'right':'left';
+    const off=align==='right'?-9:9;
+    cx.fillStyle=C_PURPLE;cx.font='bold 10px Share Tech Mono';cx.textAlign=align;
+    cx.fillText(pd.toFixed(2)+'°',xF+off,yF-6);
+  }
+  cx.save();cx.translate(11,PAD.t+ph/2);cx.rotate(-Math.PI/2);
+  cx.fillStyle='rgba(200,220,240,.3)';cx.font='8px Share Tech Mono';cx.textAlign='center';
+  cx.fillText('PHASE (°)',0,0);cx.restore();
+}
+
+// ── Phasor diagram ────────────────────────────────────────────────────────────
+function drawPhasor(){
+  const cv=phasorCanvas,cx=cv.getContext('2d');
+  const fw=cW(cv),fh=cH(cv);
+  cx.clearRect(0,0,fw,fh);
+
+  const {phaseDeg,gainLin,gainDb}=calc(fVal);
+  const isHP=filterType==='high',isRL=compType==='RL';
+  const phRad=phaseDeg*Math.PI/180;
+  const absPh=Math.abs(phRad);
+
+  const pad=24;
+  const drawW=fw-pad*2,drawH=fh-pad*2;
+  const FILL=0.78;
+  const sinA=Math.sin(absPh),cosA=Math.cos(absPh);
+  const VinByW=(cosA>0.01)?(drawW*FILL)/cosA:9999;
+  const VinByH=(sinA>0.01)?(drawH*FILL)/sinA:9999;
+  const Vin=Math.min(VinByW,VinByH);
+  const VR=Vin*cosA, VX=Vin*sinA;
+
+  const vcDown=!isRL;
+  const Ox=pad+drawW/2-VR/2;
+  const Oy=vcDown?pad+drawH/2-VX/2:pad+drawH/2+VX/2;
+
+  const vrTip ={x:Ox+VR,y:Oy};
+  const vxTip =vcDown?{x:Ox,y:Oy+VX}:{x:Ox,y:Oy-VX};
+  const vinTip=vcDown?{x:Ox+VR,y:Oy+VX}:{x:Ox+VR,y:Oy-VX};
+
+  function arrow(x1,y1,x2,y2,col,lw,hs){
+    const ang=Math.atan2(y2-y1,x2-x1),h=hs||10;
+    cx.strokeStyle=col;cx.fillStyle=col;cx.lineWidth=lw||2.5;cx.lineCap='round';
+    cx.beginPath();cx.moveTo(x1,y1);cx.lineTo(x2,y2);cx.stroke();
+    cx.beginPath();cx.moveTo(x2,y2);
+    cx.lineTo(x2-h*Math.cos(ang-0.38),y2-h*Math.sin(ang-0.38));
+    cx.lineTo(x2-h*Math.cos(ang+0.38),y2-h*Math.sin(ang+0.38));
+    cx.closePath();cx.fill();
+  }
+  function dash(x1,y1,x2,y2,col){
+    cx.strokeStyle=col;cx.lineWidth=1;cx.setLineDash([4,5]);
+    cx.beginPath();cx.moveTo(x1,y1);cx.lineTo(x2,y2);cx.stroke();cx.setLineDash([]);
+  }
+  function lbl(txt,x,y,col,sz,al){
+    cx.fillStyle=col;cx.font=(sz||11)+'px Share Tech Mono';cx.textAlign=al||'left';
+    cx.fillText(txt,x,y);
+  }
+
+  const lsz=12,lsm=10;
+  let llText='',llCol='';
+  const vRlbl=isHP?'VR = Vout':'VR';
+  const vXlbl=isRL?(isHP?'VL':'VL = Vout'):(isHP?'VC':'VC = Vout');
+
+  arrow(Ox,Oy,vrTip.x,vrTip.y,C_ORANGE,2.5,9);
+  arrow(Ox,Oy,vxTip.x,vxTip.y,C_GREEN,2.8,9);
+  arrow(Ox,Oy,vinTip.x,vinTip.y,C_CYAN,3,11);
+  dash(vrTip.x,vrTip.y,vinTip.x,vinTip.y,'rgba(0,229,255,.35)');
+  dash(vxTip.x,vxTip.y,vinTip.x,vinTip.y,'rgba(255,107,53,.25)');
+  const sq=10;
+  cx.strokeStyle='rgba(200,220,240,.3)';cx.lineWidth=1;
+  cx.strokeRect(vrTip.x-sq,vcDown?vrTip.y:vrTip.y-sq,sq,sq);
+
+  lbl(vRlbl,(Ox+vrTip.x)/2,Oy+(vcDown?-10:16),C_ORANGE,lsz,'center');
+  lbl(vXlbl,Ox-10,(Oy+vxTip.y)/2+4,C_GREEN,lsz,'right');
+  const vinMidX=(Ox+vinTip.x)/2,vinMidY=(Oy+vinTip.y)/2;
+  lbl('Vin',vinMidX+10,vinMidY+(vcDown?-6:10),C_CYAN,lsz);
+
+  llText=isHP?'Vout LEADS Vin':'Vout LAGS Vin';
+  llCol=isHP?'rgba(0,255,153,.85)':'rgba(255,61,154,.85)';
+  if(llText){
+    cx.fillStyle=llCol;cx.font='bold '+lsm+'px Share Tech Mono';cx.textAlign='center';
+    cx.fillText(llText,fw/2,fh-12);
+  }
+
+  // Phase angle arc — purple to match all other phase indicators
+  if(absPh>0.04&&absPh<Math.PI/2-0.04){
+    const arcR=Math.min(VR*0.32,32);
+    const vinAngle=Math.atan2(vinTip.y-Oy,vinTip.x-Ox);
+    cx.strokeStyle='rgba(167,139,250,.75)';cx.lineWidth=1.5;
+    cx.beginPath();
+    if(vinAngle>=0) cx.arc(Ox,Oy,arcR,0,vinAngle,false);
+    else            cx.arc(Ox,Oy,arcR,vinAngle,0,false);
+    cx.stroke();
+    const midA=vinAngle/2,lr=arcR+16;
+    cx.fillStyle=C_PURPLE;cx.font='bold 10px Share Tech Mono';cx.textAlign='center';
+    cx.fillText(Math.abs(phaseDeg).toFixed(1)+'°',Ox+lr*Math.cos(midA),Oy+lr*Math.sin(midA)+4);
+  }
+}
+
+// ── Component drawing ─────────────────────────────────────────────────────────
+function drawZZ(cx,cx0,cy0,horiz){
+  const peaks=6,tot=58,h=8;
+  cx.strokeStyle=C_CYAN;cx.lineWidth=1.8;cx.lineCap='round';cx.lineJoin='round';
+  cx.beginPath();
+  if(horiz){
+    const x0=cx0-tot/2,sw=tot/peaks;cx.moveTo(x0,cy0);
+    for(let i=0;i<peaks;i++){cx.lineTo(x0+sw*i+sw/2,(i%2===0?cy0-h:cy0+h));cx.lineTo(x0+sw*(i+1),cy0);}
+  } else {
+    const y0=cy0-tot/2,sh=tot/peaks;cx.moveTo(cx0,y0);
+    for(let i=0;i<peaks;i++){cx.lineTo((i%2===0?cx0+h:cx0-h),y0+sh*i+sh/2);cx.lineTo(cx0,y0+sh*(i+1));}
+  }
+  cx.stroke();
+}
+function drawL(cx,cx0,cy0,horiz){
+  const bumps=4,bs=8,tot=bumps*bs*2;
+  cx.strokeStyle=C_PURPLE;cx.lineWidth=1.8;cx.beginPath();
+  if(horiz){
+    const x0=cx0-tot/2;cx.moveTo(x0,cy0);
+    for(let i=0;i<bumps;i++)cx.arc(x0+i*bs*2+bs,cy0,bs,Math.PI,0,false);
+    cx.lineTo(x0+tot,cy0);
+  } else {
+    const y0=cy0-tot/2;cx.moveTo(cx0,y0);
+    for(let i=0;i<bumps;i++)cx.arc(cx0,y0+i*bs*2+bs,bs,Math.PI*1.5,Math.PI*0.5,false);
+    cx.lineTo(cx0,y0+tot);
+  }
+  cx.stroke();
+}
+function drawC(cx,cx0,cy0,horiz){
+  const gap=6,pl=22,stub=18;
+  cx.strokeStyle=C_CYAN;cx.lineWidth=1.8;
+  if(horiz){
+    cx.fillStyle=C_CYAN;
+    cx.fillRect(cx0-gap-3,cy0-pl/2,4,pl);cx.fillRect(cx0+gap-1,cy0-pl/2,4,pl);
+  } else {
+    cx.beginPath();cx.moveTo(cx0,cy0-gap-3);cx.lineTo(cx0,cy0-gap-3-stub);cx.stroke();
+    cx.beginPath();cx.moveTo(cx0,cy0+gap+3);cx.lineTo(cx0,cy0+gap+3+stub);cx.stroke();
+    cx.fillStyle=C_CYAN;
+    cx.fillRect(cx0-pl/2,cy0-gap-3,pl,4);cx.fillRect(cx0-pl/2,cy0+gap-1,pl,4);
+  }
+}
+function drawGnd(cx,x,y){
+  [[22,0],[14,8],[6,16]].forEach(([len,dy])=>{
+    cx.strokeStyle='rgba(0,229,255,.6)';cx.lineWidth=1.8;cx.lineCap='round';
+    cx.beginPath();cx.moveTo(x-len/2,y+dy);cx.lineTo(x+len/2,y+dy);cx.stroke();
+  });
+}
+function drawVin(cx,x,wireY,gndY){
+  const midY=(wireY+gndY)/2,lx=x-22;
+  cx.fillStyle='rgba(200,220,240,.8)';cx.font='italic 12px Share Tech Mono';cx.textAlign='right';
+  cx.fillText('V',lx+10,midY+2);cx.font='8px Share Tech Mono';cx.fillText('in',lx+18,midY+8);
+  cx.strokeStyle='rgba(200,220,240,.4)';cx.lineWidth=1.5;
+  cx.beginPath();cx.moveTo(lx,gndY-4);cx.lineTo(lx,wireY+4);cx.stroke();
+  cx.beginPath();cx.moveTo(lx,wireY+4);cx.lineTo(lx-6,wireY+18);
+  cx.moveTo(lx,wireY+4);cx.lineTo(lx+6,wireY+18);cx.stroke();
+  cx.beginPath();cx.moveTo(lx,gndY-4);cx.lineTo(lx-6,gndY-18);
+  cx.moveTo(lx,gndY-4);cx.lineTo(lx+6,gndY-18);cx.stroke();
+}
+function drawVout(cx,x,wireY,gndY){
+  const midY=(wireY+gndY)/2,lx=x+22;
+  cx.fillStyle='rgba(0,255,153,.8)';cx.font='italic 12px Share Tech Mono';cx.textAlign='left';
+  cx.fillText('V',lx-22,midY+2);cx.font='8px Share Tech Mono';cx.fillText('out',lx-16,midY+8);
+  cx.strokeStyle='rgba(0,255,153,.4)';cx.lineWidth=1.5;
+  cx.beginPath();cx.moveTo(lx,gndY-4);cx.lineTo(lx,wireY+4);cx.stroke();
+  cx.beginPath();cx.moveTo(lx,wireY+4);cx.lineTo(lx-6,wireY+18);
+  cx.moveTo(lx,wireY+4);cx.lineTo(lx+6,wireY+18);cx.stroke();
+  cx.beginPath();cx.moveTo(lx,gndY-4);cx.lineTo(lx-6,gndY-18);
+  cx.moveTo(lx,gndY-4);cx.lineTo(lx+6,gndY-18);cx.stroke();
+}
+
+// ── Circuit diagram ───────────────────────────────────────────────────────────
+function drawCircuit(){
+  const cv=circuitCanvas,cx=cv.getContext('2d');
+  const fw=cW(cv),fh=cH(cv);
+  cx.clearRect(0,0,fw,fh);
+
+  const isRL=compType==='RL',isHP=filterType==='high';
+  const mg=38,wireY=fh*0.28,gndY=fh*0.82;
+  const lx=mg,rx=fw-mg,jx=fw*0.63,smx=(lx+jx)/2;
+
+  function wire(x1,y1,x2,y2,col,lw){
+    cx.strokeStyle=col||C_CYAN;cx.lineWidth=lw||1.8;cx.lineCap='round';
+    cx.beginPath();cx.moveTo(x1,y1);cx.lineTo(x2,y2);cx.stroke();
+  }
+  function tDot(x,y){cx.strokeStyle=C_CYAN;cx.lineWidth=1.8;cx.beginPath();cx.arc(x,y,4,0,Math.PI*2);cx.stroke();}
+  function jDot(x,y){cx.fillStyle=C_CYAN;cx.beginPath();cx.arc(x,y,3.5,0,Math.PI*2);cx.fill();}
+
+  const serIsR=(!isRL&&!isHP)||(isRL&&isHP);
+  const shIsR=(!isRL&&isHP)||(isRL&&!isHP);
+  const shMidY=(wireY+gndY)/2;
+
+  const serGap=serIsR?29:(isRL?32:9);
+  wire(lx,wireY,smx-serGap,wireY); wire(smx+serGap,wireY,jx,wireY);
+  wire(jx,wireY,rx,wireY); wire(lx,gndY,rx,gndY);
+  const shGap=shIsR?30:(isRL?32:27);
+  wire(jx,wireY,jx,shMidY-shGap); wire(jx,shMidY+shGap,jx,gndY);
+  tDot(lx,wireY);tDot(lx,gndY);tDot(rx,wireY);tDot(rx,gndY);
+  jDot(jx,wireY);jDot(jx,gndY);
+
+  serIsR?drawZZ(cx,smx,wireY,true):(isRL?drawL(cx,smx,wireY,true):drawC(cx,smx,wireY,true));
+  shIsR?drawZZ(cx,jx,shMidY,false):(isRL?drawL(cx,jx,shMidY,false):drawC(cx,jx,shMidY,false));
+
+  drawGnd(cx,jx,gndY+8);
+  drawVin(cx,lx,wireY,gndY);
+  drawVout(cx,rx,wireY,gndY);
+
+  const p=PRESETS[compType];
+  const serLbl=serIsR?`R = ${p.Rlbl}`:(isRL?`L = ${p.LClbl}`:`C = ${p.LClbl}`);
+  const shLbl=shIsR?`R = ${p.Rlbl}`:(isRL?`L = ${p.LClbl}`:`C = ${p.LClbl}`);
+  cx.fillStyle=C_TEXT;cx.font='10px Share Tech Mono';cx.textAlign='center';
+  cx.fillText(serLbl,smx,wireY-28);
+  cx.textAlign='left';
+  cx.fillText(shLbl,jx+16,shMidY+4);
+  // Vout label + drawn arrow above top-right wire
+  cx.fillStyle='rgba(0,255,153,.75)';cx.font='10px Share Tech Mono';cx.textAlign='right';
+  cx.fillText('Vout',rx-22,wireY-8);
+  // Drawn arrow
+  const ax1=rx-16, ax2=rx-2, ay=wireY-10;
+  cx.strokeStyle='rgba(0,255,153,.75)';cx.lineWidth=2;cx.lineCap='round';
+  cx.beginPath();cx.moveTo(ax1,ay);cx.lineTo(ax2,ay);cx.stroke();
+  cx.fillStyle='rgba(0,255,153,.75)';
+  cx.beginPath();cx.moveTo(ax2,ay);cx.lineTo(ax2-8,ay-4);cx.lineTo(ax2-8,ay+4);cx.closePath();cx.fill();
+}
+
+// ── Updates ───────────────────────────────────────────────────────────────────
+function updatePresetBar(){
+  const p=PRESETS[compType],isRL=compType==='RL';
+  document.getElementById('rChip').textContent=p.Rlbl;
+  document.getElementById('lcChip').textContent=p.LClbl;
+  document.getElementById('lcChipLbl').textContent=isRL?'Inductance L':'Capacitance C';
+  document.getElementById('fcChip').textContent=formatFreq(p.fc);
+  document.getElementById('tauChip').textContent=p.taulbl;
+}
+function updateFreqBar(){
+  const {fc,gainDb,gainLin,phaseDeg}=calc(fVal);
+  const isLag=phaseDeg<0;
+  document.getElementById('fBig').textContent=formatFreq(fVal);
+  document.getElementById('pbRatio').textContent=(fVal/fc).toFixed(3)+'×';
+  document.getElementById('pbGain').textContent=gainDb.toFixed(2)+' dB';
+  document.getElementById('pbPhase').textContent=phaseDeg.toFixed(2)+'°';
+  document.getElementById('pbVout').textContent=(gainLin*100).toFixed(1)+'%';
+  const isHP=filterType==='high',isRL=compType==='RL';
+  const voutName=(!isRL&&!isHP)||(isRL&&isHP)?(isRL?'VL':'VC'):'VR';
+  const llCol=isLag?'#ff3d9a':'#00ff99';
+  document.getElementById('llStatement').innerHTML=
+    `At this frequency, <strong style="color:${llCol}">${voutName} (Vout) `+
+    `${isLag?'LAGS':'LEADS'} Vin by ${Math.abs(phaseDeg).toFixed(1)}°</strong>. `+
+    `Gain&nbsp;=&nbsp;${gainDb.toFixed(2)}&nbsp;dB.`;
+}
+function updatePhasorInfo(){
+  const {gainDb,gainLin,phaseDeg,fc}=calc(fVal);
+  const isLag=phaseDeg<0;
+  const llCol=isLag?'#ff3d9a':'#00ff99';
+  document.getElementById('piFilter').textContent=(filterType==='low'?'LP':'HP')+' '+compType;
+  document.getElementById('piGain').textContent=gainDb.toFixed(2)+' dB';
+  document.getElementById('piPhase').textContent=phaseDeg.toFixed(2)+'°';
+  document.getElementById('piVout').textContent=(gainLin*100).toFixed(1)+'%';
+  document.getElementById('piRatio').textContent=(fVal/fc).toFixed(3)+'×';
+  document.getElementById('piLL').textContent=isLag?'LAGGING':'LEADING';
+  document.getElementById('piLL').style.color=llCol;
+}
+
+function fmtVal(v){
+  // format to 4 sig figs
+  if(Math.abs(v)>=1000) return (v/1000).toFixed(3)+' k';
+  if(Math.abs(v)>=1)    return v.toFixed(4);
+  if(Math.abs(v)>=1e-3) return (v*1000).toFixed(3)+' m';
+  if(Math.abs(v)>=1e-6) return (v*1e6).toFixed(3)+' μ';
+  if(Math.abs(v)>=1e-9) return (v*1e9).toFixed(3)+' n';
+  return (v*1e12).toFixed(3)+' p';
+}
+
+function updateWorkings(){
+  const {R,LC,fc}=PRESETS[compType];
+  const isRL=compType==='RL', isHP=filterType==='high';
+  const f=fVal;
+  const {X,gainLin,gainDb,phaseDeg}=calc(f);
+  const Z=Math.sqrt(R*R+X*X);
+  const Vout_ratio=gainLin;
+  const tau=R*LC;
+
+  document.getElementById('wkFreq').textContent=formatFreq(f);
+
+  const xName=isRL?'XL':'Xc';
+  const xFormula=isRL?'2π × f × L':'1 / (2π × f × C)';
+  const xCalcParts=isRL
+    ? `2π × ${formatFreq(f)} × ${fmtVal(LC)}H`
+    : `1 / (2π × ${formatFreq(f)} × ${fmtVal(LC)}F)`;
+
+  // fc block
+  const fcFormula=isRL?'R / (2π × L)':'1 / (2π × R × C)';
+  const fcCalc=isRL
+    ? `${fmtVal(R)}Ω / (2π × ${fmtVal(LC)}H)`
+    : `1 / (2π × ${fmtVal(R)}Ω × ${fmtVal(LC)}F)`;
+
+  // Z block — total impedance
+  const ZformStr=`√(R² + ${xName}²)`;
+  const ZcalcStr=`√(${fmtVal(R)}Ω² + ${fmtVal(X)}Ω²)`;
+
+  // Av block
+  const AvFormula=isHP
+    ? (isRL?`XL / Z`:`R / Z`)
+    : (isRL?`R / Z`:`Xc / Z`);
+  const voutEl=isHP?(isRL?'XL':'R'):(isRL?'R':'Xc');
+  const voutVal=isHP?(isRL?fmtVal(X):fmtVal(R)):(isRL?fmtVal(R):fmtVal(X));
+  const AvCalc=`${voutVal}Ω / ${fmtVal(Z)}Ω`;
+
+  // Phase block
+  const phFormula=isHP?`arctan(${isRL?'R / XL':'Xc / R'})`:`-arctan(${isRL?'XL / R':'Xc / R'})`;
+  const phRatioNum=isHP?(isRL?fmtVal(R):fmtVal(X)):(isRL?fmtVal(X):fmtVal(X));
+  const phRatioDen=isHP?(isRL?fmtVal(X):fmtVal(R)):(isRL?fmtVal(R):fmtVal(R));
+  const phCalc=`${isHP?'':'-'}arctan(${phRatioNum} / ${phRatioDen})`;
+
+  function block(title, colour, lines){
+    return `<div class="wk-block">
+      <div class="wk-title" style="color:${colour}">${title}</div>
+      ${lines.map(([sym,eq,cls])=>`<div class="wk-line">
+        <span class="sym">${sym}</span><span class="eq">=</span><span class="${cls||'formula'}">${eq}</span>
+      </div>`).join('')}
+    </div>`;
+  }
+
+  document.getElementById('workingsGrid').innerHTML =
+    block('Cutoff Frequency', '#00ff99', [
+      ['f<sub>c</sub>', fcFormula, 'formula'],
+      ['', fcCalc, 'calc'],
+      ['', `<span class="result" style="color:#00ff99">${formatFreq(fc)}</span>`, 'result'],
+    ]) +
+    block(xName+' — Reactance', '#a78bfa', [
+      [xName, xFormula, 'formula'],
+      ['', xCalcParts, 'calc'],
+      ['', `<span class="result" style="color:#a78bfa">${fmtVal(X)}Ω</span>`, 'result'],
+    ]) +
+    block('Z — Total Impedance', '#00e5ff', [
+      ['Z', ZformStr, 'formula'],
+      ['', ZcalcStr, 'calc'],
+      ['', `<span class="result" style="color:#00e5ff">${fmtVal(Z)}Ω</span>`, 'result'],
+    ]) +
+    block('Av — Voltage Gain', '#ff6b35', [
+      ['Av', `V<sub>out</sub> / V<sub>in</sub> = ${AvFormula}`, 'formula'],
+      ['', AvCalc, 'calc'],
+      ['', `<span class="result" style="color:#ff6b35">${gainLin.toFixed(4)}</span>`, 'result'],
+      ['Av(dB)', '20 × log(Av)', 'formula'],
+      ['', `20 × log(${gainLin.toFixed(4)})`, 'calc'],
+      ['', `<span class="result" style="color:#ff6b35">${gainDb.toFixed(2)} dB</span>`, 'result'],
+    ]) +
+    block('Phase Shift φ', '#a78bfa', [
+      ['φ', phFormula, 'formula'],
+      ['', phCalc, 'calc'],
+      ['', `<span class="result" style="color:#a78bfa">${phaseDeg.toFixed(2)}°</span>`, 'result'],
+    ]) +
+    block('V<sub>out</sub> / V<sub>in</sub>', '#00ff99', [
+      ['V<sub>out</sub>', `V<sub>in</sub> × Av`, 'formula'],
+      ['', `1 V × ${gainLin.toFixed(4)}`, 'calc'],
+      ['', `<span class="result" style="color:#00ff99">${gainLin.toFixed(4)} V</span>&nbsp;<span class="calc">(per 1 V in)</span>`, 'result'],
+    ]);
+}
+
+function update(){
+  updatePresetBar(); updateFreqBar(); updatePhasorInfo(); updateWorkings();
+  positionFcTick();
+  drawBode(); drawPhase(); drawPhasor(); drawCircuit();
+}
+
+window.addEventListener('resize',()=>{resizeAll();update();});
+resizeAll();
+const initFcPos=fcSliderPos(PRESETS[compType].fc);
+document.getElementById('fSlider').value=initFcPos;
+fVal=PRESETS[compType].fc;
+update();
+</script>
+</body>
+</html>
