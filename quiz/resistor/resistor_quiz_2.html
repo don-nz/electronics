@@ -337,7 +337,7 @@
         </div>
         <div class="btn-row">
           <button class="btn btn-check" id="q1Check" onclick="checkQ1()" disabled>Check</button>
-          <button class="btn btn-next" id="q1Next" onclick="showQ2()" style="display:none">Next →</button>
+          <button class="btn btn-next" id="q1Next" onclick="showQuestion(2)" style="display:none">Next →</button>
           <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
         </div>
       </div>
@@ -360,7 +360,7 @@
         <div class="btn-row">
           <button class="btn btn-prev" id="q2Back" onclick="backFromQ2()">← Back</button>
           <button class="btn btn-check" id="q2Check" onclick="checkQ2()" disabled>Check</button>
-          <button class="btn btn-next" id="q2Next" onclick="showQ3()" style="display:none">Next →</button>
+          <button class="btn btn-next" id="q2Next" onclick="showQuestion(3)" style="display:none">Next →</button>
           <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
         </div>
       </div>
@@ -383,7 +383,7 @@
         <div class="btn-row">
           <button class="btn btn-prev" id="q3Back" onclick="backFromQ3()">← Back</button>
           <button class="btn btn-check" id="q3Check" onclick="checkQ3()" disabled>Check</button>
-          <button class="btn btn-next" id="q3Next" onclick="showQ4()" style="display:none">Next →</button>
+          <button class="btn btn-next" id="q3Next" onclick="showQuestion(4)" style="display:none">Next →</button>
           <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
         </div>
       </div>
@@ -406,7 +406,7 @@
         <div class="btn-row">
           <button class="btn btn-prev" id="q4Back" onclick="backFromQ4()">← Back</button>
           <button class="btn btn-check" id="q4Check" onclick="checkQ4()" disabled>Check</button>
-          <button class="btn btn-next" id="q4Next" onclick="showQ5()" style="display:none">Next →</button>
+          <button class="btn btn-next" id="q4Next" onclick="showQuestion(5)" style="display:none">Next →</button>
           <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
         </div>
       </div>
@@ -429,7 +429,7 @@
         <div class="btn-row">
           <button class="btn btn-prev" id="q5Back" onclick="backFromQ5()">← Back</button>
           <button class="btn btn-check" id="q5Check" onclick="checkQ5()" disabled>Check</button>
-          <button class="btn btn-next" id="q5Next" onclick="showQ6()" style="display:none">Next →</button>
+          <button class="btn btn-next" id="q5Next" onclick="showQuestion(6)" style="display:none">Next →</button>
           <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
         </div>
       </div>
@@ -482,11 +482,49 @@
 </div>
 
 <script>
-// ════════════════════════════════════════════════════════════════
-//  CIRCUIT 1 VALUES  (teacher's sheet)
-//  Top network: R1 ∥ (R2 + R3)   Series link: R4   Bottom bank: R5 ∥ R6 ∥ R7
-// ════════════════════════════════════════════════════════════════
-// ── value sets ── Example 1 is the original; edit example2/example3 freely.
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║  HOW TO CREATE A NEW QUIZ FROM THIS TEMPLATE                        ║
+// ║                                                                      ║
+// ║  This template is for calculation-chain quizzes: each question      ║
+// ║  builds on the previous answer, and the circuit diagram annotates   ║
+// ║  progressively as the student works through the chain.              ║
+// ║                                                                      ║
+// ║  1. Copy this file and rename it for your new circuit.              ║
+// ║                                                                      ║
+// ║  2. Replace the SVG circuit diagram in the <body>. Update the SVG   ║
+// ║     element IDs to match what refreshLabels() and your annotation   ║
+// ║     show/hide functions reference.                                  ║
+// ║                                                                      ║
+// ║  3. Edit the CIRCUIT CONFIGURATION section:                         ║
+// ║     - EXAMPLE_SETS        → your component values and supply voltage ║
+// ║     - QUIZ_QUESTION_COUNT → number of questions in your chain       ║
+// ║                                                                      ║
+// ║  4. Rewrite the CIRCUIT SIMULATION section:                         ║
+// ║     - randomValues()                    → component count / ranges  ║
+// ║     - recompute()                       → your topology maths       ║
+// ║     - refreshLabels()                   → your SVG label IDs        ║
+// ║     - Annotation show/hide functions    → your SVG annotations      ║
+// ║     - CIRCUIT_STATES[]                  → enter/reveal annotation   ║
+// ║                                            state for each question  ║
+// ║     - applyCircuitState(s)              → maps state props to show/ ║
+// ║                                            hide function pairs      ║
+// ║     - QUESTION_BUILDERS[]               → buildQ1Options…QnOptions  ║
+// ║     - buildQ1Options()…buildQnOptions() → answer choices per step   ║
+// ║     - checkQ1()…checkQn()               → answer check per step     ║
+// ║     - showQ1Working()…showQnWorking()   → step-by-step workings     ║
+// ║     backFromQ2()…backFromQn() need only one line each — ENGINE      ║
+// ║     handles the rest.                                               ║
+// ║                                                                      ║
+// ║  5. Leave the QUIZ ENGINE section untouched.                        ║
+// ╚══════════════════════════════════════════════════════════════════════╝
+
+// ══════════════════════════════════════════════════════════════════════
+// CIRCUIT CONFIGURATION
+// Edit this section for a new circuit.
+// ══════════════════════════════════════════════════════════════════════
+
+// Circuit topology: R1∥(R2+R3) + R4 series + R5∥R6∥R7
+// ── Example value sets — Example 1 is the original; edit 2/3 freely ──
 const EXAMPLE_SETS = {
   example1: { r1:50,  r2:20, r3:80, r4:70, r5:60,  r6:60,  r7:60,  vs:100 },
   example2: { r1:60,  r2:40, r3:20, r4:40, r5:90,  r6:90,  r7:90,  vs:50  },
@@ -495,7 +533,23 @@ const EXAMPLE_SETS = {
 let quizMode = 'example1';
 let V = { ...EXAMPLE_SETS.example1 };
 
-// E12 pool + generator for Randomise mode
+// Number of questions in the chain.
+// If you add or remove questions, update this AND CIRCUIT_STATES[],
+// QUESTION_BUILDERS[], the buildQnOptions/checkQn function sets, and
+// the matching HTML panels (q1Panel…qnPanel, q1Check…qnCheck, etc.).
+const QUIZ_QUESTION_COUNT = 6;
+const QIDS = Array.from({length: QUIZ_QUESTION_COUNT}, (_,i) => 'q'+(i+1));
+
+// ══════════════════════════════════════════════════════════════════════
+// END CIRCUIT CONFIGURATION
+// ══════════════════════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════════════════════
+// CIRCUIT SIMULATION
+// Rewrite this section for a new circuit topology.
+// ══════════════════════════════════════════════════════════════════════
+
+// ── E12 pool + generator for Randomise mode ──
 const E12_BASE=[10,12,15,18,22,27,33,39,47,56,68,82];
 const E12=[]; [1,10].forEach(m=>E12_BASE.forEach(v=>E12.push(v*m)));
 function pickN(arr,n){const a=[...arr],r=[];for(let i=0;i<n;i++){r.push(a.splice(Math.floor(Math.random()*a.length),1)[0]);}return r;}
@@ -552,7 +606,7 @@ function setMode(mode){
   resetQuiz();   // rebuilds options for the new values and returns to Q1
 }
 
-const Q={ q1:{sel:null,ans:false,cor:null,opts:[]}, q2:{sel:null,ans:false,cor:null,opts:[]}, q3:{sel:null,ans:false,cor:null,opts:[]}, q4:{sel:null,ans:false,cor:null,opts:[]}, q5:{sel:null,ans:false,cor:null,opts:[]}, q6:{sel:null,ans:false,cor:null,opts:[]} };
+const Q={};
 let cur='q1';
 
 function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
@@ -612,6 +666,7 @@ function buildQ6Options(){
     {label:fmtV(IT*V.r4),type:'wrong'},
   ]);
 }
+// ── engine: generic option rendering — leave unchanged ──
 function renderOptions(qid){
   const st=Q[qid], c=document.getElementById(qid+'Options'); c.innerHTML='';
   st.opts.forEach((opt,i)=>{
@@ -642,7 +697,7 @@ function setBanner(qid,ok,correctText){
   else{banner.className='result-banner wrong';document.getElementById(qid+'BannerText').innerHTML=`The correct answer is ${correctText}`;}
 }
 
-// ── recolour the circuit into the two groups ──
+// ── circuit-specific SVG colour and annotation functions ──
 const GRP1=getComputedStyle(document.documentElement).getPropertyValue('--grp1').trim();
 const GRP2=getComputedStyle(document.documentElement).getPropertyValue('--grp2').trim();
 const SERIES=getComputedStyle(document.documentElement).getPropertyValue('--series').trim();
@@ -703,17 +758,55 @@ function showVR6(){
 }
 function hideVR6(){ document.getElementById('vr6Ind').setAttribute('display','none'); }
 
+// ── Circuit state table ──────────────────────────────────────────────
+// One row per question. 'enter' = what's visible when the student arrives
+// at this question. 'reveal' = what's added after they answer it.
+// true = show, false = hide.
+// Add a property for each annotation in your circuit, then wire it into
+// applyCircuitState() below.
+const CIRCUIT_STATES = [
+  //        grp    tot    cur    vR1    iR2    iR4    vR6
+  { enter:  {grp:false,tot:false,cur:false,vR1:false,iR2:false,iR4:false,vR6:false},
+    reveal: {grp:true, tot:true, cur:false,vR1:false,iR2:false,iR4:false,vR6:false} }, // Q1 → R_T
+  { enter:  {grp:true, tot:true, cur:false,vR1:false,iR2:false,iR4:false,vR6:false},
+    reveal: {grp:true, tot:true, cur:true, vR1:false,iR2:false,iR4:false,vR6:false} }, // Q2 → I_T
+  { enter:  {grp:true, tot:true, cur:true, vR1:false,iR2:false,iR4:false,vR6:false},
+    reveal: {grp:true, tot:true, cur:true, vR1:true, iR2:false,iR4:false,vR6:false} }, // Q3 → V_R1
+  { enter:  {grp:true, tot:true, cur:true, vR1:true, iR2:false,iR4:false,vR6:false},
+    reveal: {grp:true, tot:true, cur:true, vR1:true, iR2:true, iR4:false,vR6:false} }, // Q4 → I_R2
+  { enter:  {grp:true, tot:true, cur:true, vR1:true, iR2:true, iR4:false,vR6:false},
+    reveal: {grp:true, tot:true, cur:true, vR1:true, iR2:true, iR4:true, vR6:false} }, // Q5 → I_R4
+  { enter:  {grp:true, tot:true, cur:true, vR1:true, iR2:true, iR4:true, vR6:false},
+    reveal: {grp:true, tot:true, cur:true, vR1:true, iR2:true, iR4:true, vR6:true } }, // Q6 → V_R6
+];
+
+// Maps CIRCUIT_STATES property names to show/hide function pairs.
+// Update this to match your annotation names when building a new circuit.
+function applyCircuitState(s){
+  s.grp ? recolourGroups()       : recolourDefault();
+  s.tot ? showTotals()           : hideTotals();
+  s.cur ? showCurrentIndicator() : hideCurrentIndicator();
+  s.vR1 ? showVR1() : hideVR1();
+  s.iR2 ? showIR2() : hideIR2();
+  s.iR4 ? showIR4() : hideIR4();
+  s.vR6 ? showVR6() : hideVR6();
+}
+
+// Maps question number (1-based index) to its option builder function.
+// Update this list when adding or removing questions.
+const QUESTION_BUILDERS = [
+  buildQ1Options, buildQ2Options, buildQ3Options,
+  buildQ4Options, buildQ5Options, buildQ6Options,
+];
+
 function checkQ1(){
   const st=Q.q1; if(st.ans||st.sel===null) return; st.ans=true;
   const ok=st.sel===st.cor;
   markOptions('q1',st.sel,st.cor,ok);
   setBanner('q1',ok,`R<sub>T</sub> = ${fmtO(RT)}`);
   showQ1Working();
-  recolourGroups();
-  showTotals();
-  document.getElementById('q1Check').style.display='none';
-  document.getElementById('q1Next').style.display='inline-block';
-  updateProgress();
+  applyCircuitState(CIRCUIT_STATES[0].reveal);
+  advanceQuestion(1);
 }
 function checkQ2(){
   const st=Q.q2; if(st.ans||st.sel===null) return; st.ans=true;
@@ -721,10 +814,8 @@ function checkQ2(){
   markOptions('q2',st.sel,st.cor,ok);
   setBanner('q2',ok,`I<sub>T</sub> = ${fmtA(IT)}`);
   showQ2Working();
-  showCurrentIndicator();
-  document.getElementById('q2Check').style.display='none';
-  document.getElementById('q2Next').style.display='inline-block';
-  updateProgress();
+  applyCircuitState(CIRCUIT_STATES[1].reveal);
+  advanceQuestion(2);
 }
 
 function showQ1Working(){
@@ -782,10 +873,8 @@ function checkQ3(){
   markOptions('q3',st.sel,st.cor,ok);
   setBanner('q3',ok,`V<sub>R1</sub> = ${fmtV(VR1)}`);
   showQ3Working();
-  showVR1();
-  document.getElementById('q3Check').style.display='none';
-  document.getElementById('q3Next').style.display='inline-block';
-  updateProgress();
+  applyCircuitState(CIRCUIT_STATES[2].reveal);
+  advanceQuestion(3);
 }
 
 function showQ3Working(){
@@ -807,10 +896,8 @@ function checkQ4(){
   markOptions('q4',st.sel,st.cor,ok);
   setBanner('q4',ok,`I<sub>R2</sub> = ${fmtA(IR2)}`);
   showQ4Working();
-  showIR2();
-  document.getElementById('q4Check').style.display='none';
-  document.getElementById('q4Next').style.display='inline-block';
-  updateProgress();
+  applyCircuitState(CIRCUIT_STATES[3].reveal);
+  advanceQuestion(4);
 }
 
 function showQ4Working(){
@@ -833,10 +920,8 @@ function checkQ5(){
   markOptions('q5',st.sel,st.cor,ok);
   setBanner('q5',ok,`I<sub>R4</sub> = ${fmtA(IR4)}`);
   showQ5Working();
-  showIR4();
-  document.getElementById('q5Check').style.display='none';
-  document.getElementById('q5Next').style.display='inline-block';
-  updateProgress();
+  applyCircuitState(CIRCUIT_STATES[4].reveal);
+  advanceQuestion(5);
 }
 
 function showQ5Working(){
@@ -856,10 +941,8 @@ function checkQ6(){
   markOptions('q6',st.sel,st.cor,ok);
   setBanner('q6',ok,`V<sub>R6</sub> = ${fmtV(VR6)}`);
   showQ6Working();
-  showVR6();
-  document.getElementById('q6Check').style.display='none';
-  document.getElementById('q6Summary').style.display='inline-block';
-  updateProgress();
+  applyCircuitState(CIRCUIT_STATES[5].reveal);
+  advanceQuestion(6);
 }
 
 function showQ6Working(){
@@ -885,125 +968,17 @@ function resetQuestion(qid){
   const chk=document.getElementById(qid+'Check'); chk.style.display='inline-block'; chk.disabled=true;
   const nxt=document.getElementById(qid+'Next'); if(nxt) nxt.style.display='none';
 }
-function backFromQ2(){ resetQuestion('q1'); showQ1(); }
-function backFromQ3(){ resetQuestion('q2'); showQ2(); }
-function backFromQ4(){ resetQuestion('q3'); showQ3(); }
-function backFromQ5(){ resetQuestion('q4'); showQ4(); }
-function backFromQ6(){ resetQuestion('q5'); showQ5(); }
-
-// hide the post-Q5 panels/indicator when viewing Q1–Q5
-function hidePostQ5(){
-  document.getElementById('q6Panel').style.display='none';
-  document.getElementById('summaryPanel').style.display='none';
-  hideVR6();
-}
-
-function showQ1(){
-  cur='q1';
-  hidePostQ5();
-  document.getElementById('q1Panel').style.display='flex';
-  document.getElementById('q2Panel').style.display='none';
-  document.getElementById('q3Panel').style.display='none';
-  document.getElementById('q4Panel').style.display='none';
-  document.getElementById('q5Panel').style.display='none';
-  if(Q.q1.ans){ recolourGroups(); showTotals(); } else { recolourDefault(); hideTotals(); }
-  hideCurrentIndicator();
-  hideVR1();
-  hideIR2();
-  hideIR4();
-  updateProgress();
-}
-function showQ2(){
-  cur='q2';
-  hidePostQ5();
-  document.getElementById('q1Panel').style.display='none';
-  document.getElementById('q2Panel').style.display='flex';
-  document.getElementById('q3Panel').style.display='none';
-  document.getElementById('q4Panel').style.display='none';
-  document.getElementById('q5Panel').style.display='none';
-  if(Q.q2.opts.length===0){ Q.q2.opts=buildQ2Options(); Q.q2.cor=Q.q2.opts.findIndex(o=>o.type==='correct'); renderOptions('q2'); }
-  recolourGroups();
-  showTotals();
-  hideVR1();
-  hideIR2();
-  hideIR4();
-  if(Q.q2.ans) showCurrentIndicator(); else hideCurrentIndicator();
-  updateProgress();
-}
-function showQ3(){
-  cur='q3';
-  hidePostQ5();
-  document.getElementById('q1Panel').style.display='none';
-  document.getElementById('q2Panel').style.display='none';
-  document.getElementById('q3Panel').style.display='flex';
-  document.getElementById('q4Panel').style.display='none';
-  document.getElementById('q5Panel').style.display='none';
-  if(Q.q3.opts.length===0){ Q.q3.opts=buildQ3Options(); Q.q3.cor=Q.q3.opts.findIndex(o=>o.type==='correct'); renderOptions('q3'); }
-  recolourGroups();
-  showTotals();
-  showCurrentIndicator();          // I_T is established (used in V_R1)
-  hideIR2();
-  hideIR4();
-  if(Q.q3.ans) showVR1(); else hideVR1();
-  updateProgress();
-}
-function showQ4(){
-  cur='q4';
-  hidePostQ5();
-  document.getElementById('q1Panel').style.display='none';
-  document.getElementById('q2Panel').style.display='none';
-  document.getElementById('q3Panel').style.display='none';
-  document.getElementById('q4Panel').style.display='flex';
-  document.getElementById('q5Panel').style.display='none';
-  if(Q.q4.opts.length===0){ Q.q4.opts=buildQ4Options(); Q.q4.cor=Q.q4.opts.findIndex(o=>o.type==='correct'); renderOptions('q4'); }
-  recolourGroups();
-  showTotals();
-  showCurrentIndicator();          // I_T established
-  showVR1();                       // V_R1 established (input to I_R2)
-  hideIR4();
-  if(Q.q4.ans) showIR2(); else hideIR2();
-  updateProgress();
-}
-function showQ5(){
-  cur='q5';
-  hidePostQ5();
-  document.getElementById('q1Panel').style.display='none';
-  document.getElementById('q2Panel').style.display='none';
-  document.getElementById('q3Panel').style.display='none';
-  document.getElementById('q4Panel').style.display='none';
-  document.getElementById('q5Panel').style.display='flex';
-  if(Q.q5.opts.length===0){ Q.q5.opts=buildQ5Options(); Q.q5.cor=Q.q5.opts.findIndex(o=>o.type==='correct'); renderOptions('q5'); }
-  recolourGroups();
-  showTotals();
-  showCurrentIndicator();          // I_T established (I_R4 = I_T)
-  showVR1();                       // keep V_R1 visible (established in Q3)
-  showIR2();                       // keep I_R2 visible (established in Q4)
-  if(Q.q5.ans) showIR4(); else hideIR4();
-  updateProgress();
-}
-function showQ6(){
-  cur='q6';
-  ['q1','q2','q3','q4','q5'].forEach(q=>document.getElementById(q+'Panel').style.display='none');
-  document.getElementById('summaryPanel').style.display='none';
-  document.getElementById('q6Panel').style.display='flex';
-  if(Q.q6.opts.length===0){ Q.q6.opts=buildQ6Options(); Q.q6.cor=Q.q6.opts.findIndex(o=>o.type==='correct'); renderOptions('q6'); }
-  recolourGroups();
-  showTotals();
-  showCurrentIndicator();          // I_T established (used in V_R6)
-  showIR2();                       // currents accumulate
-  showIR4();
-  showVR1();                       // keep V_R1 visible (established in Q3)
-  if(Q.q6.ans) showVR6(); else hideVR6();
-  updateProgress();
-}
+function backFromQ2(){ resetQuestion('q1'); showQuestion(1); }
+function backFromQ3(){ resetQuestion('q2'); showQuestion(2); }
+function backFromQ4(){ resetQuestion('q3'); showQuestion(3); }
+function backFromQ5(){ resetQuestion('q4'); showQuestion(4); }
+function backFromQ6(){ resetQuestion('q5'); showQuestion(5); }
 
 function showSummary(){
   cur='summary';
-  ['q1','q2','q3','q4','q5','q6'].forEach(q=>document.getElementById(q+'Panel').style.display='none');
+  QIDS.forEach(q=>document.getElementById(q+'Panel').style.display='none');
   document.getElementById('summaryPanel').style.display='block';
-  // full annotated circuit
-  recolourGroups(); showTotals();
-  showCurrentIndicator(); showVR1(); showIR2(); showIR4(); showVR6();
+  applyCircuitState(CIRCUIT_STATES[CIRCUIT_STATES.length-1].reveal);
   const vals=`<div class="summary-values">
     <span style="color:#ff4444;font-weight:bold">V<sub>S</sub></span> = <span style="color:#ff4444">${V.vs} V</span>&nbsp;&nbsp;&nbsp;
     <span class="c1" style="font-weight:bold">R1</span> = <span class="c1">${fmtO0(V.r1)}</span>&nbsp;&nbsp;
@@ -1014,8 +989,7 @@ function showSummary(){
     <span class="c2" style="font-weight:bold">R6</span> = <span class="c2">${fmtO0(V.r6)}</span>&nbsp;&nbsp;
     <span class="c2" style="font-weight:bold">R7</span> = <span class="c2">${fmtO0(V.r7)}</span>
   </div>`;
-  const qs=['q1','q2','q3','q4','q5','q6'];
-  const items=qs.map((qid,i)=>{
+  const items=QIDS.map((qid,i)=>{
     const st=Q[qid];
     const qtext=document.querySelector('#'+qid+'Panel .q-text').innerHTML;
     const ans=(st.sel!=null && st.opts[st.sel])?st.opts[st.sel].label:'—';
@@ -1030,60 +1004,62 @@ function showSummary(){
     </div>`;
   }).join('');
   document.getElementById('summaryContent').innerHTML=vals+items;
-  qs.forEach(q=>{ const d=document.getElementById('dot-'+q); if(d) d.className='progress-dot done'; });
+  QIDS.forEach(q=>{ const d=document.getElementById('dot-'+q); if(d) d.className='progress-dot done'; });
   document.getElementById('progressLabel').textContent='Complete';
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// END CIRCUIT SIMULATION
+// ══════════════════════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════════════════════
+// QUIZ ENGINE — leave this section unchanged for new circuits
+// ══════════════════════════════════════════════════════════════════════
+
 function updateProgress(){
-  ['q1','q2','q3','q4','q5','q6'].forEach(q=>{
+  QIDS.forEach(q=>{
     const d=document.getElementById('dot-'+q); if(!d) return;
     d.className='progress-dot';
     if(q===cur) d.classList.add('active'); else if(Q[q].ans) d.classList.add('done');
   });
-  const n={q1:1,q2:2,q3:3,q4:4,q5:5,q6:6}[cur];
-  const lbl=document.getElementById('progressLabel'); if(lbl && n) lbl.textContent=n+' / 6';
+  const n=QIDS.indexOf(cur)+1;
+  const lbl=document.getElementById('progressLabel'); if(lbl && n>0) lbl.textContent=n+' / '+QUIZ_QUESTION_COUNT;
+}
+
+function advanceQuestion(n){
+  const qid='q'+n;
+  document.getElementById(qid+'Check').style.display='none';
+  const isLast=(n===QUIZ_QUESTION_COUNT);
+  document.getElementById(qid+(isLast?'Summary':'Next')).style.display='inline-block';
+  updateProgress();
+}
+
+function showQuestion(n){
+  const qid='q'+n;
+  cur=qid;
+  QIDS.forEach(q=>document.getElementById(q+'Panel').style.display='none');
+  document.getElementById('summaryPanel').style.display='none';
+  document.getElementById(qid+'Panel').style.display='flex';
+  const s=Q[qid].ans ? CIRCUIT_STATES[n-1].reveal : CIRCUIT_STATES[n-1].enter;
+  applyCircuitState(s);
+  updateProgress();
 }
 
 function resetQuiz(){
-  Q.q1={sel:null,ans:false,cor:null,opts:buildQ1Options()};
-  Q.q1.cor=Q.q1.opts.findIndex(o=>o.type==='correct');
-  Q.q2={sel:null,ans:false,cor:null,opts:[]};
-  Q.q3={sel:null,ans:false,cor:null,opts:[]};
-  Q.q4={sel:null,ans:false,cor:null,opts:[]};
-  Q.q5={sel:null,ans:false,cor:null,opts:[]};
-  Q.q6={sel:null,ans:false,cor:null,opts:[]};
-  renderOptions('q1');
-  ['q1','q2','q3','q4','q5','q6'].forEach(qid=>{
+  QIDS.forEach((qid,i)=>{
+    const opts=QUESTION_BUILDERS[i]();
+    Q[qid]={sel:null,ans:false,cor:opts.findIndex(o=>o.type==='correct'),opts};
+    renderOptions(qid);
     document.getElementById(qid+'Banner').className='result-banner';
     document.getElementById(qid+'Working').className='working-box';
+    const chk=document.getElementById(qid+'Check');
+    if(chk){ chk.style.display='inline-block'; chk.disabled=true; }
+    const isLast=i===QIDS.length-1;
+    const adv=document.getElementById(qid+(isLast?'Summary':'Next'));
+    if(adv) adv.style.display='none';
   });
-  document.getElementById('q1Check').style.display='inline-block';
-  document.getElementById('q1Check').disabled=true;
-  document.getElementById('q1Next').style.display='none';
-  document.getElementById('q2Check').style.display='inline-block';
-  document.getElementById('q2Check').disabled=true;
-  document.getElementById('q2Next').style.display='none';
-  document.getElementById('q3Check').style.display='inline-block';
-  document.getElementById('q3Check').disabled=true;
-  document.getElementById('q3Next').style.display='none';
-  document.getElementById('q4Check').style.display='inline-block';
-  document.getElementById('q4Check').disabled=true;
-  document.getElementById('q4Next').style.display='none';
-  document.getElementById('q5Check').style.display='inline-block';
-  document.getElementById('q5Check').disabled=true;
-  document.getElementById('q5Next').style.display='none';
-  document.getElementById('q6Check').style.display='inline-block';
-  document.getElementById('q6Check').disabled=true;
-  document.getElementById('q6Summary').style.display='none';
   document.getElementById('summaryPanel').style.display='none';
-  recolourDefault();
-  hideCurrentIndicator();
-  hideTotals();
-  hideVR1();
-  hideIR2();
-  hideIR4();
-  hideVR6();
-  showQ1();
+  showQuestion(1);
 }
 
 // ── zoom modal ──
@@ -1110,14 +1086,13 @@ setMode('example1');
               ?q=5&ans=1         → loads on Q5, answered
    Generic — copies into any quiz unchanged; remove the block to ship clean. */
 function jump(n, answered){
-  const show = window['showQ'+n];
-  if(typeof show !== 'function'){ console.warn('jump: no question', n); return; }
-  show();                                   // builds options + shows the question
+  if(n<1||n>QUIZ_QUESTION_COUNT){ console.warn('jump: no question', n); return; }
+  showQuestion(n);
   if(answered){
-    const st = Q['q'+n];
-    if(st){ st.sel = st.cor; }              // pick the correct option
-    const check = window['checkQ'+n];
-    if(typeof check === 'function') check(); // banner + marked options + reveal
+    const st=Q['q'+n];
+    if(st){ st.sel=st.cor; }
+    const check=window['checkQ'+n];
+    if(typeof check==='function') check();
   }
 }
 window.jump = jump;

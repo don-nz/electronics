@@ -582,7 +582,34 @@
 </div>
 
 <script>
-// ══ Fixed example value sets (E12 resistors + supply voltage) ══
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║  HOW TO CREATE A NEW QUIZ FROM THIS TEMPLATE                        ║
+// ║                                                                      ║
+// ║  1. Copy this file and rename it for your new circuit.               ║
+// ║                                                                      ║
+// ║  2. Replace the SVG circuit diagram in the <body> with your new      ║
+// ║     circuit. Keep the same meter element IDs or update the           ║
+// ║     applyMeterDisplay / applyHealthyDisplay functions to match.      ║
+// ║                                                                      ║
+// ║  3. Edit the CIRCUIT CONFIGURATION section:                          ║
+// ║     - EXAMPLE_SETS  → your component values and supply voltage       ║
+// ║     - LABELS        → all user-facing answer option text             ║
+// ║     - FAULT_OPTIONS → correct + wrong answers for each scenario      ║
+// ║                                                                      ║
+// ║  4. Rewrite the CIRCUIT SIMULATION section.                          ║
+// ║     The Engine API Contract block at the top of that section         ║
+// ║     lists every function the engine calls, its required return       ║
+// ║     shape, and the SVG element ID naming convention.                 ║
+// ║                                                                      ║
+// ║  5. Leave the QUIZ ENGINE section untouched.                         ║
+// ╚══════════════════════════════════════════════════════════════════════╝
+
+// ══════════════════════════════════════════════════════════════════════
+// CIRCUIT CONFIGURATION
+// Edit this section for a new circuit.
+// ══════════════════════════════════════════════════════════════════════
+
+// ── Example value sets ──
 // Circuit: R1,R2,R3 series → R4∥R5∥R6 purple bank → R7∥(R8+R9) orange bank → R10 series
 const EXAMPLE_SETS = {
   example1: { r1:100, r2:180, r3:120, r4:470, r5:330, r6:680, r7:560, r8:150, r9:220, r10:270, vs:10 },
@@ -600,7 +627,175 @@ function setMode(mode){
   newQuiz();
 }
 
-// ══ Constants ══
+// ══════════════════════════════════════════════════════════════════════
+// USER-EDITABLE — answer option wording
+// ══════════════════════════════════════════════════════════════════════
+const LABELS = {
+  // Shared question text
+  faultQuestion: 'Based on these readings, what fault has occurred?',
+  faultHint:     'Study the meter circles — compare colours and values carefully.',
+
+  // Purple bank (R4 / R5 / R6)
+  purpleCorrect: 'One of R4, R5, R6 has gone high or open',
+  purpleWrong:   'One of R7, R8, R9 has gone high or open',
+
+  // Orange bank (R7 / R8 / R9)
+  r7Correct:     'R7 has gone high or open',
+  r7Wrong:       'One of R8, R9 has gone high or open',
+  r8High:        'R8 has gone high',
+  r8Open:        'R8 has gone open',
+  r9High:        'R9 has gone high',
+  r9Open:        'R9 has gone open',
+
+  // Fixed Q3 — R1 open
+  r1Open:        'R1 has gone open',
+  r1High:        'R1 has gone high',
+  r10Open:       'R10 has gone open',
+  r10High:       'R10 has gone high',
+
+  // Series resistors — R is the resistor label passed in, e.g. 'R2'
+  seriesHigh: R => `${R} has gone high`,
+  seriesOpen: R => `${R} has gone open`,
+};
+
+// ══════════════════════════════════════════════════════════════════════
+// USER-EDITABLE — answer options for each fault type
+// correct: the answer that is right
+// wrongs:  the wrong options shown (purple and r7 get 2 extra series
+//          distractors added automatically to make 4 options total)
+// ══════════════════════════════════════════════════════════════════════
+const FAULT_OPTIONS = {
+  purple: {
+    correct: LABELS.purpleCorrect,
+    wrongs:  [LABELS.purpleWrong],
+  },
+  r7: {
+    correct: LABELS.r7Correct,
+    wrongs:  [LABELS.r7Wrong],
+  },
+  r8High: {
+    correct: LABELS.r8High,
+    wrongs:  [LABELS.r8Open, LABELS.r9High, LABELS.r7Correct],
+  },
+  r8Open: {
+    correct: LABELS.r8Open,
+    wrongs:  [LABELS.r8High, LABELS.r9Open, LABELS.r7Correct],
+  },
+  r9High: {
+    correct: LABELS.r9High,
+    wrongs:  [LABELS.r9Open, LABELS.r8High, LABELS.r7Correct],
+  },
+  r9Open: {
+    correct: LABELS.r9Open,
+    wrongs:  [LABELS.r9High, LABELS.r8Open, LABELS.r7Correct],
+  },
+};
+
+// Maximum number of fault questions drawn from the pool each quiz run.
+// Increase for longer quizzes, decrease for shorter ones.
+const QUIZ_MAX_FAULT_QUESTIONS = 7;
+
+// ══════════════════════════════════════════════════════════════════════
+// END CIRCUIT CONFIGURATION
+// ══════════════════════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════════════════════
+// CIRCUIT SIMULATION
+// Rewrite this section for a new circuit topology.
+// ══════════════════════════════════════════════════════════════════════
+
+// ── Engine API Contract ───────────────────────────────────────────────
+//
+// The QUIZ ENGINE calls the functions listed below. When building a new
+// quiz, implement each one to match the described return shape exactly.
+// Everything else in this section is a helper you can freely rewrite.
+//
+// ── Global: Q ──
+//   Populated by newQuiz() before each quiz run. The engine reads:
+//     Q.vs        — supply voltage (number)
+//     Q.iTotal    — healthy total current (number, amps)
+//     Q.vR<name>  — healthy voltage across each metered component
+//   Simulation helpers also read Q.r<name> (component Ω values).
+//   Populate all of these inside newQuiz() after choosing component values.
+//
+// ── calcCircuit(r1, r2, …, vs) → object ──
+//   Computes voltages and currents for one set of component values.
+//   Return an object whose keys match what applyMeterDisplay expects.
+//   Required keys for this circuit: vR1…vR10, vR456, vR789, iTotal, i89.
+//   Use Infinity for an open component; safePar() handles it gracefully.
+//
+// ── buildAllQuestions() → Array<question object> ──
+//   Assembles the complete ordered question list for one quiz run.
+//   This is the only function the engine calls to get questions — edit it
+//   to change the number or type of starter questions, or their order.
+//   Reads from the global Q object (populated before this is called).
+//   Uses QUIZ_MAX_FAULT_QUESTIONS (in Configuration) to cap fault questions.
+//
+// ── buildPool() → Array<{key, fault}> ──
+//   Returns all fault scenarios to draw questions from.
+//     key   — component identifier string, e.g. 'r1', 'r8'
+//     fault — fault mode string, e.g. 'open' or 'high'
+//   Deduplicate scenarios that produce identical voltage patterns so the
+//   same question cannot appear twice in one quiz.
+//
+// ── buildFaultQuestion(faultKey, faultType) → question object ──
+//   Returns a question object (see schema below).
+//
+// ── buildQ3() → question object ──
+//   Returns a fixed fault question shown as Q3 in every quiz.
+//   Used to give students a consistent anchor question across runs.
+//
+// ── buildFaultExplanation(q) → HTML string ──
+//   q is the question object. Returns innerHTML for the working-box shown
+//   after the student answers. Use q.faultKey, q.faultType, q.faultedVals.
+//
+// ── applyMeterDisplay(healthy, faulted) ──
+//   Updates SVG meter circles. healthy and faulted are calcCircuit() results.
+//   Edit the meterKeys array inside this function to match your SVG IDs.
+//
+// ── applyHealthyDisplay() ──
+//   Resets all meters to healthy values from the global Q object.
+//   Edit the mMap object inside to match your SVG IDs.
+//
+// ── applyCurrentDisplay(healthyI, faultedI) / resetCurrentDisplay(i) ──
+//   Updates the ammeter circle. SVG IDs: ammeterValue, ammeterUnit,
+//   iOrigValue, iOrigUnit. Update these IDs in your SVG if you rename them.
+//
+// ── buildWorkingPD(q) → HTML string ──
+//   Returns innerHTML for the working-box on potential-difference questions
+//   (Q1 and Q2). Rewrite if your non-fault question format changes.
+//
+// ── makePDOpts(correct, allVoltages) → Array<string> ──
+//   Generates 4 answer option strings for a potential-difference question.
+//   correct is the right voltage (number); allVoltages is an array of all
+//   healthy voltages to draw plausible distractors from.
+//
+// ── Question object schema ──
+//   {
+//     key:         null,             // unused for fault questions
+//     faultKey:    string,           // e.g. 'r8'
+//     label:       string,           // display name, e.g. 'R8'
+//     color:       string,           // highlight colour (keep '#ffff00')
+//     type:        'fault',          // engine branches on this
+//     faultType:   string,           // e.g. 'open' or 'high'
+//     faultedVals: object,           // return value of faultedResistors()
+//     opts:        [{label, type}],  // type is 'correct' or 'wrong'; 4 entries
+//     correctIdx:  number,           // index of the correct entry in opts
+//     qText:       string,           // question prompt shown to student
+//     qHint:       string,           // hint shown below the question
+//     correctV:    null,             // null for fault questions
+//   }
+//
+// ── SVG element IDs the engine reads ──
+//   meterR<n>        — voltage number text element for component n
+//   meterR<n>u       — voltage unit text element (e.g. 'V', 'mV')
+//   ammeterValue     — current number text element
+//   ammeterUnit      — current unit text element
+//   iOrigValue       — healthy-current reference number (stays green)
+//   iOrigUnit        — healthy-current reference unit
+// ─────────────────────────────────────────────────────────────────────
+
+// ── Constants ──
 const E12_BASE=[10,12,15,18,22,27,33,39,47,56,68,82];
 const E12=[];
 [1,10,100].forEach(m=>E12_BASE.forEach(v=>E12.push(v*m)));
@@ -704,7 +899,6 @@ function calcCircuit(r1,r2,r3,r4,r5,r6,r7,r8,r9,r10,vs){
   const bankSum=(isFinite(r456)?r456:0)+(isFinite(r789)?r789:0);
   const rTotal=seriesSum+bankSum;
 
-  // Check for open in series path
   const seriesOpen=[r1,r2,r3,r10].some(x=>!isFinite(x));
 
   let iTotal, vR1,vR2,vR3,vR4,vR5,vR6,vR7,vR8,vR9,vR10;
@@ -725,11 +919,9 @@ function calcCircuit(r1,r2,r3,r4,r5,r6,r7,r8,r9,r10,vs){
     vR456val=isFinite(r456)?iTotal*r456:0;
     vR789val=isFinite(r789)?iTotal*r789:0;
 
-    // Parallel bank voltages — same across all open branches too
     vR4=vR456val; vR5=vR456val; vR6=vR456val;
     vR7=vR789val;
 
-    // R8/R9 sub-branch
     if(!isFinite(r7)&&!isFinite(r89)){
       // Entire orange bank open — shouldn't happen but safe
       vR8=0; vR9=0; i89=0;
@@ -772,7 +964,6 @@ function applyMeterDisplay(healthy, faulted){
     ['meterR7','vR7'],['meterR8','vR8'],['meterR9','vR9'],['meterR10','vR10'],
   ];
 
-  // Step 1: hard reset every meter to normal red with healthy value
   meterKeys.forEach(([id,key])=>{
     const el=document.getElementById(id); if(!el) return;
     const eu=document.getElementById(id+'u');
@@ -785,7 +976,6 @@ function applyMeterDisplay(healthy, faulted){
     if(circ) circ.setAttribute('stroke',CLR_STROKE_NORMAL);
   });
 
-  // Step 2: apply faulted values with colour coding
   meterKeys.forEach(([id,key])=>{
     const el=document.getElementById(id); if(!el) return;
     const eu=document.getElementById(id+'u');
@@ -814,7 +1004,6 @@ function addGhost(meterId, healthyVal, faultedVal, wentUp, clr){
   const txt=document.getElementById(meterId);
   if(!txt) return;
 
-  // Remove existing ghost
   const existing=document.getElementById(meterId+'Ghost');
   if(existing) existing.remove();
 
@@ -832,7 +1021,6 @@ function addGhost(meterId, healthyVal, faultedVal, wentUp, clr){
   const g=document.createElementNS(ns,'g');
   g.id=meterId+'Ghost';
 
-  // Single text line: larger arrow + normal-size delta, centred below circle
   const line=document.createElementNS(ns,'text');
   line.setAttribute('x',cx); line.setAttribute('y',cy+r+23);
   line.setAttribute('fill',clr); line.setAttribute('text-anchor','middle');
@@ -882,7 +1070,6 @@ function addAmmeterGhost(healthyI, faultedI, wentUp, clr){
   const f=fmtAShort(delta);
   const numStr=(wentUp?'+':'-')+f.num;
 
-  // Line 1: number + arrow, right-aligned so arrow sits closest to the circle
   const textTop=document.createElementNS(ns,'text');
   textTop.setAttribute('x','850'); textTop.setAttribute('y','442');
   textTop.setAttribute('text-anchor','end');
@@ -898,7 +1085,6 @@ function addAmmeterGhost(healthyI, faultedI, wentUp, clr){
   textTop.appendChild(numSpan);
   textTop.appendChild(arrowSpan);
 
-  // Line 2: unit centered below the number
   const textBot=document.createElementNS(ns,'text');
   textBot.setAttribute('x','820'); textBot.setAttribute('y','468');
   textBot.setAttribute('text-anchor','middle');
@@ -949,7 +1135,6 @@ function applyHealthyDisplay(){
     if(circ) circ.setAttribute('stroke',CLR_STROKE_NORMAL);
   });
   resetCurrentDisplay(Q.iTotal);
-  // iOrig label — always green, always healthy value
   const f=fmtAShort(Q.iTotal);
   const iOV=document.getElementById('iOrigValue'); if(iOV){iOV.textContent=f.num; iOV.setAttribute('fill','#00ff99');}
   const iOU=document.getElementById('iOrigUnit');  if(iOU){iOU.textContent=' '+f.unit; iOU.setAttribute('fill','#00ff99');}
@@ -989,7 +1174,6 @@ function buildFaultExplanation(q){
                           r7:freshFaulted.vR7,r8:freshFaulted.vR8,r9:freshFaulted.vR9,
                           r10:freshFaulted.vR10};
 
-  // Find changed resistors
   const increased=[], decreased=[];
   allKeys.forEach(k=>{
     const hv=healthyVals[k]??0, fv2=faultedVoltages[k]??0;
@@ -1044,13 +1228,11 @@ function buildFaultExplanation(q){
       html+=`<div><b style="color:#ffaa00;">${rl}</b> went <b>open circuit</b>.</div>`;
       html+=`<div style="margin-top:.3rem;">No current can flow — ${rl} shows the full source voltage (${fmtVS(Q.vs)}) and all other resistors show 0V.</div>`;
     } else {
-      // Purple bank open
       html+=`<div><b style="color:#ffaa00;">${rl}</b> went <b>open circuit</b>.</div>`;
       html+=`<div style="margin-top:.3rem;">Current continues through the remaining parallel branches. The total circuit resistance increased to <b>${freshFaulted.iTotal>0?(Q.vs/freshFaulted.iTotal).toFixed(2)+'Ω':'∞'}</b>.</div>`;
       html+=`<div style="margin-top:.3rem;color:#e8e8d0;">All parallel branches show the same voltage — we can't tell which one opened from voltage alone.</div>`;
     }
   } else {
-    // Gone high
     const newR=fv[faultKey];
     const newRTotal=Q.vs/freshFaulted.iTotal;
     html+=`<div><b style="color:#ffaa00;">${rl}</b> went high to <b>${fmtΩ(newR)}</b>.</div>`;
@@ -1121,82 +1303,47 @@ function buildFaultQuestion(faultKey, faultType){
   const purpleKeys=['r4','r5','r6'];
   const orangeKeys=['r7','r8','r9'];
   const rl=labelFromKey(faultKey);
-  const opposite=faultType==='open'?'high':'open';
 
   let correctLabel, opts;
   const seriesDistractors=[...SERIES_RESISTORS].sort(()=>Math.random()-.5);
 
   if(purpleKeys.includes(faultKey)){
-    // Purple bank — can never tell high from open, or which resistor, from voltage alone
-    correctLabel='One of R4, R5, R6 has gone high or open';
+    const cfg=FAULT_OPTIONS.purple;
+    correctLabel=cfg.correct;
     opts=[
-      {label:correctLabel,                                                          type:'correct'},
-      {label:'One of R7, R8, R9 has gone high or open',                            type:'wrong'},
-      {label:`${labelFromKey(seriesDistractors[0])} has gone open`,                type:'wrong'},
-      {label:`${labelFromKey(seriesDistractors[1])} has gone high`,                type:'wrong'},
+      {label:correctLabel, type:'correct'},
+      ...cfg.wrongs.map(l=>({label:l, type:'wrong'})),
+      {label:LABELS.seriesOpen(labelFromKey(seriesDistractors[0])), type:'wrong'},
+      {label:LABELS.seriesHigh(labelFromKey(seriesDistractors[1])), type:'wrong'},
     ];
   } else if(orangeKeys.includes(faultKey)){
     if(faultKey==='r7'){
-      // R7 high and R7 open produce identical voltage patterns (all three orange ↑)
-      correctLabel='R7 has gone high or open';
+      const cfg=FAULT_OPTIONS.r7;
+      correctLabel=cfg.correct;
       opts=[
-        {label:correctLabel,                                                 type:'correct'},
-        {label:'One of R8, R9 has gone high or open',                       type:'wrong'},
-        {label:`${labelFromKey(seriesDistractors[0])} has gone open`,       type:'wrong'},
-        {label:`${labelFromKey(seriesDistractors[1])} has gone high`,       type:'wrong'},
+        {label:correctLabel, type:'correct'},
+        ...cfg.wrongs.map(l=>({label:l, type:'wrong'})),
+        {label:LABELS.seriesOpen(labelFromKey(seriesDistractors[0])), type:'wrong'},
+        {label:LABELS.seriesHigh(labelFromKey(seriesDistractors[1])), type:'wrong'},
       ];
-    } else if(faultKey==='r8'){
-      if(faultType==='high'){
-        // R8 high: R8↑↑, R9↓ (non-zero), R7↑
-        correctLabel='R8 has gone high';
-        opts=[
-          {label:correctLabel,                                               type:'correct'},
-          {label:'R8 has gone open',                                         type:'wrong'},
-          {label:'R9 has gone high',                                         type:'wrong'},
-          {label:'R7 has gone high or open',                                 type:'wrong'},
-        ];
-      } else {
-        // R8 open: R9=0V is the tell; R8 shows full branch voltage
-        correctLabel='R8 has gone open';
-        opts=[
-          {label:correctLabel,                                               type:'correct'},
-          {label:'R8 has gone high',                                         type:'wrong'},
-          {label:'R9 has gone open',                                         type:'wrong'},
-          {label:'R7 has gone high or open',                                 type:'wrong'},
-        ];
-      }
     } else {
-      // r9
-      if(faultType==='high'){
-        // R9 high: R9↑↑, R8↓ (non-zero), R7↑
-        correctLabel='R9 has gone high';
-        opts=[
-          {label:correctLabel,                                               type:'correct'},
-          {label:'R9 has gone open',                                         type:'wrong'},
-          {label:'R8 has gone high',                                         type:'wrong'},
-          {label:'R7 has gone high or open',                                 type:'wrong'},
-        ];
-      } else {
-        // R9 open: R8=0V is the tell; R9 shows full branch voltage
-        correctLabel='R9 has gone open';
-        opts=[
-          {label:correctLabel,                                               type:'correct'},
-          {label:'R9 has gone high',                                         type:'wrong'},
-          {label:'R8 has gone open',                                         type:'wrong'},
-          {label:'R7 has gone high or open',                                 type:'wrong'},
-        ];
-      }
+      const cfgKey=faultKey+(faultType==='high'?'High':'Open');
+      const cfg=FAULT_OPTIONS[cfgKey];
+      correctLabel=cfg.correct;
+      opts=[{label:correctLabel, type:'correct'}, ...cfg.wrongs.map(l=>({label:l, type:'wrong'}))];
     }
   } else {
     // Series resistor — specific label, neighbour as distractor
-    correctLabel=`${rl} has gone ${faultType}`;
     const neighbour=getNeighbour(faultKey);
     const nl=labelFromKey(neighbour);
+    const labelFn   =faultType==='high'?LABELS.seriesHigh:LABELS.seriesOpen;
+    const labelFnOpp=faultType==='high'?LABELS.seriesOpen:LABELS.seriesHigh;
+    correctLabel=labelFn(rl);
     opts=[
-      {label:correctLabel,                      type:'correct'},
-      {label:`${rl} has gone ${opposite}`,      type:'wrong'},
-      {label:`${nl} has gone ${faultType}`,     type:'wrong'},
-      {label:`${nl} has gone ${opposite}`,      type:'wrong'},
+      {label:correctLabel,    type:'correct'},
+      {label:labelFnOpp(rl),  type:'wrong'},
+      {label:labelFn(nl),     type:'wrong'},
+      {label:labelFnOpp(nl),  type:'wrong'},
     ];
   }
 
@@ -1206,8 +1353,8 @@ function buildFaultQuestion(faultKey, faultType){
     key:null, faultKey, label:rl, color:'#ffff00',
     type:'fault', faultType, faultedVals:fv,
     opts, correctIdx:opts.findIndex(o=>o.type==='correct'),
-    qText:`Based on these readings, what fault has occurred?`,
-    qHint:`Study the meter circles — compare colours and values carefully.`,
+    qText: LABELS.faultQuestion,
+    qHint: LABELS.faultHint,
     correctV:null,
   };
 }
@@ -1256,23 +1403,23 @@ function buildPool(){
   });
 }
 
-// ══ Build Q3 (fixed: R1 open) ══
+// ══ Build Q3 ══
 function buildQ3(){
   const fv=faultedResistors('r1','open');
   const faulted=calcCircuit(fv.r1,fv.r2,fv.r3,fv.r4,fv.r5,fv.r6,fv.r7,fv.r8,fv.r9,fv.r10,Q.vs);
   const opts=[
-    {label:'R1 has gone open',  type:'correct'},
-    {label:'R1 has gone high',  type:'wrong'},
-    {label:'R10 has gone open', type:'wrong'},
-    {label:'R10 has gone high', type:'wrong'},
+    {label:LABELS.r1Open,  type:'correct'},
+    {label:LABELS.r1High,  type:'wrong'},
+    {label:LABELS.r10Open, type:'wrong'},
+    {label:LABELS.r10High, type:'wrong'},
   ].sort(()=>Math.random()-.5);
   return {
     key:null, faultKey:'r1', label:'R1', color:'#ffff00',
     type:'fault', faultType:'open',
     faultedVals:fv,
     opts, correctIdx:opts.findIndex(o=>o.type==='correct'),
-    qText:'Based on these readings, what fault has occurred?',
-    qHint:'Study the meter circles — compare colours and values carefully.',
+    qText: LABELS.faultQuestion,
+    qHint: LABELS.faultHint,
     correctV:null,
   };
 }
@@ -1319,7 +1466,64 @@ function buildWorkingPD(rKey,rLabel,color,v){
     <div class="wline total"><b style="color:${color}">V<sub>${rLabel}</sub> = ${fmtVS(v)}</b></div>`;
 }
 
-// ══ newQuiz ══
+// ══ buildAllQuestions ══
+// Assembles the full ordered question list for one quiz run.
+// Edit here to change the number or type of starter questions.
+function buildAllQuestions(){
+  const allVoltages=[Q.vR1,Q.vR2,Q.vR3,Q.vR4,Q.vR789,Q.vR8,Q.vR9,Q.vR10];
+
+  // ── Q1: PD across random series resistor ──
+  const seriesPool=[
+    {key:'r1', label:'R1', color:'#00e5ff', v:Q.vR1},
+    {key:'r2', label:'R2', color:'#00e5ff', v:Q.vR2},
+    {key:'r3', label:'R3', color:'#00e5ff', v:Q.vR3},
+    {key:'r10',label:'R10',color:'#00e5ff', v:Q.vR10},
+  ];
+  const q1r=seriesPool[Math.floor(Math.random()*seriesPool.length)];
+  const q1opts=makePDOpts(q1r.v, allVoltages.filter(x=>fmtVS(x)!==fmtVS(q1r.v)));
+  const q1={key:q1r.key,label:q1r.label,color:q1r.color,type:'pd',correctV:q1r.v,
+    opts:q1opts.opts,correctIdx:q1opts.correctIdx,
+    qText:`What is the potential difference across <span style="color:${q1r.color};font-weight:bold;">${q1r.label}</span>?`,
+    qHint:'Find the highlighted resistor and read its meter circle.',
+    working:buildWorkingPD(q1r.key,q1r.label,q1r.color,q1r.v)};
+
+  // ── Q2: PD across random parallel resistor ──
+  const parallelPool=[
+    {key:'r4',label:'R4',color:'#a78bfa',v:Q.vR4},
+    {key:'r5',label:'R5',color:'#a78bfa',v:Q.vR4},
+    {key:'r6',label:'R6',color:'#a78bfa',v:Q.vR4},
+    {key:'r7',label:'R7',color:'#ff6b35',v:Q.vR789},
+    {key:'r8',label:'R8',color:'#ff6b35',v:Q.vR8},
+    {key:'r9',label:'R9',color:'#ff6b35',v:Q.vR9},
+  ];
+  const q2r=parallelPool[Math.floor(Math.random()*parallelPool.length)];
+  const q2opts=makePDOpts(q2r.v, allVoltages.filter(x=>fmtVS(x)!==fmtVS(q2r.v)));
+  const q2={key:q2r.key,label:q2r.label,color:q2r.color,type:'pd',correctV:q2r.v,
+    opts:q2opts.opts,correctIdx:q2opts.correctIdx,
+    qText:`What is the potential difference across <span style="color:${q2r.color};font-weight:bold;">${q2r.label}</span>?`,
+    qHint:'Find the highlighted resistor and read its meter circle.',
+    working:buildWorkingPD(q2r.key,q2r.label,q2r.color,q2r.v)};
+
+  // ── Q3: R1 open ──
+  const q3=buildQ3();
+
+  // ── Qn pool: filtered to visible faults, capped by QUIZ_MAX_FAULT_QUESTIONS ──
+  const pool=buildPool();
+  const chosen=pickN(pool, Math.min(QUIZ_MAX_FAULT_QUESTIONS, pool.length));
+  const qnQuestions=chosen.map(({key,fault})=>buildFaultQuestion(key,fault));
+
+  return [q1, q2, q3, ...qnQuestions];
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// END CIRCUIT SIMULATION
+// ══════════════════════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════════════════════
+// QUIZ ENGINE — leave this section unchanged for new circuits
+// ══════════════════════════════════════════════════════════════════════
+
+// ── newQuiz ──
 function newQuiz(){
   // Reset circuit display immediately so old state doesn't linger
   highlightResistor(null);
@@ -1356,49 +1560,7 @@ function newQuiz(){
 
   applyHealthyDisplay();
 
-  const allVoltages=[vR1,vR2,vR3,vR456,vR789,vR8,vR9,vR10];
-
-  // ── Q1: PD across random series resistor ──
-  const seriesPool=[
-    {key:'r1',label:'R1',color:'#00e5ff',v:vR1},
-    {key:'r2',label:'R2',color:'#00e5ff',v:vR2},
-    {key:'r3',label:'R3',color:'#00e5ff',v:vR3},
-    {key:'r10',label:'R10',color:'#00e5ff',v:vR10},
-  ];
-  const q1r=seriesPool[Math.floor(Math.random()*seriesPool.length)];
-  const q1opts=makePDOpts(q1r.v, allVoltages.filter(x=>fmtVS(x)!==fmtVS(q1r.v)));
-  const q1={key:q1r.key,label:q1r.label,color:q1r.color,type:'pd',correctV:q1r.v,
-    opts:q1opts.opts,correctIdx:q1opts.correctIdx,
-    qText:`What is the potential difference across <span style="color:${q1r.color};font-weight:bold;">${q1r.label}</span>?`,
-    qHint:'Find the highlighted resistor and read its meter circle.',
-    working:buildWorkingPD(q1r.key,q1r.label,q1r.color,q1r.v)};
-
-  // ── Q2: PD across random parallel resistor ──
-  const parallelPool=[
-    {key:'r4',label:'R4',color:'#a78bfa',v:vR456},
-    {key:'r5',label:'R5',color:'#a78bfa',v:vR456},
-    {key:'r6',label:'R6',color:'#a78bfa',v:vR456},
-    {key:'r7',label:'R7',color:'#ff6b35',v:vR789},
-    {key:'r8',label:'R8',color:'#ff6b35',v:vR8},
-    {key:'r9',label:'R9',color:'#ff6b35',v:vR9},
-  ];
-  const q2r=parallelPool[Math.floor(Math.random()*parallelPool.length)];
-  const q2opts=makePDOpts(q2r.v, allVoltages.filter(x=>fmtVS(x)!==fmtVS(q2r.v)));
-  const q2={key:q2r.key,label:q2r.label,color:q2r.color,type:'pd',correctV:q2r.v,
-    opts:q2opts.opts,correctIdx:q2opts.correctIdx,
-    qText:`What is the potential difference across <span style="color:${q2r.color};font-weight:bold;">${q2r.label}</span>?`,
-    qHint:'Find the highlighted resistor and read its meter circle.',
-    working:buildWorkingPD(q2r.key,q2r.label,q2r.color,q2r.v)};
-
-  // ── Q3: fixed R1 open ──
-  const q3=buildQ3();
-
-  // ── Qn pool: filtered to visible faults, pick up to 7 ──
-  const pool=buildPool();
-  const chosen=pickN(pool, Math.min(7, pool.length));
-  const qnQuestions=chosen.map(({key,fault})=>buildFaultQuestion(key,fault));
-
-  questions=[q1,q2,q3,...qnQuestions];
+  questions=buildAllQuestions();
   answers=questions.map(()=>({selectedIdx:null,correct:null}));
   currentIdx=0;
   buildProgress();
@@ -1478,7 +1640,6 @@ function renderQuestion(idx){
       const correctLabel=q.opts[q.correctIdx].label;
       if(ans.correct){banner.className='result-banner correct';document.getElementById('qBannerText').textContent=`Correct! ${correctLabel}`;}
       else{banner.className='result-banner wrong';document.getElementById('qBannerText').textContent=`The correct answer is: ${correctLabel}`;}
-      // Show fault analysis
       if(wbox){wbox.className='working-box visible';document.getElementById('qWorkingContent').innerHTML=buildFaultExplanation(q);}
     } else {
       const answerStr=fmtVS(q.correctV);
