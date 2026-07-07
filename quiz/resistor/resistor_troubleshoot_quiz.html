@@ -107,7 +107,6 @@
 
     /* ── Example / Randomise mode toggle ── */
     .mode-toggle{display:flex;align-items:center;gap:.7rem;margin-bottom:.8rem;font-family:'Share Tech Mono',monospace;}
-    .mode-toggle-label{font-size:.58rem;letter-spacing:.18em;color:var(--label);text-transform:uppercase;}
     .mode-seg{display:inline-flex;border:1px solid var(--border);border-radius:4px;overflow:hidden;flex-wrap:wrap;}
     .mode-seg button{font-family:'Share Tech Mono',monospace;font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;padding:.4rem .95rem;border:none;background:transparent;color:var(--label);transition:background .15s,color .15s;}
     .mode-seg button + button{border-left:1px solid var(--border);}
@@ -239,7 +238,6 @@
 
   <div class="circuit-col">
     <div class="mode-toggle">
-      <span class="mode-toggle-label">Values</span>
       <div class="mode-seg" id="modeSeg">
         <button id="modeExample1" class="active" onclick="setMode('example1')">Example 1</button>
         <button id="modeExample2" onclick="setMode('example2')">Example 2</button>
@@ -281,7 +279,8 @@
         <line id="C8"  x1="900" y1="720" x2="760" y2="720" style="stroke: var(--col-cyan)" stroke-width="2"/><!-- bottom-right → orange right -->
         <line id="C9"  x1="480" y1="720" x2="340" y2="720" style="stroke: var(--col-cyan)" stroke-width="2"/><!-- orange left → right of R10 -->
         <line id="C11" x1="180" y1="720" x2="50"  y2="720" style="stroke: var(--col-cyan)" stroke-width="2"/><!-- left of R10 → bottom-left -->
-        <line id="C12" x1="50"  y1="720" x2="50"  y2="456" style="stroke: var(--col-cyan)" stroke-width="2"/><!-- bottom-left → battery− -->
+        <line id="C12a" x1="50"  y1="720" x2="50"  y2="630" style="stroke: var(--col-cyan)" stroke-width="2"/><!-- bottom-left → gap for ammeter2 circle -->
+        <line id="C12b" x1="50"  y1="546" x2="50"  y2="456" style="stroke: var(--col-cyan)" stroke-width="2"/><!-- gap for ammeter2 circle → battery− -->
 
         <!-- ══ R1 — IEC: empty box, label above, value below; group origin = box top-left ══ -->
         <g id="r1Group" transform="translate(100,182)">
@@ -550,6 +549,16 @@
           <circle cx="0" cy="0" r="42" style="fill: var(--col-darkgreen); stroke: var(--col-green)" stroke-width="2" filter="url(#glow)"/>
           <text id="ammeterValue" x="0" y="0" style="fill: var(--col-green)" text-anchor="middle" font-size="20" font-weight="bold">—</text>
           <text id="ammeterUnit"  x="0" y="25" style="fill: var(--col-green)" text-anchor="middle" font-size="18">—</text>
+        </g>
+
+        <!-- ══ AMMETER CIRCLE 2 — centred on left wall wire (C12), midway between the bottom -->
+        <!-- rail and the negative terminal; cuts wire like the other ammeter/battery circles; -->
+        <!-- group origin = circle centre. Same total-current reading as the other ammeter, -->
+        <!-- kept in sync wherever ammeterValue/ammeterUnit are updated. ══ -->
+        <g id="ammeter2Group" transform="translate(50,588)">
+          <circle cx="0" cy="0" r="42" style="fill: var(--col-darkgreen); stroke: var(--col-green)" stroke-width="2" filter="url(#glow)"/>
+          <text id="ammeter2Value" x="0" y="0" style="fill: var(--col-green)" text-anchor="middle" font-size="20" font-weight="bold">—</text>
+          <text id="ammeter2Unit"  x="0" y="25" style="fill: var(--col-green)" text-anchor="middle" font-size="18">—</text>
         </g>
 
         <!-- TARGET HIGHLIGHT -->
@@ -1081,6 +1090,7 @@ function removeAllGhosts(){
     if(circ) circ.setAttribute('stroke',CLR_STROKE_NORMAL);
   });
   removeAmmeterGhost();
+  removeAmmeter2Ghost();
 }
 
 function removeAmmeterGhost(){
@@ -1127,6 +1137,53 @@ function addAmmeterGhost(healthyI, faultedI, wentUp, clr){
   grp.appendChild(g);
 }
 
+function removeAmmeter2Ghost(){
+  const el=document.getElementById('ammeter2Ghost'); if(el) el.remove();
+}
+
+// Mirror of addAmmeterGhost, but for ammeter2 (left rail) — text sits to its RIGHT
+// (toward the centre of the circuit) instead of to the left, same inward-facing
+// convention as the original ammeter's ghost.
+function addAmmeter2Ghost(healthyI, faultedI, wentUp, clr){
+  const ns='http://www.w3.org/2000/svg';
+  const grp=document.querySelector('#circuitSvg > g');
+  if(!grp) return;
+  const g=document.createElementNS(ns,'g');
+  g.id='ammeter2Ghost';
+
+  const delta=Math.abs(faultedI-healthyI);
+  const f=fmtAShort(delta);
+  const numStr=(wentUp?'+':'-')+f.num;
+
+  const textTop=document.createElementNS(ns,'text');
+  textTop.setAttribute('x','100'); textTop.setAttribute('y','590');
+  textTop.setAttribute('text-anchor','start');
+  textTop.setAttribute('font-weight','bold');
+  textTop.setAttribute('fill',clr); textTop.setAttribute('stroke',clr); textTop.setAttribute('stroke-width','0.8');
+  textTop.setAttribute('font-family',"'Share Tech Mono',monospace");
+  const numSpan=document.createElementNS(ns,'tspan');
+  numSpan.setAttribute('font-size','22');
+  numSpan.textContent=numStr+' ';
+  const arrowSpan=document.createElementNS(ns,'tspan');
+  arrowSpan.setAttribute('font-size','30');
+  arrowSpan.textContent=wentUp?'↑':'↓';
+  textTop.appendChild(numSpan);
+  textTop.appendChild(arrowSpan);
+
+  const textBot=document.createElementNS(ns,'text');
+  textBot.setAttribute('x','130'); textBot.setAttribute('y','616');
+  textBot.setAttribute('text-anchor','middle');
+  textBot.setAttribute('font-size','16');
+  textBot.setAttribute('font-weight','bold');
+  textBot.setAttribute('fill',clr); textBot.setAttribute('stroke',clr); textBot.setAttribute('stroke-width','0.8');
+  textBot.setAttribute('font-family',"'Share Tech Mono',monospace");
+  textBot.textContent=f.unit;
+
+  g.appendChild(textTop);
+  g.appendChild(textBot);
+  grp.appendChild(g);
+}
+
 // ══ Update ammeter circle — text stays green, ghost shows change ══
 function applyCurrentDisplay(healthyI, faultedI){
   const wentUp=faultedI>healthyI*1.0005;
@@ -1134,15 +1191,24 @@ function applyCurrentDisplay(healthyI, faultedI){
   const f=fmtAShort(faultedI);
   const av=document.getElementById('ammeterValue'); if(av) av.textContent=f.num;
   const au=document.getElementById('ammeterUnit');  if(au) au.textContent=f.unit;
+  const av2=document.getElementById('ammeter2Value'); if(av2) av2.textContent=f.num;
+  const au2=document.getElementById('ammeter2Unit');  if(au2) au2.textContent=f.unit;
   removeAmmeterGhost();
-  if(wentUp||wentDown) addAmmeterGhost(healthyI, faultedI, wentUp, wentUp?CLR_UP:CLR_DOWN);
+  removeAmmeter2Ghost();
+  if(wentUp||wentDown){
+    addAmmeterGhost(healthyI, faultedI, wentUp, wentUp?CLR_UP:CLR_DOWN);
+    addAmmeter2Ghost(healthyI, faultedI, wentUp, wentUp?CLR_UP:CLR_DOWN);
+  }
 }
 
 function resetCurrentDisplay(iTotal){
   const f=fmtAShort(iTotal);
   const av=document.getElementById('ammeterValue'); if(av) av.textContent=f.num;
   const au=document.getElementById('ammeterUnit');  if(au) au.textContent=f.unit;
+  const av2=document.getElementById('ammeter2Value'); if(av2) av2.textContent=f.num;
+  const au2=document.getElementById('ammeter2Unit');  if(au2) au2.textContent=f.unit;
   removeAmmeterGhost();
+  removeAmmeter2Ghost();
 }
 
 // ══ Healthy circuit display ══
