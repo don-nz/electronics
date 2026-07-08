@@ -1,0 +1,1273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Total Resistance Calculation Quiz 2</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      --colour-bg:#0a0d14;
+      --colour-panel:#0f1420;
+      --colour-border:#1e2d4a;
+      --colour-accent:#00e5ff;
+      --colour-accent2:#ff6b35;
+      --colour-accent3:#00ff99;
+      --colour-accent4:#ff3d9a;
+      --colour-accent5:#a78bfa;
+      --colour-series:#00e5ff;              /* R4 + circuit lines — cyan */
+      --colour-resistor:#00e5ff;            /* default colour for resistor bodies (box outlines), before grouping is revealed */
+      --colour-resistor-labels:#f8f8f5;     /* default colour for resistor names (R1…) & ohms values, before grouping is revealed */
+      --colour-node:#f8f8f5;                 /* node labels (A, B, C) at the circuit's junction points */
+      --colour-resistor-combo1:#f209ea;     /* Group labels used to highlight resistors relating to questions */
+      --colour-resistor-combo2:#FFD700; 
+      --colour-resistor-combo3:#3d7dff; 
+      --colour-resistor-combo4:#14ffd4; 
+      --colour-resistor-combo5:#7b2ff7;
+      --colour-resistor-total:#00FFFF;      /* total resistance labels */
+      --colour-current:#39FF14;             /* current (I) indicator arrows/labels in the SVG + "current" wording in question text */
+      --colour-red:#ff3333;                 /* voltage-drop labels */
+      --colour-supply:#ff4444;              /* battery / supply voltage */
+      --colour-grid:rgba(0,229,255,0.06);
+      --colour-text:#c8d8e8;
+      --colour-label:#5a7a9a;
+    }
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{
+      background:var(--colour-bg);color:var(--colour-text);
+      font-family:'Share Tech Mono',monospace;
+      min-height:100vh;display:flex;flex-direction:column;
+      align-items:center;padding:2rem 1rem;
+      background-image:linear-gradient(var(--colour-grid) 1px,transparent 1px),linear-gradient(90deg,var(--colour-grid) 1px,transparent 1px);
+      background-size:40px 40px;
+    }
+    header{text-align:center;margin-bottom:2rem;width:100%;}
+    header h1{font-family:'Orbitron',sans-serif;font-size:clamp(1.4rem,4vw,2.2rem);font-weight:900;letter-spacing:.12em;color:var(--colour-accent);text-shadow:0 0 30px rgba(0,229,255,.5);text-transform:uppercase;}
+    header p{margin-top:.5rem;color:var(--colour-label);font-size:.75rem;letter-spacing:.2em;text-transform:uppercase;}
+
+    .quiz-wrap{width:100%;max-width:1400px;display:flex;flex-direction:column;gap:1.5rem;}
+    @media(min-width:900px){
+      .quiz-wrap{display:grid;grid-template-columns:minmax(340px,52%) 1fr;gap:1.2rem;align-items:start;}
+      .circuit-col{position:sticky;top:1.5rem;}
+      .questions-col{min-width:0;}
+      .questions-col .card{padding:1rem 1.1rem;}
+      .questions-col .option-btn{padding:.5rem .7rem;font-size:.76rem;}
+      .questions-col .q-text{font-size:.86rem;}
+      .questions-col .result-banner{font-size:.72rem;padding:.5rem .8rem;}
+      .questions-col .btn{width:130px;font-size:.64rem;}
+      .questions-col .working-box{padding:.85rem 1rem;}
+      .questions-col .options{gap:.4rem;}
+    }
+
+    .card{background:var(--colour-panel);border:1px solid var(--colour-border);border-radius:4px;padding:1.6rem;}
+    .circuit-panel{background:rgba(0,0,0,.25);border:1px solid var(--colour-border);border-radius:4px;padding:.8rem;position:relative;cursor:zoom-in;}
+    .circuit-panel svg{width:100%;height:auto;display:block;}
+    .panel-label{font-size:.58rem;letter-spacing:.18em;color:var(--colour-label);text-transform:uppercase;text-align:center;margin-bottom:6px;}
+
+    .q-panel{display:flex;flex-direction:column;gap:1rem;}
+    .q-header{display:flex;align-items:flex-start;gap:1rem;}
+    .q-num{font-family:'Orbitron',sans-serif;font-size:1.1rem;font-weight:700;color:var(--colour-accent);white-space:nowrap;padding-top:.15rem;}
+    .q-text{color:#d0e4f0;font-size:.9rem;font-weight:bold;line-height:1.5;}
+    .q-hint{font-size:.75rem;color:var(--colour-label);font-weight:normal;margin-top:.3rem;}
+
+    .options{display:flex;flex-direction:column;gap:.6rem;}
+    .option-btn{width:100%;padding:.7rem 1rem;border-radius:3px;border:1px solid var(--colour-border);background:rgba(255,255,255,.02);color:var(--colour-text);font-family:'Share Tech Mono',monospace;font-size:.82rem;text-align:left;cursor:pointer;transition:border-color .15s,background .15s;display:flex;align-items:center;gap:.7rem;}
+    .option-btn:hover:not(:disabled){border-color:rgba(0,229,255,.4);background:rgba(0,229,255,.05);}
+    .option-btn.selected{border-color:rgba(0,229,255,.6);background:rgba(0,229,255,.08);color:var(--colour-accent);}
+    .option-btn.correct{border-color:var(--colour-accent3);background:rgba(0,255,153,.08);color:var(--colour-accent3);}
+    .option-btn.wrong{border-color:var(--colour-accent4);background:rgba(255,61,154,.08);color:var(--colour-accent4);}
+    .option-btn.dimmed{opacity:.35;}
+    .option-letter{font-family:'Orbitron',sans-serif;font-size:.7rem;font-weight:700;min-width:22px;}
+    .result-icon{font-size:1.1rem;margin-left:auto;}
+
+    .result-banner{display:none;padding:.65rem 1rem;border-radius:3px;font-size:.78rem;font-family:'Orbitron',sans-serif;align-items:center;gap:.6rem;line-height:1.5;}
+    .result-banner.correct{display:flex;background:rgba(0,255,153,.08);border:1px solid rgba(0,255,153,.3);color:var(--colour-accent3);}
+    .result-banner.wrong{display:flex;background:rgba(255,61,154,.08);border:1px solid rgba(255,61,154,.3);color:var(--colour-accent4);}
+
+    .working-box{display:none;background:rgba(0,0,0,.2);border:1px solid var(--colour-border);border-radius:4px;padding:1.1rem 1.3rem;}
+    .working-box.visible{display:block;}
+    .working-title{font-family:'Orbitron',sans-serif;font-size:.62rem;letter-spacing:.2em;color:var(--colour-label);text-transform:uppercase;margin-bottom:.7rem;padding-bottom:.4rem;border-bottom:1px solid var(--colour-border);}
+    .step-label{font-family:'Orbitron',sans-serif;font-size:.7rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;margin:1rem 0 .5rem;padding-bottom:.3rem;border-bottom:1px solid var(--colour-border);}
+    .step-label:first-of-type{margin-top:0;}
+    .wlabel{font-size:.72rem;color:var(--colour-label);margin:.5rem 0 .1rem;}
+    .wline{font-size:.8rem;line-height:1.7;}
+    .wline.total{margin-top:.5rem;padding-top:.5rem;border-top:1px solid var(--colour-border);font-size:.85rem;}
+    .frac{display:inline-flex;flex-direction:column;align-items:center;vertical-align:middle;margin:0 4px;}
+    .frac .num{border-bottom:1.5px solid currentColor;padding:0 6px 2px;text-align:center;width:100%;}
+    .frac .den{padding:2px 6px 0;text-align:center;width:100%;}
+    .formula-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;line-height:1;padding:.5rem 0;font-size:.82rem;}
+    .c1{color:var(--colour-resistor-combo1);}
+    .c2{color:var(--colour-resistor-combo2);}
+    .c3{color:var(--colour-resistor-combo3);}
+    .c4{color:var(--colour-resistor-combo4);}
+    .c5{color:var(--colour-resistor-combo5);}
+    .ct{color:var(--colour-resistor-total);}
+    .cs{color:var(--colour-series);}
+    .cr{color:var(--colour-accent3);}
+    .cv{color:var(--colour-red);}
+
+    .btn-row{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;}
+    .btn{padding:.5rem 0;border-radius:3px;font-family:'Share Tech Mono',monospace;font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;transition:all .15s;border:1px solid;width:140px;text-align:center;}
+    .btn-check{background:rgba(0,255,153,.1);border-color:rgba(0,255,153,.4);color:var(--colour-accent3);}
+    .btn-check:hover:not(:disabled){background:rgba(0,255,153,.2);}
+    .btn-check:disabled{opacity:.35;cursor:default;}
+    .btn-shuffle{background:rgba(255,107,53,.1);border-color:rgba(255,107,53,.4);color:var(--colour-accent2);margin-left:auto;}
+    .btn-shuffle:hover{background:rgba(255,107,53,.2);}
+    .btn-next{background:rgba(0,229,255,.1);border-color:rgba(0,229,255,.4);color:var(--colour-accent);}
+    .btn-next:hover{background:rgba(0,229,255,.2);}
+    .btn-prev{background:rgba(90,122,154,.1);border-color:rgba(90,122,154,.4);color:var(--colour-label);}
+    .btn-prev:hover{background:rgba(90,122,154,.2);}
+    .btn-summary{background:rgba(167,139,250,.12);border-color:rgba(167,139,250,.4);color:var(--colour-accent5);}
+    .btn-summary:hover{background:rgba(167,139,250,.22);}
+
+    .summary-head{display:flex;align-items:center;justify-content:space-between;padding:.5rem 0 .8rem;border-bottom:1px solid var(--colour-border);margin-bottom:1rem;}
+    .summary-title{font-family:'Orbitron',sans-serif;font-size:1rem;font-weight:700;color:var(--colour-accent);letter-spacing:.15em;text-transform:uppercase;}
+    .summary-values{background:rgba(0,0,0,.2);border:1px solid var(--colour-border);border-radius:4px;padding:.8rem 1rem;margin-bottom:1.2rem;font-size:.82rem;line-height:2.1;}
+    .summary-item{border:1px solid var(--colour-border);border-radius:4px;padding:.9rem 1rem;margin-bottom:1rem;background:rgba(0,0,0,.15);}
+    .summary-item-head{display:flex;align-items:baseline;gap:.6rem;margin-bottom:.3rem;}
+    .summary-qnum{font-family:'Orbitron',sans-serif;font-weight:700;color:var(--colour-accent);font-size:.85rem;white-space:nowrap;}
+    .summary-question{font-size:.82rem;color:#d0e4f0;font-weight:bold;line-height:1.4;}
+    .summary-answer{font-size:.74rem;margin:.45rem 0;font-family:'Orbitron',sans-serif;letter-spacing:.04em;}
+    .progress-wrap{display:flex;gap:.4rem;align-items:center;margin-bottom:1rem;}
+    .progress-dot{width:10px;height:10px;border-radius:50%;border:1.5px solid var(--colour-border);background:transparent;transition:background .2s,border-color .2s;}
+    .progress-dot.done{background:var(--colour-accent3);border-color:var(--colour-accent3);}
+    .progress-dot.active{background:var(--colour-accent);border-color:var(--colour-accent);box-shadow:0 0 6px rgba(0,229,255,.6);}
+    .progress-label{font-size:.65rem;color:var(--colour-label);margin-left:.4rem;letter-spacing:.1em;}
+
+    .zoom-hint{position:absolute;bottom:.6rem;right:.7rem;font-family:'Orbitron',sans-serif;font-size:.55rem;letter-spacing:.12em;color:var(--colour-label);text-transform:uppercase;display:flex;align-items:center;gap:.35rem;pointer-events:none;opacity:.7;}
+    .zoom-hint svg{width:13px;height:13px;fill:var(--colour-label);}
+
+    .diagram-modal{display:none;position:fixed;inset:0;z-index:1000;background:rgba(5,8,16,.88);backdrop-filter:blur(4px);align-items:center;justify-content:center;padding:1.2rem;}
+    .diagram-modal.open{display:flex;}
+    .modal-inner{position:relative;background:rgba(0,0,0,.35);border:1px solid var(--colour-border);border-radius:6px;padding:.8rem;max-width:min(92vw,900px);max-height:92vh;width:100%;display:flex;flex-direction:column;gap:.5rem;box-shadow:0 0 60px rgba(0,229,255,.08);cursor:zoom-out;}
+    .modal-inner svg{width:100%;height:auto;max-height:calc(92vh - 5rem);display:block;}
+    .modal-header{display:flex;align-items:center;justify-content:space-between;padding-bottom:.4rem;border-bottom:1px solid var(--colour-border);}
+    .modal-title{font-family:'Orbitron',sans-serif;font-size:.65rem;letter-spacing:.18em;color:var(--colour-label);text-transform:uppercase;}
+    .modal-close{font-family:'Share Tech Mono',monospace;font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;background:rgba(255,61,154,.08);border:1px solid rgba(255,61,154,.35);color:var(--colour-accent4);border-radius:3px;padding:.3rem .7rem;transition:background .15s;}
+    .modal-close:hover{background:rgba(255,61,154,.18);}
+
+    /* ── Example / Randomise mode toggle ── */
+    .mode-toggle{display:flex;align-items:center;gap:.7rem;margin-bottom:.8rem;font-family:'Share Tech Mono',monospace;}
+    .mode-seg{display:inline-flex;border:1px solid var(--colour-border);border-radius:4px;overflow:hidden;flex-wrap:wrap;}
+    .mode-seg button{font-family:'Share Tech Mono',monospace;font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;padding:.4rem .95rem;border:none;background:transparent;color:var(--colour-label);transition:background .15s,color .15s;}
+    .mode-seg button + button{border-left:1px solid var(--colour-border);}
+    .mode-seg button.active{background:rgba(0,229,255,.12);color:var(--colour-accent);}
+    .mode-seg button:not(.active):hover{background:rgba(0,229,255,.04);color:var(--colour-text);}
+  </style>
+</head>
+<body>
+<header>
+  <h1 id="pageTitle">Total Resistance Calculation Quiz 2</h1>
+  <p>Step-by-Step Simplification · Total Resistance</p>
+</header>
+
+<div class="quiz-wrap">
+
+  <!-- LEFT: circuit diagram -->
+  <div class="circuit-col">
+    <div class="mode-toggle" id="modeToggle">
+      <div class="mode-seg" id="modeSeg">
+        <button id="modeExample1" class="active" onclick="setMode('example1')">Example 1</button>
+        <button id="modeExample2" onclick="setMode('example2')">Example 2</button>
+        <button id="modeExample3" onclick="setMode('example3')">Example 3</button>
+        <button id="modeRandomise" onclick="setMode('randomise')">Randomise</button>
+      </div>
+    </div>
+    <div class="circuit-panel" onclick="openModal()" title="Click to zoom">
+      <div class="panel-label">Circuit Diagram — <span id="panelVoltLabel">100 V</span> Source</div>
+      <div class="zoom-hint">
+        <svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.8" fill="none"/>
+          <line x1="12.5" y1="12.5" x2="17" y2="17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <line x1="6" y1="8" x2="10" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="8" y1="6" x2="8" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        Zoom
+      </div>
+
+      <svg id="circuitSvg" viewBox="0 0 600 620" xmlns="http://www.w3.org/2000/svg"
+           font-family="'Share Tech Mono',monospace">
+        <defs>
+          <filter id="glow"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        </defs>
+
+        <!-- ══ SHARED FRAME (left rail + battery) — identical in every layout, lives outside -->
+        <!-- the toggle groups. Like quiz3's helper, quiz2's outer loop never resizes between -->
+        <!-- steps (only R2∥R3, R1∥R23 and the R5,6,7 bank change internally), so the ENTIRE -->
+        <!-- left rail can be shared. ══ -->
+        <line x1="70" y1="90"  x2="70" y2="300" style="stroke: var(--colour-series)"/><!-- top rail down to battery+ -->
+        <g id="batteryGroup" transform="translate(70,300)">
+          <line x1="-22" y1="0" x2="22" y2="0" style="stroke: var(--colour-red)" stroke-width="4"/>
+          <line x1="-12" y1="30" x2="12" y2="30" style="stroke: var(--colour-red)" stroke-width="2"/>
+          <text x="34" y="5" style="fill: var(--colour-red)" font-size="16" font-weight="bold">+</text>
+          <text x="34" y="36" style="fill: var(--colour-red)" font-size="16" font-weight="bold">−</text>
+          <text x="-30" y="-12" style="fill: var(--colour-supply)" font-size="15" text-anchor="end" font-weight="bold">E</text>
+          <text id="battLabel" x="-30" y="50" style="fill: var(--colour-supply)" font-size="15" text-anchor="end" font-weight="bold">100V</text>
+        </g>
+        <line x1="70" y1="330" x2="70" y2="560" style="stroke: var(--colour-series)"/><!-- battery− down to bottom rail -->
+
+        <!-- ══════════════════════════════════════════════════════════════
+             Each <g class="circuit-layout"> below is a SELF-CONTAINED
+             mini-diagram for one stage of the simplification. Only one is
+             shown at a time (showLayout() in the script toggles display).
+             All element ids are prefixed L0-…L5- to avoid collisions.
+             Layout0 mirrors resistor_quiz_2.html's circuit exactly (same
+             textbook topology) — keep the two in sync if either changes.
+             ══════════════════════════════════════════════════════════════ -->
+
+        <!-- ══ LAYOUT 0 — full circuit, nothing combined yet; Q1 asks about R2+R3 ══ -->
+        <g id="layout0" class="circuit-layout">
+          <line x1="70"  y1="90"  x2="130" y2="90"  style="stroke: var(--colour-series)"/><!-- Top-left corner across to Node A -->
+          <line x1="130" y1="90"  x2="218" y2="90"  style="stroke: var(--colour-series)"/><!-- Node A across to R1 -->
+          <line x1="318" y1="90"  x2="405" y2="90"  style="stroke: var(--colour-series)"/><!-- R1 across to Node B -->
+          <line x1="70"  y1="560" x2="505" y2="560" style="stroke: var(--colour-series)"/><!-- Bottom-left corner across to R7 column -->
+          <line x1="130" y1="90"  x2="130" y2="170" style="stroke: var(--colour-series)"/><!-- Node A down to R2/R3 row -->
+          <line x1="405" y1="90"  x2="405" y2="170" style="stroke: var(--colour-series)"/><!-- Node B down to R2/R3 row -->
+          <line x1="405" y1="170" x2="405" y2="240" style="stroke: var(--colour-series)"/><!-- Node B down to R4 -->
+          <line x1="405" y1="340" x2="405" y2="400" style="stroke: var(--colour-series)"/><!-- R4 down to bank top rail -->
+          <line x1="305" y1="400" x2="305" y2="442" style="stroke: var(--colour-series)"/><!-- Bank top rail down to R5 -->
+          <line x1="405" y1="400" x2="405" y2="442" style="stroke: var(--colour-series)"/><!-- Bank top rail down to R6 -->
+          <line x1="505" y1="400" x2="505" y2="442" style="stroke: var(--colour-series)"/><!-- Bank top rail down to R7 -->
+          <line x1="305" y1="517" x2="305" y2="560" style="stroke: var(--colour-series)"/><!-- R5 down to bottom rail -->
+          <line x1="405" y1="517" x2="405" y2="560" style="stroke: var(--colour-series)"/><!-- R6 down to bottom rail -->
+          <line x1="505" y1="517" x2="505" y2="560" style="stroke: var(--colour-series)"/><!-- R7 down to bottom rail -->
+          <line x1="130" y1="170" x2="155" y2="170" style="stroke: var(--colour-series)"/><!-- Node A stub across to R2 -->
+          <line x1="255" y1="170" x2="280" y2="170" style="stroke: var(--colour-series)"/><!-- R2 across to R3 -->
+          <line x1="380" y1="170" x2="405" y2="170" style="stroke: var(--colour-series)"/><!-- R3 across to Node B stub -->
+          <line x1="305" y1="400" x2="505" y2="400" style="stroke: var(--colour-series)"/><!-- Bank top rail (R5 to R7, under R4/R6) -->
+
+          <!-- ══ NODES (A, B, C, D) — matches resistor_quiz_2.html's layout exactly ══ -->
+          <circle cx="130" cy="90" r="5" style="fill: var(--colour-series)"/>
+          <g id="L0-nodeA" transform="translate(130,70)">
+            <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5"/>
+            <text x="4" y="4" style="fill: var(--colour-node)" text-anchor="end" font-size="15" font-weight="bold">A</text>
+          </g>
+          <circle cx="405" cy="170" r="5" style="fill: var(--colour-series)"/>
+          <g id="L0-nodeB" transform="translate(429,166)">
+            <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5"/>
+            <text x="-4" y="4" style="fill: var(--colour-node)" font-size="15" font-weight="bold">B</text>
+          </g>
+          <circle cx="405" cy="400" r="5" style="fill: var(--colour-series)"/>
+          <g id="L0-nodeC" transform="translate(429,379)">
+            <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5"/>
+            <text x="4" y="4" style="fill: var(--colour-node)" text-anchor="end" font-size="15" font-weight="bold">C</text>
+          </g>
+          <circle cx="305" cy="560" r="5" style="fill: var(--colour-series)"/>
+          <g id="L0-nodeD1" transform="translate(305,586)">
+            <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5"/>
+            <text x="4" y="4" style="fill: var(--colour-node)" text-anchor="end" font-size="15" font-weight="bold">D</text>
+          </g>
+          <circle cx="405" cy="560" r="5" style="fill: var(--colour-series)"/>
+          <g id="L0-nodeD2" transform="translate(405,586)">
+            <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5"/>
+            <text x="0" y="4" style="fill: var(--colour-node)" text-anchor="middle" font-size="15" font-weight="bold">D</text>
+          </g>
+          <circle cx="505" cy="560" r="5" style="fill: var(--colour-series)"/>
+          <g id="L0-nodeD3" transform="translate(509,586)">
+            <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5"/>
+            <text x="-4" y="4" style="fill: var(--colour-node)" font-size="15" font-weight="bold">D</text>
+          </g>
+
+          <g id="L0-r1Group" transform="translate(218,74)">
+            <rect id="L0-box-r1" x="0" y="0" width="100" height="32" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)"/>
+            <text id="L0-nm-r1" x="50" y="-10" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="15" font-weight="bold">R1</text>
+            <text id="L0-lbl-r1" x="50" y="52" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14">50Ω</text>
+          </g>
+          <g id="L0-r2Group" transform="translate(155,154)">
+            <rect id="L0-box-r2" x="0" y="0" width="100" height="32" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor-combo1)" stroke-width="2" filter="url(#glow)"/>
+            <text id="L0-nm-r2" x="50" y="-10" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="15" font-weight="bold">R2</text>
+            <text id="L0-lbl-r2" x="50" y="52" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14">20Ω</text>
+          </g>
+          <g id="L0-r3Group" transform="translate(280,154)">
+            <rect id="L0-box-r3" x="0" y="0" width="100" height="32" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor-combo1)" stroke-width="2" filter="url(#glow)"/>
+            <text id="L0-nm-r3" x="50" y="-10" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="15" font-weight="bold">R3</text>
+            <text id="L0-lbl-r3" x="50" y="52" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14">80Ω</text>
+          </g>
+          <g id="L0-r4Group" transform="translate(389,240)">
+            <rect id="L0-box-r4" x="0" y="0" width="32" height="100" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)"/>
+            <text id="L0-nm-r4" x="-10" y="55" fill="var(--colour-resistor-labels)" text-anchor="end" font-size="15" font-weight="bold">R4</text>
+            <text id="L0-lbl-r4" x="44" y="55" fill="var(--colour-resistor-labels)" text-anchor="start" font-size="14">70Ω</text>
+          </g>
+          <g id="L0-r5Group" transform="translate(289,442)">
+            <rect id="L0-box-r5" x="0" y="0" width="32" height="75" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)"/>
+            <text id="L0-nm-r5" x="-6" y="42" fill="var(--colour-resistor-labels)" text-anchor="end" font-size="14" font-weight="bold">R5</text>
+            <text id="L0-lbl-r5" x="38" y="42" fill="var(--colour-resistor-labels)" text-anchor="start" font-size="13">60Ω</text>
+          </g>
+          <g id="L0-r6Group" transform="translate(389,442)">
+            <rect id="L0-box-r6" x="0" y="0" width="32" height="75" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)"/>
+            <text id="L0-nm-r6" x="-6" y="42" fill="var(--colour-resistor-labels)" text-anchor="end" font-size="14" font-weight="bold">R6</text>
+            <text id="L0-lbl-r6" x="38" y="42" fill="var(--colour-resistor-labels)" text-anchor="start" font-size="13">60Ω</text>
+          </g>
+          <g id="L0-r7Group" transform="translate(489,442)">
+            <rect id="L0-box-r7" x="0" y="0" width="32" height="75" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)"/>
+            <text id="L0-nm-r7" x="-6" y="42" fill="var(--colour-resistor-labels)" text-anchor="end" font-size="14" font-weight="bold">R7</text>
+            <text id="L0-lbl-r7" x="38" y="42" fill="var(--colour-resistor-labels)" text-anchor="start" font-size="13">60Ω</text>
+          </g>
+        </g>
+
+        <!-- ══ LAYOUT 1 — R2+R3 combined into R23 (Q1 solved); Q2 asks about R1∥R23 ══ -->
+        <g id="layout1" class="circuit-layout" display="none">
+          <line x1="70"  y1="90"  x2="130" y2="90"  style="stroke: var(--colour-series)"/><!-- Top-left corner across to Node A -->
+          <line x1="130" y1="90"  x2="218" y2="90"  style="stroke: var(--colour-series)"/><!-- Node A across to R1 -->
+          <line x1="318" y1="90"  x2="405" y2="90"  style="stroke: var(--colour-series)"/><!-- R1 across to Node B -->
+          <line x1="70"  y1="560" x2="505" y2="560" style="stroke: var(--colour-series)"/><!-- Bottom-left corner across to R7 column -->
+          <line x1="130" y1="90"  x2="130" y2="170" style="stroke: var(--colour-series)"/><!-- Node A down to R2,3 row -->
+          <line x1="405" y1="90"  x2="405" y2="170" style="stroke: var(--colour-series)"/><!-- Node B down to R2,3 row -->
+          <line x1="405" y1="170" x2="405" y2="240" style="stroke: var(--colour-series)"/><!-- Node B down to R4 -->
+          <line x1="405" y1="340" x2="405" y2="400" style="stroke: var(--colour-series)"/><!-- R4 down to bank top rail -->
+          <line x1="305" y1="400" x2="305" y2="442" style="stroke: var(--colour-series)"/><!-- Bank top rail down to R5 -->
+          <line x1="405" y1="400" x2="405" y2="442" style="stroke: var(--colour-series)"/><!-- Bank top rail down to R6 -->
+          <line x1="505" y1="400" x2="505" y2="442" style="stroke: var(--colour-series)"/><!-- Bank top rail down to R7 -->
+          <line x1="305" y1="517" x2="305" y2="560" style="stroke: var(--colour-series)"/><!-- R5 down to bottom rail -->
+          <line x1="405" y1="517" x2="405" y2="560" style="stroke: var(--colour-series)"/><!-- R6 down to bottom rail -->
+          <line x1="505" y1="517" x2="505" y2="560" style="stroke: var(--colour-series)"/><!-- R7 down to bottom rail -->
+          <line x1="130" y1="170" x2="175" y2="170" style="stroke: var(--colour-series)"/><!-- Node A stub across to R2,3 box -->
+          <line x1="355" y1="170" x2="405" y2="170" style="stroke: var(--colour-series)"/><!-- R2,3 box across to Node B stub -->
+          <line x1="305" y1="400" x2="505" y2="400" style="stroke: var(--colour-series)"/><!-- Bank top rail (R5 to R7, under R4/R6) -->
+
+          <!-- ══ NODES (A, B, C, D) — unchanged from layout0; R2,3 is now a single box but -->
+          <!-- both A and B are still genuine branch points (R1 vs R2,3). ══ -->
+          <circle cx="130" cy="90" r="5" style="fill: var(--colour-series)"/>
+          <g id="L1-nodeA" transform="translate(130,70)">
+            <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5"/>
+            <text x="4" y="4" style="fill: var(--colour-node)" text-anchor="end" font-size="15" font-weight="bold">A</text>
+          </g>
+          <circle cx="405" cy="170" r="5" style="fill: var(--colour-series)"/>
+          <g id="L1-nodeB" transform="translate(429,166)">
+            <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5"/>
+            <text x="-4" y="4" style="fill: var(--colour-node)" font-size="15" font-weight="bold">B</text>
+          </g>
+          <circle cx="405" cy="400" r="5" style="fill: var(--colour-series)"/>
+          <g id="L1-nodeC" transform="translate(429,379)">
+            <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5"/>
+            <text x="4" y="4" style="fill: var(--colour-node)" text-anchor="end" font-size="15" font-weight="bold">C</text>
+          </g>
+          <circle cx="305" cy="560" r="5" style="fill: var(--colour-series)"/>
+          <g id="L1-nodeD1" transform="translate(305,586)">
+            <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5"/>
+            <text x="4" y="4" style="fill: var(--colour-node)" text-anchor="end" font-size="15" font-weight="bold">D</text>
+          </g>
+          <circle cx="405" cy="560" r="5" style="fill: var(--colour-series)"/>
+          <g id="L1-nodeD2" transform="translate(405,586)">
+            <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5"/>
+            <text x="0" y="4" style="fill: var(--colour-node)" text-anchor="middle" font-size="15" font-weight="bold">D</text>
+          </g>
+          <circle cx="505" cy="560" r="5" style="fill: var(--colour-series)"/>
+          <g id="L1-nodeD3" transform="translate(509,586)">
+            <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5"/>
+            <text x="-4" y="4" style="fill: var(--colour-node)" font-size="15" font-weight="bold">D</text>
+          </g>
+
+          <g id="L1-r1Group" transform="translate(218,74)">
+            <rect id="L1-box-r1" x="0" y="0" width="100" height="32" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)"/>
+            <text id="L1-nm-r1" x="50" y="-10" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="15" font-weight="bold">R1</text>
+            <text id="L1-lbl-r1" x="50" y="52" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14">50Ω</text>
+          </g>
+          <g id="L1-r23Group" transform="translate(175,154)">
+            <rect id="L1-box-r23" x="0" y="0" width="180" height="32" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor-combo1)" stroke-width="2" filter="url(#glow)"/>
+            <text id="L1-nm-r23" x="90" y="-10" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="15" font-weight="bold">R<tspan baseline-shift="sub" font-size="10">2,3</tspan></text>
+            <text id="L1-lbl-r23" x="90" y="52" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14">—</text>
+          </g>
+          <g id="L1-r4Group" transform="translate(389,240)">
+            <rect id="L1-box-r4" x="0" y="0" width="32" height="100" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)"/>
+            <text id="L1-nm-r4" x="-10" y="55" fill="var(--colour-resistor-labels)" text-anchor="end" font-size="15" font-weight="bold">R4</text>
+            <text id="L1-lbl-r4" x="44" y="55" fill="var(--colour-resistor-labels)" text-anchor="start" font-size="14">70Ω</text>
+          </g>
+          <g id="L1-r5Group" transform="translate(289,442)">
+            <rect id="L1-box-r5" x="0" y="0" width="32" height="75" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)"/>
+            <text id="L1-nm-r5" x="-6" y="42" fill="var(--colour-resistor-labels)" text-anchor="end" font-size="14" font-weight="bold">R5</text>
+            <text id="L1-lbl-r5" x="38" y="42" fill="var(--colour-resistor-labels)" text-anchor="start" font-size="13">60Ω</text>
+          </g>
+          <g id="L1-r6Group" transform="translate(389,442)">
+            <rect id="L1-box-r6" x="0" y="0" width="32" height="75" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)"/>
+            <text id="L1-nm-r6" x="-6" y="42" fill="var(--colour-resistor-labels)" text-anchor="end" font-size="14" font-weight="bold">R6</text>
+            <text id="L1-lbl-r6" x="38" y="42" fill="var(--colour-resistor-labels)" text-anchor="start" font-size="13">60Ω</text>
+          </g>
+          <g id="L1-r7Group" transform="translate(489,442)">
+            <rect id="L1-box-r7" x="0" y="0" width="32" height="75" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)"/>
+            <text id="L1-nm-r7" x="-6" y="42" fill="var(--colour-resistor-labels)" text-anchor="end" font-size="14" font-weight="bold">R7</text>
+            <text id="L1-lbl-r7" x="38" y="42" fill="var(--colour-resistor-labels)" text-anchor="start" font-size="13">60Ω</text>
+          </g>
+        </g>
+
+        <!-- ══ LAYOUT 2 — R1∥R23 combined into R1,2,3 (Q2 solved); Q3 asks about R5∥R6 ══ -->
+        <g id="layout2" class="circuit-layout" display="none">
+          <line x1="70"  y1="90"  x2="203" y2="90"  style="stroke: var(--colour-series)"/><!-- Top-left corner across to the R1,2,3 box (Node A no longer exists) -->
+          <line x1="333" y1="90"  x2="405" y2="90"  style="stroke: var(--colour-series)"/><!-- R1,2,3 box across to R4's column (Node B no longer exists) -->
+          <line x1="70"  y1="560" x2="505" y2="560" style="stroke: var(--colour-series)"/><!-- Bottom-left corner across to R7 column -->
+          <line x1="405" y1="90"  x2="405" y2="240" style="stroke: var(--colour-series)"/><!-- Corner down into R4's top terminal -->
+          <line x1="405" y1="340" x2="405" y2="400" style="stroke: var(--colour-series)"/><!-- R4 down to bank top rail -->
+          <line x1="305" y1="400" x2="305" y2="442" style="stroke: var(--colour-series)"/><!-- Bank top rail down to R5 -->
+          <line x1="405" y1="400" x2="405" y2="442" style="stroke: var(--colour-series)"/><!-- Bank top rail down to R6 -->
+          <line x1="505" y1="400" x2="505" y2="442" style="stroke: var(--colour-series)"/><!-- Bank top rail down to R7 -->
+          <line x1="305" y1="517" x2="305" y2="560" style="stroke: var(--colour-series)"/><!-- R5 down to bottom rail -->
+          <line x1="405" y1="517" x2="405" y2="560" style="stroke: var(--colour-series)"/><!-- R6 down to bottom rail -->
+          <line x1="505" y1="517" x2="505" y2="560" style="stroke: var(--colour-series)"/><!-- R7 down to bottom rail -->
+          <line x1="305" y1="400" x2="505" y2="400" style="stroke: var(--colour-series)"/><!-- Bank top rail (R5 to R7, under R4/R6) -->
+
+          <!-- ══ NODES (C, D) — A and B no longer exist (R1,2,3 is now a single path, not -->
+          <!-- a branch); C and D remain since the R5,6,7 bank hasn't been touched yet. ══ -->
+          <circle cx="405" cy="400" r="5" style="fill: var(--colour-series)"/>
+          <g id="L2-nodeC" transform="translate(429,379)">
+            <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5"/>
+            <text x="4" y="4" style="fill: var(--colour-node)" text-anchor="end" font-size="15" font-weight="bold">C</text>
+          </g>
+          <circle cx="305" cy="560" r="5" style="fill: var(--colour-series)"/>
+          <g id="L2-nodeD1" transform="translate(305,586)">
+            <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5"/>
+            <text x="4" y="4" style="fill: var(--colour-node)" text-anchor="end" font-size="15" font-weight="bold">D</text>
+          </g>
+          <circle cx="405" cy="560" r="5" style="fill: var(--colour-series)"/>
+          <g id="L2-nodeD2" transform="translate(405,586)">
+            <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5"/>
+            <text x="0" y="4" style="fill: var(--colour-node)" text-anchor="middle" font-size="15" font-weight="bold">D</text>
+          </g>
+          <circle cx="505" cy="560" r="5" style="fill: var(--colour-series)"/>
+          <g id="L2-nodeD3" transform="translate(509,586)">
+            <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5"/>
+            <text x="-4" y="4" style="fill: var(--colour-node)" font-size="15" font-weight="bold">D</text>
+          </g>
+
+          <g id="L2-r123Group" transform="translate(203,69)">
+            <rect id="L2-box-r123" x="0" y="0" width="130" height="42" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor-combo2)" stroke-width="2" filter="url(#glow)"/>
+            <text id="L2-nm-r123" x="65" y="-10" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="15" font-weight="bold">R<tspan baseline-shift="sub" font-size="10">1,2,3</tspan></text>
+            <text id="L2-lbl-r123" x="65" y="62" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14">—</text>
+          </g>
+          <g id="L2-r4Group" transform="translate(389,240)">
+            <rect id="L2-box-r4" x="0" y="0" width="32" height="100" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)"/>
+            <text id="L2-nm-r4" x="-10" y="55" fill="var(--colour-resistor-labels)" text-anchor="end" font-size="15" font-weight="bold">R4</text>
+            <text id="L2-lbl-r4" x="44" y="55" fill="var(--colour-resistor-labels)" text-anchor="start" font-size="14">70Ω</text>
+          </g>
+          <g id="L2-r5Group" transform="translate(289,442)">
+            <rect id="L2-box-r5" x="0" y="0" width="32" height="75" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)"/>
+            <text id="L2-nm-r5" x="-6" y="42" fill="var(--colour-resistor-labels)" text-anchor="end" font-size="14" font-weight="bold">R5</text>
+            <text id="L2-lbl-r5" x="38" y="42" fill="var(--colour-resistor-labels)" text-anchor="start" font-size="13">60Ω</text>
+          </g>
+          <g id="L2-r6Group" transform="translate(389,442)">
+            <rect id="L2-box-r6" x="0" y="0" width="32" height="75" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)"/>
+            <text id="L2-nm-r6" x="-6" y="42" fill="var(--colour-resistor-labels)" text-anchor="end" font-size="14" font-weight="bold">R6</text>
+            <text id="L2-lbl-r6" x="38" y="42" fill="var(--colour-resistor-labels)" text-anchor="start" font-size="13">60Ω</text>
+          </g>
+          <g id="L2-r7Group" transform="translate(489,442)">
+            <rect id="L2-box-r7" x="0" y="0" width="32" height="75" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)"/>
+            <text id="L2-nm-r7" x="-6" y="42" fill="var(--colour-resistor-labels)" text-anchor="end" font-size="14" font-weight="bold">R7</text>
+            <text id="L2-lbl-r7" x="38" y="42" fill="var(--colour-resistor-labels)" text-anchor="start" font-size="13">60Ω</text>
+          </g>
+        </g>
+
+        <!-- ══ LAYOUT 3 — R5∥R6 combined into R5,6 (Q3 solved); Q4 asks about R5,6∥R7 ══ -->
+        <!-- ══ LAYOUT 3 — R5∥R6∥R7 combined into R5,6,7 in one 3-way step (Q3 solved); -->
+        <!-- Q4 asks about the final 3-way total R1,2,3 + R4 + R5,6,7 ══ -->
+        <g id="layout3" class="circuit-layout" display="none">
+          <line x1="70"  y1="90"  x2="203" y2="90"  style="stroke: var(--colour-series)"/><!-- Top-left corner across to the R1,2,3 box -->
+          <line x1="333" y1="90"  x2="405" y2="90"  style="stroke: var(--colour-series)"/><!-- R1,2,3 box across to R4's column -->
+          <line x1="70"  y1="560" x2="405" y2="560" style="stroke: var(--colour-series)"/><!-- Bottom-left corner across to the R5,6,7 box -->
+          <line x1="405" y1="90"  x2="405" y2="240" style="stroke: var(--colour-series)"/><!-- Corner down into R4's top terminal -->
+          <line x1="405" y1="340" x2="405" y2="431" style="stroke: var(--colour-series)"/><!-- R4 down to R5,6,7 box top -->
+          <line x1="405" y1="529" x2="405" y2="560" style="stroke: var(--colour-series)"/><!-- R5,6,7 box down to bottom rail -->
+
+          <!-- No nodes — the bank is now a single box, so the circuit is a plain series -->
+          <!-- loop (R1,2,3 → R4 → R5,6,7) with no branches left. -->
+
+          <g id="L3-r123Group" transform="translate(203,69)">
+            <rect id="L3-box-r123" x="0" y="0" width="130" height="42" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)"/>
+            <text id="L3-nm-r123" x="65" y="-10" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="15" font-weight="bold">R<tspan baseline-shift="sub" font-size="10">1,2,3</tspan></text>
+            <text id="L3-lbl-r123" x="65" y="62" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14">—</text>
+          </g>
+          <g id="L3-r4Group" transform="translate(389,240)">
+            <rect id="L3-box-r4" x="0" y="0" width="32" height="100" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)"/>
+            <text id="L3-nm-r4" x="-10" y="55" fill="var(--colour-resistor-labels)" text-anchor="end" font-size="15" font-weight="bold">R4</text>
+            <text id="L3-lbl-r4" x="44" y="55" fill="var(--colour-resistor-labels)" text-anchor="start" font-size="14">70Ω</text>
+          </g>
+          <g id="L3-r567Group" transform="translate(384,431)">
+            <rect id="L3-box-r567" x="0" y="0" width="42" height="98" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor-combo3)" stroke-width="2" filter="url(#glow)"/>
+            <text id="L3-nm-r567" x="-6" y="53" fill="var(--colour-resistor-labels)" text-anchor="end" font-size="15" font-weight="bold">R<tspan baseline-shift="sub" font-size="10">5,6,7</tspan></text>
+            <text id="L3-lbl-r567" x="48" y="53" fill="var(--colour-resistor-labels)" text-anchor="start" font-size="13">—</text>
+          </g>
+        </g>
+
+        <!-- ══ LAYOUT 4 — R1,2,3 + R4 + R5,6,7 combined into R_T (Q4 solved, final) ══ -->
+        <g id="layout4" class="circuit-layout" display="none">
+          <line x1="70"  y1="90"  x2="220" y2="90"  style="stroke: var(--colour-series)"/><!-- Top-left corner across to the R_T box's left terminal -->
+          <line x1="380" y1="90"  x2="430" y2="90"  style="stroke: var(--colour-series)"/><!-- R_T box's right terminal across to the top-right corner -->
+          <line x1="430" y1="90"  x2="430" y2="560" style="stroke: var(--colour-series)"/><!-- Top-right corner down to the bottom-right corner -->
+          <line x1="430" y1="560" x2="70"  y2="560" style="stroke: var(--colour-series)"/><!-- Bottom-right corner across to the bottom-left corner -->
+
+          <g id="L4-rtGroup" transform="translate(220,64)">
+            <rect id="L4-box-rt" x="0" y="0" width="160" height="51" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor-total)" stroke-width="2" filter="url(#glow)"/>
+            <text id="L4-nm-rt" x="80" y="-14" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R<tspan baseline-shift="sub" font-size="11">T</tspan></text>
+            <text id="L4-lbl-rt" x="80" y="72" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="15">—</text>
+          </g>
+        </g>
+
+        <!-- ══ XY RULER (dev tool, off by default) — populated by buildXYRuler(), toggled by setXY() ══ -->
+        <g id="xyRuler" display="none"></g>
+      </svg>
+    </div>
+  </div>
+
+  <!-- RIGHT: question -->
+  <div class="questions-col">
+    <div class="card">
+      <div class="progress-wrap">
+        <div class="progress-dot" id="dot-q1"></div>
+        <div class="progress-dot" id="dot-q2"></div>
+        <div class="progress-dot" id="dot-q3"></div>
+        <div class="progress-dot" id="dot-q4"></div>
+        <span class="progress-label" id="progressLabel">1 / 4</span>
+      </div>
+
+      <!-- Q1 — total resistance -->
+      <div class="q-panel" id="q1Panel">
+        <div class="q-header">
+          <div class="q-num">Q1</div>
+          <div>
+            <div class="q-text" id="q1Text"></div>
+            <div class="q-hint" id="q1Hint"></div>
+          </div>
+        </div>
+        <div class="options" id="q1Options"></div>
+        <div class="result-banner" id="q1Banner"><span id="q1Icon"></span>&nbsp;<span id="q1BannerText"></span></div>
+        <div class="working-box" id="q1Working">
+          <div class="working-title">Worked Solution</div>
+          <div id="q1WorkingContent"></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-check" id="q1Check" onclick="checkQ1()" disabled>Check</button>
+          <button class="btn btn-next" id="q1Next" onclick="showQuestion(2)" style="display:none">Next →</button>
+          <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+        </div>
+      </div>
+
+      <!-- Q2 — circuit current -->
+      <div class="q-panel" id="q2Panel" style="display:none">
+        <div class="q-header">
+          <div class="q-num">Q2</div>
+          <div>
+            <div class="q-text" id="q2Text"></div>
+            <div class="q-hint" id="q2Hint"></div>
+          </div>
+        </div>
+        <div class="options" id="q2Options"></div>
+        <div class="result-banner" id="q2Banner"><span id="q2Icon"></span>&nbsp;<span id="q2BannerText"></span></div>
+        <div class="working-box" id="q2Working">
+          <div class="working-title">Worked Solution</div>
+          <div id="q2WorkingContent"></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-prev" id="q2Back" onclick="backFromQ2()">← Back</button>
+          <button class="btn btn-check" id="q2Check" onclick="checkQ2()" disabled>Check</button>
+          <button class="btn btn-next" id="q2Next" onclick="showQuestion(3)" style="display:none">Next →</button>
+          <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+        </div>
+      </div>
+
+      <!-- Q3 — potential difference across R1 -->
+      <div class="q-panel" id="q3Panel" style="display:none">
+        <div class="q-header">
+          <div class="q-num">Q3</div>
+          <div>
+            <div class="q-text" id="q3Text"></div>
+            <div class="q-hint" id="q3Hint"></div>
+          </div>
+        </div>
+        <div class="options" id="q3Options"></div>
+        <div class="result-banner" id="q3Banner"><span id="q3Icon"></span>&nbsp;<span id="q3BannerText"></span></div>
+        <div class="working-box" id="q3Working">
+          <div class="working-title">Worked Solution</div>
+          <div id="q3WorkingContent"></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-prev" id="q3Back" onclick="backFromQ3()">← Back</button>
+          <button class="btn btn-check" id="q3Check" onclick="checkQ3()" disabled>Check</button>
+          <button class="btn btn-next" id="q3Next" onclick="showQuestion(4)" style="display:none">Next →</button>
+          <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+        </div>
+      </div>
+
+      <!-- Q4 — current through R2 -->
+      <div class="q-panel" id="q4Panel" style="display:none">
+        <div class="q-header">
+          <div class="q-num">Q4</div>
+          <div>
+            <div class="q-text" id="q4Text"></div>
+            <div class="q-hint" id="q4Hint"></div>
+          </div>
+        </div>
+        <div class="options" id="q4Options"></div>
+        <div class="result-banner" id="q4Banner"><span id="q4Icon"></span>&nbsp;<span id="q4BannerText"></span></div>
+        <div class="working-box" id="q4Working">
+          <div class="working-title">Worked Solution</div>
+          <div id="q4WorkingContent"></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-prev" id="q4Back" onclick="backFromQ4()">← Back</button>
+          <button class="btn btn-check" id="q4Check" onclick="checkQ4()" disabled>Check</button>
+          <button class="btn btn-summary" id="q4Summary" onclick="showSummary()" style="display:none">See Summary →</button>
+          <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+        </div>
+      </div>
+
+      <!-- Summary -->
+      <div id="summaryPanel" style="display:none">
+        <div class="summary-head">
+          <div class="summary-title">Quiz Summary</div>
+          <div style="display:flex;gap:.6rem">
+            <button class="btn btn-prev" id="returnToQuizBtn" style="display:none">← Return to Quiz 2</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+        <div id="summaryContent"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Zoom modal -->
+  <div class="diagram-modal" id="diagramModal" onclick="handleModalClick(event)">
+    <div class="modal-inner" id="modalInner">
+      <div class="modal-header">
+        <span class="modal-title" id="modalVoltLabel">Circuit Diagram — 100 V Source</span>
+        <button class="modal-close" onclick="closeModal()">✕ Close</button>
+      </div>
+      <svg id="modalSvg" viewBox="0 0 600 620" xmlns="http://www.w3.org/2000/svg" font-family="'Share Tech Mono',monospace"></svg>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║  HOW THIS QUIZ IS STRUCTURED (diagram-per-step variant)              ║
+// ║                                                                      ║
+// ║  Unlike the quiz2/3/4 template (one diagram, colour/annotation       ║
+// ║  toggles), this quiz shows a DIFFERENT SVG layout at each step —     ║
+// ║  each question replaces two resistor boxes with one bigger combined  ║
+// ║  box, in its own <g id="layoutN"> group in the <body>. Only one      ║
+// ║  layout is visible at a time (showLayout() toggles them).            ║
+// ║                                                                      ║
+// ║  The question logic (which resistors combine, in what order, series  ║
+// ║  or parallel, options/distractors, workings) is entirely driven by   ║
+// ║  the COMBINE_STEPS array below — that's the one thing you can        ║
+// ║  rearrange without touching any function bodies.                     ║
+// ║                                                                      ║
+// ║  To rearrange the combination order or grouping:                     ║
+// ║  1. Reorder/edit COMBINE_STEPS (key, a, b, op, count, layoutAfter).   ║
+// ║  2. Update QUESTIONS[] text/hints to match the new order.             ║
+// ║  3. Redraw/relabel the layout<N> groups in the SVG so each one shows  ║
+// ║     the right boxes for that stage (box size = boxScale(count) ×     ║
+// ║     the normal 30×80 / 80×30 resistor box). This is the part that     ║
+// ║     needs hand (or AI) editing — the maths/questions will follow      ║
+// ║     COMBINE_STEPS automatically, but the pictures won't draw          ║
+// ║     themselves.                                                       ║
+// ║  4. RAW_LABEL_LAYOUTS tells refreshLabels() which layouts still show  ║
+// ║     each raw resistor's own value label individually — update it if   ║
+// ║     a resistor now disappears at a different step.                    ║
+// ║                                                                      ║
+// ║  Leave the QUIZ ENGINE section (bottom of file) untouched.           ║
+// ╚══════════════════════════════════════════════════════════════════════╝
+
+// ══════════════════════════════════════════════════════════════════════
+// CIRCUIT CONFIGURATION
+// Edit this section for a new circuit.
+// ══════════════════════════════════════════════════════════════════════
+
+// Circuit topology: (R1 ∥ (R2+R3)) → R4 (series) → (R5∥R6∥R7) — a top
+// network (R1 in parallel with the R2+R3 series branch), a series link R4,
+// then a 3-way parallel bank. This quiz walks the student through solving
+// R_T by combining resistors a step at a time — see COMBINE_STEPS below.
+// Each step has its own SVG "layout" (layout0…layout4 in the <svg>),
+// swapped in by showLayout() as the student progresses. To rearrange which
+// resistors combine at which step: reorder/edit COMBINE_STEPS, then update
+// the matching layout<N> groups in the SVG (box positions/sizes) and the
+// QUESTIONS text above to match.
+// ── Example value sets — mirrors resistor_quiz_2.html's own three sets ──
+const EXAMPLE_SETS = {
+  example1: { r1:50,  r2:20, r3:80, r4:70, r5:60,  r6:60,  r7:60,  vs:100 },
+  example2: { r1:60,  r2:40, r3:20, r4:40, r5:90,  r6:90,  r7:90,  vs:50  },
+  example3: { r1:120, r2:80, r3:40, r4:50, r5:120, r6:120, r7:120, vs:30  }
+};
+let quizMode = 'example1';
+let V = { ...EXAMPLE_SETS.example1 };
+
+// Number of questions in the chain.
+// If you add or remove questions, update this AND CIRCUIT_STATES[],
+// QUESTION_BUILDERS[], the buildQnOptions/checkQn function sets, and
+// the matching HTML panels (q1Panel…qnPanel, q1Check…qnCheck, etc.).
+const QUIZ_QUESTION_COUNT = 4;
+const QIDS = Array.from({length: QUIZ_QUESTION_COUNT}, (_,i) => 'q'+(i+1));
+
+// ══════════════════════════════════════════════════════════════════════
+// QUESTION TEXT — edit here to change questions and hints
+// ══════════════════════════════════════════════════════════════════════
+const QUESTIONS = [
+  {
+    text: 'What is R<sub>2,3</sub> = R2 + R3 (in series)?',
+    hint: 'R2 and R3 are in series in the same branch — just add them.'
+  },
+  {
+    text: 'What is R<sub>1,2,3</sub> = R1 ∥ R<sub>2,3</sub> (in parallel)?',
+    hint: 'R1 and the R<sub>2,3</sub> combination (from Q1) are in parallel with each other — combine them with the reciprocal formula. This completes the top network.'
+  },
+  {
+    text: 'What is R<sub>5,6,7</sub> = R5 ∥ R6 ∥ R7 (in parallel)?',
+    hint: 'R5, R6 and R7 are all in parallel with each other — combine all three with the reciprocal formula. This completes the bottom bank.'
+  },
+  {
+    text: 'All remaining values — R<sub>1,2,3</sub>, R4 and R<sub>5,6,7</sub> — are in series. What is the total resistance R<sub>T</sub>?',
+    hint: 'Add all three values together for the final total resistance.'
+  }
+];
+QUESTIONS.forEach((q, i) => {
+  document.getElementById('q' + (i + 1) + 'Text').innerHTML = q.text;
+  document.getElementById('q' + (i + 1) + 'Hint').innerHTML = q.hint;
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// END CIRCUIT CONFIGURATION
+// ══════════════════════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════════════════════
+// CIRCUIT SIMULATION
+// Rewrite this section for a new circuit topology.
+// ══════════════════════════════════════════════════════════════════════
+
+// ── E12 pool + generator for Randomise mode ──
+const E12_BASE=[10,12,15,18,22,27,33,39,47,56,68,82];
+const E12=[]; [1,10].forEach(m=>E12_BASE.forEach(v=>E12.push(v*m)));
+function pickN(arr,n){const a=[...arr],r=[];for(let i=0;i<n;i++){r.push(a.splice(Math.floor(Math.random()*a.length),1)[0]);}return r;}
+function randomValues(){
+  const a=pickN(E12,7);
+  const vsOpts=[20,30,40,50,60,80,100];
+  return { r1:a[0],r2:a[1],r3:a[2],r4:a[3],r5:a[4],r6:a[5],r7:a[6],
+           vs:vsOpts[Math.floor(Math.random()*vsOpts.length)] };
+}
+
+const LETTERS=['A','B','C','D'];
+function fmtO(v){return v>=1000?(v/1000).toFixed(2)+' kΩ':v.toFixed(2)+' Ω';}
+function fmtO0(v){return v>=1000?(v/1000).toFixed(2)+'kΩ':v+'Ω';}
+function fmtA(a){const x=Math.abs(a);if(x>=1)return a.toFixed(3)+' A';if(x>=0.001)return (a*1000).toFixed(2)+' mA';return (a*1e6).toFixed(1)+' µA';}
+function fmtASplit(a){const x=Math.abs(a);if(x>=1)return {num:a.toFixed(3),unit:'A'};if(x>=0.001)return {num:(a*1000).toFixed(2),unit:'mA'};return {num:(a*1e6).toFixed(1),unit:'µA'};}
+function fmtV(v){const a=Math.abs(v);if(a>=1)return v.toFixed(2)+' V';if(a>=0.001)return (v*1000).toFixed(2)+' mV';return (v*1e6).toFixed(1)+' µV';}
+function frac(num,den){return `<span class="frac"><span class="num">${num}</span><span class="den">${den}</span></span>`;}
+
+// ── COMBINE_STEPS: the data-driven step list — this is what to edit to  ──
+// ── rearrange the quiz. Each step combines exactly two values (raw       ──
+// ── resistors and/or earlier results) into one named result.             ──
+// a/b: keys into VALUES (raw r1…r6, or an earlier step's key).
+// op: 'series' (add) or 'parallel' (reciprocal-sum).
+// count: how many ORIGINAL resistors this result represents — drives the
+//        combined box's size in the SVG (see BOX_SCALE) and must match
+//        whatever box you draw for layoutAfter.
+// layoutAfter: which <g id="layoutN"> becomes visible once this step is solved.
+// cls: the .c1…c5 colour class for this step's group colour, used in the
+// worked-solution text. The matching SVG colour lives on each step's input
+// boxes (in the layout where that question is asked) and its result box
+// (in the layout where it's first shown) — see the layout<N> groups.
+// labelLayouts: every layout that draws this result's OWN value-label box —
+// usually just [layoutAfter], but a result that survives to be an input to
+// a LATER (non-adjacent) step, like R35 here (created in step 1, but not
+// consumed until step 4), has extra copies of its box in the layouts in
+// between too, and every copy needs its text kept in sync.
+// Two steps here combine THREE values (a,b,c) instead of two: R5,6,7 (all
+// three bank resistors, in one go) and the final rt (R1,2,3 + R4 + R5,6,7).
+// op still governs the rule — 'series' sums all three, 'parallel' takes
+// their combined reciprocal — buildStepOptions/showStepWorking read step.op
+// either way, so a 3-way parallel step needs no special-casing beyond
+// setting op:'parallel' and supplying a/b/c.
+const COMBINE_STEPS = [
+  { key:'r23',  label:'R<sub>2,3</sub>',    a:'r2',   b:'r3',  aLabel:'R2',       bLabel:'R3',  op:'series',   count:2, layoutAfter:1, cls:'c1', labelLayouts:[1]     },
+  { key:'r123', label:'R<sub>1,2,3</sub>',  a:'r1',   b:'r23', aLabel:'R1',       bLabel:'R2,3', op:'parallel', count:3, layoutAfter:2, cls:'c2', labelLayouts:[2,3] },
+  { key:'r567', label:'R<sub>5,6,7</sub>',  a:'r5',   b:'r6',  c:'r7', aLabel:'R5', bLabel:'R6', cLabel:'R7', op:'parallel', count:3, layoutAfter:3, cls:'c3', labelLayouts:[3] },
+  { key:'rt',   label:'R<sub>T</sub>',      a:'r123', b:'r4',  c:'r567', aLabel:'R1,2,3', bLabel:'R4', cLabel:'R5,6,7', op:'series', count:7, layoutAfter:4, cls:'ct', labelLayouts:[4] },
+];
+// Box-size multiplier for a combined resistor, by how many originals it
+// represents (n=2 → 20% larger, n=3 → 30% larger, etc). A single,
+// uncombined resistor (n=1) is always drawn at its normal 1.0 size.
+function boxScale(n){ return n<=1 ? 1 : 1+0.1*n; }
+
+// ── derived (recomputed whenever the value set changes) ──
+let VALUES={};
+function combine(op,a,b){ return op==='series' ? a+b : 1/(1/a+1/b); }
+function combine3(op,a,b,c){ return op==='series' ? a+b+c : 1/(1/a+1/b+1/c); }
+function recompute(){
+  VALUES = {r1:V.r1,r2:V.r2,r3:V.r3,r4:V.r4,r5:V.r5,r6:V.r6,r7:V.r7};
+  COMBINE_STEPS.forEach(step=>{
+    VALUES[step.key] = step.c
+      ? combine3(step.op,VALUES[step.a],VALUES[step.b],VALUES[step.c])
+      : combine(step.op,VALUES[step.a],VALUES[step.b]);
+  });
+}
+
+// ── mode switching ──
+// Which layout(s) each raw resistor's value label appears in — needed
+// because R1…R6 are drawn once per layout they still appear in individually.
+const RAW_LABEL_LAYOUTS = {
+  r1:[0,1], r2:[0], r3:[0], r4:[0,1,2,3], r5:[0,1,2], r6:[0,1,2], r7:[0,1,2],
+};
+function refreshLabels(){
+  Object.keys(RAW_LABEL_LAYOUTS).forEach(key=>{
+    RAW_LABEL_LAYOUTS[key].forEach(n=>{
+      const el=document.getElementById('L'+n+'-lbl-'+key); if(el) el.textContent=fmtO0(V[key]);
+    });
+  });
+  COMBINE_STEPS.forEach(step=>{
+    step.labelLayouts.forEach(n=>{
+      const el=document.getElementById('L'+n+'-lbl-'+step.key);
+      if(el) el.textContent=fmtO(VALUES[step.key]);
+    });
+  });
+  document.getElementById('panelVoltLabel').textContent=V.vs+' V';
+  document.getElementById('battLabel').textContent=V.vs+'V';
+  const mt=document.getElementById('modalVoltLabel');
+  if(mt) mt.textContent=`Circuit Diagram — ${V.vs} V Source`;
+}
+function setMode(mode){
+  quizMode=mode;
+  V = (mode==='randomise') ? randomValues() : { ...EXAMPLE_SETS[mode] };
+  recompute();
+  refreshLabels();
+  ['example1','example2','example3','randomise'].forEach(m=>{
+    const b=document.getElementById('mode'+m.charAt(0).toUpperCase()+m.slice(1));
+    if(b) b.classList.toggle('active',m===mode);
+  });
+  resetQuiz();   // rebuilds options for the new values and returns to Q1
+}
+
+// Applies an explicit value set (used when arriving here via quiz 2's "help"
+// link, so this walkthrough shows the exact same circuit instance quiz 2 was
+// asking about). The Example/Randomise toggle is hidden entirely in this case
+// — those values must match quiz 2, so the student can't switch away from them.
+function applyValues(vals){
+  quizMode='custom';
+  V=vals;
+  recompute();
+  refreshLabels();
+  const toggle=document.getElementById('modeToggle');
+  if(toggle) toggle.style.display='none';
+  resetQuiz();
+}
+
+const Q={};
+let cur='q1';
+// Set from ?return=<quizId> — when present, the summary screen shows a link back to that quiz.
+let returnTo=null;
+const RETURN_URLS={ quiz2:'resistor_quiz_2.html' };
+// Page heading swaps to name the quiz that sent the student here (e.g. "...Quiz 2"),
+// falling back to "...Quiz 2" (this walkthrough's own name) when visited standalone.
+const RETURN_TITLES={ quiz2:'2' };
+
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+
+// ── generic option builder — derives distractors from step.op, so adding/
+// reordering COMBINE_STEPS entries needs no changes here ──
+function buildStepOptions(step){
+  const a=VALUES[step.a], b=VALUES[step.b];
+  const correct=VALUES[step.key];
+  let wrong1,wrong2,wrong3;
+  if(step.c){
+    const c=VALUES[step.c];
+    if(step.op==='series'){
+      // correct: a+b+c. distractors: each pairwise sum (forgot one of the three values)
+      wrong1=a+b; wrong2=a+c; wrong3=b+c;
+    } else {
+      // correct: 1/(1/a+1/b+1/c). distractors: added instead of paralleling,
+      // paralleled only two of the three (forgot one), and used just one value.
+      wrong1=a+b+c;
+      wrong2=combine('parallel',a,b);
+      wrong3=a;
+    }
+    return shuffle([
+      {label:fmtO(correct),type:'correct'},
+      {label:fmtO(wrong1),type:'wrong'},
+      {label:fmtO(wrong2),type:'wrong'},
+      {label:fmtO(wrong3),type:'wrong'},
+    ]);
+  }
+  if(step.op==='series'){
+    wrong1=combine('parallel',a,b); // used the wrong rule (paralleled instead of adding)
+    wrong2=a;                        // forgot to include the second value
+    wrong3=b;                        // forgot to include the first value
+  } else {
+    wrong1=combine('series',a,b);   // used the wrong rule (added instead of paralleling)
+    wrong2=a;                        // forgot to include the second value
+    wrong3=a*b;                      // forgot to divide by the sum (classic parallel slip)
+  }
+  return shuffle([
+    {label:fmtO(correct),type:'correct'},
+    {label:fmtO(wrong1),type:'wrong'},
+    {label:fmtO(wrong2),type:'wrong'},
+    {label:fmtO(wrong3),type:'wrong'},
+  ]);
+}
+const QUESTION_BUILDERS = COMBINE_STEPS.map(step=>()=>buildStepOptions(step));
+// ── engine: generic option rendering — leave unchanged ──
+function renderOptions(qid){
+  const st=Q[qid], c=document.getElementById(qid+'Options'); c.innerHTML='';
+  st.opts.forEach((opt,i)=>{
+    const btn=document.createElement('button'); btn.className='option-btn';
+    btn.innerHTML=`<span class="option-letter">${LETTERS[i]}</span><span>${opt.label}</span>`;
+    btn.addEventListener('click',()=>selectOption(qid,i));
+    c.appendChild(btn);
+  });
+}
+function selectOption(qid,i){
+  if(Q[qid].ans) return;
+  Q[qid].sel=i;
+  document.getElementById(qid+'Check').disabled=false;
+  document.querySelectorAll('#'+qid+'Options .option-btn').forEach((b,idx)=>b.classList.toggle('selected',idx===i));
+}
+function markOptions(qid,sel,cor,ok){
+  document.querySelectorAll('#'+qid+'Options .option-btn').forEach((btn,i)=>{
+    btn.disabled=true;
+    if(i===cor){btn.classList.remove('selected');btn.classList.add('correct');btn.innerHTML+=`<span class="result-icon">✓</span>`;}
+    else if(i===sel&&!ok){btn.classList.remove('selected');btn.classList.add('wrong');btn.innerHTML+=`<span class="result-icon">✗</span>`;}
+    else btn.classList.add('dimmed');
+  });
+}
+function setBanner(qid,ok,correctText){
+  const banner=document.getElementById(qid+'Banner');
+  document.getElementById(qid+'Icon').textContent=ok?'✓':'✗';
+  if(ok){banner.className='result-banner correct';document.getElementById(qid+'BannerText').innerHTML=`Correct! ${correctText}`;}
+  else{banner.className='result-banner wrong';document.getElementById(qid+'BannerText').innerHTML=`The correct answer is ${correctText}`;}
+}
+
+// ── layout switching — shows exactly one of the five <g id="layoutN"> groups ──
+function showLayout(n){
+  for(let i=0;i<=4;i++){
+    const g=document.getElementById('layout'+i);
+    if(g) g.setAttribute('display', i===n?'inline':'none');
+  }
+}
+
+// ── box highlight colours — a layout is shown twice: once right after its
+// step is solved (only the freshly-created box gets its own colour; the
+// NEXT question's inputs stay the default colour so nothing gives away what
+// to look at before the student actually sees that question), and again
+// when the student advances to that next question (now its inputs light up
+// too). Recomputed fresh every call, so Back/Next/jump can't leave stale
+// colours behind. ──
+function colourForCls(cls){
+  const map={c1:'var(--colour-resistor-combo1)',c2:'var(--colour-resistor-combo2)',c3:'var(--colour-resistor-combo3)',c4:'var(--colour-resistor-combo4)',c5:'var(--colour-resistor-combo5)',ct:'var(--colour-resistor-total)'};
+  return map[cls] || 'var(--colour-resistor)';
+}
+function applyLayoutColours(stepIndex, highlightNext){
+  const step=COMBINE_STEPS[stepIndex];
+  const layoutN=step.layoutAfter;
+  const nextStep=COMBINE_STEPS[stepIndex+1];
+  const keys=new Set([step.key]);
+  if(nextStep){ keys.add(nextStep.a); keys.add(nextStep.b); if(nextStep.c) keys.add(nextStep.c); }
+  keys.forEach(k=>{
+    const el=document.getElementById('L'+layoutN+'-box-'+k);
+    if(el) el.setAttribute('stroke','var(--colour-resistor)');
+  });
+  const ownEl=document.getElementById('L'+layoutN+'-box-'+step.key);
+  if(ownEl) ownEl.setAttribute('stroke', colourForCls(step.cls));
+  if(highlightNext && nextStep){
+    const colour = nextStep.c ? 'var(--colour-resistor-combo5)' : colourForCls(nextStep.cls);
+    [nextStep.a, nextStep.b, nextStep.c].filter(Boolean).forEach(k=>{
+      const el=document.getElementById('L'+layoutN+'-box-'+k);
+      if(el) el.setAttribute('stroke', colour);
+    });
+  }
+}
+
+// ── generic check/working — driven entirely by COMBINE_STEPS, so adding,
+// removing or reordering steps needs no changes below this point ──
+function checkStep(n){
+  const qid='q'+n, st=Q[qid]; if(st.ans||st.sel===null) return; st.ans=true;
+  const ok=st.sel===st.cor;
+  markOptions(qid,st.sel,st.cor,ok);
+  const step=COMBINE_STEPS[n-1];
+  setBanner(qid,ok,`${step.label} = ${fmtO(VALUES[step.key])}`);
+  showStepWorking(n);
+  showLayout(step.layoutAfter);
+  applyLayoutColours(n-1, false);
+  advanceQuestion(n);
+}
+function checkQ1(){checkStep(1);}
+function checkQ2(){checkStep(2);}
+function checkQ3(){checkStep(3);}
+function checkQ4(){checkStep(4);}
+
+function showStepWorking(n){
+  const qid='q'+n, step=COMBINE_STEPS[n-1];
+  const box=document.getElementById(qid+'Working'); box.className='working-box visible';
+  const a=VALUES[step.a], b=VALUES[step.b], result=VALUES[step.key];
+  const lbl=`<span class="${step.cls}">${step.label}</span>`;
+  let html;
+  if(step.c){
+    const c=VALUES[step.c];
+    if(step.op==='series'){
+      html = `
+        <div class="wline">${step.aLabel}, ${step.bLabel} and ${step.cLabel} are all in series here — just add them:</div>
+        <div class="wlabel">Formula:</div>
+        <div class="formula-row">${lbl} = ${step.aLabel} + ${step.bLabel} + ${step.cLabel}</div>
+        <div class="wlabel">Substituting values:</div>
+        <div class="formula-row">${lbl} = ${fmtO0(a)} + ${fmtO0(b)} + ${fmtO0(c)}</div>
+        <div class="wline total">${lbl} = <span class="cr">${fmtO(result)}</span></div>`;
+    } else {
+      const recip=x=>(1/x).toFixed(5);
+      const sum=(1/a+1/b+1/c);
+      html = `
+        <div class="wline">${step.aLabel}, ${step.bLabel} and ${step.cLabel} are all in parallel with each other:</div>
+        <div class="wlabel">Formula:</div>
+        <div class="formula-row">${lbl} = ${frac('1',`${frac('1',step.aLabel)} + ${frac('1',step.bLabel)} + ${frac('1',step.cLabel)}`)}</div>
+        <div class="wlabel">Substituting values:</div>
+        <div class="formula-row">${lbl} = ${frac('1',`${frac('1',fmtO0(a))} + ${frac('1',fmtO0(b))} + ${frac('1',fmtO0(c))}`)}</div>
+        <div class="wlabel">Calculating denominators:</div>
+        <div class="formula-row">${lbl} = ${frac('1',`${recip(a)} + ${recip(b)} + ${recip(c)}`)}</div>
+        <div class="wlabel">Summing:</div>
+        <div class="formula-row">${lbl} = ${frac('1',sum.toFixed(5))}</div>
+        <div class="wline total">${lbl} = <span class="cr">${fmtO(result)}</span></div>`;
+    }
+    document.getElementById(qid+'WorkingContent').innerHTML=html;
+    return;
+  }
+  if(step.op==='series'){
+    html = `
+      <div class="wline">${step.aLabel} and ${step.bLabel} are in series here — just add them:</div>
+      <div class="wlabel">Formula:</div>
+      <div class="formula-row">${lbl} = ${step.aLabel} + ${step.bLabel}</div>
+      <div class="wlabel">Substituting values:</div>
+      <div class="formula-row">${lbl} = ${fmtO0(a)} + ${fmtO0(b)}</div>
+      <div class="wline total">${lbl} = <span class="cr">${fmtO(result)}</span></div>`;
+  } else {
+    const recip=x=>(1/x).toFixed(5);
+    const sum=(1/a+1/b);
+    html = `
+      <div class="wline">${step.aLabel} and ${step.bLabel} are the circuit's two parallel branches:</div>
+      <div class="wlabel">Formula:</div>
+      <div class="formula-row">${lbl} = ${frac('1',`${frac('1',step.aLabel)} + ${frac('1',step.bLabel)}`)}</div>
+      <div class="wlabel">Substituting values:</div>
+      <div class="formula-row">${lbl} = ${frac('1',`${frac('1',fmtO0(a))} + ${frac('1',fmtO0(b))}`)}</div>
+      <div class="wlabel">Calculating denominators:</div>
+      <div class="formula-row">${lbl} = ${frac('1',`${recip(a)} + ${recip(b)}`)}</div>
+      <div class="wlabel">Summing:</div>
+      <div class="formula-row">${lbl} = ${frac('1',sum.toFixed(5))}</div>
+      <div class="wline total">${lbl} = <span class="cr">${fmtO(result)}</span></div>`;
+  }
+  document.getElementById(qid+'WorkingContent').innerHTML=html;
+}
+
+// ── navigation ──
+function resetQuestion(qid){
+  const st=Q[qid];
+  st.sel=null; st.ans=false;
+  renderOptions(qid);
+  document.getElementById(qid+'Banner').className='result-banner';
+  document.getElementById(qid+'Working').className='working-box';
+  const chk=document.getElementById(qid+'Check'); chk.style.display='inline-block'; chk.disabled=true;
+  const isLast = qid === QIDS[QIDS.length-1];
+  const adv=document.getElementById(qid+(isLast?'Summary':'Next'));
+  if(adv) adv.style.display='none';
+}
+// Going back to question n must also clear n itself and every question after it —
+// otherwise a later question can be left in its old "answered" state (stale
+// banner/marked options and stale layout) if the student changes an earlier
+// answer and moves forward again without re-answering it.
+function backTo(n){
+  for(let i=n;i<=QUIZ_QUESTION_COUNT;i++){ resetQuestion('q'+i); }
+  showQuestion(n);
+}
+function backFromQ2(){ backTo(1); }
+function backFromQ3(){ backTo(2); }
+function backFromQ4(){ backTo(3); }
+
+function showSummary(){
+  cur='summary';
+  QIDS.forEach(q=>document.getElementById(q+'Panel').style.display='none');
+  document.getElementById('summaryPanel').style.display='block';
+  showLayout(4);
+  const vals=`<div class="summary-values">
+    <span style="color:var(--colour-supply);font-weight:bold">V<sub>S</sub></span> = <span style="color:var(--colour-supply)">${V.vs} V</span>&nbsp;&nbsp;&nbsp;
+    <span style="font-weight:bold">R1</span> = ${fmtO0(V.r1)}&nbsp;&nbsp;
+    <span style="font-weight:bold">R2</span> = ${fmtO0(V.r2)}&nbsp;&nbsp;
+    <span style="font-weight:bold">R3</span> = ${fmtO0(V.r3)}&nbsp;&nbsp;
+    <span style="font-weight:bold">R4</span> = ${fmtO0(V.r4)}&nbsp;&nbsp;
+    <span style="font-weight:bold">R5</span> = ${fmtO0(V.r5)}&nbsp;&nbsp;
+    <span style="font-weight:bold">R6</span> = ${fmtO0(V.r6)}&nbsp;&nbsp;
+    <span style="font-weight:bold">R7</span> = ${fmtO0(V.r7)}
+  </div>`;
+  const items=QIDS.map((qid,i)=>{
+    const st=Q[qid];
+    const qtext=document.querySelector('#'+qid+'Panel .q-text').innerHTML;
+    const ans=(st.sel!=null && st.opts[st.sel])?st.opts[st.sel].label:'—';
+    const ok=st.sel===st.cor;
+    const colour=ok?'var(--colour-accent3)':'#ff3366';
+    const mark=ok?'✓':'✗';
+    const working=document.getElementById(qid+'WorkingContent').innerHTML;
+    return `<div class="summary-item">
+      <div class="summary-item-head"><span class="summary-qnum">Q${i+1}</span><span class="summary-question">${qtext}</span></div>
+      <div class="summary-answer" style="color:${colour}">You answered: ${ans} &nbsp; ${mark}</div>
+      <div class="working-box visible">${working}</div>
+    </div>`;
+  }).join('');
+  document.getElementById('summaryContent').innerHTML=vals+items;
+  QIDS.forEach(q=>{ const d=document.getElementById('dot-'+q); if(d) d.className='progress-dot done'; });
+  document.getElementById('progressLabel').textContent='Complete';
+
+  const returnBtn=document.getElementById('returnToQuizBtn');
+  const returnUrl=returnTo && RETURN_URLS[returnTo];
+  returnBtn.style.display=returnUrl?'inline-block':'none';
+  if(returnUrl) returnBtn.onclick=()=>{ location.href=returnUrl; };
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// END CIRCUIT SIMULATION
+// ══════════════════════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════════════════════
+// QUIZ ENGINE — leave this section unchanged for new circuits
+// ══════════════════════════════════════════════════════════════════════
+
+function updateProgress(){
+  QIDS.forEach(q=>{
+    const d=document.getElementById('dot-'+q); if(!d) return;
+    d.className='progress-dot';
+    if(q===cur) d.classList.add('active'); else if(Q[q].ans) d.classList.add('done');
+  });
+  const n=QIDS.indexOf(cur)+1;
+  const lbl=document.getElementById('progressLabel'); if(lbl && n>0) lbl.textContent=n+' / '+QUIZ_QUESTION_COUNT;
+}
+
+function advanceQuestion(n){
+  const qid='q'+n;
+  document.getElementById(qid+'Check').style.display='none';
+  const isLast=(n===QUIZ_QUESTION_COUNT);
+  document.getElementById(qid+(isLast?'Summary':'Next')).style.display='inline-block';
+  updateProgress();
+}
+
+function showQuestion(n){
+  const qid='q'+n;
+  cur=qid;
+  QIDS.forEach(q=>document.getElementById(q+'Panel').style.display='none');
+  document.getElementById('summaryPanel').style.display='none';
+  document.getElementById(qid+'Panel').style.display='flex';
+  const layoutBefore = n===1 ? 0 : COMBINE_STEPS[n-2].layoutAfter;
+  const ans=Q[qid].ans;
+  showLayout(ans ? COMBINE_STEPS[n-1].layoutAfter : layoutBefore);
+  if(ans) applyLayoutColours(n-1, false);
+  else if(n>1) applyLayoutColours(n-2, true);
+  updateProgress();
+}
+
+function resetQuiz(){
+  QIDS.forEach((qid,i)=>{
+    const opts=QUESTION_BUILDERS[i]();
+    Q[qid]={sel:null,ans:false,cor:opts.findIndex(o=>o.type==='correct'),opts};
+    renderOptions(qid);
+    document.getElementById(qid+'Banner').className='result-banner';
+    document.getElementById(qid+'Working').className='working-box';
+    const chk=document.getElementById(qid+'Check');
+    if(chk){ chk.style.display='inline-block'; chk.disabled=true; }
+    const isLast=i===QIDS.length-1;
+    const adv=document.getElementById(qid+(isLast?'Summary':'Next'));
+    if(adv) adv.style.display='none';
+  });
+  document.getElementById('summaryPanel').style.display='none';
+  showQuestion(1);
+}
+
+// ── zoom modal ──
+function openModal(){
+  const src=document.getElementById('circuitSvg'), dst=document.getElementById('modalSvg');
+  dst.innerHTML=src.innerHTML; dst.setAttribute('viewBox',src.getAttribute('viewBox'));
+  document.getElementById('diagramModal').classList.add('open');
+  document.body.style.overflow='hidden';
+}
+function closeModal(){
+  document.getElementById('diagramModal').classList.remove('open');
+  document.getElementById('modalSvg').innerHTML='';
+  document.body.style.overflow='';
+}
+function handleModalClick(e){ if(e.target.closest('.modal-close')) return; closeModal(); }
+document.addEventListener('keydown',e=>{if(e.key==='Escape') closeModal();});
+
+setMode('example1');
+
+/* ─── DEV: jump straight to a question for testing ──────────────────────
+   Console:   jump(5)            → go to Q5
+              jump(5, true)      → go to Q5 already answered (banner + reveal)
+   URL:       ?q=5               → loads straight on Q5
+              ?q=5&ans=1         → loads on Q5, answered
+   Generic — copies into any quiz unchanged; remove the block to ship clean. */
+function jump(n, answered){
+  if(n<1||n>QUIZ_QUESTION_COUNT){ console.warn('jump: no question', n); return; }
+  showQuestion(n);
+  if(answered){
+    const st=Q['q'+n];
+    if(st){ st.sel=st.cor; }
+    const check=window['checkQ'+n];
+    if(typeof check==='function') check();
+  }
+}
+window.jump = jump;
+
+/* ─── DEV: xy ruler overlay, for lining up SVG coordinates by eye ────────
+   Console:   setXY(1)           → show the ruler
+              setXY(0)           → hide the ruler
+   URL:       ?xy=1              → loads with the ruler already showing
+   Off (0) by default. Draws a horizontal ruler along the bottom of the
+   diagram (just above the zoom hint) and a vertical ruler down the far
+   left side, viewBox coordinates 0 upward in steps of 10px — minor ticks
+   every 10px, numbered major ticks every 50px so the labels stay readable. */
+function buildXYRuler(){
+  const g=document.getElementById('xyRuler');
+  if(g.dataset.built) return;
+  g.dataset.built='1';
+  const vb=document.getElementById('circuitSvg').viewBox.baseVal;
+  const W=vb.width, H=vb.height;
+  const hy=H-10;   // horizontal ruler baseline — near the bottom, above the zoom hint
+  const vx=10;     // vertical ruler baseline — near the far left edge
+  const col='#ff00ff';
+  let svg=`<line x1="0" y1="${hy}" x2="${W}" y2="${hy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+  for(let x=0;x<=W;x+=10){
+    const major=(x%50===0), len=major?10:5;
+    svg+=`<line x1="${x}" y1="${hy-len}" x2="${x}" y2="${hy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+    if(major) svg+=`<text x="${x}" y="${hy-13}" fill="${col}" font-size="8" text-anchor="middle">${x}</text>`;
+  }
+  svg+=`<line x1="${vx}" y1="0" x2="${vx}" y2="${H}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+  for(let y=0;y<=H;y+=10){
+    const major=(y%50===0), len=major?10:5;
+    svg+=`<line x1="${vx}" y1="${y}" x2="${vx+len}" y2="${y}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+    if(major) svg+=`<text x="${vx+13}" y="${y+3}" fill="${col}" font-size="8" text-anchor="start">${y}</text>`;
+  }
+  g.innerHTML=svg;
+}
+function setXY(on){
+  if(on) buildXYRuler();
+  document.getElementById('xyRuler').setAttribute('display', on?'inline':'none');
+}
+window.setXY = setXY;
+
+{ const p = new URLSearchParams(location.search);
+  const rKeys=['r1','r2','r3','r4','r5','r6','r7','vs'];
+  if(rKeys.every(k=>p.has(k))){
+    const vals={}; rKeys.forEach(k=>vals[k]=+p.get(k));
+    applyValues(vals);
+  }
+  if(p.has('q')) jump(+p.get('q'), p.has('ans'));
+  if(p.has('xy')) setXY(+p.get('xy') === 1);
+  if(p.has('return')) returnTo = p.get('return');
+  if(returnTo && RETURN_TITLES[returnTo]){
+    const titleText=`Total Resistance Calculation Quiz ${RETURN_TITLES[returnTo]}`;
+    document.title=titleText;
+    document.getElementById('pageTitle').textContent=titleText;
+  }
+  if(returnTo && RETURN_URLS[returnTo]){
+    const btn=document.getElementById('q4Summary');
+    btn.textContent=`Return to Quiz ${RETURN_TITLES[returnTo] || ''} →`;
+    btn.onclick=()=>{
+      recompute();
+      const url=new URL(RETURN_URLS[returnTo], location.href);
+      rKeys.forEach(k=>url.searchParams.set(k,V[k]));
+      url.searchParams.set('goto','2');
+      location.href=url.toString();
+    };
+  } }
+/* ──────────────────────────────────────────────────────────────────────── */
+</script>
+</body>
+</html>
