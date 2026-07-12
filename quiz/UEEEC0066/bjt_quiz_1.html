@@ -1,0 +1,1911 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BJT Voltage Divider Bias Quiz</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      --colour-bg: #0a0d14;
+      --colour-panel: #0f1420;
+      --colour-border: #1e2d4a;
+      --colour-ui-primary: #00e5ff;
+      /* interface accent — headings, selected option, Next button, active progress dot */
+      --colour-ui-restart: #ff6b35;
+      /* Restart/Shuffle button only */
+      --colour-ui-correct: #00ff99;
+      /* "correct answer" state — option/banner highlight, Check button, done progress dot */
+      --colour-ui-wrong: #ff3d9a;
+      /* "wrong answer" state — option/banner highlight, modal close button */
+      --colour-ui-summary: #a78bfa;
+      /* Summary button only */
+      --colour-series: #00e5ff;
+      /* circuit wires */
+      --colour-node: #f8f8f5;
+      /* test-point labels (B, C, E) at the transistor's terminals */
+      --colour-resistor: #00e5ff;
+      /* default colour for resistor bodies (box outlines) — R1, R2, RC, RE are still plain resistors */
+      --colour-resistor-labels: #f8f8f5;
+      /* default colour for resistor names & ohms values */
+      --colour-bjt: #ffb454;
+      /* the transistor symbol itself (envelope + leads) — a different object to a resistor, so its own colour */
+      --colour-bjt-labels: #ffb454;
+      /* Q1 name/part label, and BJT-specific assumptions (I_C ≈ I_E) referenced in workings */
+      --colour-current: #39FF14;
+      /* current (I) indicator arrows/labels + "current" wording in question text */
+      --colour-red: #ff3333;
+      /* voltage labels (V_B, V_E, V_C, V_CE) */
+      --colour-supply: #ff4444;
+      /* VCC rail */
+      --colour-gnd: #2f8f5b;
+      /* GND rail symbol — darker green, distinct from the current indicator's neon green */
+      --colour-ideal: #a78bfa;
+      /* the ideal/target Q-point benchmark (Q6) — a design reference, not something you'd read off a meter, so distinct from the red measured voltages */
+      --colour-grid: rgba(0, 229, 255, 0.06);
+      --colour-text: #c8d8e8;
+      --colour-label: #5a7a9a;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--colour-bg);
+      color: var(--colour-text);
+      font-family: 'Share Tech Mono', monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+      background-image: linear-gradient(var(--colour-grid) 1px, transparent 1px), linear-gradient(90deg, var(--colour-grid) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 2rem;
+      width: 100%;
+    }
+
+    header h1 {
+      font-family: 'Orbitron', sans-serif;
+      font-size: clamp(1.4rem, 4vw, 2.2rem);
+      font-weight: 900;
+      letter-spacing: .12em;
+      color: var(--colour-ui-primary);
+      text-shadow: 0 0 30px rgba(0, 229, 255, .5);
+      text-transform: uppercase;
+    }
+
+    header p {
+      margin-top: .5rem;
+      color: var(--colour-label);
+      font-size: .75rem;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+    }
+
+    .quiz-wrap {
+      width: 100%;
+      max-width: 1000px;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    @media(min-width:900px) {
+      .quiz-wrap {
+        display: grid;
+        grid-template-columns: minmax(340px, 52%) 1fr;
+        gap: 1.2rem;
+        align-items: start;
+      }
+
+      .circuit-col {
+        position: sticky;
+        top: 1.5rem;
+      }
+
+      .questions-col {
+        min-width: 0;
+      }
+
+      .questions-col .card {
+        padding: 1rem 1.1rem;
+      }
+
+      .questions-col .option-btn {
+        padding: .5rem .7rem;
+        font-size: .76rem;
+      }
+
+      .questions-col .q-text {
+        font-size: .86rem;
+      }
+
+      .questions-col .result-banner {
+        font-size: .72rem;
+        padding: .5rem .8rem;
+      }
+
+      .questions-col .btn {
+        width: 130px;
+        font-size: .64rem;
+      }
+
+      .questions-col .working-box {
+        padding: .85rem 1rem;
+      }
+
+      .questions-col .options {
+        gap: .4rem;
+      }
+    }
+
+    .card {
+      background: var(--colour-panel);
+      border: 1px solid var(--colour-border);
+      border-radius: 4px;
+      padding: 1.6rem;
+    }
+
+    .circuit-panel {
+      background: rgba(0, 0, 0, .25);
+      border: 1px solid var(--colour-border);
+      border-radius: 4px;
+      padding: .8rem;
+      position: relative;
+      cursor: zoom-in;
+    }
+
+    .circuit-panel svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .panel-label {
+      font-size: .58rem;
+      letter-spacing: .18em;
+      color: var(--colour-label);
+      text-transform: uppercase;
+      text-align: center;
+      margin-bottom: 6px;
+    }
+
+    .q-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .q-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+    }
+
+    .q-num {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--colour-ui-primary);
+      white-space: nowrap;
+      padding-top: .15rem;
+    }
+
+    .q-text {
+      color: #d0e4f0;
+      font-size: .9rem;
+      font-weight: bold;
+      line-height: 1.5;
+    }
+
+    .q-hint {
+      font-size: .75rem;
+      color: var(--colour-label);
+      font-weight: normal;
+      margin-top: .3rem;
+    }
+
+    .options {
+      display: flex;
+      flex-direction: column;
+      gap: .6rem;
+    }
+
+    .option-btn {
+      width: 100%;
+      padding: .7rem 1rem;
+      border-radius: 3px;
+      border: 1px solid var(--colour-border);
+      background: rgba(255, 255, 255, .02);
+      color: var(--colour-text);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: .82rem;
+      text-align: left;
+      cursor: pointer;
+      transition: border-color .15s, background .15s;
+      display: flex;
+      align-items: center;
+      gap: .7rem;
+    }
+
+    .option-btn:hover:not(:disabled) {
+      border-color: rgba(0, 229, 255, .4);
+      background: rgba(0, 229, 255, .05);
+    }
+
+    .option-btn.selected {
+      border-color: rgba(0, 229, 255, .6);
+      background: rgba(0, 229, 255, .08);
+      color: var(--colour-ui-primary);
+    }
+
+    .option-btn.correct {
+      border-color: var(--colour-ui-correct);
+      background: rgba(0, 255, 153, .08);
+      color: var(--colour-ui-correct);
+    }
+
+    .option-btn.wrong {
+      border-color: var(--colour-ui-wrong);
+      background: rgba(255, 61, 154, .08);
+      color: var(--colour-ui-wrong);
+    }
+
+    .option-btn.dimmed {
+      opacity: .35;
+    }
+
+    .option-letter {
+      font-family: 'Orbitron', sans-serif;
+      font-size: .7rem;
+      font-weight: 700;
+      min-width: 22px;
+    }
+
+    .result-icon {
+      font-size: 1.1rem;
+      margin-left: auto;
+    }
+
+    .result-banner {
+      display: none;
+      padding: .65rem 1rem;
+      border-radius: 3px;
+      font-size: .78rem;
+      font-family: 'Orbitron', sans-serif;
+      align-items: center;
+      gap: .6rem;
+      line-height: 1.5;
+    }
+
+    .result-banner.correct {
+      display: flex;
+      background: rgba(0, 255, 153, .08);
+      border: 1px solid rgba(0, 255, 153, .3);
+      color: var(--colour-ui-correct);
+    }
+
+    .result-banner.wrong {
+      display: flex;
+      background: rgba(255, 61, 154, .08);
+      border: 1px solid rgba(255, 61, 154, .3);
+      color: var(--colour-ui-wrong);
+    }
+
+    .working-box {
+      display: none;
+      background: rgba(0, 0, 0, .2);
+      border: 1px solid var(--colour-border);
+      border-radius: 4px;
+      padding: 1.1rem 1.3rem;
+    }
+
+    .working-box.visible {
+      display: block;
+    }
+
+    .working-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: .62rem;
+      letter-spacing: .2em;
+      color: var(--colour-label);
+      text-transform: uppercase;
+      margin-bottom: .7rem;
+      padding-bottom: .4rem;
+      border-bottom: 1px solid var(--colour-border);
+    }
+
+    .wlabel {
+      font-size: .72rem;
+      color: var(--colour-label);
+      margin: .5rem 0 .1rem;
+    }
+
+    .wline {
+      font-size: .8rem;
+      line-height: 1.7;
+    }
+
+    .wline.total {
+      margin-top: .5rem;
+      padding-top: .5rem;
+      border-top: 1px solid var(--colour-border);
+      font-size: .85rem;
+    }
+
+    .frac {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      vertical-align: middle;
+      margin: 0 4px;
+    }
+
+    .frac .num {
+      border-bottom: 1.5px solid currentColor;
+      padding: 0 6px 2px;
+      text-align: center;
+      width: 100%;
+    }
+
+    .frac .den {
+      padding: 2px 6px 0;
+      text-align: center;
+      width: 100%;
+    }
+
+    .formula-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      line-height: 1;
+      padding: .5rem 0;
+      font-size: .82rem;
+    }
+
+    /* ── Worked-solution colour convention ──────────────────────────────
+       In each formula-row, wrap ONLY the LHS subject symbol (e.g. V_B,
+       I_E) in one of these — never the whole row. Substituted values,
+       units and operators stay unwrapped (plain --colour-text). The
+       final answer in a wline.total gets .cr instead. ─────────────── */
+    .cv {
+      color: var(--colour-red);
+    }
+
+    .cc {
+      color: var(--colour-current);
+    }
+
+    .cr {
+      color: var(--colour-ui-correct);
+    }
+
+    .cbjt {
+      color: var(--colour-bjt-labels);
+    }
+
+    .cideal {
+      color: var(--colour-ideal);
+    }
+
+    .btn-row {
+      display: flex;
+      gap: .6rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .btn {
+      padding: .5rem 0;
+      border-radius: 3px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: .7rem;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all .15s;
+      border: 1px solid;
+      width: 100px;
+      text-align: center;
+    }
+
+    .btn-check {
+      background: rgba(0, 255, 153, .1);
+      border-color: rgba(0, 255, 153, .4);
+      color: var(--colour-ui-correct);
+    }
+
+    .btn-check:hover:not(:disabled) {
+      background: rgba(0, 255, 153, .2);
+    }
+
+    .btn-check:disabled {
+      opacity: .35;
+      cursor: default;
+    }
+
+    .btn-shuffle {
+      background: rgba(255, 107, 53, .1);
+      border-color: rgba(255, 107, 53, .4);
+      color: var(--colour-ui-restart);
+      margin-left: auto;
+    }
+
+    .btn-shuffle:hover {
+      background: rgba(255, 107, 53, .2);
+    }
+
+    .btn-next {
+      background: rgba(0, 229, 255, .1);
+      border-color: rgba(0, 229, 255, .4);
+      color: var(--colour-ui-primary);
+    }
+
+    .btn-next:hover {
+      background: rgba(0, 229, 255, .2);
+    }
+
+    .btn-prev {
+      background: rgba(90, 122, 154, .1);
+      border-color: rgba(90, 122, 154, .4);
+      color: var(--colour-label);
+    }
+
+    .btn-prev:hover {
+      background: rgba(90, 122, 154, .2);
+    }
+
+    .btn-summary {
+      background: rgba(167, 139, 250, .12);
+      border-color: rgba(167, 139, 250, .4);
+      color: var(--colour-ui-summary);
+    }
+
+    .btn-summary:hover {
+      background: rgba(167, 139, 250, .22);
+    }
+
+    .summary-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: .5rem 0 .8rem;
+      border-bottom: 1px solid var(--colour-border);
+      margin-bottom: 1rem;
+    }
+
+    .summary-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--colour-ui-primary);
+      letter-spacing: .15em;
+      text-transform: uppercase;
+    }
+
+    .summary-values {
+      background: rgba(0, 0, 0, .2);
+      border: 1px solid var(--colour-border);
+      border-radius: 4px;
+      padding: .8rem 1rem;
+      margin-bottom: 1.2rem;
+      font-size: .82rem;
+      line-height: 2.1;
+    }
+
+    .summary-item {
+      border: 1px solid var(--colour-border);
+      border-radius: 4px;
+      padding: .9rem 1rem;
+      margin-bottom: 1rem;
+      background: rgba(0, 0, 0, .15);
+    }
+
+    .summary-item-head {
+      display: flex;
+      align-items: baseline;
+      gap: .6rem;
+      margin-bottom: .3rem;
+    }
+
+    .summary-qnum {
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 700;
+      color: var(--colour-ui-primary);
+      font-size: .85rem;
+      white-space: nowrap;
+    }
+
+    .summary-question {
+      font-size: .82rem;
+      color: #d0e4f0;
+      font-weight: bold;
+      line-height: 1.4;
+    }
+
+    .summary-answer {
+      font-size: .74rem;
+      margin: .45rem 0;
+      font-family: 'Orbitron', sans-serif;
+      letter-spacing: .04em;
+    }
+
+    .progress-wrap {
+      display: flex;
+      gap: .4rem;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
+    .progress-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      border: 1.5px solid var(--colour-border);
+      background: transparent;
+      transition: background .2s, border-color .2s;
+    }
+
+    .progress-dot.done {
+      background: var(--colour-ui-correct);
+      border-color: var(--colour-ui-correct);
+    }
+
+    .progress-dot.active {
+      background: var(--colour-ui-primary);
+      border-color: var(--colour-ui-primary);
+      box-shadow: 0 0 6px rgba(0, 229, 255, .6);
+    }
+
+    .progress-label {
+      font-size: .65rem;
+      color: var(--colour-label);
+      margin-left: .4rem;
+      letter-spacing: .1em;
+    }
+
+    .zoom-hint {
+      position: absolute;
+      bottom: .6rem;
+      right: .7rem;
+      font-family: 'Orbitron', sans-serif;
+      font-size: .55rem;
+      letter-spacing: .12em;
+      color: var(--colour-label);
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: .35rem;
+      pointer-events: none;
+      opacity: .7;
+    }
+
+    .zoom-hint svg {
+      width: 13px;
+      height: 13px;
+      fill: var(--colour-label);
+    }
+
+    .diagram-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      background: rgba(5, 8, 16, .88);
+      backdrop-filter: blur(4px);
+      align-items: center;
+      justify-content: center;
+      padding: 1.2rem;
+    }
+
+    .diagram-modal.open {
+      display: flex;
+    }
+
+    .modal-inner {
+      position: relative;
+      background: rgba(0, 0, 0, .35);
+      border: 1px solid var(--colour-border);
+      border-radius: 6px;
+      padding: .8rem;
+      max-width: min(92vw, 900px);
+      max-height: 92vh;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: .5rem;
+      box-shadow: 0 0 60px rgba(0, 229, 255, .08);
+      cursor: zoom-out;
+    }
+
+    .modal-inner svg {
+      width: 100%;
+      height: auto;
+      max-height: calc(92vh - 5rem);
+      display: block;
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: .4rem;
+      border-bottom: 1px solid var(--colour-border);
+    }
+
+    .modal-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: .65rem;
+      letter-spacing: .18em;
+      color: var(--colour-label);
+      text-transform: uppercase;
+    }
+
+    .modal-close {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: .68rem;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      cursor: pointer;
+      background: rgba(255, 61, 154, .08);
+      border: 1px solid rgba(255, 61, 154, .35);
+      color: var(--colour-ui-wrong);
+      border-radius: 3px;
+      padding: .3rem .7rem;
+      transition: background .15s;
+    }
+
+    .modal-close:hover {
+      background: rgba(255, 61, 154, .18);
+    }
+
+    /* ── Example / Randomise mode toggle ── */
+    .mode-toggle {
+      display: flex;
+      align-items: center;
+      gap: .7rem;
+      margin-bottom: .8rem;
+      font-family: 'Share Tech Mono', monospace;
+    }
+
+    .mode-seg {
+      display: inline-flex;
+      border: 1px solid var(--colour-border);
+      border-radius: 4px;
+      overflow: hidden;
+      flex-wrap: wrap;
+    }
+
+    .mode-seg button {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: .66rem;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      padding: .4rem .95rem;
+      border: none;
+      background: transparent;
+      color: var(--colour-label);
+      transition: background .15s, color .15s;
+    }
+
+    .mode-seg button+button {
+      border-left: 1px solid var(--colour-border);
+    }
+
+    .mode-seg button.active {
+      background: rgba(0, 229, 255, .12);
+      color: var(--colour-ui-primary);
+    }
+
+    .mode-seg button:not(.active):hover {
+      background: rgba(0, 229, 255, .04);
+      color: var(--colour-text);
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>BJT Voltage Divider Bias</h1>
+    <p>DC Analysis · Single-Stage NPN Amplifier</p>
+  </header>
+
+  <div class="quiz-wrap">
+
+    <!-- LEFT: circuit diagram -->
+    <div class="circuit-col">
+      <div class="mode-toggle">
+        <div class="mode-seg" id="modeSeg">
+          <button id="modeExample1" class="active" onclick="setMode('example1')">Example 1</button>
+          <button id="modeExample2" onclick="setMode('example2')">Example 2</button>
+          <button id="modeExample3" onclick="setMode('example3')">Example 3</button>
+          <button id="modeRandomise" onclick="setMode('randomise')">Randomise</button>
+        </div>
+      </div>
+      <div class="circuit-panel" onclick="openModal()" title="Click to zoom">
+        <div class="panel-label">Circuit Diagram — <span id="panelVoltLabel">12 V</span> Supply</div>
+        <div class="zoom-hint">
+          <svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.8" fill="none" />
+            <line x1="12.5" y1="12.5" x2="17" y2="17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            <line x1="6" y1="8" x2="10" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+            <line x1="8" y1="6" x2="8" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+          </svg>
+          Zoom
+        </div>
+
+        <svg id="circuitSvg" viewBox="0 0 480 560" xmlns="http://www.w3.org/2000/svg"
+          font-family="'Share Tech Mono',monospace">
+
+          <!-- ════════════════════ DEFINITIONS ════════════════════ -->
+
+          <defs>
+            <filter id="glow">
+              <feGaussianBlur stdDeviation="2" result="b" />
+              <feMerge>
+                <feMergeNode in="b" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+
+            <!-- ══ NPN BJT SHAPE ══ -->
+            <g id="bjt-npn-shape">
+              <circle cx="7" cy="0" r="24" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2"
+                filter="url(#glow)" />
+              <line x1="-17" y1="0" x2="0" y2="0" style="stroke: var(--colour-bjt)" stroke-width="2" />
+              <!-- base lead -->
+              <line x1="0" y1="-12" x2="0" y2="12" style="stroke: var(--colour-bjt)" stroke-width="2.5" />
+              <!-- base bar -->
+              <line x1="0" y1="-8" x2="14" y2="-20" style="stroke: var(--colour-bjt)" stroke-width="2" />
+              <!-- to collector -->
+              <line x1="14" y1="-20" x2="14" y2="-34" style="stroke: var(--colour-bjt)" stroke-width="2" />
+              <!-- collector lead -->
+              <line x1="0" y1="8" x2="14" y2="20" style="stroke: var(--colour-bjt)" stroke-width="2" />
+              <!-- to emitter -->
+              <line x1="14" y1="20" x2="14" y2="34" style="stroke: var(--colour-bjt)" stroke-width="2" />
+              <!-- emitter lead -->
+              <polygon points="14,20 11,10 3,16" style="fill: var(--colour-bjt)" />
+              <!-- NPN arrow, pointing away from base -->
+            </g>
+          </defs>
+
+          <!-- ════════════════════ CIRCUIT GROUP ════════════════════ -->
+
+          <!-- ══ Used to move the entire circuit by (X,Y) pixels ══ -->
+          <g id="circuitGroup" transform="translate(0,5)">
+
+          <!-- ════════════════════ WIRES ════════════════════ -->
+
+          <!-- ── LEFT VERTICAL (base-bias rail, x=170) ── -->
+          <line x1="100" y1="50" x2="100" y2="80" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC rail down to R1 -->
+          <line x1="100" y1="160" x2="100" y2="255" style="stroke: var(--colour-series)" stroke-width="2" /><!-- R1 down to Base node -->
+          <line x1="100" y1="255" x2="100" y2="350" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Base node down to R2 -->
+          <line x1="100" y1="430" x2="100" y2="520" style="stroke: var(--colour-series)" stroke-width="2" /><!-- R2 down to GND rail -->
+
+          <!-- ── RIGHT VERTICAL (collector/emitter rail, x=340) ── -->
+          <line x1="340" y1="50" x2="340" y2="80" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC rail down to RC -->
+          <line x1="340" y1="160" x2="340" y2="221" style="stroke: var(--colour-series)" stroke-width="2" /><!-- RC down to Collector pin -->
+          <line x1="340" y1="289" x2="340" y2="350" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Emitter pin down to RE -->
+          <line x1="340" y1="430" x2="340" y2="520" style="stroke: var(--colour-series)" stroke-width="2" /><!-- RE down to GND rail -->
+
+          <!-- ── TOP HORIZONTAL ── -->
+          <line x1="100" y1="50" x2="340" y2="50" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC rail (R1 column to RC column) -->
+
+          <!-- ── BOTTOM HORIZONTAL ── -->
+          <line x1="100" y1="520" x2="340" y2="520" style="stroke: var(--colour-series)" stroke-width="2" /><!-- GND rail (R2 column to RE column) -->
+
+          <!-- ── CENTRE HORIZONTAL ── -->
+          <line x1="100" y1="255" x2="309" y2="255" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Base node across to transistor base pin -->
+
+          <!-- ════════════════════ NODES ════════════════════ -->
+
+          <!-- ── NODE B  ── -->
+          <circle cx="100" cy="255" r="5" style="fill: var(--colour-series)" />
+          <g id="nodeB_lbl" transform="translate(70,255)">
+            <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5" />
+            <text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14"
+              font-weight="bold">B</text>
+          </g>
+
+          <!-- ── NODE C ── -->
+          <g id="nodeC_lbl" transform="translate(370,205)">
+            <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5" />
+            <text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14"
+              font-weight="bold">C</text>
+          </g>
+
+          <!-- ── NODE E ── -->
+          <g id="nodeE_lbl" transform="translate(370,305)">
+            <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5" />
+            <text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14"
+              font-weight="bold">E</text>
+          </g>
+
+          <!-- ════════════════════ VCC ════════════════════ -->
+
+          <g id="vccGroup" transform="translate(180,-1)">
+            <line x1="40" y1="50" x2="40" y2="30" style="stroke: var(--colour-supply)" stroke-width="2" />
+            <line x1="0" y1="30" x2="80" y2="30" style="stroke: var(--colour-supply)" stroke-width="2" />
+            <text x="0" y="15" style="fill: var(--colour-supply)" text-anchor="start" font-size="15"
+              font-weight="bold">V<tspan baseline-shift="sub" font-size="10">CC</tspan></text>
+            <!-- hand-drawn "+" -->
+            <line x1="50" y1="10" x2="50" y2="20" style="stroke: var(--colour-supply)" stroke-width="1.0" />
+            <line x1="46" y1="15" x2="54" y2="15" style="stroke: var(--colour-supply)" stroke-width="1.0" />
+            <text id="vccValue" x="60" y="20" style="fill: var(--colour-supply)" text-anchor="start" font-size="14"
+              font-weight="bold">12V</text>
+            </g>
+
+          <!-- ════════════════════ GND SYMBOL ════════════════════ -->
+
+          <g id="gndGroup" transform="translate(220,521)">
+            <line x1="0" y1="0" x2="0" y2="15" style="stroke: var(--colour-gnd)" stroke-width="2" />
+            <line x1="-14" y1="15" x2="14" y2="15" style="stroke: var(--colour-gnd)" stroke-width="2" />
+            <line x1="-9" y1="20" x2="9" y2="20" style="stroke: var(--colour-gnd)" stroke-width="1.5" />
+            <line x1="-4" y1="25" x2="4" y2="25" style="stroke: var(--colour-gnd)" stroke-width="1.5" />
+          </g>
+
+          <!-- ════════════════════ Q1 — NPN ════════════════════ -->
+
+          <g id="q1Group" transform="translate(326,255)">
+            <use href="#bjt-npn-shape" />
+            <text id="nm-q1" x="-25" y="-15" fill="var(--colour-bjt-labels)" text-anchor="middle" font-size="14"
+              font-weight="bold">Q1</text>
+            <text id="lbl-q1" x="-20" y="25" fill="var(--colour-bjt-labels)" text-anchor="end" font-size="12">BC547</text>
+          </g>
+
+          <!--═══════════════════ RESISTORS ════════════════════ -->
+
+          <!-- ══ R1 ══ -->
+          <g id="r1Group" transform="translate(85,80)">
+            <rect id="box-r1" x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)"
+              stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+            <text id="nm-r1" x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14"
+              font-weight="bold">R1</text>
+            <text id="lbl-r1" x="60" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle"
+              font-size="13">10.00kΩ</text>
+          </g>
+
+           <!-- ══ R2 ══ -->
+         <g id="r2Group" transform="translate(85,350)">
+            <rect id="box-r2" x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)"
+              stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+            <text id="nm-r2" x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14"
+              font-weight="bold">R2</text>
+            <text id="lbl-r2" x="60" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle"
+              font-size="13">2.20kΩ</text>
+          </g>
+
+          <!-- ══ RC ══ -->
+          <g id="rcGroup" transform="translate(325,80)">
+            <rect id="box-rc" x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)"
+              stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+            <text id="nm-rc" x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14"
+              font-weight="bold">RC</text>
+            <text id="lbl-rc" x="60" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle"
+              font-size="13">1.00kΩ</text>
+          </g>
+
+           <!-- ══ RE ══ -->
+          <g id="reGroup" transform="translate(325,350)">
+            <rect id="box-re" x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)"
+              stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+            <text id="nm-re" x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14"
+              font-weight="bold">RE</text>
+            <text id="lbl-re" x="60" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle"
+              font-size="13">470.00Ω</text>
+          </g>
+
+         <!-- ════════════════════ QUESTION 1 ════════════════════ -->
+
+          <!-- ══ V_B INDICATOR (revealed on Q1) ══ -->
+          <g id="vbInd" display="none" transform="translate(40,220)">
+            <text x="0" y="-6" style="fill: var(--colour-red)" text-anchor="start" font-size="14" 
+              font-weight="bold">V<tspan baseline-shift="sub" font-size="10">B</tspan></text>
+            <text id="vbValue" x="0" y="15" style="fill: var(--colour-red)" text-anchor="start" font-size="13"
+              font-weight="bold">—</text>
+          </g>
+
+         <!-- ════════════════════ QUESTION 2 ════════════════════ -->
+
+         <!-- ══ V_E INDICATOR ══ -->
+          <g id="veInd" display="none" transform="translate(390,330)">
+            <text x="0" y="-6" style="fill: var(--colour-red)" text-anchor="start" font-size="14" 
+              font-weight="bold">V<tspan baseline-shift="sub" font-size="10">E</tspan></text>
+            <text id="veValue" x="0" y="15" style="fill: var(--colour-red)" text-anchor="start" font-size="13"
+              font-weight="bold">—</text>
+          </g>
+
+         <!-- ════════════════════ QUESTION 3 ════════════════════ -->
+
+         <!-- ══ I_E INDICATOR ══ -->
+          <g id="ieInd" display="none" transform="translate(340,445)">
+            <line x1="0" y1="0" x2="0" y2="55" style="stroke: var(--colour-current)" stroke-width="2.5" />
+            <polygon points="0,63 -6,51 6,51" style="fill: var(--colour-current)" />
+            <text x="10" y="20" style="fill: var(--colour-current)" text-anchor="start" font-size="16"
+              font-weight="bold">I<tspan baseline-shift="sub" font-size="11">E</tspan></text>
+            <text id="ieValue" x="10" y="40" style="fill: var(--colour-current)" text-anchor="start" font-size="13"
+              font-weight="bold">—</text>
+          </g>
+
+         <!-- ════════════════════ QUESTION 4 ════════════════════ -->
+
+         <!-- ══ V_C INDICATOR ══ -->
+          <g id="vcInd" display="none" transform="translate(390,180)">
+            <text x="0" y="-6" style="fill: var(--colour-red)" text-anchor="start" font-size="14" 
+              font-weight="bold">V<tspan baseline-shift="sub" font-size="10">C</tspan></text>
+            <text id="vcValue" x="0" y="15" style="fill: var(--colour-red)" text-anchor="start" font-size="13"
+              font-weight="bold">—</text>
+          </g>
+
+        <!-- ════════════════════ QUESTION 5 ════════════════════ -->
+
+        <!-- ══ V_CE INDICATOR ══ -->
+          <g id="vceInd" display="none" transform="translate(380,230)">
+            <line x1="0" y1="0" x2="10" y2="0" style="stroke: var(--colour-red)" stroke-width="2" />
+            <line x1="0" y1="50" x2="10" y2="50" style="stroke: var(--colour-red)" stroke-width="2" />
+            <line x1="10" y1="0" x2="10" y2="50" style="stroke: var(--colour-red)" stroke-width="2" />
+            <text x="20" y="20" style="fill: var(--colour-red)" text-anchor="start" font-size="14"
+              font-weight="bold">V<tspan baseline-shift="sub" font-size="10">CE</tspan></text>
+            <text id="vceValue" x="20" y="40" style="fill: var(--colour-red)" text-anchor="start" font-size="13"
+              font-weight="bold">—</text>
+          </g>
+
+        <!-- ════════════════════ QUESTION 6 ════════════════════ -->
+
+        <!-- ══ V_CE(ideal) INDICATOR — a design benchmark, not a measurable node, so it gets its own colour ══ -->
+          <g id="idealVceInd" display="none" transform="translate(230,180)">
+            <text x="0" y="-6" style="fill: var(--colour-ideal)" text-anchor="start" font-size="13"
+              font-weight="bold">V<tspan baseline-shift="sub" font-size="9">CE</tspan> (ideal)</text>
+            <text id="idealVceValue" x="0" y="13" style="fill: var(--colour-ideal)" text-anchor="start"
+              font-size="13" font-weight="bold">—</text>
+          </g>
+
+          </g><!-- /circuitGroup -->
+
+          <!-- ══ XY RULER (dev tool, off by default) ══ -->
+          <g id="xyRuler" display="none"></g>
+        </svg>
+      </div>
+    </div>
+
+    <!-- ════════════════════ QUESTION FRAMEWORK - DO NOT CHANGE MANUALLY ════════════════════ -->
+
+    <!-- RIGHT: question -->
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div class="progress-dot" id="dot-q1"></div>
+          <div class="progress-dot" id="dot-q2"></div>
+          <div class="progress-dot" id="dot-q3"></div>
+          <div class="progress-dot" id="dot-q4"></div>
+          <div class="progress-dot" id="dot-q5"></div>
+          <div class="progress-dot" id="dot-q6"></div>
+          <div class="progress-dot" id="dot-q7"></div>
+          <span class="progress-label" id="progressLabel">1 / 7</span>
+        </div>
+
+        <!-- Q1 — base voltage -->
+        <div class="q-panel" id="q1Panel">
+          <div class="q-header">
+            <div class="q-num">Q1</div>
+            <div>
+              <div class="q-text" id="q1Text"></div>
+              <div class="q-hint" id="q1Hint"></div>
+            </div>
+          </div>
+          <div class="options" id="q1Options"></div>
+          <div class="result-banner" id="q1Banner"><span id="q1Icon"></span>&nbsp;<span id="q1BannerText"></span></div>
+          <div class="working-box" id="q1Working">
+            <div class="working-title">Worked Solution</div>
+            <div id="q1WorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-check" id="q1Check" onclick="checkQ1()" disabled>Check</button>
+            <button class="btn btn-next" id="q1Next" onclick="showQuestion(2)" style="display:none">Next →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Q2 — emitter voltage -->
+        <div class="q-panel" id="q2Panel" style="display:none">
+          <div class="q-header">
+            <div class="q-num">Q2</div>
+            <div>
+              <div class="q-text" id="q2Text"></div>
+              <div class="q-hint" id="q2Hint"></div>
+            </div>
+          </div>
+          <div class="options" id="q2Options"></div>
+          <div class="result-banner" id="q2Banner"><span id="q2Icon"></span>&nbsp;<span id="q2BannerText"></span></div>
+          <div class="working-box" id="q2Working">
+            <div class="working-title">Worked Solution</div>
+            <div id="q2WorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="q2Back" onclick="backFromQ2()">← Back</button>
+            <button class="btn btn-check" id="q2Check" onclick="checkQ2()" disabled>Check</button>
+            <button class="btn btn-next" id="q2Next" onclick="showQuestion(3)" style="display:none">Next →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Q3 — emitter current -->
+        <div class="q-panel" id="q3Panel" style="display:none">
+          <div class="q-header">
+            <div class="q-num">Q3</div>
+            <div>
+              <div class="q-text" id="q3Text"></div>
+              <div class="q-hint" id="q3Hint"></div>
+            </div>
+          </div>
+          <div class="options" id="q3Options"></div>
+          <div class="result-banner" id="q3Banner"><span id="q3Icon"></span>&nbsp;<span id="q3BannerText"></span></div>
+          <div class="working-box" id="q3Working">
+            <div class="working-title">Worked Solution</div>
+            <div id="q3WorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="q3Back" onclick="backFromQ3()">← Back</button>
+            <button class="btn btn-check" id="q3Check" onclick="checkQ3()" disabled>Check</button>
+            <button class="btn btn-next" id="q3Next" onclick="showQuestion(4)" style="display:none">Next →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Q4 — collector voltage -->
+        <div class="q-panel" id="q4Panel" style="display:none">
+          <div class="q-header">
+            <div class="q-num">Q4</div>
+            <div>
+              <div class="q-text" id="q4Text"></div>
+              <div class="q-hint" id="q4Hint"></div>
+            </div>
+          </div>
+          <div class="options" id="q4Options"></div>
+          <div class="result-banner" id="q4Banner"><span id="q4Icon"></span>&nbsp;<span id="q4BannerText"></span></div>
+          <div class="working-box" id="q4Working">
+            <div class="working-title">Worked Solution</div>
+            <div id="q4WorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="q4Back" onclick="backFromQ4()">← Back</button>
+            <button class="btn btn-check" id="q4Check" onclick="checkQ4()" disabled>Check</button>
+            <button class="btn btn-next" id="q4Next" onclick="showQuestion(5)" style="display:none">Next →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Q5 — collector-emitter voltage -->
+        <div class="q-panel" id="q5Panel" style="display:none">
+          <div class="q-header">
+            <div class="q-num">Q5</div>
+            <div>
+              <div class="q-text" id="q5Text"></div>
+              <div class="q-hint" id="q5Hint"></div>
+            </div>
+          </div>
+          <div class="options" id="q5Options"></div>
+          <div class="result-banner" id="q5Banner"><span id="q5Icon"></span>&nbsp;<span id="q5BannerText"></span></div>
+          <div class="working-box" id="q5Working">
+            <div class="working-title">Worked Solution</div>
+            <div id="q5WorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="q5Back" onclick="backFromQ5()">← Back</button>
+            <button class="btn btn-check" id="q5Check" onclick="checkQ5()" disabled>Check</button>
+            <button class="btn btn-next" id="q5Next" onclick="showQuestion(6)" style="display:none">Next →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Q6 — ideal Q-point -->
+        <div class="q-panel" id="q6Panel" style="display:none">
+          <div class="q-header">
+            <div class="q-num">Q6</div>
+            <div>
+              <div class="q-text" id="q6Text"></div>
+              <div class="q-hint" id="q6Hint"></div>
+            </div>
+          </div>
+          <div class="options" id="q6Options"></div>
+          <div class="result-banner" id="q6Banner"><span id="q6Icon"></span>&nbsp;<span id="q6BannerText"></span></div>
+          <div class="working-box" id="q6Working">
+            <div class="working-title">Worked Solution</div>
+            <div id="q6WorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="q6Back" onclick="backFromQ6()">← Back</button>
+            <button class="btn btn-check" id="q6Check" onclick="checkQ6()" disabled>Check</button>
+            <button class="btn btn-next" id="q6Next" onclick="showQuestion(7)" style="display:none">Next →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Q7 — effect of RE on VCE -->
+        <div class="q-panel" id="q7Panel" style="display:none">
+          <div class="q-header">
+            <div class="q-num">Q7</div>
+            <div>
+              <div class="q-text" id="q7Text"></div>
+              <div class="q-hint" id="q7Hint"></div>
+            </div>
+          </div>
+          <div class="options" id="q7Options"></div>
+          <div class="result-banner" id="q7Banner"><span id="q7Icon"></span>&nbsp;<span id="q7BannerText"></span></div>
+          <div class="working-box" id="q7Working">
+            <div class="working-title">Worked Solution</div>
+            <div id="q7WorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="q7Back" onclick="backFromQ7()">← Back</button>
+            <button class="btn btn-check" id="q7Check" onclick="checkQ7()" disabled>Check</button>
+            <button class="btn btn-summary" id="q7Summary" onclick="showSummary()" style="display:none">See Summary
+              →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Summary -->
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Zoom modal -->
+    <div class="diagram-modal" id="diagramModal" onclick="handleModalClick(event)">
+      <div class="modal-inner" id="modalInner">
+        <div class="modal-header">
+          <span class="modal-title" id="modalVoltLabel">Circuit Diagram — 12 V Supply</span>
+          <button class="modal-close" onclick="closeModal()">✕ Close</button>
+        </div>
+        <svg id="modalSvg" viewBox="0 0 480 560" xmlns="http://www.w3.org/2000/svg"
+          font-family="'Share Tech Mono',monospace"></svg>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ══════════════════════════════════════════════════════════════════════
+    // CIRCUIT CONFIGURATION
+    // ══════════════════════════════════════════════════════════════════════
+
+    // Topology: classic voltage-divider bias, single-stage NPN.
+    // VCC —R1— [Base node] —R2— GND, base node also feeds Q1's base.
+    // VCC —RC— Q1 collector; Q1 emitter —RE— GND.
+    const VBE = 0.7; // silicon NPN base-emitter drop, assumed constant
+
+    const EXAMPLE_SETS = {
+      example1: { vcc: 12, r1: 10000, r2: 2200, rc: 1000, re: 470 },
+      example2: { vcc: 15, r1: 22000, r2: 4700, rc: 2200, re: 1000 },
+      example3: { vcc: 9, r1: 4700, r2: 1000, rc: 470, re: 220 }
+    };
+    let quizMode = 'example1';
+    let V = { ...EXAMPLE_SETS.example1 };
+
+    const QUIZ_QUESTION_COUNT = 7;
+    const QIDS = Array.from({ length: QUIZ_QUESTION_COUNT }, (_, i) => 'q' + (i + 1));
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTION TEXT
+    // ══════════════════════════════════════════════════════════════════════
+    const QUESTIONS = [
+      {
+        text: 'What is the <span style="color:var(--colour-red)">base voltage</span> V<sub>B</sub> at the junction of R1 and R2?',
+        hint: 'Treat R1 and R2 as a simple voltage divider from V<sub>CC</sub> to ground — the base draws very little current compared to the divider current.'
+      },
+      {
+        text: 'What is the <span style="color:var(--colour-red)">emitter voltage</span> V<sub>E</sub>?',
+        hint: 'A forward-biased silicon base-emitter junction drops approximately 0.7 V.'
+      },
+      {
+        text: 'What is the <span style="color:var(--colour-current)">emitter current</span> I<sub>E</sub>?',
+        hint: 'Apply Ohm\'s law to R<sub>E</sub>, using the emitter voltage from Q2.'
+      },
+      {
+        text: 'What is the <span style="color:var(--colour-red)">collector voltage</span> V<sub>C</sub>?',
+        hint: 'Assume I<sub>C</sub> ≈ I<sub>E</sub> (base current is small). Find the voltage dropped across R<sub>C</sub>, then subtract it from V<sub>CC</sub>.'
+      },
+      {
+        text: 'What is the <span style="color:var(--colour-red)">collector-emitter voltage</span> V<sub>CE</sub>?',
+        hint: 'V<sub>CE</sub> is the difference between the collector and emitter voltages — both measured with respect to ground.'
+      },
+      {
+        text: 'For maximum symmetrical output swing before clipping, what is the ideal <span style="color:var(--colour-ideal)">collector-emitter voltage</span> V<sub>CE(ideal)</sub>?',
+        hint: 'The ideal Q-point splits the voltage remaining after R<sub>E</sub>\'s drop evenly between R<sub>C</sub> and the transistor: V<sub>CE(ideal)</sub> ≈ (V<sub>CC</sub> − I<sub>E</sub>R<sub>E</sub>) / 2.'
+      }
+      // Q7's text depends on which side of ideal V_CE currently sits on (varies across
+      // Example 1/2/3/Randomise), so it isn't in this static list — see updateQ7Question(),
+      // called from refreshLabels() every time V changes.
+    ];
+    QUESTIONS.forEach((q, i) => {
+      document.getElementById('q' + (i + 1) + 'Text').innerHTML = q.text;
+      document.getElementById('q' + (i + 1) + 'Hint').innerHTML = q.hint;
+    });
+
+    // ══════════════════════════════════════════════════════════════════════
+    // END CIRCUIT CONFIGURATION
+    // ══════════════════════════════════════════════════════════════════════
+
+    // ══════════════════════════════════════════════════════════════════════
+    // CIRCUIT SIMULATION
+    // ══════════════════════════════════════════════════════════════════════
+
+    // ── curated resistor/supply pools for Randomise mode (kept in realistic
+    //    ranges for a bias network, unlike a plain E12 sweep) ──
+    const R1_POOL = [4700, 6800, 8200, 10000, 12000, 15000, 18000, 22000, 27000, 33000, 39000, 47000];
+    const R2_POOL = [1000, 1200, 1500, 1800, 2200, 2700, 3300, 3900, 4700, 5600, 6800, 8200];
+    const RC_POOL = [220, 270, 330, 390, 470, 560, 680, 820, 1000, 1200, 1500, 1800, 2200];
+    const RE_POOL = [100, 120, 150, 180, 220, 270, 330, 390, 470, 560, 680, 820, 1000];
+    const VCC_POOL = [9, 12, 15, 18, 20];
+    function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+    // Retries until the combination keeps Q1 in the active region (VE has a
+    // healthy margin above 0 and VCE has a healthy margin above 0) — a plain
+    // random pick can otherwise land the transistor in cutoff or saturation,
+    // which makes for a nonsensical "troubleshoot the amplifier" quiz.
+    function randomValues() {
+      for (let attempt = 0; attempt < 25; attempt++) {
+        const vals = { vcc: pick(VCC_POOL), r1: pick(R1_POOL), r2: pick(R2_POOL), rc: pick(RC_POOL), re: pick(RE_POOL) };
+        const vb = vals.vcc * vals.r2 / (vals.r1 + vals.r2);
+        const ve = vb - VBE;
+        if (ve < 0.3) continue;
+        const ie = ve / vals.re;
+        const vc = vals.vcc - ie * vals.rc;
+        if (vc - ve < 1 || vc > vals.vcc - 0.3) continue;
+        return vals;
+      }
+      return { ...EXAMPLE_SETS.example1 };
+    }
+
+    const LETTERS = ['A', 'B', 'C', 'D'];
+    function fmtO0(v) { return v >= 1000 ? (v / 1000).toFixed(2) + 'kΩ' : v.toFixed(2) + 'Ω'; }
+    function fmtA(a) { const x = Math.abs(a); if (x >= 1) return a.toFixed(3) + ' A'; if (x >= 0.001) return (a * 1000).toFixed(2) + ' mA'; return (a * 1e6).toFixed(1) + ' µA'; }
+    function fmtV(v) { const a = Math.abs(v); if (a >= 1) return v.toFixed(2) + ' V'; if (a >= 0.001) return (v * 1000).toFixed(2) + ' mV'; return (v * 1e6).toFixed(1) + ' µV'; }
+    function frac(num, den) { return `<span class="frac"><span class="num">${num}</span><span class="den">${den}</span></span>`; }
+
+    // ── derived (recomputed whenever the value set changes) ──
+    let VB, VE, IE, IC, VRC, VC, VCE, VCE_ideal;
+    function recompute() {
+      VB = V.vcc * V.r2 / (V.r1 + V.r2);   // voltage-divider rule (base current assumed negligible)
+      VE = VB - VBE;                    // silicon base-emitter drop
+      IE = VE / V.re;                   // Ohm's law on RE
+      IC = IE;                          // I_C ≈ I_E, since I_B is small
+      VRC = IC * V.rc;
+      VC = V.vcc - VRC;
+      VCE = VC - VE;
+      VCE_ideal = (V.vcc - IE * V.re) / 2;  // Q-point centred on the DC load line: splits the leftover voltage evenly between RC and the transistor
+    }
+
+    // Classifies the actual Q-point (VCE, from Q5) against the ideal midpoint
+    // (VCE_ideal, from Q6) — shared by the SVG indicator and the Q6 working.
+    function qPointStatus() {
+      const diffPct = (VCE - VCE_ideal) / VCE_ideal * 100;
+      if (Math.abs(diffPct) <= 20) return { tag: 'centred', diffPct };
+      if (diffPct > 20) return { tag: 'cutoff', diffPct };
+      return { tag: 'saturation', diffPct };
+    }
+
+    // Q7: the four single-component changes that CAN bring V_CE to a centred
+    // Q-point, each solved exactly (holding the other three components fixed).
+    //   - rcTarget: R1,R2,RE fixed. I_E (and so V_CE_ideal) is untouched by R_C,
+    //     so this is the ONLY lever that hits the exact V_CE(ideal) from Q6
+    //     without changing the emitter bias current at all.
+    //   - reTarget: R1,R2,RC fixed. V_E is set solely by the base divider, so
+    //     V_CE_ideal = (VCC-VE)/2 is ALSO untouched by R_E — this also lands on
+    //     the same Q6 number, but only by substantially changing I_E, which
+    //     undermines R_E's own role of stabilising I_E against beta/temperature.
+    //   - r2Target / r1Target: changing the divider changes V_E, so V_CE_ideal
+    //     itself shifts too — these converge V_CE and V_CE_ideal at a NEW point,
+    //     different from the Q6 number, redesigning the whole bias current
+    //     rather than repositioning V_CE within it.
+    function calcAdjustmentTargets() {
+      const ieDiv = V.vcc / (2 * V.rc + V.re);
+      const veDiv = ieDiv * V.re;
+      const vbDiv = veDiv + VBE;
+      const r2Target = V.r1 * vbDiv / (V.vcc - vbDiv);
+      const r1Target = V.r2 * (V.vcc - vbDiv) / vbDiv;
+      const rcTarget = VCE_ideal / IE;
+      const ieViaRE = VCE_ideal / V.rc;
+      const reTarget = VE / ieViaRE;
+      const convergedVCE = (V.vcc - ieDiv * V.re) / 2; // where V_CE and V_CE_ideal meet if R1/R2 is used instead
+      return { r2Target, r1Target, rcTarget, reTarget, ieDiv, ieViaRE, convergedVCE };
+    }
+
+    // Sets Q7's question text/hint, which — unlike Q1-Q6 — depends on which
+    // side of ideal V_CE currently sits on (varies across Example 1/2/3/Randomise).
+    function updateQ7Question() {
+      const above = VCE >= VCE_ideal;
+      const q7 = document.getElementById('q7Text');
+      if (q7) {
+        q7.innerHTML = `The current V<sub>CE</sub> is <span style="color:var(--colour-ui-wrong)"><b>${above ? 'above' : 'below'}</b></span> the ideal Q-point found in Q6. If you wanted to bring it closer to ideal, which single change would you make?`;
+      }
+      const hint = document.getElementById('q7Hint');
+      if (hint) {
+        hint.innerHTML = 'All four options can numerically bring V<sub>CE</sub> close to the ideal — but only one does it without disturbing the emitter bias current I<sub>E</sub>. Think about which resistor sets I<sub>E</sub>, and which one doesn\'t touch it at all.';
+      }
+    }
+
+    // ── mode switching ──
+    function refreshLabels() {
+      document.getElementById('lbl-r1').textContent = fmtO0(V.r1);
+      document.getElementById('lbl-r2').textContent = fmtO0(V.r2);
+      document.getElementById('lbl-rc').textContent = fmtO0(V.rc);
+      document.getElementById('lbl-re').textContent = fmtO0(V.re);
+      document.getElementById('vccValue').textContent = V.vcc + 'V';
+      document.getElementById('panelVoltLabel').textContent = V.vcc + ' V';
+      const mt = document.getElementById('modalVoltLabel');
+      if (mt) mt.textContent = `Circuit Diagram — ${V.vcc} V Supply`;
+      updateQ7Question();
+    }
+    function setMode(mode) {
+      quizMode = mode;
+      V = (mode === 'randomise') ? randomValues() : { ...EXAMPLE_SETS[mode] };
+      recompute();
+      refreshLabels();
+      ['example1', 'example2', 'example3', 'randomise'].forEach(m => {
+        const b = document.getElementById('mode' + m.charAt(0).toUpperCase() + m.slice(1));
+        if (b) b.classList.toggle('active', m === mode);
+      });
+      resetQuiz();
+    }
+
+    const Q = {};
+    let cur = 'q1';
+
+    function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+    function buildQ1Options() {
+      // correct: VCC * R2/(R1+R2)
+      // distractors: ratio swapped, assumed midpoint, forgot the divider entirely
+      return shuffle([
+        { label: fmtV(VB), type: 'correct' },
+        { label: fmtV(V.vcc * V.r1 / (V.r1 + V.r2)), type: 'wrong' },
+        { label: fmtV(V.vcc / 2), type: 'wrong' },
+        { label: fmtV(V.vcc), type: 'wrong' },
+      ]);
+    }
+    function buildQ2Options() {
+      // correct: VB - 0.7
+      // distractors: sign error, forgot the VBE drop, wrong VBE assumption (germanium-like 0.3V)
+      return shuffle([
+        { label: fmtV(VE), type: 'correct' },
+        { label: fmtV(VB + VBE), type: 'wrong' },
+        { label: fmtV(VB), type: 'wrong' },
+        { label: fmtV(VB - 0.3), type: 'wrong' },
+      ]);
+    }
+    function buildQ3Options() {
+      // correct: VE / RE
+      // distractors: wrong resistor, wrong voltage (VB instead of VE), wrong reference (VCC-VE)
+      return shuffle([
+        { label: fmtA(IE), type: 'correct' },
+        { label: fmtA(VE / V.rc), type: 'wrong' },
+        { label: fmtA(VB / V.re), type: 'wrong' },
+        { label: fmtA((V.vcc - VE) / V.re), type: 'wrong' },
+      ]);
+    }
+    function buildQ4Options() {
+      // correct: VCC - IE*RC
+      // distractors: wrong resistor (RE), forgot to subtract from VCC, ignored RC drop entirely
+      return shuffle([
+        { label: fmtV(VC), type: 'correct' },
+        { label: fmtV(V.vcc - IE * V.re), type: 'wrong' },
+        { label: fmtV(IE * V.rc), type: 'wrong' },
+        { label: fmtV(V.vcc - VE), type: 'wrong' },
+      ]);
+    }
+    function buildQ5Options() {
+      // correct: VC - VE
+      // distractors: summed instead of subtracted, confused with V_RC (VCC-VC), used VCC instead of VC
+      return shuffle([
+        { label: fmtV(VCE), type: 'correct' },
+        { label: fmtV(VC + VE), type: 'wrong' },
+        { label: fmtV(V.vcc - VC), type: 'wrong' },
+        { label: fmtV(V.vcc - VE), type: 'wrong' },
+      ]);
+    }
+    function buildQ6Options() {
+      // correct: (VCC - IE*RE) / 2 — splits the leftover voltage evenly between RC and the transistor
+      // distractors: forgot the RE drop first, forgot to halve, ignored both adjustments
+      return shuffle([
+        { label: fmtV(VCE_ideal), type: 'correct' },
+        { label: fmtV(V.vcc / 2), type: 'wrong' },
+        { label: fmtV(V.vcc - IE * V.re), type: 'wrong' },
+        { label: fmtV(V.vcc), type: 'wrong' },
+      ]);
+    }
+    function buildQ7Options() {
+      // All four options genuinely land V_CE at (a) centred Q-point — see
+      // calcAdjustmentTargets() for the derivation of each target value and
+      // why only R_C does it without disturbing I_E. Direction words
+      // (Increase/Decrease) are derived from the target vs the current value,
+      // so they're correct whichever side of ideal this circuit sits on.
+      const T = calcAdjustmentTargets();
+      const dir = (target, baseline) => target > baseline ? 'Increase' : 'Decrease';
+      return shuffle([
+        { label: `${dir(T.rcTarget, V.rc)} R<sub>C</sub> to ${fmtO0(T.rcTarget)}`, type: 'correct' },
+        { label: `${dir(T.r2Target, V.r2)} R2 to ${fmtO0(T.r2Target)}`, type: 'wrong' },
+        { label: `${dir(T.r1Target, V.r1)} R1 to ${fmtO0(T.r1Target)}`, type: 'wrong' },
+        { label: `${dir(T.reTarget, V.re)} R<sub>E</sub> to ${fmtO0(T.reTarget)}`, type: 'wrong' },
+      ]);
+    }
+
+    // ── engine: generic option rendering — leave unchanged ──
+    function renderOptions(qid) {
+      const st = Q[qid], c = document.getElementById(qid + 'Options'); c.innerHTML = '';
+      st.opts.forEach((opt, i) => {
+        const btn = document.createElement('button'); btn.className = 'option-btn';
+        btn.innerHTML = `<span class="option-letter">${LETTERS[i]}</span><span>${opt.label}</span>`;
+        btn.addEventListener('click', () => selectOption(qid, i));
+        c.appendChild(btn);
+      });
+    }
+    function selectOption(qid, i) {
+      if (Q[qid].ans) return;
+      Q[qid].sel = i;
+      document.getElementById(qid + 'Check').disabled = false;
+      document.querySelectorAll('#' + qid + 'Options .option-btn').forEach((b, idx) => b.classList.toggle('selected', idx === i));
+    }
+    function markOptions(qid, sel, cor, ok) {
+      document.querySelectorAll('#' + qid + 'Options .option-btn').forEach((btn, i) => {
+        btn.disabled = true;
+        if (i === cor) { btn.classList.remove('selected'); btn.classList.add('correct'); btn.innerHTML += `<span class="result-icon">✓</span>`; }
+        else if (i === sel && !ok) { btn.classList.remove('selected'); btn.classList.add('wrong'); btn.innerHTML += `<span class="result-icon">✗</span>`; }
+        else btn.classList.add('dimmed');
+      });
+    }
+    function setBanner(qid, ok, correctText) {
+      const banner = document.getElementById(qid + 'Banner');
+      document.getElementById(qid + 'Icon').textContent = ok ? '✓' : '✗';
+      if (ok) { banner.className = 'result-banner correct'; document.getElementById(qid + 'BannerText').innerHTML = `Correct! ${correctText}`; }
+      else { banner.className = 'result-banner wrong'; document.getElementById(qid + 'BannerText').innerHTML = `The correct answer is ${correctText}`; }
+    }
+
+    // ── circuit-specific SVG annotation show/hide ──
+    function showVB() { document.getElementById('vbValue').textContent = fmtV(VB); document.getElementById('vbInd').setAttribute('display', 'inline'); }
+    function hideVB() { document.getElementById('vbInd').setAttribute('display', 'none'); }
+    function showVE() { document.getElementById('veValue').textContent = fmtV(VE); document.getElementById('veInd').setAttribute('display', 'inline'); }
+    function hideVE() { document.getElementById('veInd').setAttribute('display', 'none'); }
+    function showIE() { document.getElementById('ieValue').textContent = fmtA(IE); document.getElementById('ieInd').setAttribute('display', 'inline'); }
+    function hideIE() { document.getElementById('ieInd').setAttribute('display', 'none'); }
+    function showVC() { document.getElementById('vcValue').textContent = fmtV(VC); document.getElementById('vcInd').setAttribute('display', 'inline'); }
+    function hideVC() { document.getElementById('vcInd').setAttribute('display', 'none'); }
+    function showVCE() { document.getElementById('vceValue').textContent = fmtV(VCE); document.getElementById('vceInd').setAttribute('display', 'inline'); }
+    function hideVCE() { document.getElementById('vceInd').setAttribute('display', 'none'); }
+    function showIdealVCE() {
+      document.getElementById('idealVceValue').textContent = fmtV(VCE_ideal);
+      document.getElementById('idealVceInd').setAttribute('display', 'inline');
+    }
+    function hideIdealVCE() { document.getElementById('idealVceInd').setAttribute('display', 'none'); }
+
+    // ── Circuit state table — one row per question, cumulative reveal ──
+    const CIRCUIT_STATES = [
+      {
+        enter: { vb: false, ve: false, ie: false, vc: false, vce: false, idealVce: false },
+        reveal: { vb: true, ve: false, ie: false, vc: false, vce: false, idealVce: false }
+      }, // Q1 → V_B
+      {
+        enter: { vb: true, ve: false, ie: false, vc: false, vce: false, idealVce: false },
+        reveal: { vb: true, ve: true, ie: false, vc: false, vce: false, idealVce: false }
+      }, // Q2 → V_E
+      {
+        enter: { vb: true, ve: true, ie: false, vc: false, vce: false, idealVce: false },
+        reveal: { vb: true, ve: true, ie: true, vc: false, vce: false, idealVce: false }
+      }, // Q3 → I_E
+      {
+        enter: { vb: true, ve: true, ie: true, vc: false, vce: false, idealVce: false },
+        reveal: { vb: true, ve: true, ie: true, vc: true, vce: false, idealVce: false }
+      }, // Q4 → V_C
+      {
+        enter: { vb: true, ve: true, ie: true, vc: true, vce: false, idealVce: false },
+        reveal: { vb: true, ve: true, ie: true, vc: true, vce: true, idealVce: false }
+      }, // Q5 → V_CE
+      {
+        enter: { vb: true, ve: true, ie: true, vc: true, vce: true, idealVce: false },
+        reveal: { vb: true, ve: true, ie: true, vc: true, vce: true, idealVce: true }
+      }, // Q6 → V_CE(ideal)
+      {
+        enter: { vb: true, ve: true, ie: true, vc: true, vce: true, idealVce: true },
+        reveal: { vb: true, ve: true, ie: true, vc: true, vce: true, idealVce: true }
+      }, // Q7 → conceptual (effect of RE) — no new diagram annotation
+    ];
+
+    function applyCircuitState(s) {
+      s.vb ? showVB() : hideVB();
+      s.ve ? showVE() : hideVE();
+      s.ie ? showIE() : hideIE();
+      s.vc ? showVC() : hideVC();
+      s.vce ? showVCE() : hideVCE();
+      s.idealVce ? showIdealVCE() : hideIdealVCE();
+    }
+
+    const QUESTION_BUILDERS = [
+      buildQ1Options, buildQ2Options, buildQ3Options,
+      buildQ4Options, buildQ5Options, buildQ6Options, buildQ7Options,
+    ];
+
+    function checkQ1() {
+      const st = Q.q1; if (st.ans || st.sel === null) return; st.ans = true;
+      const ok = st.sel === st.cor;
+      markOptions('q1', st.sel, st.cor, ok);
+      setBanner('q1', ok, `V<sub>B</sub> = ${fmtV(VB)}`);
+      showQ1Working();
+      applyCircuitState(CIRCUIT_STATES[0].reveal);
+      advanceQuestion(1);
+    }
+    function showQ1Working() {
+      const box = document.getElementById('q1Working');
+      box.className = 'working-box visible';
+      document.getElementById('q1WorkingContent').innerHTML = `
+    <div class="wline">Since the base draws very little current compared to the divider current flowing through R1 and R2, treat R1–R2 as a simple voltage divider from V<sub>CC</sub> to ground:</div>
+    <div class="wlabel">Formula:</div>
+    <div class="formula-row"><span class="cv">V<sub>B</sub></span> = V<sub>CC</sub> × ${frac('R2', 'R1 + R2')}</div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cv">V<sub>B</sub></span> = ${V.vcc} V × ${frac(fmtO0(V.r2), fmtO0(V.r1) + ' + ' + fmtO0(V.r2))}</div>
+    <div class="wline total"><span class="cv">V<sub>B</sub></span> = <span class="cr">${fmtV(VB)}</span></div>`;
+    }
+
+    function checkQ2() {
+      const st = Q.q2; if (st.ans || st.sel === null) return; st.ans = true;
+      const ok = st.sel === st.cor;
+      markOptions('q2', st.sel, st.cor, ok);
+      setBanner('q2', ok, `V<sub>E</sub> = ${fmtV(VE)}`);
+      showQ2Working();
+      applyCircuitState(CIRCUIT_STATES[1].reveal);
+      advanceQuestion(2);
+    }
+    function showQ2Working() {
+      const box = document.getElementById('q2Working');
+      box.className = 'working-box visible';
+      document.getElementById('q2WorkingContent').innerHTML = `
+    <div class="wline">A forward-biased silicon base-emitter junction drops approximately <b>0.7 V</b>. The emitter voltage is the base voltage minus this drop:</div>
+    <div class="formula-row"><span class="cv">V<sub>E</sub></span> = V<sub>B</sub> − V<sub>BE</sub></div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cv">V<sub>E</sub></span> = ${fmtV(VB)} − 0.7 V</div>
+    <div class="wline total"><span class="cv">V<sub>E</sub></span> = <span class="cr">${fmtV(VE)}</span></div>`;
+    }
+
+    function checkQ3() {
+      const st = Q.q3; if (st.ans || st.sel === null) return; st.ans = true;
+      const ok = st.sel === st.cor;
+      markOptions('q3', st.sel, st.cor, ok);
+      setBanner('q3', ok, `I<sub>E</sub> = ${fmtA(IE)}`);
+      showQ3Working();
+      applyCircuitState(CIRCUIT_STATES[2].reveal);
+      advanceQuestion(3);
+    }
+    function showQ3Working() {
+      const box = document.getElementById('q3Working');
+      box.className = 'working-box visible';
+      document.getElementById('q3WorkingContent').innerHTML = `
+    <div class="wline">Apply Ohm's law to R<sub>E</sub>, using the emitter voltage found in Q2:</div>
+    <div class="formula-row"><span class="cc">I<sub>E</sub></span> = ${frac('V<sub>E</sub>', 'R<sub>E</sub>')}</div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cc">I<sub>E</sub></span> = ${frac(fmtV(VE), fmtO0(V.re))}</div>
+    <div class="wline total"><span class="cc">I<sub>E</sub></span> = <span class="cr">${fmtA(IE)}</span></div>`;
+    }
+
+    function checkQ4() {
+      const st = Q.q4; if (st.ans || st.sel === null) return; st.ans = true;
+      const ok = st.sel === st.cor;
+      markOptions('q4', st.sel, st.cor, ok);
+      setBanner('q4', ok, `V<sub>C</sub> = ${fmtV(VC)}`);
+      showQ4Working();
+      applyCircuitState(CIRCUIT_STATES[3].reveal);
+      advanceQuestion(4);
+    }
+    function showQ4Working() {
+      const box = document.getElementById('q4Working');
+      box.className = 'working-box visible';
+      document.getElementById('q4WorkingContent').innerHTML = `
+    <div class="wline">Base current is small, so assume <span class="cbjt">I<sub>C</sub> ≈ I<sub>E</sub></span> = ${fmtA(IE)}. Find the voltage dropped across R<sub>C</sub>, then subtract it from V<sub>CC</sub>:</div>
+    <div class="formula-row">V<sub>RC</sub> = I<sub>C</sub> × R<sub>C</sub> = ${fmtA(IE)} × ${fmtO0(V.rc)} = <b>${fmtV(VRC)}</b></div>
+    <div class="wlabel">Formula:</div>
+    <div class="formula-row"><span class="cv">V<sub>C</sub></span> = V<sub>CC</sub> − V<sub>RC</sub></div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cv">V<sub>C</sub></span> = ${V.vcc} V − ${fmtV(VRC)}</div>
+    <div class="wline total"><span class="cv">V<sub>C</sub></span> = <span class="cr">${fmtV(VC)}</span></div>`;
+    }
+
+    function checkQ5() {
+      const st = Q.q5; if (st.ans || st.sel === null) return; st.ans = true;
+      const ok = st.sel === st.cor;
+      markOptions('q5', st.sel, st.cor, ok);
+      setBanner('q5', ok, `V<sub>CE</sub> = ${fmtV(VCE)}`);
+      showQ5Working();
+      applyCircuitState(CIRCUIT_STATES[4].reveal);
+      advanceQuestion(5);
+    }
+    function showQ5Working() {
+      const box = document.getElementById('q5Working');
+      box.className = 'working-box visible';
+      document.getElementById('q5WorkingContent').innerHTML = `
+    <div class="wline">V<sub>CE</sub> is the difference between the collector and emitter voltages, both measured with respect to ground:</div>
+    <div class="formula-row"><span class="cv">V<sub>CE</sub></span> = V<sub>C</sub> − V<sub>E</sub></div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cv">V<sub>CE</sub></span> = ${fmtV(VC)} − ${fmtV(VE)}</div>
+    <div class="wline total"><span class="cv">V<sub>CE</sub></span> = <span class="cr">${fmtV(VCE)}</span></div>`;
+    }
+
+    function checkQ6() {
+      const st = Q.q6; if (st.ans || st.sel === null) return; st.ans = true;
+      const ok = st.sel === st.cor;
+      markOptions('q6', st.sel, st.cor, ok);
+      setBanner('q6', ok, `V<sub>CE(ideal)</sub> = ${fmtV(VCE_ideal)}`);
+      showQ6Working();
+      applyCircuitState(CIRCUIT_STATES[5].reveal);
+      advanceQuestion(6);
+    }
+    function showQ6Working() {
+      const box = document.getElementById('q6Working');
+      box.className = 'working-box visible';
+      const st = qPointStatus();
+      const VERDICTS = {
+        centred: `the Q-point is <b style="color:var(--colour-ui-correct)">well-centred</b> (within ${Math.abs(st.diffPct).toFixed(0)}% of ideal) — roughly equal headroom for the output to swing either way before clipping.`,
+        cutoff: `V<sub>CE</sub> is <b style="color:var(--colour-ui-wrong)">higher than ideal</b> (+${st.diffPct.toFixed(0)}%) — the Q-point sits closer to cut-off, leaving less headroom for the output to swing upward before the transistor cuts off.`,
+        saturation: `V<sub>CE</sub> is <b style="color:var(--colour-ui-wrong)">lower than ideal</b> (${st.diffPct.toFixed(0)}%) — the Q-point sits closer to saturation, leaving less headroom for the output to swing downward before the transistor saturates.`
+      };
+      document.getElementById('q6WorkingContent').innerHTML = `
+    <div class="wline">For maximum symmetrical output swing before clipping, the Q-point should sit at the centre of the DC load line — splitting the voltage left over after R<sub>E</sub>'s drop evenly between R<sub>C</sub> and the transistor:</div>
+    <div class="wlabel">Formula:</div>
+    <div class="formula-row"><span class="cideal">V<sub>CE(ideal)</sub></span> = ${frac('V<sub>CC</sub> − I<sub>E</sub>R<sub>E</sub>', '2')}</div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cideal">V<sub>CE(ideal)</sub></span> = ${frac(`${V.vcc} V − (${fmtA(IE)} × ${fmtO0(V.re)})`, '2')}</div>
+    <div class="wline total"><span class="cideal">V<sub>CE(ideal)</sub></span> = <span class="cr">${fmtV(VCE_ideal)}</span></div>
+    <div class="wline" style="margin-top:.6rem">Comparing this to the actual <span class="cv">V<sub>CE</sub> = ${fmtV(VCE)}</span> found in Q5: ${VERDICTS[st.tag]}</div>`;
+    }
+
+    function checkQ7() {
+      const st = Q.q7; if (st.ans || st.sel === null) return; st.ans = true;
+      const ok = st.sel === st.cor;
+      markOptions('q7', st.sel, st.cor, ok);
+      const T = calcAdjustmentTargets();
+      const dir = (target, baseline) => target > baseline ? 'Increase' : 'Decrease';
+      setBanner('q7', ok, `${dir(T.rcTarget, V.rc)} R<sub>C</sub> to ${fmtO0(T.rcTarget)} — the only change that doesn't disturb I<sub>E</sub>.`);
+      showQ7Working();
+      applyCircuitState(CIRCUIT_STATES[6].reveal);
+      advanceQuestion(7);
+    }
+    function showQ7Working() {
+      const box = document.getElementById('q7Working');
+      box.className = 'working-box visible';
+      const T = calcAdjustmentTargets();
+      const dir = (target, baseline) => target > baseline ? 'Increase' : 'Decrease';
+      const ieChangePct = (T.ieViaRE - IE) / IE * 100;
+      document.getElementById('q7WorkingContent').innerHTML = `
+    <div class="wline">All four changes below can numerically land V<sub>CE</sub> on a centred Q-point — but they don't all get there the same way. R1, R2 and R<sub>E</sub> all set I<sub>E</sub> (directly or via V<sub>E</sub>), so touching any of them means redesigning the bias current just to reposition V<sub>CE</sub>. R<sub>C</sub> alone sits downstream of I<sub>E</sub> and only sets where V<sub>CE</sub> falls on the load line.</div>
+
+    <div class="step-label">R<sub>C</sub> — the correct lever</div>
+    <div class="wline">I<sub>E</sub> and V<sub>E</sub> don't depend on R<sub>C</sub> at all, so V<sub>CE(ideal)</sub> stays exactly the ${fmtV(VCE_ideal)} found in Q6. Solving V<sub>C</sub> − V<sub>E</sub> = V<sub>CE(ideal)</sub> for R<sub>C</sub>:</div>
+    <div class="formula-row"><span class="cideal">R<sub>C</sub></span> = ${frac('V<sub>CE(ideal)</sub>', 'I<sub>E</sub>')} = ${frac(fmtV(VCE_ideal), fmtA(IE))}</div>
+    <div class="wline total"><span class="cideal">R<sub>C</sub></span>: ${fmtO0(V.rc)} → <span class="cr">${dir(T.rcTarget, V.rc)} to ${fmtO0(T.rcTarget)}</span> &nbsp;<i>(I<sub>E</sub> stays at ${fmtA(IE)} — completely unchanged)</i></div>
+
+    <div class="step-label">R<sub>E</sub> — also reaches ${fmtV(VCE_ideal)}, but at a cost</div>
+    <div class="wline">V<sub>E</sub> is set by the base divider, not by R<sub>E</sub>, so this route also lands on the same V<sub>CE(ideal)</sub> = ${fmtV(VCE_ideal)}. But to get there, I<sub>E</sub> has to move from ${fmtA(IE)} to ${fmtA(T.ieViaRE)} — a ${Math.abs(ieChangePct).toFixed(0)}% ${ieChangePct >= 0 ? 'increase' : 'decrease'} in bias current, which also works against R<sub>E</sub>'s own job of stabilising I<sub>E</sub> against β and temperature drift.</div>
+    <div class="wline total">R<sub>E</sub>: ${fmtO0(V.re)} → <span style="color:var(--colour-ui-wrong)">${dir(T.reTarget, V.re)} to ${fmtO0(T.reTarget)}</span></div>
+
+    <div class="step-label">R1 or R2 — moves the goalposts too</div>
+    <div class="wline">Changing the base divider changes V<sub>E</sub>, which means V<sub>CE(ideal)</sub> itself shifts as you turn the knob. Instead of hitting ${fmtV(VCE_ideal)}, V<sub>CE</sub> and the (now-moving) ideal converge somewhere else entirely — <b>${fmtV(T.convergedVCE)}</b> — with I<sub>E</sub> shifting from ${fmtA(IE)} to ${fmtA(T.ieDiv)} along the way. This redesigns the whole bias point rather than just repositioning V<sub>CE</sub> within it.</div>
+    <div class="wline total">R2: ${fmtO0(V.r2)} → <span style="color:var(--colour-ui-wrong)">${dir(T.r2Target, V.r2)} to ${fmtO0(T.r2Target)}</span> &nbsp;or&nbsp; R1: ${fmtO0(V.r1)} → <span style="color:var(--colour-ui-wrong)">${dir(T.r1Target, V.r1)} to ${fmtO0(T.r1Target)}</span></div>`;
+    }
+
+    // ── navigation ──
+    function resetQuestion(qid) {
+      const st = Q[qid];
+      st.sel = null; st.ans = false;
+      renderOptions(qid);
+      document.getElementById(qid + 'Banner').className = 'result-banner';
+      document.getElementById(qid + 'Working').className = 'working-box';
+      const chk = document.getElementById(qid + 'Check'); chk.style.display = 'inline-block'; chk.disabled = true;
+      const nxt = document.getElementById(qid + 'Next'); if (nxt) nxt.style.display = 'none';
+    }
+    function backFromQ2() { resetQuestion('q1'); showQuestion(1); }
+    function backFromQ3() { resetQuestion('q2'); showQuestion(2); }
+    function backFromQ4() { resetQuestion('q3'); showQuestion(3); }
+    function backFromQ5() { resetQuestion('q4'); showQuestion(4); }
+    function backFromQ6() { resetQuestion('q5'); showQuestion(5); }
+    function backFromQ7() { resetQuestion('q6'); showQuestion(6); }
+
+    function showSummary() {
+      cur = 'summary';
+      QIDS.forEach(q => document.getElementById(q + 'Panel').style.display = 'none');
+      document.getElementById('summaryPanel').style.display = 'block';
+      applyCircuitState(CIRCUIT_STATES[CIRCUIT_STATES.length - 1].reveal);
+      const vals = `<div class="summary-values">
+    <span style="color:var(--colour-supply);font-weight:bold">V<sub>CC</sub></span> = <span style="color:var(--colour-supply)">${V.vcc} V</span>&nbsp;&nbsp;&nbsp;
+    <span style="color:var(--colour-resistor-labels);font-weight:bold">R1</span> = <span style="color:var(--colour-resistor-labels)">${fmtO0(V.r1)}</span>&nbsp;&nbsp;
+    <span style="color:var(--colour-resistor-labels);font-weight:bold">R2</span> = <span style="color:var(--colour-resistor-labels)">${fmtO0(V.r2)}</span>&nbsp;&nbsp;
+    <span style="color:var(--colour-resistor-labels);font-weight:bold">RC</span> = <span style="color:var(--colour-resistor-labels)">${fmtO0(V.rc)}</span>&nbsp;&nbsp;
+    <span style="color:var(--colour-resistor-labels);font-weight:bold">RE</span> = <span style="color:var(--colour-resistor-labels)">${fmtO0(V.re)}</span>
+  </div>`;
+      const items = QIDS.map((qid, i) => {
+        const st = Q[qid];
+        const qtext = document.querySelector('#' + qid + 'Panel .q-text').innerHTML;
+        const ans = (st.sel != null && st.opts[st.sel]) ? st.opts[st.sel].label : '—';
+        const ok = st.sel === st.cor;
+        const colour = ok ? 'var(--colour-ui-correct)' : '#ff3366';
+        const mark = ok ? '✓' : '✗';
+        const working = document.getElementById(qid + 'WorkingContent').innerHTML;
+        return `<div class="summary-item">
+      <div class="summary-item-head"><span class="summary-qnum">Q${i + 1}</span><span class="summary-question">${qtext}</span></div>
+      <div class="summary-answer" style="color:${colour}">You answered: ${ans} &nbsp; ${mark}</div>
+      <div class="working-box visible">${working}</div>
+    </div>`;
+      }).join('');
+      document.getElementById('summaryContent').innerHTML = vals + items;
+      QIDS.forEach(q => { const d = document.getElementById('dot-' + q); if (d) d.className = 'progress-dot done'; });
+      document.getElementById('progressLabel').textContent = 'Complete';
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // END CIRCUIT SIMULATION
+    // ══════════════════════════════════════════════════════════════════════
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUIZ ENGINE — generic, unchanged from the resistor-quiz template
+    // ══════════════════════════════════════════════════════════════════════
+
+    function updateProgress() {
+      QIDS.forEach(q => {
+        const d = document.getElementById('dot-' + q); if (!d) return;
+        d.className = 'progress-dot';
+        if (q === cur) d.classList.add('active'); else if (Q[q].ans) d.classList.add('done');
+      });
+      const n = QIDS.indexOf(cur) + 1;
+      const lbl = document.getElementById('progressLabel'); if (lbl && n > 0) lbl.textContent = n + ' / ' + QUIZ_QUESTION_COUNT;
+    }
+
+    function advanceQuestion(n) {
+      const qid = 'q' + n;
+      document.getElementById(qid + 'Check').style.display = 'none';
+      const isLast = (n === QUIZ_QUESTION_COUNT);
+      document.getElementById(qid + (isLast ? 'Summary' : 'Next')).style.display = 'inline-block';
+      updateProgress();
+    }
+
+    function showQuestion(n) {
+      const qid = 'q' + n;
+      cur = qid;
+      QIDS.forEach(q => document.getElementById(q + 'Panel').style.display = 'none');
+      document.getElementById('summaryPanel').style.display = 'none';
+      document.getElementById(qid + 'Panel').style.display = 'flex';
+      const s = Q[qid].ans ? CIRCUIT_STATES[n - 1].reveal : CIRCUIT_STATES[n - 1].enter;
+      applyCircuitState(s);
+      updateProgress();
+    }
+
+    function resetQuiz() {
+      QIDS.forEach((qid, i) => {
+        const opts = QUESTION_BUILDERS[i]();
+        Q[qid] = { sel: null, ans: false, cor: opts.findIndex(o => o.type === 'correct'), opts };
+        renderOptions(qid);
+        document.getElementById(qid + 'Banner').className = 'result-banner';
+        document.getElementById(qid + 'Working').className = 'working-box';
+        const chk = document.getElementById(qid + 'Check');
+        if (chk) { chk.style.display = 'inline-block'; chk.disabled = true; }
+        const isLast = i === QIDS.length - 1;
+        const adv = document.getElementById(qid + (isLast ? 'Summary' : 'Next'));
+        if (adv) adv.style.display = 'none';
+      });
+      document.getElementById('summaryPanel').style.display = 'none';
+      showQuestion(1);
+    }
+
+    // ── zoom modal ──
+    function openModal() {
+      const src = document.getElementById('circuitSvg'), dst = document.getElementById('modalSvg');
+      dst.innerHTML = src.innerHTML; dst.setAttribute('viewBox', src.getAttribute('viewBox'));
+      document.getElementById('diagramModal').classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeModal() {
+      document.getElementById('diagramModal').classList.remove('open');
+      document.getElementById('modalSvg').innerHTML = '';
+      document.body.style.overflow = '';
+    }
+    function handleModalClick(e) { if (e.target.closest('.modal-close')) return; closeModal(); }
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+    setMode('example1');
+
+    /* ─── DEV: jump straight to a question for testing ──────────────────────
+       Console:   jump(5)            → go to Q5
+                  jump(5, true)      → go to Q5 already answered (banner + reveal)
+       URL:       ?q=5               → loads straight on Q5
+                  ?q=5&ans=1         → loads on Q5, answered
+                  ?q=s               → loads straight on the summary (see jumpToSummary below) */
+    function jump(n, answered) {
+      if (n < 1 || n > QUIZ_QUESTION_COUNT) { console.warn('jump: no question', n); return; }
+      showQuestion(n);
+      if (answered) {
+        const st = Q['q' + n];
+        if (st) { st.sel = st.cor; }
+        const check = window['checkQ' + n];
+        if (typeof check === 'function') check();
+      }
+    }
+    window.jump = jump;
+
+    /* ─── DEV: jump straight to the summary, auto-answering every question ──
+       (correctly, so the summary has real banners/workings to review) ────
+       Console:   jumpToSummary()
+       URL:       ?q=s */
+    function jumpToSummary() {
+      for (let i = 1; i <= QUIZ_QUESTION_COUNT; i++) {
+        const st = Q['q' + i];
+        if (!st || st.ans) continue;
+        st.sel = st.cor;
+        const check = window['checkQ' + i];
+        if (typeof check === 'function') check();
+      }
+      showSummary();
+    }
+    window.jumpToSummary = jumpToSummary;
+
+    /* ─── DEV: xy ruler overlay, for lining up SVG coordinates by eye ────────
+       Console:   setXY(1) / setXY(0)     URL: ?xy=1 */
+    function buildXYRuler() {
+      const g = document.getElementById('xyRuler');
+      if (g.dataset.built) return;
+      g.dataset.built = '1';
+      const vb = document.getElementById('circuitSvg').viewBox.baseVal;
+      const W = vb.width, H = vb.height;
+      const hy = H - 10, vx = 10, col = '#ff00ff';
+      let svg = `<line x1="0" y1="${hy}" x2="${W}" y2="${hy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+      for (let x = 0; x <= W; x += 10) {
+        const major = (x % 50 === 0), len = major ? 10 : 5;
+        svg += `<line x1="${x}" y1="${hy - len}" x2="${x}" y2="${hy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+        if (major) svg += `<text x="${x}" y="${hy - 13}" fill="${col}" font-size="8" text-anchor="middle">${x}</text>`;
+      }
+      svg += `<line x1="${vx}" y1="0" x2="${vx}" y2="${H}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+      for (let y = 0; y <= H; y += 10) {
+        const major = (y % 50 === 0), len = major ? 10 : 5;
+        svg += `<line x1="${vx}" y1="${y}" x2="${vx + len}" y2="${y}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+        if (major) svg += `<text x="${vx + 13}" y="${y + 3}" fill="${col}" font-size="8" text-anchor="start">${y}</text>`;
+      }
+      g.innerHTML = svg;
+    }
+    function setXY(on) {
+      if (on) buildXYRuler();
+      document.getElementById('xyRuler').setAttribute('display', on ? 'inline' : 'none');
+    }
+    window.setXY = setXY;
+
+    {
+      const p = new URLSearchParams(location.search);
+      const rKeys = ['vcc', 'r1', 'r2', 'rc', 're'];
+      if (rKeys.every(k => p.has(k))) {
+        const vals = {}; rKeys.forEach(k => vals[k] = +p.get(k));
+        quizMode = 'custom'; V = vals; recompute(); refreshLabels();
+        ['example1', 'example2', 'example3', 'randomise'].forEach(m => {
+          const b = document.getElementById('mode' + m.charAt(0).toUpperCase() + m.slice(1));
+          if (b) b.classList.toggle('active', false);
+        });
+        resetQuiz();
+      }
+      if (p.has('q')) { if (p.get('q') === 's') jumpToSummary(); else jump(+p.get('q'), p.has('ans')); }
+      if (p.has('xy')) setXY(+p.get('xy') === 1);
+    }
+    /* ──────────────────────────────────────────────────────────────────────── */
+  </script>
+</body>
+
+</html>
