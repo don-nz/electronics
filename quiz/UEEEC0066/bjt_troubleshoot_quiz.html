@@ -416,6 +416,9 @@
     .cgnd {
       color: var(--colour-ground);
     }
+    .cvce {
+      color: var(--colour-vce);
+    }
 
     .btn-row {
       display: flex;
@@ -1037,6 +1040,17 @@
                   font-size="12">A</text>
               </g>
 
+              <!-- ════════════════════ VCE INDICATOR (revealed on Q1) ════════════════════ -->
+
+              <g id="vceInd" transform="translate(350,227)">
+                <text x="20" y="20" style="fill: var(--colour-voltage-label)" text-anchor="start" font-size="14"
+                  font-weight="bold">V<tspan baseline-shift="sub" font-size="10">CE</tspan></text>
+                <text x="20" y="45" text-anchor="start" font-size="15" font-weight="bold">
+                  <tspan id="vceNum" style="fill: var(--colour-text)">?</tspan>
+                  <tspan id="vceUnit" style="fill: var(--colour-text)" font-size="15" dx="2">V</tspan>
+                </text>
+              </g>
+
               <!-- ════════════════════ FAULT GHOSTS - IF NO CHANGE EMPTY ════════════════════ -->
 
               <g id="meterVBGhost" display="none" transform="translate(-10,310)">
@@ -1067,15 +1081,14 @@
                   <tspan id="ammeterGroupGhostDelta" font-size="14" dx="4"></tspan>
                 </text>
               </g>
-
-              <!-- ════════════════════ VCE INDICATOR (revealed on Q1) ════════════════════ -->
-
-              <g id="vceInd" display="none" transform="translate(350,232)">
-                <text x="20" y="20" style="fill: var(--colour-voltage-label)" text-anchor="start" font-size="14"
-                  font-weight="bold">V<tspan baseline-shift="sub" font-size="10">CE</tspan></text>
-                <text id="vceValue" x="20" y="40" style="fill: var(--colour-voltage-label)" text-anchor="start"
-                  font-size="13" font-weight="bold">—</text>
+              <g id="vceGhostGroup" display="none" transform="translate(440 ,270)">
+                <text id="vceGhostText" text-anchor="start" font-weight="bold" stroke-width="0.8"
+                  font-family="'Share Tech Mono',monospace">
+                  <tspan id="vceGhostArrow" font-size="22" font-weight="bold"></tspan>
+                  <tspan id="vceGhostDelta" font-size="14" dx="4"></tspan>
+                </text>
               </g>
+
 
             </g><!-- /circuitGroup -->
           </svg>
@@ -1323,8 +1336,7 @@
       markOptions('q1', st.sel, st.cor, ok);
       setBanner('q1', ok, `V<sub>CE</sub> = ${fmtV(VCE)}`);
       showQ1Working();
-      document.getElementById('vceValue').textContent = fmtV(VCE);
-      document.getElementById('vceInd').setAttribute('display', 'inline');
+      document.getElementById('vceNum').textContent = VCE.toFixed(2);
       document.getElementById('q1Check').style.display = 'none';
       document.getElementById('q1Next').style.display = 'inline-block';
       updateProgress();
@@ -1448,12 +1460,28 @@
         const d = m.fmt(Math.abs(fv - hv));
         addGhost(m.group, wentUp, (wentUp ? '+' : '−') + d.num + d.unit);
       });
-      document.getElementById('vceValue').textContent = fmtV(fc.vc - fc.ve);
+      const fVce = fc.vce;
+      document.getElementById('vceNum').textContent = fVce.toFixed(2);
+      const hVce = VCE;
+      const vceChanged = (hVce === 0 && fVce !== 0) || (hVce !== 0 && Math.abs(fVce - hVce) / Math.abs(hVce) > 0.0005);
+      if (vceChanged) {
+        const wentUp = fVce > hVce;
+        const clr = wentUp ? CLR_UP : CLR_DOWN;
+        const vceGhostText = document.getElementById('vceGhostText');
+        vceGhostText.setAttribute('fill', clr); vceGhostText.setAttribute('stroke', clr);
+        const delta = Math.abs(fVce - hVce).toFixed(2);
+        document.getElementById('vceGhostArrow').textContent = wentUp ? '↑' : '↓';
+        document.getElementById('vceGhostDelta').textContent = (wentUp ? '+' : '−') + delta + 'V';
+        document.getElementById('vceGhostGroup').setAttribute('display', 'inline');
+      } else {
+        document.getElementById('vceGhostGroup').setAttribute('display', 'none');
+      }
     }
     function clearFault() {
       refreshLabels(); // restores every meter to the healthy reading
       removeAllGhosts();
-      document.getElementById('vceValue').textContent = fmtV(VCE);
+      document.getElementById('vceNum').textContent = (Q.q1 && Q.q1.ans) ? VCE.toFixed(2) : '?';
+      document.getElementById('vceGhostGroup').setAttribute('display', 'none');
     }
 
     function faultVerb(type) { return type === 'high' ? 'gone high' : 'gone open'; }
@@ -1516,52 +1544,87 @@
       r1_high: (h, f, fault) => `
     <div class="wlabel">Voltage divider (with the faulted <span class="cres">R<sub>1</sub></span>):</div>
     <div class="formula-row"><span class="cv">V<sub>B</sub></span> = <span class="csup">V<sub>CC</sub></span> × ${frac('<span class="cres">R2</span>', '<span class="cres">R<sub>1</sub></span> + <span class="cres">R2</span>')}</div>
-    <div class="formula-row"><span class="cv">V<sub>B</sub></span> = ${V.vcc} V × ${frac(fmtO0(V.r2), fmtO0(V.r1 * fault.mult) + ' + ' + fmtO0(V.r2))} = <span class="cr">${fmtV(f.vb)}</span></div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cv">V<sub>B</sub></span> = ${V.vcc} V × ${frac(fmtO0(V.r2), fmtO0(V.r1 * fault.mult) + ' + ' + fmtO0(V.r2))}</div>
+    <div class="wline total"><span class="cv">V<sub>B</sub></span> = <span class="cr">${fmtV(f.vb)}</span></div>
     <div class="wline">Less of <span class="csup">V<sub>CC</sub></span> now reaches the base, so <span class="cv">V<sub>B</sub></span> falls from ${fmtV(h.vb)}.</div>
     <div class="wlabel">Emitter voltage:</div>
     <div class="formula-row"><span class="cv">V<sub>E</sub></span> = <span class="cv">V<sub>B</sub></span> − <span class="cbjt">V<sub>BE</sub>(on)</span></div>
-    <div class="formula-row"><span class="cv">V<sub>E</sub></span> = ${fmtV(f.vb)} − 0.7 V = <span class="cr">${fmtV(f.ve)}</span></div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cv">V<sub>E</sub></span> = ${fmtV(f.vb)} − 0.7 V</div>
+    <div class="wline total"><span class="cv">V<sub>E</sub></span> = <span class="cr">${fmtV(f.ve)}</span></div>
     <div class="wlabel">Emitter current:</div>
     <div class="formula-row"><span class="cc">I<sub>E</sub></span> = ${frac('<span class="cv">V<sub>E</sub></span>', '<span class="cres">R<sub>E</sub></span>')}</div>
-    <div class="formula-row"><span class="cc">I<sub>E</sub></span> = ${frac(fmtV(f.ve), fmtO0(V.re))} = <span class="cr">${fmtA(f.ie)}</span> — the ammeter's down arrow</div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cc">I<sub>E</sub></span> = ${frac(fmtV(f.ve), fmtO0(V.re))}</div>
+    <div class="wline total"><span class="cc">I<sub>E</sub></span> = <span class="cr">${fmtA(f.ie)}</span> — the ammeter's down arrow</div>
     <div class="wlabel">Collector voltage:</div>
     <div class="formula-row"><span class="cv">V<sub>C</sub></span> = <span class="csup">V<sub>CC</sub></span> − <span class="cc">I<sub>E</sub></span><span class="cres">R<sub>C</sub></span></div>
-    <div class="formula-row"><span class="cv">V<sub>C</sub></span> = ${V.vcc} V − (${fmtA(f.ie)} × ${fmtO0(V.rc)}) = <span class="cr">${fmtV(f.vc)}</span></div>`,
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cv">V<sub>C</sub></span> = ${V.vcc} V − (${fmtA(f.ie)} × ${fmtO0(V.rc)})</div>
+    <div class="wline total"><span class="cv">V<sub>C</sub></span> = <span class="cr">${fmtV(f.vc)}</span></div>
+    <div class="wlabel">Collector-emitter voltage:</div>
+    <div class="formula-row"><span class="cvce">V<sub>CE</sub></span> = <span class="cv">V<sub>C</sub></span> − <span class="cv">V<sub>E</sub></span></div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cvce">V<sub>CE</sub></span> = ${fmtV(f.vc)} − ${fmtV(f.ve)}</div>
+    <div class="wline total"><span class="cvce">V<sub>CE</sub></span> = <span class="cr">${fmtV(f.vce)}</span></div>`,
 
       r1_open: (h, f) => `
     <div class="wlabel">Voltage divider (<span class="cres">R<sub>1</sub></span> open = infinite resistance):</div>
     <div class="formula-row"><span class="cv">V<sub>B</sub></span> = <span class="csup">V<sub>CC</sub></span> × ${frac('<span class="cres">R2</span>', '<span class="cres">R<sub>1</sub></span> + <span class="cres">R2</span>')} = <span class="csup">V<sub>CC</sub></span> × ${frac('<span class="cres">R2</span>', '∞')} → <span class="cr">0.00 V</span></div>
     <div class="wline">With no path from <span class="csup">V<sub>CC</sub></span> to the base at all, <span class="cres">R<sub>2</sub></span> pulls it straight to <span class="cgnd">ground</span>, and with no forward bias across the base-emitter junction the transistor <b>cuts off</b> entirely.</div>
     <div class="wlabel">Emitter current (transistor off):</div>
-    <div class="formula-row"><span class="cc">I<sub>E</sub></span> = <span class="cr">${fmtA(f.ie)}</span> — the ammeter's down arrow</div>
+    <div class="wline total"><span class="cc">I<sub>E</sub></span> = <span class="cr">${fmtA(f.ie)}</span> — the ammeter's down arrow</div>
     <div class="wlabel">Emitter voltage (no current, no drop across <span class="cres">R<sub>E</sub></span>):</div>
     <div class="formula-row"><span class="cv">V<sub>E</sub></span> = <span class="cc">I<sub>E</sub></span> × <span class="cres">R<sub>E</sub></span></div>
-    <div class="formula-row"><span class="cv">V<sub>E</sub></span> = 0 A × ${fmtO0(V.re)} = <span class="cr">${fmtV(f.ve)}</span></div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cv">V<sub>E</sub></span> = 0 A × ${fmtO0(V.re)}</div>
+    <div class="wline total"><span class="cv">V<sub>E</sub></span> = <span class="cr">${fmtV(f.ve)}</span></div>
     <div class="wlabel">Collector voltage (no current, no drop across <span class="cres">R<sub>C</sub></span>):</div>
     <div class="formula-row"><span class="cv">V<sub>C</sub></span> = <span class="csup">V<sub>CC</sub></span> − <span class="cc">I<sub>E</sub></span><span class="cres">R<sub>C</sub></span></div>
-    <div class="formula-row"><span class="cv">V<sub>C</sub></span> = ${V.vcc} V − 0 V = <span class="cr">${fmtV(f.vc)}</span></div>`,
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cv">V<sub>C</sub></span> = ${V.vcc} V − 0 V</div>
+    <div class="wline total"><span class="cv">V<sub>C</sub></span> = <span class="cr">${fmtV(f.vc)}</span></div>
+    <div class="wlabel">Collector-emitter voltage:</div>
+    <div class="formula-row"><span class="cvce">V<sub>CE</sub></span> = <span class="cv">V<sub>C</sub></span> − <span class="cv">V<sub>E</sub></span></div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cvce">V<sub>CE</sub></span> = ${fmtV(f.vc)} − ${fmtV(f.ve)}</div>
+    <div class="wline total"><span class="cvce">V<sub>CE</sub></span> = <span class="cr">${fmtV(f.vce)}</span></div>`,
 
       r2_high: (h, f, fault) => `
     <div class="wlabel">Voltage divider (with the faulted <span class="cres">R<sub>2</sub></span>):</div>
     <div class="formula-row"><span class="cv">V<sub>B</sub></span> = <span class="csup">V<sub>CC</sub></span> × ${frac('<span class="cres">R2</span>', '<span class="cres">R<sub>1</sub></span> + <span class="cres">R2</span>')}</div>
-    <div class="formula-row"><span class="cv">V<sub>B</sub></span> = ${V.vcc} V × ${frac(fmtO0(V.r2 * fault.mult), fmtO0(V.r1) + ' + ' + fmtO0(V.r2 * fault.mult))} = <span class="cr">${fmtV(f.vb)}</span></div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cv">V<sub>B</sub></span> = ${V.vcc} V × ${frac(fmtO0(V.r2 * fault.mult), fmtO0(V.r1) + ' + ' + fmtO0(V.r2 * fault.mult))}</div>
+    <div class="wline total"><span class="cv">V<sub>B</sub></span> = <span class="cr">${fmtV(f.vb)}</span></div>
     <div class="wline">More of <span class="csup">V<sub>CC</sub></span> now reaches the base, so <span class="cv">V<sub>B</sub></span> rises from ${fmtV(h.vb)}.</div>
     <div class="wlabel">Emitter voltage:</div>
     <div class="formula-row"><span class="cv">V<sub>E</sub></span> = <span class="cv">V<sub>B</sub></span> − <span class="cbjt">V<sub>BE</sub>(on)</span></div>
-    <div class="formula-row"><span class="cv">V<sub>E</sub></span> = ${fmtV(f.vb)} − 0.7 V = <span class="cr">${fmtV(f.ve)}</span></div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cv">V<sub>E</sub></span> = ${fmtV(f.vb)} − 0.7 V</div>
+    <div class="wline total"><span class="cv">V<sub>E</sub></span> = <span class="cr">${fmtV(f.ve)}</span></div>
     <div class="wlabel">Emitter current:</div>
     <div class="formula-row"><span class="cc">I<sub>E</sub></span> = ${frac('<span class="cv">V<sub>E</sub></span>', '<span class="cres">R<sub>E</sub></span>')}</div>
-    <div class="formula-row"><span class="cc">I<sub>E</sub></span> = ${frac(fmtV(f.ve), fmtO0(V.re))} = <span class="cr">${fmtA(f.ie)}</span> — the ammeter's up arrow</div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cc">I<sub>E</sub></span> = ${frac(fmtV(f.ve), fmtO0(V.re))}</div>
+    <div class="wline total"><span class="cc">I<sub>E</sub></span> = <span class="cr">${fmtA(f.ie)}</span> — the ammeter's up arrow</div>
     <div class="wlabel">Collector voltage:</div>
     <div class="formula-row"><span class="cv">V<sub>C</sub></span> = <span class="csup">V<sub>CC</sub></span> − <span class="cc">I<sub>E</sub></span><span class="cres">R<sub>C</sub></span></div>
-    <div class="formula-row"><span class="cv">V<sub>C</sub></span> = ${V.vcc} V − (${fmtA(f.ie)} × ${fmtO0(V.rc)}) = <span class="cr">${fmtV(f.vc)}</span></div>`,
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cv">V<sub>C</sub></span> = ${V.vcc} V − (${fmtA(f.ie)} × ${fmtO0(V.rc)})</div>
+    <div class="wline total"><span class="cv">V<sub>C</sub></span> = <span class="cr">${fmtV(f.vc)}</span></div>
+    <div class="wlabel">Collector-emitter voltage:</div>
+    <div class="formula-row"><span class="cvce">V<sub>CE</sub></span> = <span class="cv">V<sub>C</sub></span> − <span class="cv">V<sub>E</sub></span></div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cvce">V<sub>CE</sub></span> = ${fmtV(f.vc)} − ${fmtV(f.ve)}</div>
+    <div class="wline total"><span class="cvce">V<sub>CE</sub></span> = <span class="cr">${fmtV(f.vce)}</span></div>`,
 
       r2_open: (h, f) => `
     <div class="wline">&nbsp;</div>
     <div class="wline">Because <span class="cres">R<sub>2</sub></span> has gone open, we can no longer use the voltage divider (<span class="cres">R<sub>1</sub></span>&nbsp;<span class="cres">R<sub>2</sub></span>) to calculate <span class="cv">V<sub>B</sub></span>.</div>
     <div class="wline">&nbsp;</div>
     <div class="wline">So how to verify it?</div>
-
+    <div class="wline step">Preliminaries: </div>
     <!--Assumptions -->
     <div class="wlabel">We are going to make 2 assumptions:</div>
     <div class="wline">1. <span class="cbjt">Q1</span> is in saturation.</div>
@@ -1611,56 +1674,107 @@
     <div class="wlabel">Collector voltage:</div>
     <div class="formula-row"><span class="cv">V<sub>C</sub></span> = <span class="cv">V<sub>E</sub></span> + <span class="cbjt">V<sub>CE(sat)</sub></span></div>
     <div class="formula-row"><span class="cv">V<sub>C</sub></span> = ${fmtV(f.ve)} + 0.2 V </div>
-    <div class="wline total"><span class="cv">V<sub>C</sub></span> = <span class="cr">${fmtV(f.vc)}</span></div>`,
+    <div class="wline total"><span class="cv">V<sub>C</sub></span> = <span class="cr">${fmtV(f.vc)}</span></div>
+    <div class="wlabel">Collector-emitter voltage:</div>
+    <div class="formula-row"><span class="cvce">V<sub>CE</sub></span> = <span class="cv">V<sub>C</sub></span> − <span class="cv">V<sub>E</sub></span></div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cvce">V<sub>CE</sub></span> = ${fmtV(f.vc)} − ${fmtV(f.ve)}</div>
+    <div class="wline total"><span class="cvce">V<sub>CE</sub></span> = <span class="cr">${fmtV(f.vce)}</span></div>`,
 
       rc_high: (h, f, fault) => `
     <div class="wlabel">Voltage divider — <span class="cres">R<sub>C</sub></span> doesn't appear in it at all:</div>
     <div class="formula-row"><span class="cv">V<sub>B</sub></span> = <span class="csup">V<sub>CC</sub></span> × ${frac('<span class="cres">R2</span>', '<span class="cres">R<sub>1</sub></span> + <span class="cres">R2</span>')}</div>
-    <div class="formula-row"><span class="cv">V<sub>B</sub></span> = ${V.vcc} V × ${frac(fmtO0(V.r2), fmtO0(V.r1) + ' + ' + fmtO0(V.r2))} = <span class="cr">${fmtV(f.vb)}</span> — unchanged</div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cv">V<sub>B</sub></span> = ${V.vcc} V × ${frac(fmtO0(V.r2), fmtO0(V.r1) + ' + ' + fmtO0(V.r2))}</div>
+    <div class="wline total"><span class="cv">V<sub>B</sub></span> = <span class="cr">${fmtV(f.vb)}</span> — unchanged</div>
     <div class="formula-row"><span class="cv">V<sub>E</sub></span> = <span class="cv">V<sub>B</sub></span> − <span class="cbjt">V<sub>BE</sub>(on)</span></div>
-    <div class="formula-row"><span class="cv">V<sub>E</sub></span> = ${fmtV(f.vb)} − 0.7 V = <span class="cr">${fmtV(f.ve)}</span> — unchanged</div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cv">V<sub>E</sub></span> = ${fmtV(f.vb)} − 0.7 V</div>
+    <div class="wline total"><span class="cv">V<sub>E</sub></span> = <span class="cr">${fmtV(f.ve)}</span> — unchanged</div>
     <div class="formula-row"><span class="cc">I<sub>E</sub></span> = ${frac('<span class="cv">V<sub>E</sub></span>', '<span class="cres">R<sub>E</sub></span>')}</div>
-    <div class="formula-row"><span class="cc">I<sub>E</sub></span> = ${frac(fmtV(f.ve), fmtO0(V.re))} = <span class="cr">${fmtA(f.ie)}</span> — unchanged, no ammeter movement at all</div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cc">I<sub>E</sub></span> = ${frac(fmtV(f.ve), fmtO0(V.re))}</div>
+    <div class="wline total"><span class="cc">I<sub>E</sub></span> = <span class="cr">${fmtA(f.ie)}</span> — unchanged, no ammeter movement at all</div>
     <div class="wlabel">Collector voltage (with the faulted <span class="cres">R<sub>C</sub></span>):</div>
     <div class="formula-row"><span class="cv">V<sub>C</sub></span> = <span class="csup">V<sub>CC</sub></span> − <span class="cc">I<sub>E</sub></span><span class="cres">R<sub>C</sub></span></div>
-    <div class="formula-row"><span class="cv">V<sub>C</sub></span> = ${V.vcc} V − (${fmtA(f.ie)} × ${fmtO0(V.rc * fault.mult)}) = <span class="cr">${fmtV(f.vc)}</span></div>`,
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cv">V<sub>C</sub></span> = ${V.vcc} V − (${fmtA(f.ie)} × ${fmtO0(V.rc * fault.mult)})</div>
+    <div class="wline total"><span class="cv">V<sub>C</sub></span> = <span class="cr">${fmtV(f.vc)}</span></div>
+    <div class="wlabel">Collector-emitter voltage:</div>
+    <div class="formula-row"><span class="cvce">V<sub>CE</sub></span> = <span class="cv">V<sub>C</sub></span> − <span class="cv">V<sub>E</sub></span></div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cvce">V<sub>CE</sub></span> = ${fmtV(f.vc)} − ${fmtV(f.ve)}</div>
+    <div class="wline total"><span class="cvce">V<sub>CE</sub></span> = <span class="cr">${fmtV(f.vce)}</span></div>`,
 
       rc_open: (h, f) => `
     <div class="wlabel">Voltage divider and emitter loop — both unaffected by <span class="cres">R<sub>C</sub></span>:</div>
     <div class="formula-row"><span class="cv">V<sub>B</sub></span> = <span class="csup">V<sub>CC</sub></span> × ${frac('<span class="cres">R2</span>', '<span class="cres">R<sub>1</sub></span> + <span class="cres">R2</span>')}</div>
-    <div class="formula-row"><span class="cv">V<sub>B</sub></span> = ${V.vcc} V × ${frac(fmtO0(V.r2), fmtO0(V.r1) + ' + ' + fmtO0(V.r2))} = <span class="cr">${fmtV(f.vb)}</span> — unchanged</div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cv">V<sub>B</sub></span> = ${V.vcc} V × ${frac(fmtO0(V.r2), fmtO0(V.r1) + ' + ' + fmtO0(V.r2))}</div>
+    <div class="wline total"><span class="cv">V<sub>B</sub></span> = <span class="cr">${fmtV(f.vb)}</span> — unchanged</div>
     <div class="formula-row"><span class="cv">V<sub>E</sub></span> = <span class="cv">V<sub>B</sub></span> − <span class="cbjt">V<sub>BE</sub>(on)</span></div>
-    <div class="formula-row"><span class="cv">V<sub>E</sub></span> = ${fmtV(f.vb)} − 0.7 V = <span class="cr">${fmtV(f.ve)}</span> — unchanged</div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cv">V<sub>E</sub></span> = ${fmtV(f.vb)} − 0.7 V</div>
+    <div class="wline total"><span class="cv">V<sub>E</sub></span> = <span class="cr">${fmtV(f.ve)}</span> — unchanged</div>
     <div class="wline">With <span class="cres">R<sub>C</sub></span> open, there's no path for collector current to flow at all:</div>
-    <div class="formula-row"><span class="cc">I<sub>E</sub></span> = <span class="cr">${fmtA(f.ie)}</span> — the ammeter's down arrow</div>
+    <div class="wline total"><span class="cc">I<sub>E</sub></span> = <span class="cr">${fmtA(f.ie)}</span> — the ammeter's down arrow</div>
     <div class="wlabel">Collector voltage (no current means no drop across <span class="cres">R<sub>C</sub></span>, however large):</div>
     <div class="formula-row"><span class="cv">V<sub>C</sub></span> = <span class="csup">V<sub>CC</sub></span> − <span class="cc">I<sub>E</sub></span><span class="cres">R<sub>C</sub></span></div>
-    <div class="formula-row"><span class="cv">V<sub>C</sub></span> = ${V.vcc} V − 0 V = <span class="cr">${fmtV(f.vc)}</span></div>`,
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cv">V<sub>C</sub></span> = ${V.vcc} V − 0 V</div>
+    <div class="wline total"><span class="cv">V<sub>C</sub></span> = <span class="cr">${fmtV(f.vc)}</span></div>
+    <div class="wlabel">Collector-emitter voltage:</div>
+    <div class="formula-row"><span class="cvce">V<sub>CE</sub></span> = <span class="cv">V<sub>C</sub></span> − <span class="cv">V<sub>E</sub></span></div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cvce">V<sub>CE</sub></span> = ${fmtV(f.vc)} − ${fmtV(f.ve)}</div>
+    <div class="wline total"><span class="cvce">V<sub>CE</sub></span> = <span class="cr">${fmtV(f.vce)}</span></div>`,
 
       re_high: (h, f, fault) => `
     <div class="wlabel">Voltage divider — <span class="cres">R<sub>E</sub></span> doesn't appear in it at all:</div>
     <div class="formula-row"><span class="cv">V<sub>B</sub></span> = <span class="csup">V<sub>CC</sub></span> × ${frac('<span class="cres">R2</span>', '<span class="cres">R<sub>1</sub></span> + <span class="cres">R2</span>')}</div>
-    <div class="formula-row"><span class="cv">V<sub>B</sub></span> = ${V.vcc} V × ${frac(fmtO0(V.r2), fmtO0(V.r1) + ' + ' + fmtO0(V.r2))} = <span class="cr">${fmtV(f.vb)}</span> — unchanged</div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cv">V<sub>B</sub></span> = ${V.vcc} V × ${frac(fmtO0(V.r2), fmtO0(V.r1) + ' + ' + fmtO0(V.r2))}</div>
+    <div class="wline total"><span class="cv">V<sub>B</sub></span> = <span class="cr">${fmtV(f.vb)}</span> — unchanged</div>
     <div class="formula-row"><span class="cv">V<sub>E</sub></span> = <span class="cv">V<sub>B</sub></span> − <span class="cbjt">V<sub>BE</sub>(on)</span></div>
-    <div class="formula-row"><span class="cv">V<sub>E</sub></span> = ${fmtV(f.vb)} − 0.7 V = <span class="cr">${fmtV(f.ve)}</span> — unchanged</div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cv">V<sub>E</sub></span> = ${fmtV(f.vb)} − 0.7 V</div>
+    <div class="wline total"><span class="cv">V<sub>E</sub></span> = <span class="cr">${fmtV(f.ve)}</span> — unchanged</div>
     <div class="wlabel">Emitter current (with the faulted <span class="cres">R<sub>E</sub></span>):</div>
     <div class="formula-row"><span class="cc">I<sub>E</sub></span> = ${frac('<span class="cv">V<sub>E</sub></span>', '<span class="cres">R<sub>E</sub></span>')}</div>
-    <div class="formula-row"><span class="cc">I<sub>E</sub></span> = ${frac(fmtV(f.ve), fmtO0(V.re * fault.mult))} = <span class="cr">${fmtA(f.ie)}</span> — the ammeter's down arrow</div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cc">I<sub>E</sub></span> = ${frac(fmtV(f.ve), fmtO0(V.re * fault.mult))}</div>
+    <div class="wline total"><span class="cc">I<sub>E</sub></span> = <span class="cr">${fmtA(f.ie)}</span> — the ammeter's down arrow</div>
     <div class="wlabel">Collector voltage:</div>
     <div class="formula-row"><span class="cv">V<sub>C</sub></span> = <span class="csup">V<sub>CC</sub></span> − <span class="cc">I<sub>E</sub></span><span class="cres">R<sub>C</sub></span></div>
-    <div class="formula-row"><span class="cv">V<sub>C</sub></span> = ${V.vcc} V − (${fmtA(f.ie)} × ${fmtO0(V.rc)}) = <span class="cr">${fmtV(f.vc)}</span></div>`,
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cv">V<sub>C</sub></span> = ${V.vcc} V − (${fmtA(f.ie)} × ${fmtO0(V.rc)})</div>
+    <div class="wline total"><span class="cv">V<sub>C</sub></span> = <span class="cr">${fmtV(f.vc)}</span></div>
+    <div class="wlabel">Collector-emitter voltage:</div>
+    <div class="formula-row"><span class="cvce">V<sub>CE</sub></span> = <span class="cv">V<sub>C</sub></span> − <span class="cv">V<sub>E</sub></span></div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cvce">V<sub>CE</sub></span> = ${fmtV(f.vc)} − ${fmtV(f.ve)}</div>
+    <div class="wline total"><span class="cvce">V<sub>CE</sub></span> = <span class="cr">${fmtV(f.vce)}</span></div>`,
 
       re_open: (h, f) => `
     <div class="wlabel">Voltage divider — unaffected by <span class="cres">R<sub>E</sub></span>:</div>
     <div class="formula-row"><span class="cv">V<sub>B</sub></span> = <span class="csup">V<sub>CC</sub></span> × ${frac('<span class="cres">R2</span>', '<span class="cres">R<sub>1</sub></span> + <span class="cres">R2</span>')}</div>
-    <div class="formula-row"><span class="cv">V<sub>B</sub></span> = ${V.vcc} V × ${frac(fmtO0(V.r2), fmtO0(V.r1) + ' + ' + fmtO0(V.r2))} = <span class="cr">${fmtV(f.vb)}</span> — unchanged</div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cv">V<sub>B</sub></span> = ${V.vcc} V × ${frac(fmtO0(V.r2), fmtO0(V.r1) + ' + ' + fmtO0(V.r2))}</div>
+    <div class="wline total"><span class="cv">V<sub>B</sub></span> = <span class="cr">${fmtV(f.vb)}</span> — unchanged</div>
     <div class="wline">With <span class="cres">R<sub>E</sub></span> open, there's no path for emitter current to <span class="cgnd">ground</span> at all:</div>
-    <div class="formula-row"><span class="cc">I<sub>E</sub></span> = <span class="cr">${fmtA(f.ie)}</span> — the ammeter's down arrow</div>
+    <div class="wline total"><span class="cc">I<sub>E</sub></span> = <span class="cr">${fmtA(f.ie)}</span> — the ammeter's down arrow</div>
     <div class="wlabel">Collector voltage (no current, no drop across <span class="cres">R<sub>C</sub></span>):</div>
     <div class="formula-row"><span class="cv">V<sub>C</sub></span> = <span class="csup">V<sub>CC</sub></span> − <span class="cc">I<sub>E</sub></span><span class="cres">R<sub>C</sub></span></div>
-    <div class="formula-row"><span class="cv">V<sub>C</sub></span> = ${V.vcc} V − 0 V = <span class="cr">${fmtV(f.vc)}</span></div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cv">V<sub>C</sub></span> = ${V.vcc} V − 0 V</div>
+    <div class="wline total"><span class="cv">V<sub>C</sub></span> = <span class="cr">${fmtV(f.vc)}</span></div>
+    <div class="wlabel">Collector-emitter voltage:</div>
+    <div class="formula-row"><span class="cvce">V<sub>CE</sub></span> = <span class="cv">V<sub>C</sub></span> − <span class="cv">V<sub>E</sub></span></div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="cvce">V<sub>CE</sub></span> = ${fmtV(f.vc)} − ${fmtV(f.ve)}</div>
+    <div class="wline total"><span class="cvce">V<sub>CE</sub></span> = <span class="cr">${fmtV(f.vce)}</span></div>
     <div class="wlabel">Emitter voltage (no current means no diode drop to subtract):</div>
-    <div class="formula-row"><span class="cv">V<sub>E</sub></span> ≈ <span class="cv">V<sub>B</sub></span> = <span class="cr">${fmtV(f.ve)}</span> — floats up to meet <span class="cv">V<sub>B</sub></span>, not <span class="cv">V<sub>B</sub></span> − 0.7 V</div>`,
+    <div class="wline total"><span class="cv">V<sub>E</sub></span> ≈ <span class="cv">V<sub>B</sub></span> = <span class="cr">${fmtV(f.ve)}</span> — floats up to meet <span class="cv">V<sub>B</sub></span>, not <span class="cv">V<sub>B</sub></span> − 0.7 V</div>`,
     };
 
     function showFaultWorking(qid, fault) {
@@ -1684,7 +1798,9 @@
       document.getElementById('q1Working').className = 'working-box';
       const chk = document.getElementById('q1Check'); chk.style.display = 'inline-block'; chk.disabled = true;
       document.getElementById('q1Next').style.display = 'none';
-      document.getElementById('vceInd').setAttribute('display', 'none');
+      document.getElementById('vceNum').textContent = '?';
+      document.getElementById('vceUnit').textContent = 'V';
+      document.getElementById('vceGhostGroup').setAttribute('display', 'none');
     }
 
     // Clears question n's built state entirely (including its assigned
