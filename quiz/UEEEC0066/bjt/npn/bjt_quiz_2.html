@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>BJT Voltage Divider Bias Quiz</title>
+  <title>BJT Voltage Divider Bias Quiz 2 — AC Coupled</title>
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
     rel="stylesheet">
   <link rel="icon" href="data:,">
@@ -14,45 +14,36 @@
       --colour-panel: #0f1420;
       --colour-border: #1e2d4a;
       --colour-ui-primary: #00e5ff;
-      /* interface accent — headings, selected option, Next button, active progress dot */
       --colour-ui-restart: #ff6b35;
-      /* Restart/Shuffle button only */
       --colour-ui-correct: #00ff99;
-      /* "correct answer" state — option/banner highlight, Check button, done progress dot */
       --colour-ui-wrong: #ff3d9a;
-      /* "wrong answer" state — option/banner highlight, modal close button */
       --colour-ui-summary: #a78bfa;
-      /* Summary button only */
       --colour-series: #00e5ff;
-      /* circuit wires */
       --colour-node: #f8f8f5;
-      /* test-point labels (B, C, E) at the transistor's terminals */
       --colour-resistor: #00e5ff;
-      /* default colour for resistor bodies (box outlines) — R1, R2, RC, RE are still plain resistors */
       --colour-resistor-labels: #e436de;
-      /* default colour for resistor names */
+      --colour-text: #e436de;
       --colour-bjt: #ffb454;
-      /* the transistor symbol itself (envelope + leads) — a different object to a resistor, so its own colour */
       --colour-bjt-labels: #ffb454;
-      /* Q1 name/part label, and BJT-specific assumptions (I_C ≈ I_E) referenced in workings */
       --colour-current: #39FF14;
-      /* current (I) indicator arrows/labels + "current" wording in question text */
       --colour-red: #ff3333;
       --colour-voltage-label: #ff6b6b;
-      /* voltage labels (V_B, V_E, V_C, V_CE) */
       --colour-meter-fill: #200808;
-      /* dark fill inside voltmeter circle */
       --colour-ammeter-fill: #081a08;
-      /* dark green fill inside ammeter circle */
       --colour-supply: #ff4444;
-      /* VCC rail */
       --colour-gnd: #2f8f5b;
-      /* GND rail symbol — darker green, distinct from the current indicator's neon green */
       --colour-ideal: #a78bfa;
-      /* the ideal/target Q-point benchmark (Q6) — a design reference, not something you'd read off a meter, so distinct from the red measured voltages */
       --colour-grid: rgba(0, 229, 255, 0.06);
       --colour-text: #c8d8e8;
       --colour-label: #5a7a9a;
+      --colour-capacitor: #3d7dff;
+      --colour-capacitor-labels: #3d7dff;
+      --colour-scope: #a6aebe;
+      --colour-scope-labels: #a6aebe;
+      --colour-scope-fill: #200808;
+      --colour-signal: #ffd166;
+      --colour-signal-labels: #ffd166;
+      --colour-gain: #a78bfa;
     }
 
     * {
@@ -109,7 +100,11 @@
     @media(min-width:900px) {
       .quiz-wrap {
         display: grid;
-        grid-template-columns: minmax(340px, 52%) 1fr;
+        /* Circuit viewBox is 700x560 (wider than Quiz 1's 480x560, to fit the AC
+           source/coupling caps either side), so it needs a wider column — a fixed
+           760px cap, not a %, so it renders at roughly the same on-screen HEIGHT
+           as Quiz 1's circuit rather than staying narrower and looking squashed. */
+        grid-template-columns: minmax(340px, 760px) 1fr;
         gap: 1.2rem;
         align-items: start;
       }
@@ -350,7 +345,7 @@
       font-size: .8rem;
       line-height: 1.7;
     }
-
+    
     .working-total {
       margin-top: .5rem;
       border-top: 1px solid var(--colour-text);
@@ -417,8 +412,20 @@
       color: var(--colour-resistor-labels);
     }
 
+    .ccap {
+      color: var(--colour-capacitor-labels);
+    }
+
     .cideal {
       color: var(--colour-ideal);
+    }
+
+    .csignal {
+      color: var(--colour-signal);
+    }
+
+    .colour-gain {
+      color: var(--colour-gain);
     }
 
     .btn-row {
@@ -767,14 +774,20 @@
       background: rgba(0, 229, 255, .04);
       color: var(--colour-text);
     }
+
+    /* graphical option labels fill the remaining flex space */
+    .option-btn span:not(.option-letter) {
+      flex: 1;
+      min-width: 0;
+    }
   </style>
 </head>
 
 <body>
 <a id="homeBar" class="home-bar" href="index.html" style="display:none">⌂ Home</a>
   <header>
-    <h1>BJT Voltage Divider Bias</h1>
-    <p>DC Analysis · Single-Stage NPN Amplifier</p>
+    <h1>BJT Voltage Divider Bias — AC Coupled</h1>
+    <p>DC Analysis · Capacitive Coupling · Single-Stage NPN Amplifier</p>
   </header>
 
   <div class="quiz-wrap">
@@ -801,7 +814,7 @@
           Zoom
         </div>
 
-        <svg id="circuitSvg" viewBox="-90 0 610 560" xmlns="http://www.w3.org/2000/svg"
+        <svg id="circuitSvg" viewBox="0 0 700 560" xmlns="http://www.w3.org/2000/svg"
           font-family="'Share Tech Mono',monospace">
 
           <!-- ════════════════════ DEFINITIONS ════════════════════ -->
@@ -814,6 +827,23 @@
                 <feMergeNode in="SourceGraphic" />
               </feMerge>
             </filter>
+
+            <!-- ══ MULTI-METER SHAPE ══ -->
+            <g id="multimeter-dc-probe">
+              <!-- 1. The Main Meter Circle Base -->
+              <circle cx="0" cy="0" r="30" fill="#111c24" style="stroke: var(--colour-supply);" stroke-width="2"
+                filter="url(#glow)" />
+              <!-- 2. The DC Symbol (⎓) -->
+              <line x1="-15" y1="-20" x2="15" y2="-20" style="stroke: var(--colour-supply);" stroke-width="1.5" />
+              <line x1="-15" y1="-15" x2="15" y2="-15" style="stroke: var(--colour-supply);" stroke-width="1.5"
+                stroke-dasharray="3,2" />
+              <!-- The Dynamic Voltage Reading -->
+              <text x="0" y="5" font-family="sans-serif" font-size="14px" font-weight="bold" fill="var(--colour-text)"
+                text-anchor="middle">1.46</text>
+              <!-- The Unit Label (V) -->
+              <text x="0" y="22" font-family="sans-serif" font-size="14px" fill="var(--colour-supply)"
+                text-anchor="middle">V</text>
+            </g>
 
             <!-- ══ NPN BJT SHAPE ══ -->
             <g id="bjt-npn-shape">
@@ -843,6 +873,83 @@
               <line x1="-15" y1="-14" x2="15" y2="-14" style="stroke: var(--colour-red)" stroke-width="1.5" stroke-dasharray="3,2"/>
             </g>
 
+            <!-- ══ COUPLING CAPACITOR SHAPE — two plates, reused for Cin and Cout ══ -->
+            <g id="cap-shape">
+              <rect x="-4" y="-12" width="8" height="24" style="fill: var(--colour-bg)" />
+              <line x1="-4" y1="-12" x2="-4" y2="12" style="stroke: var(--colour-capacitor)" stroke-width="2.5" />
+              <line x1="4" y1="-12" x2="4" y2="12" style="stroke: var(--colour-capacitor)" stroke-width="2.5" />
+            </g>
+
+            <!-- ══ OSCILLOSCOPE SHAPE ══ -->
+            <!-- 1. BASE SCOPE (No waveforms) -->
+            <g id="scope-base">
+              <rect x="-35" y="-25" width="70" height="50" rx="6" ry="6" style="fill: var(--colour-meter-fill); stroke: var(--colour-scope)" stroke-width="1.5" filter="url(#glow)"></rect>
+              <rect x="-28" y="-18" width="56" height="36" rx="3" ry="3" style="fill: #0d1117; stroke: var(--colour-scope)" stroke-width="1" opacity="0.8"></rect>
+              <line x1="-26" y1="0" x2="26" y2="0" style="stroke: var(--colour-scope)" stroke-width="0.75" stroke-dasharray="2,2" opacity="0.4"></line>
+              <line x1="0" y1="-16" x2="0" y2="16" style="stroke: var(--colour-scope)" stroke-width="0.75" stroke-dasharray="2,2" opacity="0.4"></line>
+            </g>
+
+            <!-- 2. WAVEFORM CH1 (Yellow Input) -->
+            <path id="wave-ch1" d="M -26 0 C -23.4 -14, -18.2 -14, -15.6 0 C -13 14, -7.8 14, -5.2 0 C -2.6 -14, 2.6 -14, 5.2 0 C 7.8 14, 13 14, 15.6 0 C 18.2 -14, 23.4 -14, 26 0" style="stroke: #ffcc00; fill: none;" stroke-width="1.0" stroke-linecap="round" stroke-linejoin="round"></path>
+
+            <!-- 3. WAVEFORM CH2 (Cyan Output) -->
+            <path id="wave-ch2" d="M -26 0 C -23.4 14, -18.2 14, -15.6 0 C -13 -14, -7.8 -14, -5.2 0 C -2.6 14, 2.6 14, 5.2 0 C 7.8 -14, 13 -14, 15.6 0 C 18.2 14, 23.4 14, 26 0" style="stroke: #00ffff; fill: none;" stroke-width="1.0" stroke-linecap="round" stroke-linejoin="round"></path>
+            <!-- ══ 3 COMBINATION SHAPES ══ -->
+
+            <!-- Combination A: Channel 1 Only -->
+            <g id="scope-ch1-only">
+              <use href="#scope-base"></use>
+              <g clip-path="url(#scope-screen-clip)">
+                <use href="#wave-ch1"></use>
+              </g>
+            </g>
+
+            <!-- Combination B: Channel 2 Only -->
+            <g id="scope-ch2-only">
+              <use href="#scope-base"></use>
+              <g clip-path="url(#scope-screen-clip)">
+                <use href="#wave-ch2"></use>
+              </g>
+            </g>
+
+            <!-- Combination C: Dual Channel (CH1 + CH2) -->
+            <g id="scope-dual">
+              <use href="#scope-base"></use>
+              <g clip-path="url(#scope-screen-clip)">
+                <use href="#wave-ch1"></use>
+                <use href="#wave-ch2"></use>
+              </g>
+            </g>
+            <!-- ══ SCOPE WIRES ══ -->
+            <!-- Single master wire starting at the top edge of the scope -->
+            <marker id="probe-node-dot" 
+                    viewBox="-6 -6 12 12" 
+                    refX="0" refY="0" 
+                    markerWidth="12" markerHeight="12">
+              <circle cx="0" cy="0" r="2" style="fill: var(--colour-series); stroke: none;" />
+            </marker>
+
+            <!-- Master Wire using stroke-opacity instead of element opacity -->
+            <line id="scope-wire-v" x1="0" y1="-25" x2="0" y2="-90"
+                  style="stroke: var(--colour-scope); stroke-width: 1.5; stroke-dasharray: 4,3; stroke-opacity: 0.8;" 
+                  marker-end="url(#probe-node-dot)" />
+              <!-- TOP CENTER    - no translate
+                    TOP RIGHT     - transform="translate(25, 0)
+                    TOP LEFT      - transform="translate(-25, 0)
+                    BOTTOM CENTER - transform="scale(1, -1)
+                    BOTTOM RIGHT  - transform="scale(1, -1) translate(-25, 0)
+                    BOTTOM LEFT   - transform="scale(1, -1) translate(25, 0)          
+              -->
+
+            <!-- ══ AC SIGNAL SOURCE SHAPE — circle with one sine cycle ══ -->
+            <g id="ac-source-shape">
+              <circle cx="0" cy="0" r="24" fill="none" style="stroke: var(--colour-signal)" stroke-width="2"
+                filter="url(#glow)" />
+              <!-- Mathematically symmetrical sine wave -->
+              <path d="M -16,0 C -11,-14 -5,-14 0,0 C 5,14 11,14 16,0" fill="none" style="stroke: var(--colour-signal)"
+                stroke-width="2.5" stroke-linecap="round" />
+            </g>
+
             <!-- ══ AMMETER BADGE — defined once, instanced with <use> ══ -->
             <g id="ammeter-shape">
               <circle cx="0" cy="0" r="30" style="fill: var(--colour-ammeter-fill); stroke: var(--colour-current)"
@@ -853,18 +960,18 @@
 
           <!-- ════════════════════ CIRCUIT GROUP ════════════════════ -->
 
-          <!-- ══ Used to move the entire circuit by (X,Y) pixels ══ -->
-          <g id="circuitGroup" transform="translate(0,5)">
+          <!-- ── Used to move the entire circuit by (X,Y) pixels. ── -->
+          <g id="circuitGroup" transform="translate(150,5)">
 
           <!-- ════════════════════ BJT DATASHEET REFERENCE TABLE ════════════════════ -->
 
-          <g id="datasheetTable" transform="translate(-90,0)">
+          <g id="datasheetTable" transform="translate(-145,0)">
             <rect x="0" y="0" width="130" height="145" rx="4" style="fill: rgba(0,0,0,.25)" stroke="var(--colour-bjt)" stroke-width="1" />
             <text x="6" y="13" style="fill: var(--colour-text)" text-anchor="start" font-size="9" font-weight="bold" letter-spacing=".03em">BC547 — TYPICAL RATINGS</text>
             <line x1="6" y1="19" x2="134" y2="19" style="stroke: var(--colour-border)" stroke-width="1" />
 
             <text x="6" y="32" style="fill: var(--colour-bjt)" font-size="12">V<tspan baseline-shift="sub" font-size="6.5">BE</tspan>(on)</text>
-            <text x="124" y="32" style="fill: var(--colour-text)" text-anchor="end" font-size="12">0.7 V typ</text>
+            <text x="124" y="32" style="fill: var(--colour-text)" text-anchor="end" font-size="12">0.6 V typ</text>
 
             <text x="6" y="49" style="fill: var(--colour-bjt)" font-size="12">V<tspan baseline-shift="sub" font-size="6.5">CE</tspan>(sat)</text>
             <text x="124" y="49" style="fill: var(--colour-text)" text-anchor="end" font-size="12">0.2 V typ</text>
@@ -885,203 +992,266 @@
             <text x="124" y="134" style="fill: var(--colour-text)" text-anchor="end" font-size="12">&lt;15 nA</text>
           </g>
 
-          <!-- ════════════════════ WIRES ════════════════════ -->
+            <!-- ════════════════════ WIRES ════════════════════ -->
 
-          <!-- ── LEFT VERTICAL (base-bias rail, x=170) ── -->
-          <line x1="100" y1="50" x2="100" y2="80" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC rail down to R1 -->
-          <line x1="100" y1="160" x2="100" y2="255" style="stroke: var(--colour-series)" stroke-width="2" /><!-- R1 down to Base node -->
-          <line x1="100" y1="255" x2="100" y2="350" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Base node down to R2 -->
-          <line x1="100" y1="430" x2="100" y2="520" style="stroke: var(--colour-series)" stroke-width="2" /><!-- R2 down to GND rail -->
+            <!-- ── LEFT VERTICAL (AC source ground return, x=-110) ── -->
+            <line x1="-70" y1="279" x2="-70" y2="520" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Source return down to GND level -->
 
-          <!-- ── RIGHT VERTICAL (collector/emitter rail, x=340) ── -->
-          <line x1="340" y1="50" x2="340" y2="80" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC rail down to RC -->
-          <line x1="340" y1="160" x2="340" y2="221" style="stroke: var(--colour-series)" stroke-width="2" /><!-- RC down to Collector pin -->
-          <line x1="340" y1="289" x2="340" y2="350" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Emitter pin down to RE -->
-          <line x1="340" y1="430" x2="340" y2="520" style="stroke: var(--colour-series)" stroke-width="2" /><!-- RE down to GND rail -->
+            <!-- ── CENTER VERTICAL (R1/R2 LINE) (base-bias rail, x=100) ── -->
+            <line x1="100" y1="50" x2="100" y2="80" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC rail down to R1 -->
+            <line x1="100" y1="160" x2="100" y2="255" style="stroke: var(--colour-series)" stroke-width="2" /><!-- R1 down to Base node -->
+            <line x1="100" y1="255" x2="100" y2="350" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Base node down to R2 -->
+            <line x1="100" y1="430" x2="100" y2="520" style="stroke: var(--colour-series)" stroke-width="2" /><!-- R2 down to GND rail -->
 
-          <!-- ── TOP HORIZONTAL ── -->
-          <line x1="100" y1="50" x2="340" y2="50" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC rail (R1 column to RC column) -->
+            <!-- ── RIGHT VERTICAL (collector/emitter rail, x=340) ── -->
+            <line x1="340" y1="50" x2="340" y2="80" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC rail down to RC -->
+            <line x1="340" y1="160" x2="340" y2="221" style="stroke: var(--colour-series)" stroke-width="2" /><!-- RC down to Collector pin -->
+            <line x1="340" y1="289" x2="340" y2="350" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Emitter pin down to RE -->
+            <line x1="340" y1="430" x2="340" y2="520" style="stroke: var(--colour-series)" stroke-width="2" /><!-- RE down to GND rail -->
 
-          <!-- ── BOTTOM HORIZONTAL ── -->
-          <line x1="100" y1="520" x2="340" y2="520" style="stroke: var(--colour-series)" stroke-width="2" /><!-- GND rail (R2 column to RE column) -->
+            <!-- ── TOP HORIZONTAL ── -->
+            <line x1="100" y1="50" x2="340" y2="50" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC rail (R1 column to RC column) -->
 
-          <!-- ── CENTRE HORIZONTAL ── -->
-          <line x1="100" y1="255" x2="309" y2="255" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Base node across to transistor base pin -->
+            <!-- ── BOTTOM HORIZONTAL ── -->
+            <line x1="100" y1="520" x2="340" y2="520" style="stroke: var(--colour-series)" stroke-width="2" /><!-- GND rail (R2 column to RE column) -->
+            <line x1="-70" y1="520" x2="100" y2="520" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Source return across to existing GND rail -->
 
-          <!-- ════════════════════ NODES ════════════════════ -->
+            <!-- ── CENTRE HORIZONTAL ── -->
+            <line x1="100" y1="255" x2="309" y2="255" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Base node across to transistor base pin -->
+            <line x1="-47" y1="255" x2="-4" y2="255" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Source to Cin -->
+            <line x1="4" y1="255" x2="100" y2="255" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Cin to Base node -->
 
-          <!-- ── NODE B  ── -->
-          <circle cx="100" cy="255" r="5" style="fill: var(--colour-series)" />
-          <g id="nodeB_lbl" transform="translate(70,255)">
-            <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5" />
-            <text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14"
-              font-weight="bold">B</text>
-          </g>
+            <!-- ── OUTPUT HORIZONTAL ── -->
+            <line x1="340" y1="221" x2="484" y2="221" style="stroke: var(--colour-series)" stroke-width="2" />
 
-          <!-- ── NODE C ── -->
-          <g id="nodeC_lbl" transform="translate(370,205)">
-            <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5" />
-            <text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14"
-              font-weight="bold">C</text>
-          </g>
+            <!-- ════════════════════ NODES ════════════════════ -->
 
-          <!-- ── NODE E ── -->
-          <g id="nodeE_lbl" transform="translate(370,305)">
-            <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5" />
-            <text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14"
-              font-weight="bold">E</text>
-          </g>
-
-          <!-- ════════════════════ VCC ════════════════════ -->
-
-          <g id="vccGroup" transform="translate(180,-1)">
-            <line x1="40" y1="50" x2="40" y2="30" style="stroke: var(--colour-supply)" stroke-width="2" />
-            <line x1="0" y1="30" x2="80" y2="30" style="stroke: var(--colour-supply)" stroke-width="2" />
-            <text x="0" y="15" style="fill: var(--colour-voltage-label)" text-anchor="start" font-size="15"
-              font-weight="bold">V<tspan baseline-shift="sub" font-size="10">CC</tspan></text>
-            <!-- hand-drawn "+" -->
-            <line x1="50" y1="10" x2="50" y2="20" style="stroke: var(--colour-text)" stroke-width="1.0" />
-            <line x1="46" y1="15" x2="54" y2="15" style="stroke: var(--colour-text)" stroke-width="1.0" />
-            <text id="vccValue" x="60" y="20" style="fill: var(--colour-text)" text-anchor="start" font-size="14"
-              font-weight="bold">12V</text>
+            <!-- ── NODE B ── -->
+            <circle cx="100" cy="255" r="5" style="fill: var(--colour-series)" />
+            <g id="nodeB_lbl" transform="translate(80,235)">
+              <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5" />
+              <text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14"
+                font-weight="bold">B</text>
             </g>
 
-          <!-- ════════════════════ GND SYMBOL ════════════════════ -->
+            <!-- ── NODE C ── -->
+            <circle cx="340" cy="221" r="5" style="fill: var(--colour-series)" />
+            <g id="nodeC_lbl" transform="translate(310,200)">
+              <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5" />
+              <text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14"
+                font-weight="bold">C</text>
+            </g>
 
-          <g id="gndGroup" transform="translate(220,521)">
-            <line x1="0" y1="0" x2="0" y2="15" style="stroke: var(--colour-gnd)" stroke-width="2" />
-            <line x1="-14" y1="15" x2="14" y2="15" style="stroke: var(--colour-gnd)" stroke-width="2" />
-            <line x1="-9" y1="20" x2="9" y2="20" style="stroke: var(--colour-gnd)" stroke-width="1.5" />
-            <line x1="-4" y1="25" x2="4" y2="25" style="stroke: var(--colour-gnd)" stroke-width="1.5" />
-          </g>
+            <!-- ── NODE E ── -->
+            <g id="nodeE_lbl" transform="translate(310,305)">
+              <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5" />
+              <text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14"
+                font-weight="bold">E</text>
+            </g>
 
-          <!-- ════════════════════ Q1 — NPN ════════════════════ -->
+            <!-- ════════════════════ AC INPUT COMPONENTS ════════════════════ -->
 
-          <g id="q1Group" transform="translate(326,255)">
-            <use href="#bjt-npn-shape" />
-            <text id="nm-q1" x="-25" y="-15" fill="var(--colour-bjt-labels)" text-anchor="middle" font-size="14"
-              font-weight="bold">Q1</text>
-            <text id="lbl-q1" x="-20" y="25" fill="var(--colour-bjt-labels)" text-anchor="end" font-size="12">BC547</text>
-          </g>
+            <g id="vsGroup" transform="translate(-70,255)">
+              <use href="#ac-source-shape" />
+              <text x="25" y="35" style="fill: var(--colour-signal)" text-anchor="middle" font-size="14"
+                font-weight="bold">V<tspan baseline-shift="sub" font-size="10">S</tspan></text>
+              <text id="vsValue" x="-35" y="-35" style="fill: var(--colour-signal)" text-anchor="start" font-size="12"
+                font-weight="bold"><tspan fill="var(--colour-text)">10</tspan><tspan fill="var(--colour-signal)"> mV p-p</tspan></text>
+            </g>
 
-          <!--═══════════════════ RESISTORS ════════════════════ -->
+            <g id="cinGroup" transform="translate(0,255)">
+              <use href="#cap-shape" />
+              <text id="nm-cin" x="0" y="-25" fill="var(--colour-capacitor-labels)" text-anchor="middle" font-size="13"
+                font-weight="bold">C<tspan baseline-shift="sub" font-size="9">IN</tspan></text>
+              <text id="lbl-cin" x="0" y="25" fill="var(--colour-text)" text-anchor="middle"
+                font-size="12"><tspan fill="var(--colour-text)">10</tspan><tspan fill="var(--colour-capacitor-labels)"> µF</tspan></text>
+            </g>
 
-          <!-- ══ R1 ══ -->
-          <g id="r1Group" transform="translate(85,80)">
-            <rect id="box-r1" x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)"
-              stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
-            <text id="nm-r1" x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14"
-              font-weight="bold">R1</text>
-            <text id="lbl-r1" x="60" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle"
-              font-size="14">10.00kΩ</text>
-          </g>
+            <!-- ════════════════════ AC OUTPUT COMPONENTS ════════════════════ -->
 
-           <!-- ══ R2 ══ -->
-         <g id="r2Group" transform="translate(85,350)">
-            <rect id="box-r2" x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)"
-              stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
-            <text id="nm-r2" x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14"
-              font-weight="bold">R2</text>
-            <text id="lbl-r2" x="60" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle"
-              font-size="14">2.20kΩ</text>
-          </g>
+            <g id="coutGroup" transform="translate(440,221)">
+              <use href="#cap-shape" />
+              <text id="nm-cout" x="0" y="-25" fill="var(--colour-capacitor-labels)" text-anchor="middle" font-size="13"
+                font-weight="bold">C<tspan baseline-shift="sub" font-size="9">OUT</tspan></text>
+              <text id="lbl-cout" x="0" y="25" fill="var(--colour-text)" text-anchor="middle"
+                font-size="12"><tspan fill="var(--colour-text)">10</tspan><tspan fill="var(--colour-capacitor-labels)"> µF</tspan></text>
+            </g>
 
-          <!-- ══ RC ══ -->
-          <g id="rcGroup" transform="translate(325,80)">
-            <rect id="box-rc" x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)"
-              stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
-            <text id="nm-rc" x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14"
-              font-weight="bold">RC</text>
-            <text id="lbl-rc" x="60" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle"
-              font-size="14">1.00kΩ</text>
-          </g>
+            <!-- ════ Scope output  ════ -->
+            <g id="scopeOutput" transform="translate(470,131)">
+              <use href="#scope-wire-v" transform="scale(1, -1) translate(0, 0)"></use>
+              <!-- Render Channel 2 shape -->
+              <use href="#scope-ch2-only"></use>
+            </g>
+          
+            <!-- ── OUTPUT TERMINAL ── -->
+            <g id="outputTerminal" transform="translate(500,221)">
+              <circle cx="0" cy="0" r="16" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5" />
+              <text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="13"
+                font-weight="bold">L</text>
+              <text x="0" y="-25" style="fill: var(--colour-label)" text-anchor="middle" font-size="15">R<tspan
+                  baseline-shift="sub" font-size="10">L</tspan></text>
+              <text x="0" y="30" style="fill: var(--colour-label)" text-anchor="middle" font-size="11">(load)</text>
+            </g>
 
-           <!-- ══ RE ══ -->
-          <g id="reGroup" transform="translate(325,350)">
-            <rect id="box-re" x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)"
-              stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
-            <text id="nm-re" x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14"
-              font-weight="bold">RE</text>
-            <text id="lbl-re" x="60" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle"
-              font-size="14">470.00Ω</text>
-          </g>
+            <!-- ════════════════════ VCC ════════════════════ -->
 
-         <!-- ════════════════════ QUESTION 1 ════════════════════ -->
+            <g id="vccGroup" transform="translate(180,-1)">
+              <line x1="40" y1="50" x2="40" y2="30" style="stroke: var(--colour-supply)" stroke-width="2" />
+              <line x1="0" y1="30" x2="80" y2="30" style="stroke: var(--colour-supply)" stroke-width="2" />
+              <text x="0" y="15" style="fill: var(--colour-voltage-label)" text-anchor="start" font-size="15"
+                font-weight="bold">V<tspan baseline-shift="sub" font-size="10">CC</tspan></text>
+              <!-- hand-drawn "+" -->
+              <line x1="50" y1="10" x2="50" y2="20" style="stroke: var(--colour-text)" stroke-width="1.0" />
+              <line x1="46" y1="15" x2="54" y2="15" style="stroke: var(--colour-text)" stroke-width="1.0" />
+              <text id="vccValue" x="60" y="20" style="fill: var(--colour-text)" text-anchor="start" font-size="14"
+                font-weight="bold">12V</text>
+            </g>
 
-          <!-- ══ V_B METER ══ -->
-          <g id="meterVB" display="none" transform="translate(-5,255)">
-            <use href="#probe-wire" transform="rotate(0) translate(30,0)" />
-            <use href="#meter-shape" />
-            <text x="20" y="-35" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14"
-              font-weight="bold">V<tspan baseline-shift="sub" font-size="10">B</tspan></text>
-            <text id="meterVBValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle"
-              font-size="15" font-weight="bold">—</text>
-            <text id="meterVBUnit" x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle"
-              font-size="14">V</text>
-          </g>
+            <!-- ════════════════════ GND SYMBOL ════════════════════ -->
 
-         <!-- ════════════════════ QUESTION 2 ════════════════════ -->
+            <g id="gndGroup" transform="translate(20,521)">
+              <line x1="0" y1="0" x2="0" y2="15" style="stroke: var(--colour-gnd)" stroke-width="2" />
+              <line x1="-14" y1="15" x2="14" y2="15" style="stroke: var(--colour-gnd)" stroke-width="2" />
+              <line x1="-9" y1="20" x2="9" y2="20" style="stroke: var(--colour-gnd)" stroke-width="1.5" />
+              <line x1="-4" y1="25" x2="4" y2="25" style="stroke: var(--colour-gnd)" stroke-width="1.5" />
+            </g>
 
-          <!-- ══ V_E METER ══ -->
-          <g id="meterVE" display="none" transform="translate(440,340)">
-            <use href="#probe-wire" transform="rotate(205) translate(30,0)" />
-            <use href="#meter-shape" />
-            <text x="20" y="-35" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14"
-              font-weight="bold">V<tspan baseline-shift="sub" font-size="10">E</tspan></text>
-            <text id="meterVEValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle"
-              font-size="15" font-weight="bold">—</text>
-            <text id="meterVEUnit" x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle"
-              font-size="14">V</text>
-          </g>
+            <!-- ════════════════════ Q1 — NPN ════════════════════ -->
 
-         <!-- ════════════════════ QUESTION 3 ════════════════════ -->
+            <g id="q1Group" transform="translate(326,255)">
+              <use href="#bjt-npn-shape" />
+              <text id="nm-q1" x="-25" y="-15" fill="var(--colour-bjt-labels)" text-anchor="middle" font-size="14"
+                font-weight="bold">Q1</text>
+              <text id="lbl-q1" x="-20" y="25" fill="var(--colour-bjt-labels)" text-anchor="end"
+                font-size="12">BC547</text>
+            </g>
 
-         <!-- ══ I_E INDICATOR ══ -->
-          <g id="ieInd" display="none" transform="translate(340,475)">
-            <use href="#ammeter-shape" />
-            <text x="40" y="-20" style="fill: var(--colour-current)" text-anchor="middle" font-size="14"
-              font-weight="bold">I<tspan baseline-shift="sub" font-size="10">E</tspan></text>
-            <text id="ieValue" x="0" y="-2" style="fill: var(--colour-text)" text-anchor="middle"
-              font-size="15" font-weight="bold">—</text>
-            <text id="ieUnit" x="0" y="15" style="fill: var(--colour-current)" text-anchor="middle"
-              font-size="12">mA</text>
-          </g>
+            <!--═══════════════════ RESISTORS ════════════════════ -->
 
-         <!-- ════════════════════ QUESTION 4 ════════════════════ -->
+            <!-- ══ R1 ══ -->
+            <g id="r1Group" transform="translate(85,80)">
+              <rect id="box-r1" x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)"
+                stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+              <text id="nm-r1" x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14"
+                font-weight="bold">R1</text>
+              <text id="lbl-r1" x="60" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle"
+                font-size="14">10.00kΩ</text>
+            </g>
 
-          <!-- ══ V_C METER ══ -->
-          <g id="meterVC" display="none" transform="translate(440,170)">
-            <use href="#probe-wire" transform="rotate(150) translate(30,0)" />
-            <use href="#meter-shape" />
-            <text x="20" y="-35" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14"
-              font-weight="bold">V<tspan baseline-shift="sub" font-size="10">C</tspan></text>
-            <text id="meterVCValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle"
-              font-size="15" font-weight="bold">—</text>
-            <text id="meterVCUnit" x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle"
-              font-size="14">V</text>
-          </g>
+            <!-- ══ R2 ══ -->
+            <g id="r2Group" transform="translate(85,350)">
+              <rect id="box-r2" x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)"
+                stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+              <text id="nm-r2" x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14"
+                font-weight="bold">R2</text>
+              <text id="lbl-r2" x="60" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle"
+                font-size="14">2.20kΩ</text>
+            </g>
 
-        <!-- ════════════════════ QUESTION 5 ════════════════════ -->
+            <!-- ══ RC ══ -->
+            <g id="rcGroup" transform="translate(325,80)">
+              <rect id="box-rc" x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)"
+                stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+              <text id="nm-rc" x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14"
+                font-weight="bold">RC</text>
+              <text id="lbl-rc" x="60" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle"
+                font-size="14">1.00kΩ</text>
+            </g>
 
-        <!-- ══ V_CE INDICATOR ══ -->
-          <g id="vceInd" display="none" transform="translate(350,228)">
-            <text x="20" y="20" style="fill: var(--colour-voltage-label)" text-anchor="start" font-size="14"
-              font-weight="bold">V<tspan baseline-shift="sub" font-size="10">CE</tspan></text>
-            <text id="vceValue" x="20" y="40" style="fill: var(--colour-voltage-label)" text-anchor="start" font-size="13"
-              font-weight="bold">—</text>
-          </g>
+            <!-- ══ RE ══ -->
+            <g id="reGroup" transform="translate(325,350)">
+              <rect id="box-re" x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)"
+                stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+              <text id="nm-re" x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14"
+                font-weight="bold">RE</text>
+              <text id="lbl-re" x="60" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle"
+                font-size="14">470.00Ω</text>
+            </g>
 
-        <!-- ════════════════════ QUESTION 6 ════════════════════ -->
+            <!-- ════════════════════ QUESTION 1 ════════════════════ -->
 
-        <!-- ══ V_CE(ideal) INDICATOR — a design benchmark, not a measurable node, so it gets its own colour ══ -->
-          <g id="idealVceInd" display="none" transform="translate(430,256)">
-            <rect id="box-ideal" x="-10" y="-25" width="90" height="50" rx="3" style="fill: var(--colour-panel)"
-              stroke="var(--colour-ideal)" stroke-width="2" filter="url(#glow)" />            
-            <text x="0" y="-6" style="fill: var(--colour-ideal)" text-anchor="start" font-size="13"
-              font-weight="bold">V<tspan baseline-shift="sub" font-size="9">CE</tspan> (Ideal)</text>
-            <text id="idealVceValue" x="0" y="13" style="fill: var(--colour-ideal)" text-anchor="start"
-              font-size="13" font-weight="bold">—</text>
-          </g>
+            <!-- ══ V_B METER ══ -->
+            <g id="meterVB" display="none" transform="translate(30,180)">
+              <use href="#probe-wire" transform="rotate(45) translate(30,0)" />
+              <use href="#meter-shape" />
+              <text x="20" y="-35" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14"
+                font-weight="bold">V<tspan baseline-shift="sub" font-size="10">B</tspan></text>
+              <text id="meterVBValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle"
+                font-size="15" font-weight="bold">—</text>
+              <text id="meterVBUnit" x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle"
+                font-size="14">V</text>
+            </g>
+
+            <!-- ════════════════════ QUESTION 2 ════════════════════ -->
+
+            <!-- ══ V_E METER ══ -->
+            <g id="meterVE" display="none" transform="translate(250,350)">
+              <use href="#probe-wire" transform="rotate(325) translate(30,0)" />
+              <use href="#meter-shape" />
+              <text x="20" y="-35" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14"
+                font-weight="bold">V<tspan baseline-shift="sub" font-size="10">E</tspan></text>
+              <text id="meterVEValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle"
+                font-size="15" font-weight="bold">—</text>
+              <text id="meterVEUnit" x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle"
+                font-size="14">V</text>
+            </g>
+
+            <!-- ════════════════════ QUESTION 3 ════════════════════ -->
+
+            <!-- ══ I_E INDICATOR ══ -->
+            <g id="ieInd" display="none" transform="translate(340,475)">
+              <use href="#ammeter-shape" />
+              <text x="40" y="-20" style="fill: var(--colour-current)" text-anchor="middle" font-size="14"
+                font-weight="bold">I<tspan baseline-shift="sub" font-size="10">E</tspan></text>
+              <text id="ieValue" x="0" y="-2" style="fill: var(--colour-text)" text-anchor="middle"
+                font-size="15" font-weight="bold">—</text>
+              <text id="ieUnit" x="0" y="15" style="fill: var(--colour-current)" text-anchor="middle"
+                font-size="12">mA</text>
+            </g>
+
+            <!-- ════════════════════ QUESTION 4 ════════════════════ -->
+
+            <!-- ══ V_C METER ══ -->
+            <g id="meterVC" display="none" transform="translate(250,150)">
+              <use href="#probe-wire" transform="rotate(45) translate(30,0)" />
+              <use href="#meter-shape" />
+              <text x="20" y="-35" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14"
+                font-weight="bold">V<tspan baseline-shift="sub" font-size="10">C</tspan></text>
+              <text id="meterVCValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle"
+                font-size="15" font-weight="bold">—</text>
+              <text id="meterVCUnit" x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle"
+                font-size="14">V</text>
+            </g>
+
+            <!-- ════════════════════ QUESTION 5 ════════════════════ -->
+
+            <!-- ══ V_CE INDICATOR ══ -->
+            <g id="vceInd" display="none" transform="translate(360,232)">
+              <line x1="0" y1="0" x2="10" y2="0" style="stroke: var(--colour-red)" stroke-width="2" />
+              <line x1="0" y1="50" x2="10" y2="50" style="stroke: var(--colour-red)" stroke-width="2" />
+              <line x1="10" y1="0" x2="10" y2="50" style="stroke: var(--colour-red)" stroke-width="2" />
+              <text x="20" y="20" style="fill: var(--colour-voltage-label)" text-anchor="start" font-size="14"
+                font-weight="bold">V<tspan baseline-shift="sub" font-size="10">CE</tspan></text>
+              <text id="vceValue" x="20" y="40" style="fill: var(--colour-voltage-label)" text-anchor="start" font-size="13"
+                font-weight="bold">—</text>
+            </g>
+
+            <!-- ════════════════════ QUESTION 6 ════════════════════ -->
+
+            <!-- ══ V_CE(ideal) INDICATOR — a design benchmark, not a measurable node, so it gets its own colour ══ -->
+            <g id="idealVceInd" display="none" transform="translate(400,310)">
+              <text x="0" y="-6" style="fill: var(--colour-ideal)" text-anchor="start" font-size="13"
+                font-weight="bold">V<tspan baseline-shift="sub" font-size="9">CE</tspan> (ideal)</text>
+              <text id="idealVceValue" x="0" y="13" style="fill: var(--colour-ideal)" text-anchor="start" font-size="13"
+                font-weight="bold">—</text>
+            </g>
+
+            <!-- ════════════════════ GAIN INDICATOR ════════════════════ -->
+            <g id="gainInd" display="none" transform="translate(395,270)">
+              <text x="0" y="-12" style="fill: var(--colour-gain)" text-anchor="middle" font-size="14" letter-spacing=".05em">|A<tspan baseline-shift="sub" font-size="8">v</tspan>|</text>
+              <text id="gainValue" x="0" y="6" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">—</text>
+            </g>
 
           </g><!-- /circuitGroup -->
 
@@ -1198,7 +1368,7 @@
           </div>
         </div>
 
-        <!-- Q5 — collector-emitter voltage -->
+        <!-- Q5 — voltage gain -->
         <div class="q-panel" id="q5Panel" style="display:none">
           <div class="q-header">
             <div class="q-num">Q5</div>
@@ -1221,7 +1391,7 @@
           </div>
         </div>
 
-        <!-- Q6 — ideal Q-point -->
+        <!-- Q6 — load terminal behaviour -->
         <div class="q-panel" id="q6Panel" style="display:none">
           <div class="q-header">
             <div class="q-num">Q6</div>
@@ -1262,7 +1432,7 @@
           <span class="modal-title" id="modalVoltLabel">Circuit Diagram — 12 V Supply</span>
           <button class="modal-close" onclick="closeModal()">✕ Close</button>
         </div>
-        <svg id="modalSvg" viewBox="-90 0 610 560" xmlns="http://www.w3.org/2000/svg"
+        <svg id="modalSvg" viewBox="0 0 700 560" xmlns="http://www.w3.org/2000/svg"
           font-family="'Share Tech Mono',monospace"></svg>
       </div>
     </div>
@@ -1277,12 +1447,12 @@
     // Topology: classic voltage-divider bias, single-stage NPN.
     // VCC —R1— [Base node] —R2— GND, base node also feeds Q1's base.
     // VCC —RC— Q1 collector; Q1 emitter —RE— GND.
-    const VBE = 0.7; // silicon NPN base-emitter drop, assumed constant
+    const VBE = 0.6; // silicon NPN base-emitter drop, assumed constant
 
     const EXAMPLE_SETS = {
-      example1: { vcc: 12, r1: 10000, r2: 2200, rc: 1000, re: 470 },
-      example2: { vcc: 15, r1: 22000, r2: 4700, rc: 2200, re: 1000 },
-      example3: { vcc: 9, r1: 4700, r2: 1000, rc: 470, re: 220 }
+      example1: { vcc: 12, r1: 33000, r2: 6800, rc: 1800, re: 390 },
+      example2: { vcc: 15, r1: 47000, r2: 8200, rc: 2200, re: 560 },
+      example3: { vcc: 9,  r1: 22000, r2: 3900, rc: 1200, re: 270 }
     };
     let quizMode = 'example1';
     let V = { ...EXAMPLE_SETS.example1 };
@@ -1300,7 +1470,7 @@
       },
       {
         text: 'What is the <span style="color:var(--colour-voltage-label)">emitter voltage</span> V<sub>E</sub>?',
-        hint: 'A forward-biased silicon base-emitter junction drops approximately 0.7 V (<span class="colour-bjt">V<sub>BE</sub> (on)</span>).'
+        hint: 'A forward-biased silicon base-emitter junction drops approximately 0.6 V (<span class="colour-bjt">V<sub>BE</sub> (on)</span>).'
       },
       {
         text: 'What is the <span style="color:var(--colour-current)">emitter current</span> I<sub>E</sub>?',
@@ -1311,16 +1481,13 @@
         hint: 'Assume I<sub>C</sub> ≈ I<sub>E</sub> (base current is small). Find the voltage dropped across R<sub>C</sub>, then subtract it from V<sub>CC</sub>.'
       },
       {
-        text: 'What is the <span style="color:var(--colour-voltage-label)">collector-emitter voltage</span> V<sub>CE</sub>?',
-        hint: 'V<sub>CE</sub> is the difference between the collector and emitter voltages — both measured with respect to ground.'
+        text: 'What is the <span class="colour-gain">voltage gain</span> |A<sub>v</sub>| of this common-emitter stage?',
+        hint: 'For a common-emitter amplifier, |A<sub>v</sub>| ≈ R<sub>C</sub> / R<sub>E</sub> (AC gain approximation).'
       },
       {
-        text: 'For maximum symmetrical output swing before clipping, what is the ideal <span style="color:var(--colour-ideal)">collector-emitter voltage</span> V<sub>CE(ideal)</sub>?',
-        hint: 'The ideal Q-point splits the voltage remaining after R<sub>E</sub>\'s drop evenly between R<sub>C</sub> and the transistor: V<sub>CE(ideal)</sub> ≈ (V<sub>CC</sub> − I<sub>E</sub>R<sub>E</sub>) / 2.'
+        text: 'Under normal operating conditions, what is the expected <span style="color:var(--colour-signal)">DC voltage</span> and <span style="color:var(--colour-signal)">AC signal behaviour</span> at the Load terminal (L)?',
+        hint: 'Consider what <span class="ccap">C<sub>OUT</sub></span> does to the DC level, how a common-emitter stage affects the signal phase, and the gain you found in Q5.'
       }
-      // Q7's text depends on which side of ideal V_CE currently sits on (varies across
-      // Example 1/2/3/Randomise), so it isn't in this static list — see updateQ7Question(),
-      // called from refreshLabels() every time V changes.
     ];
     QUESTIONS.forEach((q, i) => {
       document.getElementById('q' + (i + 1) + 'Text').innerHTML = q.text;
@@ -1361,74 +1528,22 @@
       return { ...EXAMPLE_SETS.example1 };
     }
 
-    const LETTERS = ['A', 'B', 'C', 'D'];
+    const LETTERS = ['A', 'B', 'C', 'D', 'E'];
     function fmtO0(v) { return v >= 1000 ? parseFloat((v / 1000).toFixed(2)) + 'kΩ' : parseFloat(v.toFixed(2)) + 'Ω'; }
     function fmtO0Parts(v) { if (v >= 1000) return { num: String(parseFloat((v / 1000).toFixed(2))), unit: ' kΩ' }; return { num: String(parseFloat(v.toFixed(2))), unit: ' Ω' }; }
     function fmtA(a) { const x = Math.abs(a); if (x >= 1) return parseFloat(a.toFixed(3)) + ' A'; if (x >= 0.001) return parseFloat((a * 1000).toFixed(2)) + ' mA'; return parseFloat((a * 1e6).toFixed(1)) + ' µA'; }
     function fmtV(v) { const a = Math.abs(v); if (a >= 1) return parseFloat(v.toFixed(2)) + ' V'; if (a >= 0.001) return parseFloat((v * 1000).toFixed(2)) + ' mV'; return parseFloat((v * 1e6).toFixed(1)) + ' µV'; }
-    function fmtVParts(v) { const a = Math.abs(v); if (a >= 1) return { val: String(parseFloat(v.toFixed(2))), unit: 'V' }; if (a >= 0.001) return { val: String(parseFloat((v * 1000).toFixed(2))), unit: 'mV' }; return { val: String(parseFloat((v * 1e6).toFixed(1))), unit: 'µV' }; }
     function frac(num, den) { return `<span class="working-frac"><span class="num">${num}</span><span class="den">${den}</span></span>`; }
 
     // ── derived (recomputed whenever the value set changes) ──
-    let VB, VE, IE, IC, VRC, VC, VCE, VCE_ideal;
+    let VB, VE, IE, IC, VRC, VC;
     function recompute() {
-      VB = V.vcc * V.r2 / (V.r1 + V.r2);   // voltage-divider rule (base current assumed negligible)
-      VE = VB - VBE;                    // silicon base-emitter drop
-      IE = VE / V.re;                   // Ohm's law on RE
-      IC = IE;                          // I_C ≈ I_E, since I_B is small
+      VB = V.vcc * V.r2 / (V.r1 + V.r2);
+      VE = VB - VBE;
+      IE = VE / V.re;
+      IC = IE;
       VRC = IC * V.rc;
       VC = V.vcc - VRC;
-      VCE = VC - VE;
-      VCE_ideal = (V.vcc - IE * V.re) / 2;  // Q-point centred on the DC load line: splits the leftover voltage evenly between RC and the transistor
-    }
-
-    // Classifies the actual Q-point (VCE, from Q5) against the ideal midpoint
-    // (VCE_ideal, from Q6) — shared by the SVG indicator and the Q6 working.
-    function qPointStatus() {
-      const diffPct = (VCE - VCE_ideal) / VCE_ideal * 100;
-      if (Math.abs(diffPct) <= 20) return { tag: 'centred', diffPct };
-      if (diffPct > 20) return { tag: 'cutoff', diffPct };
-      return { tag: 'saturation', diffPct };
-    }
-
-    // Q7: the four single-component changes that CAN bring V_CE to a centred
-    // Q-point, each solved exactly (holding the other three components fixed).
-    //   - rcTarget: R1,R2,RE fixed. I_E (and so V_CE_ideal) is untouched by R_C,
-    //     so this is the ONLY lever that hits the exact V_CE(ideal) from Q6
-    //     without changing the emitter bias current at all.
-    //   - reTarget: R1,R2,RC fixed. V_E is set solely by the base divider, so
-    //     V_CE_ideal = (VCC-VE)/2 is ALSO untouched by R_E — this also lands on
-    //     the same Q6 number, but only by substantially changing I_E, which
-    //     undermines R_E's own role of stabilising I_E against beta/temperature.
-    //   - r2Target / r1Target: changing the divider changes V_E, so V_CE_ideal
-    //     itself shifts too — these converge V_CE and V_CE_ideal at a NEW point,
-    //     different from the Q6 number, redesigning the whole bias current
-    //     rather than repositioning V_CE within it.
-    function calcAdjustmentTargets() {
-      const ieDiv = V.vcc / (2 * V.rc + V.re);
-      const veDiv = ieDiv * V.re;
-      const vbDiv = veDiv + VBE;
-      const r2Target = V.r1 * vbDiv / (V.vcc - vbDiv);
-      const r1Target = V.r2 * (V.vcc - vbDiv) / vbDiv;
-      const rcTarget = VCE_ideal / IE;
-      const ieViaRE = VCE_ideal / V.rc;
-      const reTarget = VE / ieViaRE;
-      const convergedVCE = (V.vcc - ieDiv * V.re) / 2; // where V_CE and V_CE_ideal meet if R1/R2 is used instead
-      return { r2Target, r1Target, rcTarget, reTarget, ieDiv, ieViaRE, convergedVCE };
-    }
-
-    // Sets Q7's question text/hint, which — unlike Q1-Q6 — depends on which
-    // side of ideal V_CE currently sits on (varies across Example 1/2/3/Randomise).
-    function updateQ7Question() {
-      const above = VCE >= VCE_ideal;
-      const q7 = document.getElementById('q7Text');
-      if (q7) {
-        q7.innerHTML = `The current V<sub>CE</sub> is <span style="color:var(--colour-ui-wrong)"><b>${above ? 'above' : 'below'}</b></span> the ideal Q-point found in Q6. If you wanted to bring it closer to ideal, which single change would you make?`;
-      }
-      const hint = document.getElementById('q7Hint');
-      if (hint) {
-        hint.innerHTML = 'All four options can numerically bring V<sub>CE</sub> close to the ideal — but only one does it without disturbing the emitter bias current I<sub>E</sub>. Think about which resistor sets I<sub>E</sub>, and which one doesn\'t touch it at all.';
-      }
     }
 
     // ── mode switching ──
@@ -1471,7 +1586,7 @@
       ]);
     }
     function buildQ2Options() {
-      // correct: VB - 0.7
+      // correct: VB - 0.6
       // distractors: sign error, forgot the VBE drop, wrong VBE assumption (germanium-like 0.3V)
       return shuffle([
         { label: fmtV(VE), type: 'correct' },
@@ -1501,38 +1616,51 @@
       ]);
     }
     function buildQ5Options() {
-      // correct: VC - VE
-      // distractors: summed instead of subtracted, confused with V_RC (VCC-VC), used VCC instead of VC
+      const gainNum = V.rc / V.re;
+      function fmtGain(g) { return parseFloat(g.toFixed(2)).toString(); }
       return shuffle([
-        { label: fmtV(VCE), type: 'correct' },
-        { label: fmtV(VC + VE), type: 'wrong' },
-        { label: fmtV(V.vcc - VC), type: 'wrong' },
-        { label: fmtV(V.vcc - VE), type: 'wrong' },
+        { label: fmtGain(gainNum),                type: 'correct' },
+        { label: fmtGain(V.re / V.rc),            type: 'wrong' },
+        { label: fmtGain((V.rc + V.re) / V.re),   type: 'wrong' },
+        { label: fmtGain(V.rc / (V.rc + V.re)),   type: 'wrong' },
       ]);
     }
     function buildQ6Options() {
-      // correct: (VCC - IE*RE) / 2 — splits the leftover voltage evenly between RC and the transistor
-      // distractors: forgot the RE drop first, forgot to halve, ignored both adjustments
+      // Graphical options: mini multimeter (DC level) + sine wave + p-p indicator.
+      // Correct: DC = 0 V (COUT blocks DC), inverted (CE phase inversion), >10 mV (amplified).
+      function optSvg(reading, sinePath, ppText) {
+        const mCol = 'var(--colour-supply)', sCol = 'var(--colour-ui-primary)', lCol = 'var(--colour-label)';
+        return `<svg viewBox="0 0 290 70" style="width:min(260px,100%);height:auto;display:block;overflow:visible" xmlns="http://www.w3.org/2000/svg">
+          <g transform="translate(35,35)">
+            <circle cx="0" cy="0" r="28" fill="#111c24" stroke="${mCol}" stroke-width="2"/>
+            <line x1="-12" y1="-18" x2="12" y2="-18" stroke="${mCol}" stroke-width="1.5"/>
+            <line x1="-12" y1="-13" x2="12" y2="-13" stroke="${mCol}" stroke-width="1.5" stroke-dasharray="3,2"/>
+            <text x="0" y="4" font-family="sans-serif" font-size="12" font-weight="bold" fill="#ffffff" text-anchor="middle">${reading}</text>
+            <text x="0" y="18" font-family="sans-serif" font-size="9" fill="${mCol}" text-anchor="middle">V DC</text>
+          </g>
+          <g transform="translate(100,35)">
+            <line x1="0" y1="-16" x2="79" y2="-16" stroke="${lCol}" stroke-width="1" stroke-dasharray="3,3" opacity="0.6"/>
+            <line x1="0" y1="16" x2="79" y2="16" stroke="${lCol}" stroke-width="1" stroke-dasharray="3,3" opacity="0.6"/>
+            <path d="${sinePath}" fill="none" stroke="${sCol}" stroke-width="2" stroke-linecap="round"/>
+            <line x1="80" y1="-16" x2="80" y2="16" stroke="${lCol}" stroke-width="1.5"/>
+            <polygon points="80,-16 77,-10 83,-10" fill="${lCol}"/>
+            <polygon points="80,16 77,10 83,10" fill="${lCol}"/>
+            <text x="88" y="-5" font-family="'Share Tech Mono',monospace" font-size="13" fill="${lCol}" text-anchor="start">${ppText}</text>
+            <text x="88" y="13" font-family="'Share Tech Mono',monospace" font-size="13" fill="${lCol}" text-anchor="start">p-p</text>
+          </g>
+        </svg>`;
+      }
+      const INPHASE = 'M 0,0 C 8,-18 22,-18 30,0 C 38,18 52,18 60,0';
+      const INVERTED = 'M 0,0 C 8,18 22,18 30,0 C 38,-18 52,-18 60,0';
+      const INPHASE_BIG = 'M 0,0 C 8,-37 22,-37 30,0 C 38,37 52,37 60,0';
+      const INVERTED_BIG = 'M 0,0 C 8,37 22,37 30,0 C 38,-37 52,-37 60,0';
+      const vcReading = VC.toFixed(2);
       return shuffle([
-        { label: fmtV(VCE_ideal), type: 'correct' },
-        { label: fmtV(V.vcc / 2), type: 'wrong' },
-        { label: fmtV(V.vcc - IE * V.re), type: 'wrong' },
-        { label: fmtV(V.vcc), type: 'wrong' },
-      ]);
-    }
-    function buildQ7Options() {
-      // All four options genuinely land V_CE at (a) centred Q-point — see
-      // calcAdjustmentTargets() for the derivation of each target value and
-      // why only R_C does it without disturbing I_E. Direction words
-      // (Increase/Decrease) are derived from the target vs the current value,
-      // so they're correct whichever side of ideal this circuit sits on.
-      const T = calcAdjustmentTargets();
-      const dir = (target, baseline) => target > baseline ? 'Increase' : 'Decrease';
-      return shuffle([
-        { label: `${dir(T.rcTarget, V.rc)} R<sub>C</sub> to ${fmtO0(T.rcTarget)}`, type: 'correct' },
-        { label: `${dir(T.r2Target, V.r2)} R2 to ${fmtO0(T.r2Target)}`, type: 'wrong' },
-        { label: `${dir(T.r1Target, V.r1)} R1 to ${fmtO0(T.r1Target)}`, type: 'wrong' },
-        { label: `${dir(T.reTarget, V.re)} R<sub>E</sub> to ${fmtO0(T.reTarget)}`, type: 'wrong' },
+        { label: optSvg(vcReading, INPHASE, '10 mV'), type: 'wrong' },
+        { label: optSvg(vcReading, INVERTED, '10 mV'), type: 'wrong' },
+        { label: optSvg('0.00', INPHASE_BIG, '10 mV'), type: 'wrong' },
+        { label: optSvg('0.00', INVERTED_BIG, '10 mV'), type: 'correct' },
+        { label: optSvg(vcReading, INVERTED_BIG, '10 mV'), type: 'wrong' },
       ]);
     }
 
@@ -1570,9 +1698,9 @@
     // ── circuit-specific SVG annotation show/hide ──
     function fmtVParts(v) {
       const a = Math.abs(v);
-      if (a >= 1) return { val: v.toFixed(2), unit: 'V' };
-      if (a >= 0.001) return { val: (v * 1000).toFixed(2), unit: 'mV' };
-      return { val: (v * 1e6).toFixed(1), unit: 'µV' };
+      if (a >= 1) return { val: String(parseFloat(v.toFixed(2))), unit: 'V' };
+      if (a >= 0.001) return { val: String(parseFloat((v * 1000).toFixed(2))), unit: 'mV' };
+      return { val: String(parseFloat((v * 1e6).toFixed(1))), unit: 'µV' };
     }
     function setMeter(id, v) {
       const p = fmtVParts(v);
@@ -1586,9 +1714,9 @@
     function hideVE() { document.getElementById('meterVE').setAttribute('display', 'none'); }
     function fmtAParts(a) {
       const x = Math.abs(a);
-      if (x >= 1) return { val: a.toFixed(3), unit: 'A' };
-      if (x >= 0.001) return { val: (a * 1000).toFixed(2), unit: 'mA' };
-      return { val: (a * 1e6).toFixed(1), unit: 'µA' };
+      if (x >= 1) return { val: String(parseFloat(a.toFixed(3))), unit: 'A' };
+      if (x >= 0.001) return { val: String(parseFloat((a * 1000).toFixed(2))), unit: 'mA' };
+      return { val: String(parseFloat((a * 1e6).toFixed(1))), unit: 'µA' };
     }
     function showIE() {
       const p = fmtAParts(IE);
@@ -1599,49 +1727,29 @@
     function hideIE() { document.getElementById('ieInd').setAttribute('display', 'none'); }
     function showVC() { setMeter('meterVC', VC); }
     function hideVC() { document.getElementById('meterVC').setAttribute('display', 'none'); }
-    function showVCE() { const p = fmtVParts(VCE); document.getElementById('vceValue').innerHTML = `<tspan fill="var(--colour-text)">${p.val}</tspan><tspan fill="var(--colour-supply)"> ${p.unit}</tspan>`; document.getElementById('vceInd').setAttribute('display', 'inline'); }
-    function hideVCE() { document.getElementById('vceInd').setAttribute('display', 'none'); }
-    function showIdealVCE() {
-      document.getElementById('idealVceValue').textContent = fmtV(VCE_ideal);
-      document.getElementById('idealVceInd').setAttribute('display', 'inline');
+    function showGain() {
+      const gainNum = V.rc / V.re;
+      document.getElementById('gainValue').textContent = '≈ ' + parseFloat(gainNum.toFixed(2));
+      document.getElementById('gainInd').setAttribute('display', 'inline');
     }
-    function hideIdealVCE() { document.getElementById('idealVceInd').setAttribute('display', 'none'); }
+    function hideGain() { document.getElementById('gainInd').setAttribute('display', 'none'); }
 
     // ── Circuit state table — one row per question, cumulative reveal ──
     const CIRCUIT_STATES = [
-      {
-        enter: { vb: false, ve: false, ie: false, vc: false, vce: false, idealVce: false },
-        reveal: { vb: true, ve: false, ie: false, vc: false, vce: false, idealVce: false }
-      }, // Q1 → V_B
-      {
-        enter: { vb: true, ve: false, ie: false, vc: false, vce: false, idealVce: false },
-        reveal: { vb: true, ve: true, ie: false, vc: false, vce: false, idealVce: false }
-      }, // Q2 → V_E
-      {
-        enter: { vb: true, ve: true, ie: false, vc: false, vce: false, idealVce: false },
-        reveal: { vb: true, ve: true, ie: true, vc: false, vce: false, idealVce: false }
-      }, // Q3 → I_E
-      {
-        enter: { vb: true, ve: true, ie: true, vc: false, vce: false, idealVce: false },
-        reveal: { vb: true, ve: true, ie: true, vc: true, vce: false, idealVce: false }
-      }, // Q4 → V_C
-      {
-        enter: { vb: true, ve: true, ie: true, vc: true, vce: false, idealVce: false },
-        reveal: { vb: true, ve: true, ie: true, vc: true, vce: true, idealVce: false }
-      }, // Q5 → V_CE
-      {
-        enter: { vb: true, ve: true, ie: true, vc: true, vce: true, idealVce: false },
-        reveal: { vb: true, ve: true, ie: true, vc: true, vce: true, idealVce: true }
-      }, // Q6 → V_CE(ideal)
+      { enter: { vb:false, ve:false, ie:false, vc:false, gain:false }, reveal: { vb:true,  ve:false, ie:false, vc:false, gain:false } }, // Q1 → VB
+      { enter: { vb:true,  ve:false, ie:false, vc:false, gain:false }, reveal: { vb:true,  ve:true,  ie:false, vc:false, gain:false } }, // Q2 → VE
+      { enter: { vb:true,  ve:true,  ie:false, vc:false, gain:false }, reveal: { vb:true,  ve:true,  ie:true,  vc:false, gain:false } }, // Q3 → IE
+      { enter: { vb:true,  ve:true,  ie:true,  vc:false, gain:false }, reveal: { vb:true,  ve:true,  ie:true,  vc:true,  gain:false } }, // Q4 → VC
+      { enter: { vb:true,  ve:true,  ie:true,  vc:true,  gain:false }, reveal: { vb:true,  ve:true,  ie:true,  vc:true,  gain:true  } }, // Q5 → gain
+      { enter: { vb:true,  ve:true,  ie:true,  vc:true,  gain:true  }, reveal: { vb:true,  ve:true,  ie:true,  vc:true,  gain:true  } }, // Q6 → load terminal
     ];
 
     function applyCircuitState(s) {
-      s.vb ? showVB() : hideVB();
-      s.ve ? showVE() : hideVE();
-      s.ie ? showIE() : hideIE();
-      s.vc ? showVC() : hideVC();
-      s.vce ? showVCE() : hideVCE();
-      s.idealVce ? showIdealVCE() : hideIdealVCE();
+      s.vb   ? showVB()   : hideVB();
+      s.ve   ? showVE()   : hideVE();
+      s.ie   ? showIE()   : hideIE();
+      s.vc   ? showVC()   : hideVC();
+      s.gain ? showGain() : hideGain();
     }
 
     const QUESTION_BUILDERS = [
@@ -1684,12 +1792,12 @@
       const box = document.getElementById('q2Working');
       box.className = 'working-box visible';
       document.getElementById('q2WorkingContent').innerHTML = `
-    <div class="working-line">A forward-biased silicon base-emitter junction drops approximately <b>0.7 V</b>. The emitter voltage is the base voltage minus this drop:</div>
+    <div class="working-line">A forward-biased silicon base-emitter junction drops approximately <b>0.6 V</b>(<span class="colour-bjt">V<sub>BE</sub> (on)</span>). The emitter voltage is the base voltage minus this drop:</div>
 
     <div class="working-step">Emitter voltage:</div>
     <div class="working-formula-row"><span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-voltage">V<sub>B</sub></span> − <span class="colour-bjt">V<sub>BE</sub>(on)</span></div>
     <div class="working-label">Substituting values:</div>
-    <div class="working-formula-row"><span class="colour-voltage">V<sub>E</sub></span> = ${fmtV(VB)} − 0.7 V</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>E</sub></span> = ${fmtV(VB)} − 0.6 V</div>
     <div class="working-total"><span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-result">${fmtV(VE)}</span></div>`;
     }
 
@@ -1747,7 +1855,8 @@
       const st = Q.q5; if (st.ans || st.sel === null) return; st.ans = true;
       const ok = st.sel === st.cor;
       markOptions('q5', st.sel, st.cor, ok);
-      setBanner('q5', ok, `V<sub>CE</sub> = ${fmtV(VCE)}`);
+      const gainNum = V.rc / V.re;
+      setBanner('q5', ok, `|A<sub>v</sub>| ≈ <span class="colour-result">${gainNum.toFixed(2)}</span>`);
       showQ5Working();
       applyCircuitState(CIRCUIT_STATES[4].reveal);
       advanceQuestion(5);
@@ -1755,21 +1864,20 @@
     function showQ5Working() {
       const box = document.getElementById('q5Working');
       box.className = 'working-box visible';
+      const gainNum = V.rc / V.re;
+      const gain = gainNum.toFixed(2);
       document.getElementById('q5WorkingContent').innerHTML = `
-    <div class="working-line"><span class="colour-voltage">V<sub>CE</sub></span> is the difference between the collector and emitter voltages, both measured with respect to ground:</div>
-
-    <div class="working-step">Collector-emitter voltage:</div>
-    <div class="working-formula-row"><span class="colour-voltage">V<sub>CE</sub></span> = <span class="colour-voltage">V<sub>C</sub></span> − <span class="colour-voltage">V<sub>E</sub></span></div>
+    <div class="working-step">Voltage gain of common-emitter stage</div>
+    <div class="working-formula-row"><span class="colour-gain">|A<sub>v</sub>|</span> ≈ ${frac('<span class="colour-resistor">R<sub>C</sub></span>', '<span class="colour-resistor">R<sub>E</sub></span>')}</div>
     <div class="working-label">Substituting values:</div>
-    <div class="working-formula-row"><span class="colour-voltage">V<sub>CE</sub></span> = ${fmtV(VC)} − ${fmtV(VE)}</div>
-    <div class="working-total"><span class="colour-voltage">V<sub>CE</sub></span> = <span class="colour-result">${fmtV(VCE)}</span></div>`;
+    <div class="working-formula-row"><span class="colour-gain">|A<sub>v</sub>|</span> ≈ ${frac(fmtO0(V.rc), fmtO0(V.re))}</div>
+    <div class="working-total"><span class="colour-gain">|A<sub>v</sub>|</span> ≈ <span class="colour-result">${gain}</span></div>`;
     }
-
     function checkQ6() {
       const st = Q.q6; if (st.ans || st.sel === null) return; st.ans = true;
       const ok = st.sel === st.cor;
       markOptions('q6', st.sel, st.cor, ok);
-      setBanner('q6', ok, `V<sub>CE(ideal)</sub> = ${fmtV(VCE_ideal)}`);
+      setBanner('q6', ok, 'DC = 0 V, inverted signal, amplified (p-p &gt; 10 mV)');
       showQ6Working();
       applyCircuitState(CIRCUIT_STATES[5].reveal);
       advanceQuestion(6);
@@ -1777,59 +1885,19 @@
     function showQ6Working() {
       const box = document.getElementById('q6Working');
       box.className = 'working-box visible';
-      const st = qPointStatus();
-      const VERDICTS = {
-        centred: `the Q-point is <b style="color:var(--colour-ui-correct)">well-centred</b> (within ${Math.abs(st.diffPct).toFixed(0)}% of ideal) — roughly equal headroom for the output to swing either way before clipping.`,
-        cutoff: `V<sub>CE</sub> is <b style="color:var(--colour-ui-wrong)">higher than ideal</b> (+${st.diffPct.toFixed(0)}%) — the Q-point sits closer to cut-off, leaving less headroom for the output to swing upward before the transistor cuts off.`,
-        saturation: `V<sub>CE</sub> is <b style="color:var(--colour-ui-wrong)">lower than ideal</b> (${st.diffPct.toFixed(0)}%) — the Q-point sits closer to saturation, leaving less headroom for the output to swing downward before the transistor saturates.`
-      };
+      const gainNum = V.rc / V.re;
+      const gain = gainNum.toFixed(2);
+      const voutPP = (gainNum * 10).toFixed(1);
       document.getElementById('q6WorkingContent').innerHTML = `
-    <div class="working-line">For maximum symmetrical output swing before clipping, the Q-point should sit at the centre of the DC load line — splitting the voltage left over after <span class="colour-resistor">R<sub>E</sub></span>'s drop evenly between <span class="colour-resistor">R<sub>C</sub></span> and the transistor:</div>
-
-    <div class="working-step">Ideal collector-emitter voltage:</div>
-    <div class="working-formula-row"><span class="cideal">V<sub>CE(ideal)</sub></span> = ${frac('<span class="colour-supply">V<sub>CC</sub></span> − <span class="colour-voltage">V<sub>E</sub></span>', '2')}</div>
-    <div class="working-label">Substituting values:</div>
-    <div class="working-formula-row"><span class="cideal">V<sub>CE(ideal)</sub></span> = ${frac(`${V.vcc} V − ${fmtV(VE)}`, '2')}</div>
-    <div class="working-total"><span class="cideal">V<sub>CE(ideal)</sub></span> = <span class="colour-result">${fmtV(VCE_ideal)}</span></div>
-    <div class="working-line" style="margin-top:.6rem">Comparing this to the actual <span class="colour-voltage">V<sub>CE</sub> = ${fmtV(VCE)}</span> found in Q5: ${VERDICTS[st.tag]}</div>`;
-    }
-
-    function checkQ7() {
-      const st = Q.q7; if (st.ans || st.sel === null) return; st.ans = true;
-      const ok = st.sel === st.cor;
-      markOptions('q7', st.sel, st.cor, ok);
-      const T = calcAdjustmentTargets();
-      const dir = (target, baseline) => target > baseline ? 'Increase' : 'Decrease';
-      setBanner('q7', ok, `${dir(T.rcTarget, V.rc)} <span class="colour-resistor">R<sub>C</sub></span> to ${fmtO0(T.rcTarget)} — the only change that doesn't disturb <span class="colour-current">I<sub>E</sub></span>.`);
-      showQ7Working();
-      applyCircuitState(CIRCUIT_STATES[6].reveal);
-      advanceQuestion(7);
-    }
-    function showQ7Working() {
-      const box = document.getElementById('q7Working');
-      box.className = 'working-box visible';
-      const T = calcAdjustmentTargets();
-      const dir = (target, baseline) => target > baseline ? 'Increase' : 'Decrease';
-      const ieChangePct = (T.ieViaRE - IE) / IE * 100;
-      document.getElementById('q7WorkingContent').innerHTML = `
-    <div class="step-label"><span class="colour-resistor">R<sub>C</sub></span> — the correct lever</div>
-    <div class="working-line"><span class="colour-current">I<sub>E</sub></span> and <span class="colour-voltage">V<sub>E</sub></span> don't depend on <span class="colour-resistor">R<sub>C</sub></span> at all, so <span class="cideal">V<sub>CE(ideal)</sub></span> stays exactly the ${fmtV(VCE_ideal)} found in Q6. Solving <span class="colour-voltage">V<sub>C</sub></span> − <span class="colour-voltage">V<sub>E</sub></span> = <span class="cideal">V<sub>CE(ideal)</sub></span> for <span class="colour-resistor">R<sub>C</sub></span>:</div>
-
-    <div class="working-formula-row"><span class="cideal">R<sub>C</sub></span> = ${frac('<span class="cideal">V<sub>CE(ideal)</sub></span>', '<span class="colour-current">I<sub>E</sub></span>')}</div>
-    <div class="working-label">Substituting values:</div>
-    <div class="working-formula-row"><span class="cideal">R<sub>C</sub></span> = ${frac(fmtV(VCE_ideal), fmtA(IE))}</div>
-    <div class="working-total"><span class="cideal">R<sub>C</sub></span>: ${fmtO0(V.rc)} → <span class="colour-result">${dir(T.rcTarget, V.rc)} to ${fmtO0(T.rcTarget)}</span> &nbsp;<i>(<span class="colour-current">I<sub>E</sub></span> stays at ${fmtA(IE)} — completely unchanged)</i></div>
-
-    <div class="working-line">All three changes below can numerically land <span class="colour-voltage">V<sub>CE</sub></span> on a centred Q-point — but they don't all get there the same way. <span class="colour-resistor">R<sub>1</sub></span>, <span class="colour-resistor">R<sub>2</sub></span> and <span class="colour-resistor">R<sub>E</sub></span> all set <span class="colour-current">I<sub>E</sub></span> (directly or via <span class="colour-voltage">V<sub>E</sub></span>), so touching any of them means redesigning the bias current just to reposition <span class="colour-voltage">V<sub>CE</sub></span>. <span class="colour-resistor">R<sub>C</sub></span> alone sits downstream of <span class="colour-current">I<sub>E</sub></span> and only sets where <span class="colour-voltage">V<sub>CE</sub></span> falls on the load line.</div>
-
-
-    <div class="step-label"><span class="colour-resistor">R<sub>E</sub></span> — also reaches ${fmtV(VCE_ideal)}, but at a cost</div>
-    <div class="working-line"><span class="colour-voltage">V<sub>E</sub></span> is set by the base divider, not by <span class="colour-resistor">R<sub>E</sub></span>, so this route also lands on the same <span class="cideal">V<sub>CE(ideal)</sub></span> = ${fmtV(VCE_ideal)}. But to get there, <span class="colour-current">I<sub>E</sub></span> has to move from ${fmtA(IE)} to ${fmtA(T.ieViaRE)} — a ${Math.abs(ieChangePct).toFixed(0)}% ${ieChangePct >= 0 ? 'increase' : 'decrease'} in bias current, which also works against <span class="colour-resistor">R<sub>E</sub></span>'s own job of stabilising <span class="colour-current">I<sub>E</sub></span> against β and temperature drift.</div>
-    <div class="working-total"><span class="colour-resistor">R<sub>E</sub></span>: ${fmtO0(V.re)} → <span style="color:var(--colour-ui-wrong)">${dir(T.reTarget, V.re)} to ${fmtO0(T.reTarget)}</span></div>
-
-    <div class="step-label"><span class="colour-resistor">R<sub>1</sub></span> or <span class="colour-resistor">R<sub>2</sub></span> — moves the goalposts too</div>
-    <div class="working-line">Changing the base divider changes <span class="colour-voltage">V<sub>E</sub></span>, which means <span class="cideal">V<sub>CE(ideal)</sub></span> itself shifts as you turn the knob. Instead of hitting ${fmtV(VCE_ideal)}, <span class="colour-voltage">V<sub>CE</sub></span> and the (now-moving) ideal converge somewhere else entirely — <b>${fmtV(T.convergedVCE)}</b> — with <span class="colour-current">I<sub>E</sub></span> shifting from ${fmtA(IE)} to ${fmtA(T.ieDiv)} along the way. This redesigns the whole bias point rather than just repositioning <span class="colour-voltage">V<sub>CE</sub></span> within it.</div>
-    <div class="working-total"><span class="colour-resistor">R<sub>2</sub></span>: ${fmtO0(V.r2)} → <span style="color:var(--colour-ui-wrong)">${dir(T.r2Target, V.r2)} to ${fmtO0(T.r2Target)}</span> &nbsp;or&nbsp; <span class="colour-resistor">R<sub>1</sub></span>: ${fmtO0(V.r1)} → <span style="color:var(--colour-ui-wrong)">${dir(T.r1Target, V.r1)} to ${fmtO0(T.r1Target)}</span></div>`;
+    <div class="working-label">DC level at L</div>
+    <div class="working-line"><span class="ccap">C<sub>OUT</sub></span> is a coupling capacitor — it blocks DC and passes only the AC signal. No matter what <span class="colour-voltage">V<sub>C</sub></span> is (${fmtV(VC)} in this example), the DC level at the load terminal is <span class="colour-voltage">0 V</span>.</div>
+    <div class="working-label">AC phase at L</div>
+    <div class="working-line">Common-emitter configuration: a rising input at the base increases collector current, increasing the voltage drop across <span class="colour-resistor">R<sub>C</sub></span> and pulling <span class="colour-voltage">V<sub>C</sub></span> <b>lower</b>. The signal passed through <span class="ccap">C<sub>OUT</sub></span> to L is therefore <span class="colour-voltage">inverted</span> — 180° out of phase with V<sub>S</sub>.</div>
+    <div class="working-step">Output amplitude (using gain from Q5)</div>
+    <div class="working-formula-row"><span class="csignal">V<sub>L p-p</sub></span> ≈ <span class="colour-gain">|A<sub>v</sub>|</span> × <span class="csignal">V<sub>S</sub></span></div>
+    <div class="working-formula-row"><span class="csignal">V<sub>L p-p</sub></span> ≈ ${gain} × 10 mV</div>
+    <div class="working-total"><span class="csignal">V<sub>L p-p</sub></span> ≈ <span class="colour-result">${voutPP} mV p-p</span></div>
+    <div class="working-formula-row">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(amplified, so p-p &gt; 10 mV)&nbsp;<span class="colour-result">✓</span></div>`;
     }
 
     // ── navigation ──
@@ -1841,13 +1909,13 @@
       document.getElementById(qid + 'Working').className = 'working-box';
       const chk = document.getElementById(qid + 'Check'); chk.style.display = 'inline-block'; chk.disabled = true;
       const nxt = document.getElementById(qid + 'Next'); if (nxt) nxt.style.display = 'none';
+      const sum = document.getElementById(qid + 'Summary'); if (sum) sum.style.display = 'none';
     }
     function backFromQ2() { resetQuestion('q1'); resetQuestion('q2'); showQuestion(1); }
     function backFromQ3() { resetQuestion('q2'); resetQuestion('q3'); showQuestion(2); }
     function backFromQ4() { resetQuestion('q3'); resetQuestion('q4'); showQuestion(3); }
     function backFromQ5() { resetQuestion('q4'); resetQuestion('q5'); showQuestion(4); }
     function backFromQ6() { resetQuestion('q5'); resetQuestion('q6'); showQuestion(5); }
-    function backFromQ7() { resetQuestion('q6'); resetQuestion('q7'); showQuestion(6); }
 
     function showSummary() {
       cur = 'summary';
