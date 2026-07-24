@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NPN Bias Simulation — UEEEC0066</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      --colour-bg:      #0a0d14;
+      --colour-panel:   #0f1420;
+      --colour-border:  #1e2d4a;
+      --colour-bjt:     #ffb454;
+      --colour-grid:    rgba(0, 229, 255, 0.06);
+      --colour-text:    #c8d8e8;
+      --colour-label:   #5a7a9a;
+      --colour-primary: #00e5ff;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--colour-bg);
+      color: var(--colour-text);
+      font-family: 'Share Tech Mono', monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 3rem 1.5rem;
+      background-image:
+        linear-gradient(var(--colour-grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--colour-grid) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+
+    .crumb {
+      width: 100%;
+      max-width: 640px;
+      margin-bottom: 1.5rem;
+      font-size: 0.68rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+    .crumb a { color: var(--colour-label); text-decoration: none; transition: color 0.15s; }
+    .crumb a:hover { color: var(--colour-bjt); }
+    .crumb span { color: var(--colour-bjt); }
+
+    header {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+    header h1 {
+      font-family: 'Orbitron', sans-serif;
+      font-size: clamp(1.4rem, 5vw, 2.2rem);
+      font-weight: 900;
+      letter-spacing: 0.12em;
+      color: var(--colour-bjt);
+      text-shadow: 0 0 30px rgba(255, 180, 84, 0.5);
+      text-transform: uppercase;
+    }
+    header p {
+      margin-top: 0.5rem;
+      color: var(--colour-label);
+      font-size: 0.75rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+    }
+
+    .sim-wrap {
+      width: 100%;
+      max-width: 640px;
+    }
+
+    footer {
+      margin-top: 4rem;
+      font-size: 0.65rem;
+      color: var(--colour-label);
+      opacity: 0.4;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    /* ── Visualizer ── */
+    .q5-visualizer {
+      --q5v-magenta: #ff007f;
+      --q5v-cyan:    #00f0ff;
+      --q5v-orange:  #ff8c00;
+      --q5v-red:     #ff3344;
+      --q5v-green:   #00ff66;
+      --q5v-dim:     #a0aab8;
+      width: 100%;
+      border-radius: 4px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      background: rgba(0, 0, 0, .25);
+      border: 1px solid var(--colour-border);
+    }
+
+    .q5-visualizer .q5v-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2px;
+    }
+    .q5-visualizer .q5v-header-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.58rem;
+      letter-spacing: 1.5px;
+      color: var(--q5v-dim);
+      text-transform: uppercase;
+    }
+    .q5-visualizer .q5v-reset {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.2);
+      color: #fff;
+      padding: 3px 9px;
+      border-radius: 5px;
+      font-size: 0.65rem;
+      cursor: pointer;
+      font-family: 'Share Tech Mono', monospace;
+      transition: background 0.2s;
+    }
+    .q5-visualizer .q5v-reset:hover { background: rgba(255,255,255,0.15); }
+
+    .q5-visualizer .q5v-box {
+      border-radius: 7px;
+      padding: 8px 11px;
+      background: rgba(255,255,255,0.02);
+    }
+    .q5-visualizer .q5v-box-magenta { border: 2px dashed var(--q5v-magenta); }
+    .q5-visualizer .q5v-box-cyan    { border: 2px dashed var(--q5v-cyan); }
+
+    .q5-visualizer .q5v-box-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .q5-visualizer .q5v-box-title {
+      font-weight: 800;
+      font-size: 0.7rem;
+      letter-spacing: 1px;
+      margin-bottom: 1px;
+    }
+    .q5-visualizer .q5v-box-magenta .q5v-box-title { color: var(--q5v-magenta); }
+    .q5-visualizer .q5v-box-cyan    .q5v-box-title { color: var(--q5v-cyan); }
+
+    .q5-visualizer .q5v-box-sub {
+      font-size: 0.6rem;
+      color: var(--q5v-dim);
+      font-family: 'Share Tech Mono', monospace;
+      margin-bottom: 5px;
+    }
+    .q5-visualizer .q5v-vol {
+      font-weight: bold;
+      font-size: 0.82rem;
+      white-space: nowrap;
+    }
+
+    .q5-visualizer .q5v-slider {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 13px;
+      border-radius: 7px;
+      outline: none;
+      cursor: pointer;
+      margin-top: 2px;
+      border: 1px solid rgba(255,255,255,0.15);
+    }
+    #q5-slide-C { background: linear-gradient(to right, #fff, var(--q5v-magenta), #2a0018); }
+    #q5-slide-E { background: linear-gradient(to right, #001f28, var(--q5v-cyan), #fff); }
+
+    .q5-visualizer .q5v-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 19px; height: 19px; border-radius: 50%;
+      background: #fff; cursor: pointer;
+      box-shadow: 0 0 8px rgba(255,255,255,0.8);
+      border: 2px solid var(--colour-bg);
+      transition: background 0.15s, box-shadow 0.15s;
+    }
+    .q5-visualizer .q5v-slider:active::-webkit-slider-thumb {
+      background: var(--colour-bjt);
+      box-shadow: 0 0 12px var(--colour-bjt), 0 0 24px rgba(255,180,84,0.4);
+    }
+    .q5-visualizer .q5v-slider::-moz-range-thumb {
+      width: 19px; height: 19px; border-radius: 50%;
+      background: #fff; cursor: pointer;
+      box-shadow: 0 0 8px rgba(255,255,255,0.8);
+      border: 2px solid var(--colour-bg);
+      transition: background 0.15s, box-shadow 0.15s;
+    }
+    .q5-visualizer .q5v-slider:active::-moz-range-thumb {
+      background: var(--colour-bjt);
+      box-shadow: 0 0 12px var(--colour-bjt);
+    }
+
+    .q5-visualizer .q5v-schematic {
+      position: relative;
+      width: 100%;
+      height: 186px;
+    }
+    .q5-visualizer .q5v-schematic svg { width: 100%; height: 100%; }
+    .q5-visualizer .q5v-wire { transition: stroke 0.3s ease, stroke-width 0.3s ease; }
+    .q5-visualizer .q5v-flow { stroke-dasharray: 6, 6; }
+
+    @keyframes q5vFlowDown  { from { stroke-dashoffset: 24; } to { stroke-dashoffset: 0; } }
+    @keyframes q5vFlowRight { from { stroke-dashoffset: 24; } to { stroke-dashoffset: 0; } }
+
+    .q5-visualizer .q5v-badge {
+      text-align: center;
+      padding: 8px 11px;
+      border-radius: 7px;
+      font-weight: bold;
+      font-size: 0.72rem;
+      line-height: 1.5;
+      transition: all 0.3s;
+    }
+    .q5-visualizer .q5v-badge-header {
+      font-size: 0.76rem;
+      margin-bottom: 3px;
+      padding-bottom: 2px;
+      border-bottom: 1px solid rgba(255,255,255,0.15);
+    }
+    .q5-visualizer .q5v-badge-line { margin: 2px 0; font-weight: 600; }
+
+    .q5-visualizer .q5v-active  { background: rgba(0,255,102,0.10); border: 1px solid var(--q5v-green);  color: var(--q5v-green); }
+    .q5-visualizer .q5v-alert   { background: rgba(255,51,68,0.12);  border: 1px solid var(--q5v-red);    color: var(--q5v-red); }
+    .q5-visualizer .q5v-warning { background: rgba(255,140,0,0.12);  border: 1px solid var(--q5v-orange); color: var(--q5v-orange); }
+  </style>
+</head>
+<body>
+
+  <div class="crumb">
+    <a href="../../../../index.html">Electronics</a> /
+    <a href="../../../index.html">Quiz</a> /
+    <a href="../../index.html">UEEEC0066</a> /
+    <a href="../index.html">BJT</a> /
+    <a href="index.html">NPN</a> /
+    <span>Bias Simulation</span>
+  </div>
+
+  <header>
+    <h1>NPN Bias Simulation</h1>
+    <p>Fixed-Bias Circuit · BC549 · Interactive</p>
+  </header>
+
+  <div class="sim-wrap">
+    <div class="q5-visualizer">
+      <div class="q5v-header">
+        <span class="q5v-header-title">BJT Biasing Interactive</span>
+        <button class="q5v-reset" onclick="simReset()">↺ Reset</button>
+      </div>
+
+      <!-- C–B Junction (top) -->
+      <div class="q5v-box q5v-box-magenta">
+        <div class="q5v-box-row">
+          <div>
+            <div class="q5v-box-title">C–B JUNCTION</div>
+            <div class="q5v-box-sub">REVERSE-BIASED when V<sub>C</sub> &gt; V<sub>B</sub></div>
+          </div>
+          <span id="q5-val-VC" class="q5v-vol" style="color:#ff007f">V<sub>C</sub> = 0.0V</span>
+        </div>
+        <input type="range" id="q5-slide-C" class="q5v-slider" min="0" max="12" step="0.1" value="0">
+      </div>
+
+      <!-- Schematic SVG -->
+      <div class="q5v-schematic">
+        <svg id="q5v-svg" viewBox="0 0 540 220" xmlns="http://www.w3.org/2000/svg"
+             font-family="'Share Tech Mono',monospace">
+          <defs>
+            <filter id="q5v-glow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+              <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+            <g id="q5v-bjt">
+              <circle cx="7" cy="0" r="24" fill="none" style="stroke:var(--colour-bjt)" stroke-width="2" filter="url(#q5v-glow)"/>
+              <line x1="-17" y1="0" x2="0" y2="0" style="stroke:var(--colour-bjt)" stroke-width="2"/>
+              <line x1="0" y1="-12" x2="0" y2="12" style="stroke:var(--colour-bjt)" stroke-width="2.5"/>
+              <polyline points="14,-34 14,-20 0,-8" style="stroke:var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round"/>
+              <polyline points="14,34 14,20 0,8" style="stroke:var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round"/>
+              <polygon points="12,18 1,14 6,8" style="fill:var(--colour-bjt)"/>
+            </g>
+          </defs>
+          <!-- Static background wires -->
+          <line x1="414" y1="0"   x2="414" y2="76"  stroke="rgba(255,255,255,0.1)" stroke-width="6" stroke-linecap="round"/>
+          <line x1="414" y1="144" x2="414" y2="220" stroke="rgba(255,255,255,0.1)" stroke-width="6" stroke-linecap="round"/>
+          <line x1="85"  y1="110" x2="383" y2="110" stroke="rgba(255,255,255,0.1)" stroke-width="6" stroke-linecap="round"/>
+          <!-- Animated current wires -->
+          <line id="q5v-wC" class="q5v-wire q5v-flow" x1="414" y1="0"   x2="414" y2="76"  stroke="#00ff66" stroke-width="6" stroke-linecap="round"/>
+          <line id="q5v-wE" class="q5v-wire q5v-flow" x1="414" y1="144" x2="414" y2="220" stroke="#00ff66" stroke-width="6" stroke-linecap="round"/>
+          <line id="q5v-wB" class="q5v-wire q5v-flow" x1="85"  y1="110" x2="383" y2="110" stroke="#00ff66" stroke-width="6" stroke-linecap="round"/>
+          <!-- BJT symbol -->
+          <use href="#q5v-bjt" x="400" y="110"/>
+          <!-- Base voltage scale ticks -->
+          <line x1="105" y1="100" x2="105" y2="120" stroke="#a0aab8" stroke-width="2"/>
+          <text x="105" y="138" fill="#a0aab8" font-size="11" font-weight="bold" text-anchor="middle">0V</text>
+          <line x1="210" y1="95"  x2="210" y2="125" stroke="#00f0ff" stroke-width="3"/>
+          <text x="210" y="138" fill="#00f0ff" font-size="12" font-weight="bold" text-anchor="middle">0.6V</text>
+          <line x1="320" y1="100" x2="320" y2="120" stroke="#a0aab8" stroke-width="2"/>
+          <text x="320" y="138" fill="#a0aab8" font-size="11" font-weight="bold" text-anchor="middle">5.0V</text>
+          <!-- V_B knob -->
+          <circle id="q5v-knob" cx="105" cy="110" r="10" fill="#fff" stroke="#00ff66" stroke-width="3"/>
+          <!-- Voltage readouts — move the whole block by editing translate(x, y) -->
+          <g id="q5v-readouts" transform="translate(0, 0)">
+            <text x="0" y="115" fill="#fff" font-weight="bold" font-size="14">V<tspan baseline-shift="sub" font-size="11">B</tspan>=<tspan id="q5v-vb">0.00V</tspan></text>
+            <text x="430" y="45"  fill="#ff007f" font-weight="bold" font-size="14">V<tspan baseline-shift="sub" font-size="11">BC</tspan>=<tspan id="q5v-vbc">0.00V</tspan></text>
+            <text id="q5v-bc-tag" x="430" y="70"  fill="#00ff66" font-size="14" font-weight="bold">REVERSE-BIASED</text>
+            <text x="430" y="160" fill="#00f0ff" font-weight="bold" font-size="14">V<tspan baseline-shift="sub" font-size="11">BE</tspan>=<tspan id="q5v-vbe">−5.00V</tspan></text>
+            <text id="q5v-be-tag"  x="430" y="185" fill="#ff3344" font-size="14" font-weight="bold">OFF OR</text>
+            <text id="q5v-be-tag2" x="430" y="203" fill="#ff3344" font-size="14" font-weight="bold">REVERSE-BIASED</text>
+          </g>
+          <!-- VB drag zone — drawn last so it sits on top of the knob and wires -->
+          <rect id="q5v-drag-zone" x="105" y="82" width="215" height="56" fill="transparent" style="cursor:pointer"/>
+        </svg>
+      </div>
+
+      <!-- B–E Junction (bottom) -->
+      <div class="q5v-box q5v-box-cyan">
+        <div class="q5v-box-row">
+          <div>
+            <div class="q5v-box-title">B–E JUNCTION</div>
+            <div class="q5v-box-sub">FORWARD-BIASED when V<sub>BE</sub> = V<sub>B</sub> − V<sub>E</sub> ≥ 0.6V</div>
+          </div>
+          <span id="q5-val-VE" class="q5v-vol" style="color:#00f0ff">V<sub>E</sub> = 5.0V</span>
+        </div>
+        <input type="range" id="q5-slide-E" class="q5v-slider" min="0" max="5" step="0.1" value="5">
+      </div>
+
+      <!-- Status badge -->
+      <div id="q5v-status" class="q5v-badge q5v-alert">
+        <div class="q5v-badge-line">CUTOFF: V<sub>BE</sub> = −5.00V — no current</div>
+      </div>
+    </div>
+  </div>
+
+  <footer>Electronics // Quiz // UEEEC0066 // BJT // NPN // Bias Simulation</footer>
+
+  <script>
+    (function () {
+      const sC      = document.getElementById('q5-slide-C');
+      const sE      = document.getElementById('q5-slide-E');
+      const dispVC  = document.getElementById('q5-val-VC');
+      const dispVE  = document.getElementById('q5-val-VE');
+      const svgVB   = document.getElementById('q5v-vb');
+      const svgVBC  = document.getElementById('q5v-vbc');
+      const svgVBE  = document.getElementById('q5v-vbe');
+      const bcTag   = document.getElementById('q5v-bc-tag');
+      const beTag   = document.getElementById('q5v-be-tag');
+      const beTag2  = document.getElementById('q5v-be-tag2');
+      const knob    = document.getElementById('q5v-knob');
+      const wB      = document.getElementById('q5v-wB');
+      const wC      = document.getElementById('q5v-wC');
+      const wE      = document.getElementById('q5v-wE');
+      const badge   = document.getElementById('q5v-status');
+      const dragZone = document.getElementById('q5v-drag-zone');
+      const TRACK_X0 = 105, TRACK_X1 = 320;
+
+      let vbPct = 0;
+      let dragging = false;
+      let trackRect = null;
+
+      function pctFromClientX(clientX) {
+        return Math.max(0, Math.min(1, (clientX - trackRect.left) / trackRect.width));
+      }
+
+      dragZone.addEventListener('pointerdown', e => {
+        trackRect = dragZone.getBoundingClientRect();
+        dragging = true;
+        dragZone.setPointerCapture(e.pointerId);
+        knob.setAttribute('fill', 'var(--colour-bjt)');
+        vbPct = pctFromClientX(e.clientX);
+        update();
+      });
+      dragZone.addEventListener('pointermove', e => {
+        if (!dragging) return;
+        vbPct = pctFromClientX(e.clientX);
+        update();
+      });
+      dragZone.addEventListener('pointerup',     () => { dragging = false; knob.setAttribute('fill', '#fff'); });
+      dragZone.addEventListener('pointercancel', () => { dragging = false; knob.setAttribute('fill', '#fff'); });
+
+      function setWires(color, vAnim, hAnim) {
+        [wC, wE].forEach(w => { w.setAttribute('stroke', color); w.style.animation = vAnim; });
+        wB.setAttribute('stroke', color); wB.style.animation = hAnim;
+        knob.setAttribute('stroke', color);
+      }
+
+      function update() {
+        const vc  = parseFloat(sC.value);
+        const ve  = parseFloat(sE.value);
+
+        let pct = vbPct;
+        if (Math.abs(pct - 0.5) < 0.025) pct = 0.5; // snap to 0.6 V
+        const vb = pct <= 0.5 ? (pct / 0.5) * 0.6 : 0.6 + ((pct - 0.5) / 0.5) * 4.4;
+        knob.setAttribute('cx', TRACK_X0 + pct * (TRACK_X1 - TRACK_X0));
+
+        dispVC.innerHTML = `V<sub>C</sub> = ${vc.toFixed(1)}V`;
+        dispVE.innerHTML = `V<sub>E</sub> = ${ve.toFixed(1)}V`;
+        svgVB.textContent = `${vb.toFixed(2)}V`;
+
+        const vbe = vb - ve;
+        const vbc = vb - vc;
+        svgVBC.textContent = `${vbc >= 0 ? '+' : ''}${vbc.toFixed(2)}V`;
+        svgVBE.textContent = `${vbe >= 0 ? '+' : ''}${vbe.toFixed(2)}V`;
+
+        const sat = vbc > 0;
+        bcTag.textContent = sat ? 'FORWARD-BIASED (SATURATED)' : 'REVERSE-BIASED';
+        bcTag.setAttribute('fill', sat ? '#ff3344' : '#00ff66');
+
+        let beOff = false, subThr = false;
+        if (vbe >= 0.6) {
+          beTag.textContent = 'FORWARD-BIASED'; beTag.setAttribute('fill', '#00ff66');
+          beTag2.style.display = 'none';
+        } else if (vbe > 0) {
+          beTag.textContent = 'SUB-THRESHOLD'; beTag.setAttribute('fill', '#ff8c00');
+          beTag2.style.display = 'none';
+          beOff = true; subThr = true;
+        } else {
+          beTag.textContent = 'OFF OR'; beTag.setAttribute('fill', '#ff3344');
+          beTag2.textContent = 'REVERSE-BIASED'; beTag2.style.display = '';
+          beOff = true;
+        }
+
+        if (beOff && sat) {
+          setWires('#ff3344', 'none', '0s');
+          badge.className = 'q5v-badge q5v-alert';
+          badge.innerHTML = `<div class="q5v-badge-header">MULTIPLE BIAS FAULTS</div>
+            <div class="q5v-badge-line">Emitter: ${subThr ? `SUB-THRESHOLD (V<sub>BE</sub> = +${vbe.toFixed(2)}V)` : `CUTOFF (V<sub>BE</sub> = ${vbe.toFixed(2)}V)`}</div>
+            <div class="q5v-badge-line">Collector: SATURATION (V<sub>C</sub> ≤ V<sub>B</sub>)</div>`;
+        } else if (beOff && subThr) {
+          setWires('#ff8c00', 'q5vFlowDown 3s linear infinite', 'q5vFlowRight 3s linear infinite');
+          badge.className = 'q5v-badge q5v-warning';
+          badge.innerHTML = `<div class="q5v-badge-line">SUB-THRESHOLD: V<sub>BE</sub> = +${vbe.toFixed(2)}V (weak leakage)</div>`;
+        } else if (beOff) {
+          setWires('#ff3344', 'none', '0s');
+          badge.className = 'q5v-badge q5v-alert';
+          badge.innerHTML = `<div class="q5v-badge-line">CUTOFF: V<sub>BE</sub> = ${vbe.toFixed(2)}V — no current</div>`;
+        } else if (sat) {
+          setWires('#ff3344', 'none', '0s');
+          badge.className = 'q5v-badge q5v-alert';
+          badge.innerHTML = `<div class="q5v-badge-line">SATURATION: V<sub>C</sub> too low (V<sub>C</sub> ≤ V<sub>B</sub>)</div>`;
+        } else {
+          setWires('#00ff66', 'q5vFlowDown 0.8s linear infinite', 'q5vFlowRight 0.8s linear infinite');
+          badge.className = 'q5v-badge q5v-active';
+          badge.innerHTML = `<div class="q5v-badge-line">ACTIVE REGION: V<sub>C</sub> &gt; V<sub>B</sub> &gt; V<sub>E</sub> → Normal Flow!</div>`;
+        }
+      }
+
+      function reset() { sC.value = 0; vbPct = 0; sE.value = 5; update(); }
+      window.simReset = reset;
+
+      [sC, sE].forEach(s => s.addEventListener('input', update));
+      update();
+    })();
+  </script>
+</body>
+</html>
