@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NPN Bias Simulator 2 — Operating Point</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:           #0a0d14;
+      --panel:        #0f1420;
+      --panel2:       #0c1119;
+      --border:       #1e2d4a;
+      --grid:         rgba(0,229,255,0.06);
+      --text:         #c8d8e8;
+      --label:        #5a7a9a;
+      --subject:      #ffb454;
+      --subject-dim:  rgba(255,180,84,0.05);
+      --subject-glow: rgba(255,180,84,0.5);
+      --colour-bjt:   #ffb454;
+      --green:        #00ff66;
+      --red:          #ff3344;
+      --orange:       #ff8c00;
+      --magenta:      #ff007f;
+      --cyan:         #00f0ff;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Share Tech Mono', monospace;
+      min-height: 100vh;
+      padding: 2rem 1.2rem 4rem;
+      background-image: linear-gradient(var(--grid) 1px,transparent 1px),
+                        linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+      background-size: 40px 40px;
+    }
+    .crumb { font-size: 0.68rem; letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 1.4rem; }
+    .crumb a { color: var(--label); text-decoration: none; }
+    .crumb a:hover { color: var(--subject); }
+    .crumb span { color: var(--subject); }
+    header { text-align: center; margin-bottom: 1.8rem; }
+    header h1 {
+      font-family: 'Orbitron', sans-serif;
+      font-size: clamp(1.1rem, 3.5vw, 1.9rem);
+      font-weight: 900; letter-spacing: 0.08em;
+      color: var(--subject); text-shadow: 0 0 40px var(--subject-glow);
+      text-transform: uppercase;
+    }
+    header p { margin-top: 0.45rem; color: var(--label); font-size: 0.76rem; letter-spacing: 0.18em; text-transform: uppercase; }
+
+    /* ── Layout ── */
+    .s2-layout { display: flex; gap: 14px; align-items: flex-start; max-width: 980px; margin: 0 auto 16px; }
+    .s2-left   { flex: 0 0 330px; display: flex; flex-direction: column; gap: 9px; }
+    .s2-right  { flex: 1 1 0; min-width: 0; }
+
+    /* ── Control boxes ── */
+    .s2-cbox { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 9px 12px; }
+    .s2-cbox-title { font-size: 0.58rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--label); margin-bottom: 5px; }
+    .s2-cbox-val { font-size: 0.82rem; color: var(--text); margin-bottom: 5px; }
+    .s2-cbox-val strong { color: #fff; }
+
+    /* ── Sliders ── */
+    .s2-slider { -webkit-appearance: none; appearance: none; width: 100%; height: 4px; border-radius: 2px; outline: none; cursor: pointer; margin: 2px 0; }
+    .s2-slider.rc  { background: var(--magenta); }
+    .s2-slider.ve  { background: var(--cyan); }
+    .s2-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #fff; cursor: pointer; }
+    .s2-slider.rc::-webkit-slider-thumb { border: 3px solid var(--magenta); }
+    .s2-slider.ve::-webkit-slider-thumb { border: 3px solid var(--cyan); }
+    .s2-slider::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: #fff; cursor: pointer; border: 3px solid currentColor; }
+    .s2-slider-range { display: flex; justify-content: space-between; font-size: 0.7rem; color: #8aaacc; margin-top: 3px; padding: 0 2px; }
+
+    /* ── Schematic ── */
+    .s2-schematic { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 4px; }
+    .s2-schematic svg { width: 100%; height: auto; display: block; }
+    .s2-wire { transition: stroke 0.3s ease; }
+    .s2-flow { stroke-dasharray: 6, 6; }
+    @keyframes s2Down  { from { stroke-dashoffset: 24; } to { stroke-dashoffset: 0; } }
+    @keyframes s2Right { from { stroke-dashoffset: 24; } to { stroke-dashoffset: 0; } }
+
+    /* ── Readout grid ── */
+    .s2-readouts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 9px 12px; }
+    .s2-ro-label { font-size: 0.58rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--label); }
+    .s2-ro-val   { font-size: 0.88rem; color: #fff; }
+
+    /* ── Badge ── */
+    .s2-badge { border-radius: 4px; padding: 9px 13px; font-size: 0.76rem; line-height: 1.6; }
+    .s2-badge-hdr { font-family: 'Orbitron', sans-serif; font-size: 0.66rem; letter-spacing: 0.1em; font-weight: 700; margin-bottom: 3px; }
+    .s2-badge-line { margin: 1px 0; }
+    .s2-active    { background: rgba(0,255,102,0.08);  border: 1px solid var(--green);   color: var(--green); }
+    .s2-alert     { background: rgba(255,51,68,0.10);  border: 1px solid var(--red);     color: var(--red); }
+    .s2-saturated { background: rgba(255,0,127,0.09);  border: 1px solid var(--magenta); color: var(--magenta); }
+
+    /* ── Reset ── */
+    .s2-reset { width: 100%; padding: 7px; cursor: pointer; background: var(--panel2); border: 1px solid var(--border); border-radius: 4px; color: var(--label); font-family: 'Share Tech Mono', monospace; font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; transition: background 0.15s, color 0.15s; }
+    .s2-reset:hover { background: var(--subject-dim); color: var(--subject); }
+
+    /* ── Graph wrappers ── */
+    .s2-gtitle { font-family: 'Orbitron', sans-serif; font-size: 0.52rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--label); text-align: center; margin-bottom: 5px; }
+    .s2-gwrap  { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 6px; }
+    .s2-gwrap svg { width: 100%; height: auto; display: block; }
+    .s2-note { font-size: 0.6rem; color: var(--label); text-align: center; margin-top: 4px; letter-spacing: 0.05em; }
+
+    /* ── Bottom section ── */
+    .s2-bottom { max-width: 980px; margin: 0 auto; }
+
+    /* ── Responsive ── */
+    @media (max-width: 700px) {
+      .s2-layout { flex-direction: column; }
+      .s2-left   { flex: none; width: 100%; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="crumb">
+  <a href="../../../../index.html">Electronics</a> /
+  <a href="../../../index.html">Cert III</a> /
+  <a href="../../index.html">UEEEC0066</a> /
+  <a href="../index.html">BJT</a> /
+  <a href="index.html">NPN</a> /
+  <span>Simulator 2</span>
+</div>
+
+<header>
+  <h1>NPN Bias Simulator 2</h1>
+  <p>Operating Point · Load Line · BC549 · V<sub>CC</sub> = 12V · β = 200</p>
+</header>
+
+<div class="s2-layout">
+
+  <!-- ═══ LEFT COLUMN ═══ -->
+  <div class="s2-left">
+
+    <!-- RC control -->
+    <div class="s2-cbox">
+      <div class="s2-cbox-title">Collector Resistor R<sub>C</sub></div>
+      <div class="s2-cbox-val">R<sub>C</sub> = <strong id="s2-rc-disp">1.0kΩ</strong></div>
+      <input type="range" id="s2-rc" class="s2-slider rc" min="0" max="100" value="50">
+      <div class="s2-slider-range"><span>100Ω</span><span>10kΩ</span></div>
+    </div>
+
+    <!-- Schematic SVG -->
+    <div class="s2-schematic">
+      <svg id="s2-svg" viewBox="0 0 540 220" xmlns="http://www.w3.org/2000/svg"
+           font-family="'Share Tech Mono',monospace">
+        <defs>
+          <filter id="s2-glow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="2" result="cb"/>
+            <feMerge><feMergeNode in="cb"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <g id="s2-bjt-sym">
+            <circle cx="7" cy="0" r="24" fill="none" style="stroke:var(--colour-bjt)" stroke-width="2" filter="url(#s2-glow)"/>
+            <line x1="-17" y1="0"  x2="0"  y2="0"   style="stroke:var(--colour-bjt)" stroke-width="2"/>
+            <line x1="0"   y1="-12" x2="0" y2="12"  style="stroke:var(--colour-bjt)" stroke-width="2.5"/>
+            <polyline points="14,-34 14,-20 0,-8"     style="stroke:var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round"/>
+            <polyline points="14,34 14,20 0,8"        style="stroke:var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round"/>
+            <polygon  points="12,18 1,14 6,8"         style="fill:var(--colour-bjt)"/>
+          </g>
+        </defs>
+
+        <!-- Static shadow wires -->
+        <line x1="414" y1="0"   x2="414" y2="76"  stroke="rgba(255,255,255,0.08)" stroke-width="6" stroke-linecap="round"/>
+        <line x1="414" y1="144" x2="414" y2="220" stroke="rgba(255,255,255,0.08)" stroke-width="6" stroke-linecap="round"/>
+        <line x1="85"  y1="110" x2="383" y2="110" stroke="rgba(255,255,255,0.08)" stroke-width="6" stroke-linecap="round"/>
+
+        <!-- Animated current wires -->
+        <line id="s2-wC" class="s2-wire s2-flow" x1="414" y1="0"   x2="414" y2="76"  stroke="#ff3344" stroke-width="6" stroke-linecap="round"/>
+        <line id="s2-wE" class="s2-wire s2-flow" x1="414" y1="144" x2="414" y2="220" stroke="#ff3344" stroke-width="6" stroke-linecap="round"/>
+        <line id="s2-wB" class="s2-wire s2-flow" x1="85"  y1="110" x2="383" y2="110" stroke="#ff3344" stroke-width="6" stroke-linecap="round"/>
+
+        <!-- RC symbol over collector wire -->
+        <rect x="406" y="14" width="16" height="36" fill="var(--panel)" stroke="var(--magenta)" stroke-width="2" rx="2"/>
+
+        <!-- VCC label + node -->
+        <text x="414" y="9" fill="#a0aab8" font-size="10" font-weight="bold" text-anchor="middle">+VCC</text>
+        <!-- RC value label -->
+        <text x="428" y="28" fill="var(--magenta)" font-size="10" font-weight="bold">R<tspan baseline-shift="sub" font-size="8">C</tspan></text>
+        <text id="s2-svg-rc" x="428" y="44" fill="var(--magenta)" font-size="11" font-weight="bold">1.0kΩ</text>
+
+        <!-- BJT -->
+        <use href="#s2-bjt-sym" x="400" y="110"/>
+
+        <!-- Derived VC at collector node -->
+        <text x="436" y="60" fill="var(--magenta)" font-size="10">V<tspan baseline-shift="sub" font-size="8">C</tspan>=<tspan id="s2-svg-vc">12.0V</tspan></text>
+        <!-- VBC junction -->
+        <text x="436" y="74" fill="var(--magenta)" font-size="10">V<tspan baseline-shift="sub" font-size="8">BC</tspan>=<tspan id="s2-svg-vbc">−12.0V</tspan></text>
+        <text id="s2-bc-tag" x="436" y="88" fill="var(--green)" font-size="9" font-weight="bold">REV-BIASED</text>
+
+        <!-- VBE junction -->
+        <text x="436" y="145" fill="var(--cyan)" font-size="10">V<tspan baseline-shift="sub" font-size="8">BE</tspan>=<tspan id="s2-svg-vbe">0.00V</tspan></text>
+        <text id="s2-be-tag" x="436" y="159" fill="var(--red)" font-size="9" font-weight="bold">OFF</text>
+
+        <!-- VB track scale ticks -->
+        <line x1="105" y1="100" x2="105" y2="120" stroke="#a0aab8" stroke-width="2"/>
+        <text x="105" y="135" fill="#a0aab8" font-size="10" font-weight="bold" text-anchor="middle">0V</text>
+        <line x1="131" y1="97"  x2="131" y2="123" stroke="var(--cyan)" stroke-width="2.5"/>
+        <text x="131" y="135" fill="var(--cyan)" font-size="10" font-weight="bold" text-anchor="middle">0.6V</text>
+        <line x1="320" y1="100" x2="320" y2="120" stroke="#a0aab8" stroke-width="2"/>
+        <text x="320" y="135" fill="#a0aab8" font-size="10" font-weight="bold" text-anchor="middle">5V</text>
+
+        <!-- VB knob -->
+        <circle id="s2-knob" cx="105" cy="110" r="10" fill="#fff" stroke="var(--red)" stroke-width="3"/>
+
+        <!-- VB readout (left) -->
+        <text x="0" y="115" fill="#fff" font-weight="bold" font-size="14">V<tspan baseline-shift="sub" font-size="11">B</tspan>=<tspan id="s2-svg-vb">0.00V</tspan></text>
+
+        <!-- VE label at emitter -->
+        <text x="414" y="215" fill="var(--cyan)" font-size="10" font-weight="bold" text-anchor="middle">V<tspan baseline-shift="sub" font-size="8">E</tspan>=<tspan id="s2-svg-ve">0.0V</tspan></text>
+
+        <!-- VB drag zone -->
+        <rect id="s2-drag" x="105" y="82" width="215" height="56" fill="transparent" style="cursor:pointer"/>
+      </svg>
+    </div>
+
+    <!-- VE control -->
+    <div class="s2-cbox">
+      <div class="s2-cbox-title">Emitter Voltage V<sub>E</sub></div>
+      <div class="s2-cbox-val">V<sub>E</sub> = <strong id="s2-ve-disp">0.0V</strong></div>
+      <input type="range" id="s2-ve" class="s2-slider ve" min="-1" max="5" step="0.05" value="0">
+      <div class="s2-slider-range"><span>−1V</span><span>5V</span></div>
+    </div>
+
+    <!-- Readouts -->
+    <div class="s2-readouts">
+      <div>
+        <div class="s2-ro-label">V<sub>BE</sub></div>
+        <div class="s2-ro-val" id="s2-ro-vbe">0.000 V</div>
+      </div>
+      <div>
+        <div class="s2-ro-label">V<sub>C</sub> <span style="color:var(--magenta);font-size:0.55rem">(derived)</span></div>
+        <div class="s2-ro-val" id="s2-ro-vc">12.00 V</div>
+      </div>
+      <div>
+        <div class="s2-ro-label">I<sub>C</sub></div>
+        <div class="s2-ro-val" id="s2-ro-ic">0.000 mA</div>
+      </div>
+      <div>
+        <div class="s2-ro-label">I<sub>B</sub></div>
+        <div class="s2-ro-val" id="s2-ro-ib">0.0 μA</div>
+      </div>
+      <div>
+        <div class="s2-ro-label">V<sub>CE</sub></div>
+        <div class="s2-ro-val" id="s2-ro-vce">12.00 V</div>
+      </div>
+      <div>
+        <div class="s2-ro-label">V<sub>BC</sub></div>
+        <div class="s2-ro-val" id="s2-ro-vbc">−12.00 V</div>
+      </div>
+    </div>
+
+    <!-- Badge -->
+    <div id="s2-badge" class="s2-badge s2-alert">
+      <div class="s2-badge-line">CUTOFF — V<sub>BE</sub> = 0.00V &lt; 0.6V — no current</div>
+    </div>
+
+    <button class="s2-reset" onclick="s2Reset()">↺  Reset to defaults</button>
+  </div>
+
+  <!-- ═══ RIGHT COLUMN: Load Line ═══ -->
+  <div class="s2-right">
+    <p class="s2-gtitle">Load Line — I<sub>C</sub> vs V<sub>C</sub></p>
+    <div class="s2-gwrap">
+      <!--
+        Coords:  G_L=55  G_R=290  G_T=20  G_B=250  G_W=235  G_H=230
+        x(VC) = 55 + (VC/12)*235    VC=0→55  VC=3→114  VC=6→173  VC=9→231  VC=12→290
+        y(IC) = 250 - (IC/20)*230   IC=0→250  IC=5→193  IC=10→135  IC=15→78  IC=20→20
+      -->
+      <svg id="s2-ll-svg" viewBox="0 0 310 285" xmlns="http://www.w3.org/2000/svg"
+           font-family="'Share Tech Mono',monospace">
+
+        <!-- Grid verticals: VC = 3, 6, 9 -->
+        <line x1="114" y1="20" x2="114" y2="250" stroke="rgba(0,229,255,0.07)" stroke-width="1" stroke-dasharray="3,4"/>
+        <line x1="173" y1="20" x2="173" y2="250" stroke="rgba(0,229,255,0.07)" stroke-width="1" stroke-dasharray="3,4"/>
+        <line x1="231" y1="20" x2="231" y2="250" stroke="rgba(0,229,255,0.07)" stroke-width="1" stroke-dasharray="3,4"/>
+        <!-- Grid horizontals: IC = 5, 10, 15, 20 mA -->
+        <line x1="55" y1="193" x2="290" y2="193" stroke="rgba(0,229,255,0.07)" stroke-width="1" stroke-dasharray="3,4"/>
+        <line x1="55" y1="135" x2="290" y2="135" stroke="rgba(0,229,255,0.07)" stroke-width="1" stroke-dasharray="3,4"/>
+        <line x1="55" y1="78"  x2="290" y2="78"  stroke="rgba(0,229,255,0.07)" stroke-width="1" stroke-dasharray="3,4"/>
+        <line x1="55" y1="20"  x2="290" y2="20"  stroke="rgba(0,229,255,0.04)" stroke-width="1" stroke-dasharray="3,4"/>
+
+        <!-- Axes -->
+        <line x1="55" y1="20"  x2="55"  y2="254" stroke="#2a4060" stroke-width="2"/>
+        <line x1="51" y1="250" x2="294" y2="250" stroke="#2a4060" stroke-width="2"/>
+
+        <!-- X labels (VC) -->
+        <text x="55"  y="262" fill="#5a7a9a" font-size="9" text-anchor="middle">0</text>
+        <text x="114" y="262" fill="#5a7a9a" font-size="9" text-anchor="middle">3</text>
+        <text x="173" y="262" fill="#5a7a9a" font-size="9" text-anchor="middle">6</text>
+        <text x="231" y="262" fill="#5a7a9a" font-size="9" text-anchor="middle">9</text>
+        <text x="290" y="262" fill="#5a7a9a" font-size="9" text-anchor="middle">12</text>
+        <text x="172" y="274" fill="var(--magenta)" font-size="9" font-weight="bold" text-anchor="middle">VC  (volts)</text>
+        <text x="291" y="246" fill="#4a6070" font-size="8" text-anchor="middle">VCC</text>
+
+        <!-- Y labels (IC) -->
+        <text x="50"  y="253" fill="#5a7a9a" font-size="9" text-anchor="end">0</text>
+        <text x="50"  y="196" fill="#5a7a9a" font-size="9" text-anchor="end">5</text>
+        <text x="50"  y="138" fill="#5a7a9a" font-size="9" text-anchor="end">10</text>
+        <text x="50"  y="81"  fill="#5a7a9a" font-size="9" text-anchor="end">15</text>
+        <text x="50"  y="23"  fill="#5a7a9a" font-size="9" text-anchor="end">20</text>
+        <text x="14"  y="140" fill="var(--green)" font-size="9" font-weight="bold" text-anchor="middle" transform="rotate(-90,14,140)">IC  (mA)</text>
+
+        <!-- Saturation boundary vertical: VC = VB (dynamic) -->
+        <line id="s2-sat-bnd" x1="55" y1="20" x2="55" y2="250" stroke="var(--magenta)" stroke-width="1.5" stroke-dasharray="5,4" opacity="0"/>
+        <text id="s2-sat-bnd-lbl" x="57" y="35" fill="var(--magenta)" font-size="8" opacity="0">VB</text>
+        <!-- Region labels -->
+        <text id="s2-lbl-sat"  x="60" y="48" fill="var(--magenta)" font-size="8" opacity="0">◀ SAT</text>
+        <text id="s2-lbl-act"  x="60" y="48" fill="var(--green)"   font-size="8" opacity="0">ACTIVE ▶</text>
+
+        <!-- Load line (dynamic, changes with RC) -->
+        <line id="s2-loadline" x1="290" y1="250" x2="55" y2="112"
+              stroke="var(--cyan)" stroke-width="2" stroke-dasharray="8,4" opacity="0.75"/>
+
+        <!-- IC_sat horizontal dashed line (dynamic) -->
+        <line id="s2-ic-sat-line" x1="55" y1="114" x2="290" y2="114"
+              stroke="var(--magenta)" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.45"/>
+        <text id="s2-ic-sat-lbl" x="293" y="117" fill="var(--magenta)" font-size="8" opacity="0.45">IC_sat</text>
+
+        <!-- Operating point crosshairs -->
+        <line id="s2-op-vl" x1="290" y1="250" x2="290" y2="250" stroke="rgba(255,255,255,0.2)" stroke-width="1" stroke-dasharray="3,3"/>
+        <line id="s2-op-hl" x1="55"  y1="250" x2="290" y2="250" stroke="rgba(255,255,255,0.2)" stroke-width="1" stroke-dasharray="3,3"/>
+        <!-- Operating point dot -->
+        <circle id="s2-op-dot" cx="290" cy="250" r="7" fill="var(--red)" stroke="#fff" stroke-width="2"/>
+      </svg>
+    </div>
+    <p class="s2-note">V<sub>CC</sub> = 12V fixed &nbsp;·&nbsp; β = 200 &nbsp;·&nbsp; V<sub>CE(sat)</sub> = 0.2V</p>
+  </div>
+</div>
+
+<!-- ═══ BOTTOM: IC vs VBE ═══ -->
+<div class="s2-bottom">
+  <p class="s2-gtitle" style="margin-bottom:7px">BJT Characteristic — I<sub>C</sub> vs V<sub>BE</sub> &nbsp;(tanh model, unconstrained)</p>
+  <div class="s2-gwrap">
+    <!--
+      Coords:  G2_L=55  G2_R=515  G2_T=20  G2_B=170  G2_W=460  G2_H=150
+      x(VBE) = 55 + (VBE/1.0)*460   0→55  0.2→147  0.4→239  0.6→331  0.8→423  1.0→515
+      y(IC)  = 170 - (IC/20)*150     0→170  5→133  10→95  15→58  20→20
+    -->
+    <svg id="s2-v2-svg" viewBox="0 0 540 200" xmlns="http://www.w3.org/2000/svg"
+         font-family="'Share Tech Mono',monospace">
+
+      <!-- Grid verticals: VBE = 0.2, 0.4, 0.6, 0.8 -->
+      <line x1="147" y1="20" x2="147" y2="170" stroke="rgba(0,229,255,0.06)" stroke-width="1" stroke-dasharray="3,4"/>
+      <line x1="239" y1="20" x2="239" y2="170" stroke="rgba(0,229,255,0.06)" stroke-width="1" stroke-dasharray="3,4"/>
+      <line x1="331" y1="20" x2="331" y2="170" stroke="rgba(0,240,255,0.20)" stroke-width="1.5" stroke-dasharray="4,4"/>
+      <line x1="423" y1="20" x2="423" y2="170" stroke="rgba(0,229,255,0.06)" stroke-width="1" stroke-dasharray="3,4"/>
+      <!-- Grid horizontals: IC = 5, 10, 15, 20 mA -->
+      <line x1="55" y1="133" x2="515" y2="133" stroke="rgba(0,229,255,0.06)" stroke-width="1" stroke-dasharray="3,4"/>
+      <line x1="55" y1="95"  x2="515" y2="95"  stroke="rgba(0,229,255,0.06)" stroke-width="1" stroke-dasharray="3,4"/>
+      <line x1="55" y1="58"  x2="515" y2="58"  stroke="rgba(0,229,255,0.06)" stroke-width="1" stroke-dasharray="3,4"/>
+      <line x1="55" y1="20"  x2="515" y2="20"  stroke="rgba(0,229,255,0.04)" stroke-width="1" stroke-dasharray="3,4"/>
+
+      <!-- 0.6V threshold label -->
+      <text x="331" y="16" fill="var(--cyan)" font-size="8" text-anchor="middle">0.6V threshold</text>
+
+      <!-- Axes -->
+      <line x1="55" y1="20"  x2="55"  y2="174" stroke="#2a4060" stroke-width="2"/>
+      <line x1="51" y1="170" x2="519" y2="170" stroke="#2a4060" stroke-width="2"/>
+
+      <!-- X labels (VBE) -->
+      <text x="55"  y="181" fill="#5a7a9a" font-size="9" text-anchor="middle">0.0</text>
+      <text x="147" y="181" fill="#5a7a9a" font-size="9" text-anchor="middle">0.2</text>
+      <text x="239" y="181" fill="#5a7a9a" font-size="9" text-anchor="middle">0.4</text>
+      <text x="331" y="181" fill="var(--cyan)" font-size="9" font-weight="bold" text-anchor="middle">0.6</text>
+      <text x="423" y="181" fill="#5a7a9a" font-size="9" text-anchor="middle">0.8</text>
+      <text x="515" y="181" fill="#5a7a9a" font-size="9" text-anchor="middle">1.0</text>
+      <text x="285" y="193" fill="var(--cyan)" font-size="9" font-weight="bold" text-anchor="middle">VBE  (volts)</text>
+
+      <!-- Y labels (IC) -->
+      <text x="50" y="173" fill="#5a7a9a" font-size="9" text-anchor="end">0</text>
+      <text x="50" y="136" fill="#5a7a9a" font-size="9" text-anchor="end">5</text>
+      <text x="50" y="98"  fill="#5a7a9a" font-size="9" text-anchor="end">10</text>
+      <text x="50" y="61"  fill="#5a7a9a" font-size="9" text-anchor="end">15</text>
+      <text x="50" y="23"  fill="#5a7a9a" font-size="9" text-anchor="end">20</text>
+      <text x="14" y="100" fill="var(--green)" font-size="9" font-weight="bold" text-anchor="middle" transform="rotate(-90,14,100)">IC  (mA)</text>
+
+      <!-- BJT characteristic curve (set by JS once) -->
+      <polyline id="s2-vbe-curve" points="" fill="none" stroke="var(--cyan)" stroke-width="2.5" stroke-linejoin="round" opacity="0.85"/>
+
+      <!-- Circuit ceiling (IC_sat from load line) — dynamic -->
+      <line id="s2-v2-ceil" x1="55" y1="170" x2="515" y2="170"
+            stroke="var(--magenta)" stroke-width="1.5" stroke-dasharray="6,3" opacity="0"/>
+      <text id="s2-v2-ceil-lbl" x="58" y="167" fill="var(--magenta)" font-size="8" opacity="0">circuit ceiling (IC_sat)</text>
+
+      <!-- Zone labels -->
+      <text id="s2-v2-sat-zone"  x="60" y="35" fill="var(--magenta)" font-size="8" opacity="0">▲ SATURATION — IC limited by load line</text>
+      <text id="s2-v2-act-zone"  x="60" y="35" fill="var(--green)"   font-size="8" opacity="0">▼ ACTIVE — IC follows BJT curve</text>
+
+      <!-- Operating point -->
+      <circle id="s2-v2-dot" cx="331" cy="170" r="7" fill="var(--red)" stroke="#fff" stroke-width="2"/>
+    </svg>
+  </div>
+  <p class="s2-note">The circuit ceiling (dashed magenta) shows the IC_sat limit set by V<sub>CC</sub> and R<sub>C</sub>. Above it: saturation. Below: active.</p>
+</div>
+
+<script>
+  // ── Constants ──
+  const VCC      = 12;
+  const BETA     = 200;
+  const IC_MAX   = 20;   // mA — BJT model reference ceiling
+  const VCE_SAT  = 0.2;  // V
+
+  // Load line graph pixel coords
+  const GL=55, GR=290, GT=20, GB=250, GW=235, GH=230;
+  // VBE graph pixel coords
+  const G2L=55, G2R=515, G2T=20, G2B=170, G2W=460, G2H=150;
+
+  // VB drag track
+  const TX0=105, TX1=320;
+  let vbPct = 0; // 0 → 0V, 1 → 5V
+
+  // ── Coordinate helpers ──
+  function vcToX(vc)   { return GL  + Math.max(0, Math.min(GW,  (vc / VCC)        * GW));  }
+  function icToYll(ic) { return GB  - Math.max(0, Math.min(GH,  (ic / IC_MAX)     * GH));  }
+  function vbeToX2(v)  { return G2L + Math.max(0, Math.min(G2W, (v  / 1.0)        * G2W)); }
+  function icToYv2(ic) { return G2B - Math.max(0, Math.min(G2H, (ic / IC_MAX)     * G2H)); }
+
+  // ── RC slider → ohms (log scale 100–10000) ──
+  function rcOhms(sliderVal) { return 100 * Math.pow(10, sliderVal / 50); }
+  function rcStr(ohms) {
+    if (ohms >= 9950) return '10kΩ';
+    if (ohms >= 1000) return (ohms / 1000).toFixed(1) + 'kΩ';
+    return Math.round(ohms) + 'Ω';
+  }
+
+  // ── BJT model ──
+  function icBjt(vbe) { return Math.max(0, IC_MAX * Math.tanh((vbe - 0.6) / 0.07)); }
+
+  function computeOP(vb, ve, rc_ohms) {
+    const rc_k  = rc_ohms / 1000;
+    const vbe   = vb - ve;
+    const ic_bj = icBjt(vbe);
+    const ic_sat= Math.max(0, (VCC - VCE_SAT - ve) / rc_k);
+    const ic    = Math.min(ic_bj, ic_sat);
+    const vc    = VCC - ic * rc_k;
+    const vce   = vc - ve;
+    const ib    = ic / BETA;
+    const vbc   = vb - vc;
+    let region  = ic_bj < 0.02 ? 'CUTOFF' : (ic >= ic_sat * 0.97 ? 'SATURATION' : 'ACTIVE');
+    return { vbe, ic, ic_bj, ic_sat, vc, vce, ib, vbc, region };
+  }
+
+  // ── DOM refs ──
+  const rcSlider  = document.getElementById('s2-rc');
+  const veSlider  = document.getElementById('s2-ve');
+  const knob      = document.getElementById('s2-knob');
+  const dragZone  = document.getElementById('s2-drag');
+  // Schematic
+  const svgRc     = document.getElementById('s2-svg-rc');
+  const svgVc     = document.getElementById('s2-svg-vc');
+  const svgVbc    = document.getElementById('s2-svg-vbc');
+  const svgVbe    = document.getElementById('s2-svg-vbe');
+  const svgVb     = document.getElementById('s2-svg-vb');
+  const svgVe     = document.getElementById('s2-svg-ve');
+  const bcTag     = document.getElementById('s2-bc-tag');
+  const beTag     = document.getElementById('s2-be-tag');
+  // Wires
+  const wC = document.getElementById('s2-wC');
+  const wE = document.getElementById('s2-wE');
+  const wB = document.getElementById('s2-wB');
+  // Load line graph
+  const loadLine  = document.getElementById('s2-loadline');
+  const opDot     = document.getElementById('s2-op-dot');
+  const opVl      = document.getElementById('s2-op-vl');
+  const opHl      = document.getElementById('s2-op-hl');
+  const satBnd    = document.getElementById('s2-sat-bnd');
+  const satBndLbl = document.getElementById('s2-sat-bnd-lbl');
+  const icSatLine = document.getElementById('s2-ic-sat-line');
+  const icSatLbl  = document.getElementById('s2-ic-sat-lbl');
+  const lblSat    = document.getElementById('s2-lbl-sat');
+  const lblAct    = document.getElementById('s2-lbl-act');
+  // VBE graph
+  const v2Ceil    = document.getElementById('s2-v2-ceil');
+  const v2CeilLbl = document.getElementById('s2-v2-ceil-lbl');
+  const v2Dot     = document.getElementById('s2-v2-dot');
+  const v2SatZone = document.getElementById('s2-v2-sat-zone');
+  const v2ActZone = document.getElementById('s2-v2-act-zone');
+  // Readouts
+  const rcDisp    = document.getElementById('s2-rc-disp');
+  const veDisp    = document.getElementById('s2-ve-disp');
+  const roVbe     = document.getElementById('s2-ro-vbe');
+  const roVc      = document.getElementById('s2-ro-vc');
+  const roIc      = document.getElementById('s2-ro-ic');
+  const roIb      = document.getElementById('s2-ro-ib');
+  const roVce     = document.getElementById('s2-ro-vce');
+  const roVbc     = document.getElementById('s2-ro-vbc');
+  const badge     = document.getElementById('s2-badge');
+
+  // ── Draw BJT characteristic curve once ──
+  function initCurve() {
+    const pts = [];
+    for (let i = 0; i <= 250; i++) {
+      const vbe = (i / 250) * 1.0;
+      pts.push(vbeToX2(vbe).toFixed(1) + ',' + icToYv2(icBjt(vbe)).toFixed(1));
+    }
+    document.getElementById('s2-vbe-curve').setAttribute('points', pts.join(' '));
+  }
+
+  // ── Wire helper ──
+  function setWires(color, vAnim, hAnim) {
+    [wC, wE].forEach(w => { w.setAttribute('stroke', color); w.style.animation = vAnim; });
+    wB.setAttribute('stroke', color); wB.style.animation = hAnim;
+    knob.setAttribute('stroke', color);
+  }
+
+  // ── Main update ──
+  function update() {
+    // Resolve VB (snap at 0.6V = pct 0.12)
+    let pct = vbPct;
+    if (Math.abs(pct - 0.12) < 0.022) pct = 0.12;
+    const vb = pct * 5;
+    knob.setAttribute('cx', TX0 + pct * (TX1 - TX0));
+
+    const ve      = parseFloat(veSlider.value);
+    const rc_ohms = rcOhms(parseFloat(rcSlider.value));
+    const rs      = rcStr(rc_ohms);
+    const rc_k    = rc_ohms / 1000;
+
+    // RC displays
+    rcDisp.textContent = rs;
+    svgRc.textContent  = rs;
+
+    // VE / VB displays
+    veDisp.textContent = ve.toFixed(2) + 'V';
+    svgVe.textContent  = ve.toFixed(1) + 'V';
+    svgVb.textContent  = vb.toFixed(2) + 'V';
+
+    // Compute
+    const op = computeOP(vb, ve, rc_ohms);
+    const pm = v => (v >= 0 ? '+' : '') + v.toFixed(2) + 'V';
+
+    // Schematic readouts
+    svgVc.textContent  = op.vc.toFixed(1) + 'V';
+    svgVbc.textContent = pm(op.vbc);
+    svgVbe.textContent = pm(op.vbe);
+    bcTag.textContent  = op.vbc > 0 ? 'FWD-BIASED' : 'REV-BIASED';
+    bcTag.setAttribute('fill', op.vbc > 0 ? 'var(--red)' : 'var(--green)');
+    if (op.vbe >= 0.6) {
+      beTag.textContent = 'FWD-BIASED'; beTag.setAttribute('fill', 'var(--green)');
+    } else if (op.vbe > 0) {
+      beTag.textContent = 'SUB-THR';    beTag.setAttribute('fill', 'var(--orange)');
+    } else {
+      beTag.textContent = 'OFF / REV';  beTag.setAttribute('fill', 'var(--red)');
+    }
+
+    // Readout grid
+    roVbe.textContent = op.vbe.toFixed(3) + ' V';
+    roVc.textContent  = op.vc.toFixed(3)  + ' V';
+    roIc.textContent  = op.ic.toFixed(3)  + ' mA';
+    roIb.textContent  = (op.ib * 1000).toFixed(1) + ' μA';
+    roVce.textContent = op.vce.toFixed(3) + ' V';
+    roVbc.textContent = (op.vbc >= 0 ? '+' : '') + op.vbc.toFixed(3) + ' V';
+
+    // ── Badge + wires ──
+    const dotColor = op.region === 'CUTOFF' ? 'var(--red)' : op.region === 'SATURATION' ? 'var(--magenta)' : 'var(--green)';
+    if (op.region === 'CUTOFF') {
+      setWires('var(--red)', 'none', '0s');
+      badge.className = 's2-badge s2-alert';
+      badge.innerHTML = `<div class="s2-badge-hdr">CUTOFF — No Current</div>
+        <div class="s2-badge-line">V<sub>BE</sub> = ${op.vbe.toFixed(3)}V &lt; 0.6V — B-E junction not forward-biased</div>
+        <div class="s2-badge-line">I<sub>C</sub> = 0 &nbsp;·&nbsp; V<sub>C</sub> = V<sub>CC</sub> = ${VCC}V (no voltage drop across R<sub>C</sub>)</div>`;
+    } else if (op.region === 'SATURATION') {
+      setWires('var(--magenta)', 's2Down 1.5s linear infinite', 's2Right 1.5s linear infinite');
+      badge.className = 's2-badge s2-saturated';
+      badge.innerHTML = `<div class="s2-badge-hdr">SATURATION — I<sub>C</sub> = ${op.ic.toFixed(2)} mA</div>
+        <div class="s2-badge-line">BJT wants ${op.ic_bj.toFixed(1)} mA — circuit ceiling is ${op.ic_sat.toFixed(2)} mA (= (V<sub>CC</sub>−V<sub>CE(sat)</sub>−V<sub>E</sub>) / R<sub>C</sub>)</div>
+        <div class="s2-badge-line">V<sub>C</sub> = ${op.vc.toFixed(2)}V &nbsp;·&nbsp; V<sub>CE</sub> = ${op.vce.toFixed(2)}V ≈ V<sub>CE(sat)</sub> &nbsp;·&nbsp; both junctions forward-biased</div>`;
+    } else {
+      const spd = Math.max(0.4, 2.5 - op.ic / 9).toFixed(1);
+      setWires('var(--green)', `s2Down ${spd}s linear infinite`, `s2Right ${spd}s linear infinite`);
+      badge.className = 's2-badge s2-active';
+      badge.innerHTML = `<div class="s2-badge-hdr">ACTIVE REGION</div>
+        <div class="s2-badge-line">V<sub>C</sub> = V<sub>CC</sub> − I<sub>C</sub>×R<sub>C</sub> = ${VCC} − ${op.ic.toFixed(2)}mA × ${rs} = <strong>${op.vc.toFixed(2)}V</strong></div>
+        <div class="s2-badge-line">V<sub>CE</sub> = ${op.vce.toFixed(2)}V &nbsp;·&nbsp; I<sub>B</sub> = ${(op.ib*1000).toFixed(1)}μA &nbsp;·&nbsp; β×I<sub>B</sub> = ${op.ic.toFixed(2)}mA</div>`;
+    }
+
+    // ── Load line graph ──
+    // Endpoints: right = (VCC, 0), left clipped at IC_MAX
+    const ll_x2 = GR, ll_y2 = GB;
+    const ic_at_0 = VCC / rc_k;
+    let ll_x1, ll_y1;
+    if (ic_at_0 <= IC_MAX) {
+      ll_x1 = GL; ll_y1 = icToYll(ic_at_0);
+    } else {
+      const vc_clip = VCC - IC_MAX * rc_k;
+      ll_x1 = GL + Math.max(0, (vc_clip / VCC) * GW);
+      ll_y1 = GT;
+    }
+    loadLine.setAttribute('x1', ll_x1.toFixed(1)); loadLine.setAttribute('y1', ll_y1.toFixed(1));
+    loadLine.setAttribute('x2', ll_x2);            loadLine.setAttribute('y2', ll_y2);
+
+    // IC_sat horizontal (circuit ceiling)
+    const showCeil = op.ic_sat < IC_MAX * 0.99;
+    const ceilY = icToYll(Math.min(op.ic_sat, IC_MAX));
+    icSatLine.setAttribute('y1', ceilY.toFixed(1)); icSatLine.setAttribute('y2', ceilY.toFixed(1));
+    icSatLine.setAttribute('opacity', showCeil ? '0.5' : '0');
+    icSatLbl.setAttribute('y', (ceilY - 3).toFixed(0));
+    icSatLbl.textContent = op.ic_sat.toFixed(1) + 'mA';
+    icSatLbl.setAttribute('opacity', showCeil ? '0.5' : '0');
+
+    // Saturation boundary (VC = VB)
+    if (vb > 0.1 && vb < VCC) {
+      const sbX = vcToX(vb);
+      satBnd.setAttribute('x1', sbX.toFixed(1)); satBnd.setAttribute('x2', sbX.toFixed(1));
+      satBnd.setAttribute('y1', GT); satBnd.setAttribute('y2', GB);
+      satBnd.setAttribute('opacity', '0.65');
+      satBndLbl.setAttribute('x', (sbX + 2).toFixed(0));
+      satBndLbl.textContent = 'VB=' + vb.toFixed(1) + 'V';
+      satBndLbl.setAttribute('opacity', '0.7');
+      // Region labels
+      const midSat = (GL + sbX) / 2;
+      const midAct = (sbX + GR) / 2;
+      lblSat.setAttribute('x', Math.max(GL + 2, midSat - 15).toFixed(0));
+      lblAct.setAttribute('x', Math.min(GR - 40, midAct - 15).toFixed(0));
+      [lblSat, lblAct].forEach(l => l.setAttribute('opacity', '0.6'));
+    } else {
+      [satBnd, satBndLbl, lblSat, lblAct].forEach(el => el.setAttribute('opacity', '0'));
+    }
+
+    // Operating point dot + crosshairs
+    const op_x = vcToX(op.vc);
+    const op_y = icToYll(Math.min(op.ic, IC_MAX));
+    opDot.setAttribute('cx', op_x.toFixed(1)); opDot.setAttribute('cy', op_y.toFixed(1));
+    opDot.setAttribute('fill', dotColor);
+    opVl.setAttribute('x1', op_x.toFixed(1)); opVl.setAttribute('x2', op_x.toFixed(1));
+    opVl.setAttribute('y1', op_y.toFixed(1)); opVl.setAttribute('y2', GB);
+    opHl.setAttribute('x1', GL);              opHl.setAttribute('x2', op_x.toFixed(1));
+    opHl.setAttribute('y1', op_y.toFixed(1)); opHl.setAttribute('y2', op_y.toFixed(1));
+
+    // ── VBE graph ──
+    const v2x = vbeToX2(Math.max(0, Math.min(1.0, op.vbe)));
+    const v2y = icToYv2(Math.min(op.ic, IC_MAX));
+    v2Dot.setAttribute('cx', v2x.toFixed(1)); v2Dot.setAttribute('cy', v2y.toFixed(1));
+    v2Dot.setAttribute('fill', dotColor);
+
+    // Circuit ceiling on VBE graph
+    const v2CeilY = icToYv2(Math.min(op.ic_sat, IC_MAX));
+    v2Ceil.setAttribute('y1', v2CeilY.toFixed(1)); v2Ceil.setAttribute('y2', v2CeilY.toFixed(1));
+    v2CeilLbl.setAttribute('y', (v2CeilY - 3).toFixed(0));
+    v2CeilLbl.textContent = 'circuit ceiling: ' + op.ic_sat.toFixed(2) + 'mA (RC=' + rs + ')';
+    const showV2Ceil = op.ic_sat < IC_MAX * 0.99 && op.ic_sat > 0.05;
+    v2Ceil.setAttribute('opacity',    showV2Ceil ? '0.6' : '0');
+    v2CeilLbl.setAttribute('opacity', showV2Ceil ? '0.6' : '0');
+
+    // Zone labels
+    if (showV2Ceil) {
+      const aboveY = Math.max(G2T + 10, v2CeilY - 8);
+      const belowY = Math.min(G2B - 5, v2CeilY + 14);
+      v2SatZone.setAttribute('y', aboveY.toFixed(0));
+      v2ActZone.setAttribute('y', belowY.toFixed(0));
+      v2SatZone.setAttribute('opacity', '0.55');
+      v2ActZone.setAttribute('opacity', '0.55');
+    } else {
+      v2SatZone.setAttribute('opacity', '0');
+      v2ActZone.setAttribute('opacity', '0');
+    }
+  }
+
+  // ── VB drag ──
+  let dragging = false, trackRect = null;
+  dragZone.addEventListener('pointerdown', e => {
+    trackRect = dragZone.getBoundingClientRect();
+    dragging  = true;
+    dragZone.setPointerCapture(e.pointerId);
+    knob.setAttribute('fill', 'var(--colour-bjt)');
+    vbPct = Math.max(0, Math.min(1, (e.clientX - trackRect.left) / trackRect.width));
+    update();
+  });
+  dragZone.addEventListener('pointermove', e => {
+    if (!dragging) return;
+    vbPct = Math.max(0, Math.min(1, (e.clientX - trackRect.left) / trackRect.width));
+    update();
+  });
+  dragZone.addEventListener('pointerup',     () => { dragging = false; knob.setAttribute('fill', '#fff'); });
+  dragZone.addEventListener('pointercancel', () => { dragging = false; knob.setAttribute('fill', '#fff'); });
+
+  rcSlider.addEventListener('input', update);
+  veSlider.addEventListener('input', update);
+
+  function s2Reset() { vbPct = 0; veSlider.value = 0; rcSlider.value = 50; update(); }
+  window.s2Reset = s2Reset;
+
+  // ── Init ──
+  initCurve();
+  update();
+</script>
+</body>
+</html>
