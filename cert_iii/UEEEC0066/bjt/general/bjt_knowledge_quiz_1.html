@@ -1,3 +1,31 @@
+<!--
+  TEMPLATE FILE — read before cloning for a new weekly quiz.
+
+  This file uses a data-driven quiz engine: a single `QUESTIONS` array (in the
+  <script>, search "QUESTIONS —") drives one generic HTML panel and a generic
+  set of engine functions (renderQuestion, checkAnswer, nextQuestion, etc).
+  There is deliberately NO per-question HTML or per-question JS function.
+
+  When cloning this file for a new quiz — even one that starts with just ONE
+  image and ONE question — KEEP THIS STRUCTURE. Do not revert to a hardcoded
+  per-question panel just because there's only one entry. The whole point of
+  this architecture is that adding question 2, 3, splitting a question into
+  two, or reordering them later is a pure edit of the QUESTIONS array, with
+  zero HTML/JS restructuring. Starting with one question and hardcoding it
+  "for now" recreates exactly the problem this file was refactored to avoid.
+
+  A `leftPanel` field per question ('circuit' | 'viz' | 'shapeGrid') swaps the
+  left-hand image between the static circuit SVG, an interactive visualizer
+  (see the Q5 IIFE), or a grid of clickable shapes (see Q8) — a clone with
+  only one static image can omit `leftPanel` (defaults to 'circuit') without
+  losing the array-driven engine. Add new left-panel modes the same way: a new
+  string value, a new container div, one more branch in swapLeftPanel().
+
+  A `kind:'multi'` field per question switches it from single-select
+  (A/B/C/D, one correct answer) to multi-select (any number of options can be
+  toggled on; correctness is a set match) — see Q8 for the pattern. Leave
+  `kind` unset for ordinary single-select questions.
+-->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -132,6 +160,49 @@
       text-transform: uppercase;
       text-align: center;
       margin-bottom: 6px;
+    }
+
+    /* ── Shape-grid left panel (multi-select "pick the valid symbols" questions) ── */
+    .shape-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: .7rem;
+    }
+
+    .shape-cell {
+      position: relative;
+      background: rgba(0, 0, 0, .25);
+      border: 2px solid var(--colour-border);
+      border-radius: 4px;
+      cursor: pointer;
+      padding: .5rem .3rem .3rem;
+      transition: border-color .15s, background .15s;
+    }
+
+    .shape-cell svg { width: 100%; height: auto; display: block; }
+
+    .shape-cell:hover { border-color: rgba(0, 229, 255, .5); }
+    .shape-cell.selected { border-color: var(--colour-ui-primary); background: rgba(0, 229, 255, .08); }
+    .shape-cell.correct { border-color: var(--colour-ui-correct); background: rgba(0, 255, 153, .1); }
+    .shape-cell.wrong { border-color: var(--colour-ui-wrong); background: rgba(255, 61, 154, .1); }
+    .shape-cell.missed { border-color: var(--colour-ui-restart); background: rgba(255, 107, 53, .08); }
+    .shape-cell.dimmed { opacity: .4; }
+
+    .shape-cell .shape-num {
+      position: absolute;
+      top: 3px;
+      left: 6px;
+      font-family: 'Orbitron', sans-serif;
+      font-size: .62rem;
+      font-weight: 700;
+      color: var(--colour-label);
+    }
+
+    .selected-list {
+      font-size: .78rem;
+      color: var(--colour-label);
+      font-family: 'Orbitron', sans-serif;
+      letter-spacing: .04em;
     }
 
     .q-panel { display: flex; flex-direction: column; gap: 1rem; }
@@ -858,6 +929,132 @@
 </head>
 
 <body>
+  <!-- Hidden defs: BJT symbol variants used by the shape-grid multi-select question.
+       All 12 share one neutral colour (var(--colour-bjt)) — deliberately NOT colour-coded
+       correct/incorrect, so the only way to tell them apart is the arrow logic itself. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <g id="bjt-base-frame">
+        <line x1="-17" y1="0" x2="0" y2="0" style="stroke: var(--colour-bjt)" stroke-width="2" />
+        <line x1="0" y1="-12" x2="0" y2="12" style="stroke: var(--colour-bjt)" stroke-width="2.5" />
+        <polyline points="14,-34 14,-20 0,-8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+        <polyline points="14,34 14,20 0,8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+      </g>
+      <!-- ── 8 valid symbols: standard/flipped × NPN/PNP × circle/no-circle ── -->
+      <g id="bjt-npn-standard-circle">
+        <use href="#bjt-base-frame" />
+        <circle cx="7" cy="0" r="24" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+        <polygon points="12,18 1,14 6,8" style="fill: var(--colour-bjt)" />
+      </g>
+      <g id="bjt-pnp-standard-circle">
+        <use href="#bjt-base-frame" />
+        <circle cx="7" cy="0" r="24" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+        <polygon points="2,-9 8,-20 13,-14" style="fill: var(--colour-bjt)" />
+      </g>
+      <g id="bjt-npn-flipped-circle">
+        <use href="#bjt-base-frame" />
+        <circle cx="7" cy="0" r="24" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+        <polygon points="12,-18 1,-14 6,-8" style="fill: var(--colour-bjt)" />
+      </g>
+      <g id="bjt-pnp-flipped-circle">
+        <use href="#bjt-base-frame" />
+        <circle cx="7" cy="0" r="24" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+        <polygon points="2,9 8,20 13,14" style="fill: var(--colour-bjt)" />
+      </g>
+      <g id="bjt-npn-standard-nocircle">
+        <use href="#bjt-base-frame" />
+        <polygon points="12,18 1,14 6,8" style="fill: var(--colour-bjt)" />
+      </g>
+      <g id="bjt-pnp-standard-nocircle">
+        <use href="#bjt-base-frame" />
+        <polygon points="2,-9 8,-20 13,-14" style="fill: var(--colour-bjt)" />
+      </g>
+      <g id="bjt-npn-flipped-nocircle">
+        <use href="#bjt-base-frame" />
+        <polygon points="12,-18 1,-14 6,-8" style="fill: var(--colour-bjt)" />
+      </g>
+      <g id="bjt-pnp-flipped-nocircle">
+        <use href="#bjt-base-frame" />
+        <polygon points="2,9 8,20 13,14" style="fill: var(--colour-bjt)" />
+      </g>
+      <!-- ── 4 invalid symbols: arrow on the base lead, or two arrows instead of one ── -->
+      <g id="bjt-error-base-arrow-in">
+        <use href="#bjt-base-frame" />
+        <circle cx="7" cy="0" r="24" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+        <polygon points="-4,-4 2,0 -4,4" style="fill: var(--colour-bjt)" />
+      </g>
+      <g id="bjt-error-base-arrow-out">
+        <use href="#bjt-base-frame" />
+        <circle cx="7" cy="0" r="24" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+        <polygon points="-10,0 -4,-4 -4,4" style="fill: var(--colour-bjt)" />
+      </g>
+      <g id="bjt-error-double-in">
+        <use href="#bjt-base-frame" />
+        <circle cx="7" cy="0" r="24" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+        <polygon points="2,-9 8,-20 13,-14" style="fill: var(--colour-bjt)" />
+        <polygon points="2,9 8,20 13,14" style="fill: var(--colour-bjt)" />
+      </g>
+      <g id="bjt-error-double-out">
+        <use href="#bjt-base-frame" />
+        <circle cx="7" cy="0" r="24" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+        <polygon points="12,-18 1,-14 6,-8" style="fill: var(--colour-bjt)" />
+        <polygon points="12,18 1,14 6,8" style="fill: var(--colour-bjt)" />
+      </g>
+      <!-- ── B/E/C-labelled variants for the terminal-labelling question. Both symbols
+           are emitter-at-bottom (npn-standard, pnp-flipped); only the label placement
+           differs. Correct positions: B=base lead (left), C=top diagonal, E=bottom
+           diagonal (the one with the arrow). Each "swap" variant exchanges two of the
+           three labels — a plausible mislabelling, not random noise. ── -->
+      <g id="bjt-npn-labels-correct">
+        <use href="#bjt-npn-standard-circle" />
+        <text x="-20" y="4"  text-anchor="end"   font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">B</text>
+        <text x="22" y="-24" text-anchor="start" font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">C</text>
+        <text x="22" y="32"  text-anchor="start" font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">E</text>
+      </g>
+      <g id="bjt-npn-labels-swap-ec">
+        <use href="#bjt-npn-standard-circle" />
+        <text x="-20" y="4"  text-anchor="end"   font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">B</text>
+        <text x="22" y="-24" text-anchor="start" font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">E</text>
+        <text x="22" y="32"  text-anchor="start" font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">C</text>
+      </g>
+      <g id="bjt-npn-labels-swap-be">
+        <use href="#bjt-npn-standard-circle" />
+        <text x="-20" y="4"  text-anchor="end"   font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">E</text>
+        <text x="22" y="-24" text-anchor="start" font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">C</text>
+        <text x="22" y="32"  text-anchor="start" font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">B</text>
+      </g>
+      <g id="bjt-npn-labels-swap-bc">
+        <use href="#bjt-npn-standard-circle" />
+        <text x="-20" y="4"  text-anchor="end"   font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">C</text>
+        <text x="22" y="-24" text-anchor="start" font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">B</text>
+        <text x="22" y="32"  text-anchor="start" font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">E</text>
+      </g>
+      <g id="bjt-pnp-labels-correct">
+        <use href="#bjt-pnp-flipped-circle" />
+        <text x="-20" y="4"  text-anchor="end"   font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">B</text>
+        <text x="22" y="-24" text-anchor="start" font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">C</text>
+        <text x="22" y="32"  text-anchor="start" font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">E</text>
+      </g>
+      <g id="bjt-pnp-labels-swap-ec">
+        <use href="#bjt-pnp-flipped-circle" />
+        <text x="-20" y="4"  text-anchor="end"   font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">B</text>
+        <text x="22" y="-24" text-anchor="start" font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">E</text>
+        <text x="22" y="32"  text-anchor="start" font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">C</text>
+      </g>
+      <g id="bjt-pnp-labels-swap-be">
+        <use href="#bjt-pnp-flipped-circle" />
+        <text x="-20" y="4"  text-anchor="end"   font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">E</text>
+        <text x="22" y="-24" text-anchor="start" font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">C</text>
+        <text x="22" y="32"  text-anchor="start" font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">B</text>
+      </g>
+      <g id="bjt-pnp-labels-swap-bc">
+        <use href="#bjt-pnp-flipped-circle" />
+        <text x="-20" y="4"  text-anchor="end"   font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">C</text>
+        <text x="22" y="-24" text-anchor="start" font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">B</text>
+        <text x="22" y="32"  text-anchor="start" font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">E</text>
+      </g>
+    </defs>
+  </svg>
 <a id="homeBar" class="home-bar" href="../index.html" style="display:none">⌂ Home</a>
   <header>
     <h1>BJT Knowledge</h1>
@@ -971,9 +1168,6 @@
 
           <!-- ── BOTTOM HORIZONTAL ── -->
           <line x1="100" y1="435" x2="380" y2="435" style="stroke: var(--colour-series)" stroke-width="2" /><!-- GND rail -->
-
-
-\
 
           <!-- ════════════════════ NODES ════════════════════ -->
 
@@ -1163,6 +1357,10 @@
           </div>
         </div>
       </div>
+      <div id="qShapeGridPanel" style="display:none">
+        <div class="panel-label">Click the shapes to select your answer</div>
+        <div class="shape-grid" id="shapeGridCells"></div>
+      </div>
     </div>
 
     <!-- ════════════════════ QUESTION FRAMEWORK ════════════════════ -->
@@ -1171,173 +1369,32 @@
     <div class="questions-col">
       <div class="card">
         <div class="progress-wrap">
-          <div class="progress-dot" id="dot-q1"></div>
-          <div class="progress-dot" id="dot-q2"></div>
-          <div class="progress-dot" id="dot-q3"></div>
-          <div class="progress-dot" id="dot-q4"></div>
-          <div class="progress-dot" id="dot-q5"></div>
-          <div class="progress-dot" id="dot-q6"></div>
-          <div class="progress-dot" id="dot-q7"></div>
-          <span class="progress-label" id="progressLabel">1 / 7</span>
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
           <a id="menuLink" class="menu-link" href="../index.html" style="display:none">⌂ Menu</a>
         </div>
 
-        <!-- Q1 — BJT type -->
-        <div class="q-panel" id="q1Panel">
+        <!-- Single reusable question panel — populated from QUESTIONS[cur] by renderQuestion() -->
+        <div class="q-panel" id="qPanel">
           <div class="q-header">
-            <div class="q-num">Q1</div>
+            <div class="q-num" id="qNum"></div>
             <div>
-              <div class="q-text" id="q1Text"></div>
-              <div class="q-hint" id="q1Hint"></div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
             </div>
           </div>
-          <div class="options" id="q1Options"></div>
-          <div class="result-banner" id="q1Banner"><span id="q1Icon"></span>&nbsp;<span id="q1BannerText"></span></div>
-          <div class="working-box" id="q1Working">
+          <div class="options" id="qOptions"></div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
             <div class="working-title">Worked Solution</div>
-            <div id="q1WorkingContent"></div>
+            <div id="qWorkingContent"></div>
           </div>
           <div class="btn-row">
-            <button class="btn btn-check" id="q1Check" onclick="checkQ1()" disabled>Check</button>
-            <button class="btn btn-next" id="q1Next" onclick="showQuestion(2)" style="display:none">Next →</button>
-            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
-          </div>
-        </div>
-
-        <!-- Q2 — circuit type -->
-        <div class="q-panel" id="q2Panel" style="display:none">
-          <div class="q-header">
-            <div class="q-num">Q2</div>
-            <div>
-              <div class="q-text" id="q2Text"></div>
-              <div class="q-hint" id="q2Hint"></div>
-            </div>
-          </div>
-          <div class="options" id="q2Options"></div>
-          <div class="result-banner" id="q2Banner"><span id="q2Icon"></span>&nbsp;<span id="q2BannerText"></span></div>
-          <div class="working-box" id="q2Working">
-            <div class="working-title">Worked Solution</div>
-            <div id="q2WorkingContent"></div>
-          </div>
-          <div class="btn-row">
-            <button class="btn btn-prev" id="q2Back" onclick="backFromQ2()">← Back</button>
-            <button class="btn btn-check" id="q2Check" onclick="checkQ2()" disabled>Check</button>
-            <button class="btn btn-next" id="q2Next" onclick="showQuestion(3)" style="display:none">Next →</button>
-            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
-          </div>
-        </div>
-
-        <!-- Q3 — collector current -->
-        <div class="q-panel" id="q3Panel" style="display:none">
-          <div class="q-header">
-            <div class="q-num">Q3</div>
-            <div>
-              <div class="q-text" id="q3Text"></div>
-              <div class="q-hint" id="q3Hint"></div>
-            </div>
-          </div>
-          <div class="options" id="q3Options"></div>
-          <div class="result-banner" id="q3Banner"><span id="q3Icon"></span>&nbsp;<span id="q3BannerText"></span></div>
-          <div class="working-box" id="q3Working">
-            <div class="working-title">Worked Solution</div>
-            <div id="q3WorkingContent"></div>
-          </div>
-          <div class="btn-row">
-            <button class="btn btn-prev" id="q3Back" onclick="backFromQ3()">← Back</button>
-            <button class="btn btn-check" id="q3Check" onclick="checkQ3()" disabled>Check</button>
-            <button class="btn btn-next" id="q3Next" onclick="showQuestion(4)" style="display:none">Next →</button>
-            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
-          </div>
-        </div>
-
-        <!-- Q4 — current gain (β) -->
-        <div class="q-panel" id="q4Panel" style="display:none">
-          <div class="q-header">
-            <div class="q-num">Q4</div>
-            <div>
-              <div class="q-text" id="q4Text"></div>
-              <div class="q-hint" id="q4Hint"></div>
-            </div>
-          </div>
-          <div class="options" id="q4Options"></div>
-          <div class="result-banner" id="q4Banner"><span id="q4Icon"></span>&nbsp;<span id="q4BannerText"></span></div>
-          <div class="working-box" id="q4Working">
-            <div class="working-title">Worked Solution</div>
-            <div id="q4WorkingContent"></div>
-          </div>
-          <div class="btn-row">
-            <button class="btn btn-prev" id="q4Back" onclick="backFromQ4()">← Back</button>
-            <button class="btn btn-check" id="q4Check" onclick="checkQ4()" disabled>Check</button>
-            <button class="btn btn-next" id="q4Next" onclick="showQuestion(5)" style="display:none">Next →</button>
-            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
-          </div>
-        </div>
-
-        <!-- Q5 — forward and reverse bias (interactive) -->
-        <div class="q-panel" id="q5Panel" style="display:none">
-          <div class="q-header">
-            <div class="q-num">Q5</div>
-            <div>
-              <div class="q-text" id="q5Text"></div>
-              <div class="q-hint" id="q5Hint"></div>
-            </div>
-          </div>
-          <div class="options" id="q5Options"></div>
-          <div class="result-banner" id="q5Banner"><span id="q5Icon"></span>&nbsp;<span id="q5BannerText"></span></div>
-          <div class="working-box" id="q5Working">
-            <div class="working-title">Worked Solution</div>
-            <div id="q5WorkingContent"></div>
-          </div>
-          <div class="btn-row">
-            <button class="btn btn-prev" id="q5Back" onclick="backFromQ5()">← Back</button>
-            <button class="btn btn-check" id="q5Check" onclick="checkQ5()" disabled>Check</button>
-            <button class="btn btn-next" id="q5Next" onclick="showQuestion(6)" style="display:none">Next →</button>
-            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
-          </div>
-        </div>
-
-        <!-- Q6 — saturation behaviour (interactive) -->
-        <div class="q-panel" id="q6Panel" style="display:none">
-          <div class="q-header">
-            <div class="q-num">Q6</div>
-            <div>
-              <div class="q-text" id="q6Text"></div>
-              <div class="q-hint" id="q6Hint"></div>
-            </div>
-          </div>
-          <div class="options" id="q6Options"></div>
-          <div class="result-banner" id="q6Banner"><span id="q6Icon"></span>&nbsp;<span id="q6BannerText"></span></div>
-          <div class="working-box" id="q6Working">
-            <div class="working-title">Worked Solution</div>
-            <div id="q6WorkingContent"></div>
-          </div>
-          <div class="btn-row">
-            <button class="btn btn-prev" id="q6Back" onclick="backFromQ6()">← Back</button>
-            <button class="btn btn-check" id="q6Check" onclick="checkQ6()" disabled>Check</button>
-            <button class="btn btn-next" id="q6Next" onclick="showQuestion(7)" style="display:none">Next →</button>
-            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
-          </div>
-        </div>
-
-        <!-- Q7 — Kirchhoff's Voltage Law -->
-        <div class="q-panel" id="q7Panel" style="display:none">
-          <div class="q-header">
-            <div class="q-num">Q7</div>
-            <div>
-              <div class="q-text" id="q7Text"></div>
-              <div class="q-hint" id="q7Hint"></div>
-            </div>
-          </div>
-          <div class="options" id="q7Options"></div>
-          <div class="result-banner" id="q7Banner"><span id="q7Icon"></span>&nbsp;<span id="q7BannerText"></span></div>
-          <div class="working-box" id="q7Working">
-            <div class="working-title">Worked Solution</div>
-            <div id="q7WorkingContent"></div>
-          </div>
-          <div class="btn-row">
-            <button class="btn btn-prev" id="q7Back" onclick="backFromQ7()">← Back</button>
-            <button class="btn btn-check" id="q7Check" onclick="checkQ7()" disabled>Check</button>
-            <button class="btn btn-summary" id="q7Summary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Back</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
             <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
           </div>
         </div>
@@ -1383,48 +1440,6 @@
     let quizMode = 'example1';
     let V = { ...EXAMPLE_SETS.example1 };
 
-    const QUIZ_QUESTION_COUNT = 7;
-    const QIDS = ['q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7'];
-
-    // ══════════════════════════════════════════════════════════════════════
-    // QUESTION TEXT
-    // ══════════════════════════════════════════════════════════════════════
-
-    const QUESTIONS = [
-      {
-        text: 'The circuit shown represents what type of BJT?',
-        hint: 'Look at the arrow direction on the emitter inside the transistor symbol. Then trace where V<sub>CC</sub> connects in the circuit.'
-      },
-      {
-        text: 'A BJT is a <span style="color:var(--colour-bjt)">?</span> amplifier.',
-        hint: 'Think about what quantity at the input (base) controls the output (collector). Look at what h<sub>FE</sub> describes on the datasheet.'
-      },
-      {
-        text: 'β = 200 and <span class="colour-current">I<sub>B</sub></span> = <span id="q3IbSpan" class="colour-current">—</span>. What is <span class="colour-current">I<sub>C</sub></span>?',
-        hint: 'I<sub>C</sub> = β × I<sub>B</sub>. The base current was found using Ohm\'s Law: I<sub>B</sub> = (V<sub>CC</sub> − V<sub>BE</sub>) / R<sub>B</sub>.'
-      },
-      {
-        text: 'Look at the heading above the interactive diagram: "β = 200, V<sub>BE</sub> = 0.6V, R<sub>C</sub> = 1kΩ, V<sub>CC</sub> = 12V". Which of these values represents the transistor\'s current gain?',
-        hint: 'Current gain relates a change in output current (I<sub>C</sub>) to a change in input current (I<sub>B</sub>) — it isn\'t a voltage or a resistance.'
-      },
-      {
-        text: 'Try moving the 2 sliders on the interactive image. Based on the results you see, which answer best describes the state a circuit needs to be in for a NPN transistor to be in the <em>active region</em>?',
-        hint: 'A junction is <b>forward-biased</b> when its P-type side is at higher potential than its N-type side. Check the polarity markers (+/−) in the diagram for each junction.'
-      },
-      {
-        text: 'Using the same interactive image, drag V<sub>B</sub> well past 0.6V (with V<sub>E</sub> fixed) until the status badge reads <em>SATURATION</em>. Based on your observations, what best describes the behaviour of a BJT in saturation?',
-        hint: 'Watch the I<sub>C</sub> readout and the status badge as V<sub>B</sub> keeps increasing. Does I<sub>C</sub> keep climbing in proportion, or does it stall near a fixed value?'
-      },
-      {
-        text: 'As I<sub>C</sub> increases, V<sub>C</sub> decreases — even though V<sub>CC</sub> and R<sub>C</sub> haven\'t changed. Which law explains why the voltage drop across R<sub>C</sub> directly reduces V<sub>C</sub>?',
-        hint: 'Ohm\'s Law tells you the <em>size</em> of the drop across R<sub>C</sub> (V = IR). Something else explains why that drop has to come directly out of V<sub>C</sub>, given V<sub>CC</sub> is fixed.'
-      }
-    ];
-    QUESTIONS.forEach((q, i) => {
-      document.getElementById('q' + (i + 1) + 'Text').innerHTML = q.text;
-      document.getElementById('q' + (i + 1) + 'Hint').innerHTML = q.hint;
-    });
-
     // ══════════════════════════════════════════════════════════════════════
     // CIRCUIT SIMULATION
     // ══════════════════════════════════════════════════════════════════════
@@ -1461,8 +1476,6 @@
       document.getElementById('panelVoltLabel').textContent = V.vcc + ' V';
       const mt = document.getElementById('modalVoltLabel');
       if (mt) mt.textContent = `Circuit Diagram — ${V.vcc} V Supply`;
-      const q3span = document.getElementById('q3IbSpan');
-      if (q3span) q3span.textContent = fmtA(IB);
     }
 
     function setMode(mode) {
@@ -1477,189 +1490,195 @@
       resetQuiz();
     }
 
-    // No progressive circuit state reveals for this quiz
-    const CIRCUIT_STATES = [
-      { enter: {}, reveal: {} },  // Q1
-      { enter: {}, reveal: {} },  // Q2
-      { enter: {}, reveal: {} },  // Q3
-      { enter: {}, reveal: {} },  // Q4
-      { enter: {}, reveal: {} },  // Q5
-      { enter: {}, reveal: {} },  // Q6
-      { enter: {}, reveal: {} }   // Q7
-    ];
-    function applyCircuitState(s) { /* nothing to show/hide — no meters in this circuit */ }
-
     // ══════════════════════════════════════════════════════════════════════
-    // QUESTION OPTIONS AND CHECKING
+    // QUESTIONS — the template. Add, remove, split or reorder questions by
+    // editing this array only — nothing in the engine below needs to change.
+    //
+    // Each entry:
+    //   leftPanel           'circuit' (default) | 'viz' | 'shapeGrid' — which
+    //                       left-hand image to show for this question
+    //   kind                'multi' for multi-select (any number of options
+    //                       toggled on); omit for ordinary single-select
+    //   text()              question prompt (HTML string)
+    //   hint()               hint shown under the prompt (HTML string)
+    //   options()            returns a shuffled array of
+    //                       { label, type: 'correct'|'wrong', shapeId? }
+    //                       (shapeId is only used by leftPanel:'shapeGrid' —
+    //                       it names a <g id="..."> in the hidden defs <svg>
+    //                       near the top of <body>)
+    //   correctExplain(st)   short HTML fragment used in the result banner
+    //   working(st)          full worked-solution HTML shown after answering
+    //
+    // text/hint/options take no arguments; correctExplain/working receive the
+    // question's live state `st` ({ sel, ans, cor, opts }) so they can report
+    // on what was actually selected/shuffled (see Q8's shape numbering) —
+    // ordinary questions can just ignore the argument. All fields are
+    // functions (even when static) so a question can freely start simple and
+    // later reference live values (V, IB, IC, etc) without changing shape.
+    //
+    // Cloning this file for a new quiz: keep this array-of-one-object-per-
+    // question shape even if you're starting with a single question. Add the
+    // 2nd/3rd/Nth entry (or split an existing one into two) by editing this
+    // array only — do not add HTML panels or per-question functions.
     // ══════════════════════════════════════════════════════════════════════
 
-    const Q = {};
-    let cur = 'q1';
-
-    function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
-
-    function buildQ1Options() {
-      return shuffle([
-        { label: 'NPN with a positive supply rail', type: 'correct' },
-        { label: 'NPN with a negative supply rail', type: 'wrong' },
-        { label: 'PNP with a positive supply rail', type: 'wrong' },
-        { label: 'PNP with a negative supply rail', type: 'wrong' }
-      ]);
-    }
-
-    function buildQ2Options() {
-      return shuffle([
-        { label: 'Current', type: 'correct' },
-        { label: 'Voltage', type: 'wrong' },
-        { label: 'Amplitude', type: 'wrong' },
-        { label: 'Frequency', type: 'wrong' }
-      ]);
-    }
-
-    function buildQ3Options() {
-      // correct: β × IB
-      // distractors: forgot gain (IB only), inverted (IB/β), raw Ohm's law on RC ignoring transistor
-      return shuffle([
-        { label: fmtA(IC),           type: 'correct' },
-        { label: fmtA(IB),           type: 'wrong' },
-        { label: fmtA(IB / V.beta),  type: 'wrong' },
-        { label: fmtA(V.vcc / V.rc), type: 'wrong' }
-      ]);
-    }
-
-    function buildQ4Options() {
-      return shuffle([
-        { label: 'β (the current gain, IC/IB)',        type: 'correct' },
-        { label: 'VCC (the supply voltage)',            type: 'wrong' },
-        { label: 'RC (the collector resistor)',         type: 'wrong' },
-        { label: 'VBE (the 0.6V turn-on threshold)',    type: 'wrong' }
-      ]);
-    }
-
-    function buildQ5Options() {
-      return shuffle([
-        { label: 'B-E forward-biased (VBE > 0.6V); B-C reverse-biased', type: 'correct' },
-        { label: 'Both junctions forward-biased (saturation)',           type: 'wrong' },
-        { label: 'Both junctions reverse-biased (cutoff)',               type: 'wrong' },
-        { label: 'B-E reverse-biased (VBE < −0.6V); B-C forward-biased', type: 'wrong' }
-      ]);
-    }
-
-    function buildQ6Options() {
-      return shuffle([
-        { label: 'IC is near its maximum — increasing IB further has little effect, since the circuit (VCC and RC), not β, now sets the current', type: 'correct' },
-        { label: 'The transistor turns off and IC drops to zero',                type: 'wrong' },
-        { label: 'IC keeps increasing in direct proportion to IB (IC = β × IB)',  type: 'wrong' },
-        { label: 'VCE increases toward VCC as more current flows',               type: 'wrong' }
-      ]);
-    }
-
-    function buildQ7Options() {
-      return shuffle([
-        { label: "Kirchhoff's Voltage Law", type: 'correct' },
-        { label: "Ohm's Law",               type: 'wrong' },
-        { label: "Kirchhoff's Current Law", type: 'wrong' },
-        { label: "Thevenin's Theorem",      type: 'wrong' }
-      ]);
-    }
-
-    const QUESTION_BUILDERS = [buildQ1Options, buildQ2Options, buildQ3Options, buildQ4Options, buildQ5Options, buildQ6Options, buildQ7Options];
-
-    // ── generic option rendering ──
-    function renderOptions(qid) {
-      const st = Q[qid], c = document.getElementById(qid + 'Options'); c.innerHTML = '';
-      st.opts.forEach((opt, i) => {
-        const btn = document.createElement('button'); btn.className = 'option-btn';
-        btn.innerHTML = `<span class="option-letter">${LETTERS[i]}</span><span>${opt.label}</span>`;
-        btn.addEventListener('click', () => selectOption(qid, i));
-        c.appendChild(btn);
-      });
-    }
-
-    function selectOption(qid, i) {
-      if (Q[qid].ans) return;
-      Q[qid].sel = i;
-      document.getElementById(qid + 'Check').disabled = false;
-      document.querySelectorAll('#' + qid + 'Options .option-btn').forEach((b, idx) => b.classList.toggle('selected', idx === i));
-    }
-
-    function markOptions(qid, sel, cor, ok) {
-      document.querySelectorAll('#' + qid + 'Options .option-btn').forEach((btn, i) => {
-        btn.disabled = true;
-        if (i === cor) { btn.classList.remove('selected'); btn.classList.add('correct'); btn.innerHTML += `<span class="result-icon">✓</span>`; }
-        else if (i === sel && !ok) { btn.classList.remove('selected'); btn.classList.add('wrong'); btn.innerHTML += `<span class="result-icon">✗</span>`; }
-        else btn.classList.add('dimmed');
-      });
-    }
-
-    function setBanner(qid, ok, correctText) {
-      const banner = document.getElementById(qid + 'Banner');
-      document.getElementById(qid + 'Icon').textContent = ok ? '✓' : '✗';
-      if (ok) { banner.className = 'result-banner correct'; document.getElementById(qid + 'BannerText').innerHTML = `Correct! ${correctText}`; }
-      else { banner.className = 'result-banner wrong'; document.getElementById(qid + 'BannerText').innerHTML = `The correct answer is ${correctText}`; }
-    }
-
-    function checkQ1() {
-      const st = Q.q1; if (st.ans || st.sel === null) return; st.ans = true;
-      const ok = st.sel === st.cor;
-      markOptions('q1', st.sel, st.cor, ok);
-      setBanner('q1', ok, '<b>NPN</b> with a <b>positive</b> supply rail');
-      showQ1Working();
-      applyCircuitState(CIRCUIT_STATES[0].reveal);
-      advanceQuestion(1);
-    }
-
-    function showQ1Working() {
-      const box = document.getElementById('q1Working');
-      box.className = 'working-box visible';
-      document.getElementById('q1WorkingContent').innerHTML = `
+    const QUESTIONS = [
+      {
+        // Multi-select example: leftPanel:'shapeGrid' shows numbered, clickable
+        // symbol variants instead of the circuit image; kind:'multi' lets the
+        // student toggle any number of them on/off before checking.
+        leftPanel: 'shapeGrid',
+        kind: 'multi',
+        text: () => 'Click every shape below that is a <b>valid</b> BJT transistor symbol. There are 8 correct shapes among the 12 shown.',
+        hint: () => 'A valid symbol has exactly one arrow, sitting on an emitter/collector lead — never the base lead — pointing away from the base for NPN or toward the base for PNP. The circle is optional, and it doesn\'t matter which side (top or bottom) that lead is drawn on, as long as the arrow\'s direction relative to the base is still correct.',
+        options: () => shuffle([
+          { label: 'NPN, standard, circle',  type: 'correct', shapeId: 'bjt-npn-standard-circle' },
+          { label: 'PNP, standard, circle',  type: 'correct', shapeId: 'bjt-pnp-standard-circle' },
+          { label: 'NPN, flipped, circle',   type: 'correct', shapeId: 'bjt-npn-flipped-circle' },
+          { label: 'PNP, flipped, circle',   type: 'correct', shapeId: 'bjt-pnp-flipped-circle' },
+          { label: 'NPN, standard, no circle', type: 'correct', shapeId: 'bjt-npn-standard-nocircle' },
+          { label: 'PNP, standard, no circle', type: 'correct', shapeId: 'bjt-pnp-standard-nocircle' },
+          { label: 'NPN, flipped, no circle',  type: 'correct', shapeId: 'bjt-npn-flipped-nocircle' },
+          { label: 'PNP, flipped, no circle',  type: 'correct', shapeId: 'bjt-pnp-flipped-nocircle' },
+          { label: 'Arrow on base lead, pointing in',  type: 'wrong', shapeId: 'bjt-error-base-arrow-in' },
+          { label: 'Arrow on base lead, pointing out', type: 'wrong', shapeId: 'bjt-error-base-arrow-out' },
+          { label: 'Two arrows, both pointing in',     type: 'wrong', shapeId: 'bjt-error-double-in' },
+          { label: 'Two arrows, both pointing out',    type: 'wrong', shapeId: 'bjt-error-double-out' }
+        ]),
+        correctExplain: (st) => {
+          const nums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(n => n).join(', ');
+          return `Shapes <b>${nums}</b> are the valid BJT symbols`;
+        },
+        working: (st) => {
+          const correctNums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join(', ');
+          const wrongNums = st.opts.map((o, i) => o.type === 'wrong' ? i + 1 : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-step">Valid symbols — shapes ${correctNums}:</div>
+    <div class="working-line">Each has exactly one arrow, on an emitter/collector diagonal, pointing <b style="color:var(--colour-ui-correct)">away</b> from the base for NPN or <b style="color:var(--colour-ui-correct)">toward</b> the base for PNP. The circle is a drawing style, not a rule — both circled and uncircled forms are valid.</div>
+    <div class="working-line" style="margin-top:.4rem">"Flipped" versions (arrow-bearing lead drawn on top instead of bottom, or vice versa) are just as valid — only the arrow's direction <em>relative to the base</em> matters, not which physical side of the symbol it's drawn on.</div>
+    <div class="working-step" style="margin-top:.6rem">Invalid symbols — shapes ${wrongNums}:</div>
+    <div class="working-line">Each breaks the one-arrow-on-the-emitter rule: two of them put the arrow directly on the <b style="color:var(--colour-ui-wrong)">base lead</b> — an arrow never belongs there — and the other two put <b style="color:var(--colour-ui-wrong)">two arrows</b> on the symbol at once, when a real BJT only ever has one.</div>`;
+        }
+      },
+      {
+        // Same shapeGrid/multi-select method as the previous question, reusing
+        // its 8 valid shapeIds — but the pass/fail split here is NPN vs PNP,
+        // not valid vs invalid.
+        leftPanel: 'shapeGrid',
+        kind: 'multi',
+        text: () => 'All 8 shapes below are valid BJT symbols. Click every shape that is specifically a <b>PNP</b> transistor.',
+        hint: () => 'Every shape here already has a correctly placed single arrow, so validity isn\'t the question this time. Look at which way each arrow points relative to the base: a PNP arrow points <em>toward</em> the base; an NPN arrow points <em>away</em> from it. The circle, and which side the arrow-bearing lead is drawn on, don\'t matter.',
+        options: () => shuffle([
+          { label: 'NPN, standard, circle',    type: 'wrong',   shapeId: 'bjt-npn-standard-circle' },
+          { label: 'PNP, standard, circle',    type: 'correct', shapeId: 'bjt-pnp-standard-circle' },
+          { label: 'NPN, flipped, circle',     type: 'wrong',   shapeId: 'bjt-npn-flipped-circle' },
+          { label: 'PNP, flipped, circle',     type: 'correct', shapeId: 'bjt-pnp-flipped-circle' },
+          { label: 'NPN, standard, no circle', type: 'wrong',   shapeId: 'bjt-npn-standard-nocircle' },
+          { label: 'PNP, standard, no circle', type: 'correct', shapeId: 'bjt-pnp-standard-nocircle' },
+          { label: 'NPN, flipped, no circle',  type: 'wrong',   shapeId: 'bjt-npn-flipped-nocircle' },
+          { label: 'PNP, flipped, no circle',  type: 'correct', shapeId: 'bjt-pnp-flipped-nocircle' }
+        ]),
+        correctExplain: (st) => {
+          const nums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(n => n).join(', ');
+          return `Shapes <b>${nums}</b> are the PNP symbols`;
+        },
+        working: (st) => {
+          const correctNums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join(', ');
+          const wrongNums = st.opts.map((o, i) => o.type === 'wrong' ? i + 1 : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-step">PNP symbols — shapes ${correctNums}:</div>
+    <div class="working-line">Each has its single arrow pointing <b style="color:var(--colour-ui-correct)">toward</b> the base — the defining feature of a PNP symbol, regardless of whether the arrow-bearing lead is drawn on top or bottom, or whether the circle is present.</div>
+    <div class="working-step" style="margin-top:.6rem">NPN symbols — shapes ${wrongNums}:</div>
+    <div class="working-line">Each has its arrow pointing <b style="color:var(--colour-ui-wrong)">away</b> from the base instead. These are still valid, correctly-drawn symbols — just the wrong transistor type for this question.</div>`;
+        }
+      },
+      {
+        // Reuses the previous question's two emitter-bottom shapeIds
+        // (bjt-npn-standard-circle, bjt-pnp-flipped-circle), but the shapeGrid
+        // symbols here are that symbol plus B/E/C text labels layered on top
+        // (see the bjt-*-labels-* defs) — correctness now hinges on label
+        // placement, not the symbol geometry itself.
+        leftPanel: 'shapeGrid',
+        kind: 'multi',
+        text: () => 'Each shape below is an NPN or PNP symbol with its <b>Base (B)</b>, <b>Emitter (E)</b> and <b>Collector (C)</b> leads labelled. Click every shape where all three labels are correct. There are 2 correct shapes among the 8 shown — one NPN, one PNP.',
+        hint: () => 'Both symbols here are drawn with the emitter at the bottom. The base label belongs on the short straight lead (not one of the diagonals); the emitter label belongs on whichever diagonal lead carries the arrow; the collector label belongs on the other diagonal lead. Check all three positions on each shape individually — don\'t assume a mistake only happens between neighbouring labels.',
+        options: () => shuffle([
+          { label: 'NPN, correctly labelled', type: 'correct', shapeId: 'bjt-npn-labels-correct' },
+          { label: 'PNP, correctly labelled', type: 'correct', shapeId: 'bjt-pnp-labels-correct' },
+          { label: 'NPN, E/C swapped',        type: 'wrong',   shapeId: 'bjt-npn-labels-swap-ec' },
+          { label: 'NPN, B/E swapped',        type: 'wrong',   shapeId: 'bjt-npn-labels-swap-be' },
+          { label: 'NPN, B/C swapped',        type: 'wrong',   shapeId: 'bjt-npn-labels-swap-bc' },
+          { label: 'PNP, E/C swapped',        type: 'wrong',   shapeId: 'bjt-pnp-labels-swap-ec' },
+          { label: 'PNP, B/E swapped',        type: 'wrong',   shapeId: 'bjt-pnp-labels-swap-be' },
+          { label: 'PNP, B/C swapped',        type: 'wrong',   shapeId: 'bjt-pnp-labels-swap-bc' }
+        ]),
+        correctExplain: (st) => {
+          const nums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(n => n).join(', ');
+          return `Shapes <b>${nums}</b> have all three labels correct`;
+        },
+        working: (st) => {
+          const correctNums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join(', ');
+          const wrongNums = st.opts.map((o, i) => o.type === 'wrong' ? i + 1 : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-step">Correctly labelled — shapes ${correctNums}:</div>
+    <div class="working-line">In both, <b style="color:var(--colour-ui-correct)">B</b> sits on the short straight base lead, <b style="color:var(--colour-ui-correct)">E</b> sits on the diagonal lead carrying the arrow (the bottom lead here, for both NPN and PNP), and <b style="color:var(--colour-ui-correct)">C</b> sits on the remaining diagonal lead (the top one).</div>
+    <div class="working-step" style="margin-top:.6rem">Incorrectly labelled — shapes ${wrongNums}:</div>
+    <div class="working-line">Each has exactly two of its three labels swapped with each other: either <b style="color:var(--colour-ui-wrong)">E and C</b> (the two current-carrying leads mixed up), <b style="color:var(--colour-ui-wrong)">B and E</b>, or <b style="color:var(--colour-ui-wrong)">B and C</b>. Checking each label against its own rule individually — rather than judging the shape as a whole — is the only reliable way to catch these.</div>`;
+        }
+      },
+      {
+        leftPanel: 'circuit',
+        text: () => 'The circuit shown represents what type of BJT?',
+        hint: () => 'Look at the arrow direction on the emitter inside the transistor symbol. Then trace where V<sub>CC</sub> connects in the circuit.',
+        options: () => shuffle([
+          { label: 'NPN with a positive supply rail', type: 'correct' },
+          { label: 'NPN with a negative supply rail', type: 'wrong' },
+          { label: 'PNP with a positive supply rail', type: 'wrong' },
+          { label: 'PNP with a negative supply rail', type: 'wrong' }
+        ]),
+        correctExplain: () => '<b>NPN</b> with a <b>positive</b> supply rail',
+        working: () => `
     <div class="working-step">Identifying NPN vs PNP:</div>
     <div class="working-line">Look at the arrow on the emitter line inside the BJT circle. In an <b style="color:var(--colour-bjt)">NPN</b> transistor the arrow points <em>away</em> from the base bar — outward toward the emitter terminal. A common mnemonic: <b style="color:var(--colour-bjt)">N</b>ot <b style="color:var(--colour-bjt)">P</b>ointing i<b style="color:var(--colour-bjt)">N</b>.</div>
     <div class="working-line" style="margin-top:.5rem">In a <b>PNP</b> transistor the arrow reverses — it points <em>toward</em> the base bar.</div>
 
     <div class="working-step">Identifying positive vs negative supply:</div>
     <div class="working-line"><span class="colour-supply">V<sub>CC</sub></span> connects at the <em>top</em> of the circuit, feeding the collector through <span class="colour-resistor">R<sub>C</sub></span>. The emitter returns to GND (0 V) at the <em>bottom</em>. Conventional current flows from <span class="colour-supply">V<sub>CC</sub></span> downward through the transistor to ground — this is a <b style="color:var(--colour-supply)">positive supply</b> configuration.</div>
-    <div class="working-line" style="margin-top:.5rem">A <em>negative</em> supply configuration would have the emitter connected to a negative rail (<span style="color:var(--colour-supply)">−V<sub>CC</sub></span>) with the collector returning toward 0 V, or alternatively use a PNP with the emitter at the positive rail and the collector returning to GND.</div>`;
-    }
-
-    function checkQ2() {
-      const st = Q.q2; if (st.ans || st.sel === null) return; st.ans = true;
-      const ok = st.sel === st.cor;
-      markOptions('q2', st.sel, st.cor, ok);
-      setBanner('q2', ok, 'A BJT is a <b>current</b> amplifier');
-      showQ2Working();
-      applyCircuitState(CIRCUIT_STATES[1].reveal);
-      advanceQuestion(2);
-    }
-
-    function showQ2Working() {
-      const box = document.getElementById('q2Working');
-      box.className = 'working-box visible';
-      document.getElementById('q2WorkingContent').innerHTML = `
+    <div class="working-line" style="margin-top:.5rem">A <em>negative</em> supply configuration would have the emitter connected to a negative rail (<span style="color:var(--colour-supply)">−V<sub>CC</sub></span>) with the collector returning toward 0 V, or alternatively use a PNP with the emitter at the positive rail and the collector returning to GND.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        text: () => 'A BJT is a <span style="color:var(--colour-bjt)">?</span> amplifier.',
+        hint: () => 'Think about what quantity at the input (base) controls the output (collector). Look at what h<sub>FE</sub> describes on the datasheet.',
+        options: () => shuffle([
+          { label: 'Current', type: 'correct' },
+          { label: 'Voltage', type: 'wrong' },
+          { label: 'Amplitude', type: 'wrong' },
+          { label: 'Frequency', type: 'wrong' }
+        ]),
+        correctExplain: () => 'A BJT is a <b>current</b> amplifier',
+        working: () => `
     <div class="working-line">A BJT (Bipolar Junction Transistor) is a <b style="color:var(--colour-bjt)">current amplifier</b>. A small base current I<sub>B</sub> controls a much larger collector current I<sub>C</sub>.</div>
 
     <div class="working-step">Current gain (from the datasheet):</div>
-    <div class="working-formula-row"><span class="colour-bjt">h<sub>FE</sub></span> = <span class="colour-bjt">β</span> = <span class="colour-frac" style="display:inline-flex;flex-direction:column;align-items:center;vertical-align:middle;margin:0 4px"><span style="border-bottom:1.5px solid currentColor;padding:0 6px 2px;text-align:center"><span class="colour-current">I<sub>C</sub></span></span><span style="padding:2px 6px 0;text-align:center"><span class="colour-current">I<sub>B</sub></span></span></span></div>
+    <div class="working-formula-row"><span class="colour-bjt">h<sub>FE</sub></span> = <span class="colour-bjt">β</span> = ${frac('<span class="colour-current">I<sub>C</sub></span>', '<span class="colour-current">I<sub>B</sub></span>')}</div>
     <div class="working-label">For the BC549:</div>
     <div class="working-total"><span class="colour-bjt">h<sub>FE</sub></span> = 110 to 800 — a small I<sub>B</sub> produces a collector current up to 800× larger</div>
 
-    <div class="working-line" style="margin-top:.6rem">Compare this to a <b>voltage amplifier</b> (e.g. an op-amp or FET), where an input <em>voltage</em> controls the output. In a BJT, it is the input <em>current</em> that is the controlling quantity — hence the name <b style="color:var(--colour-bjt)">current amplifier</b>.</div>`;
-    }
-
-    function checkQ3() {
-      const st = Q.q3; if (st.ans || st.sel === null) return; st.ans = true;
-      const ok = st.sel === st.cor;
-      markOptions('q3', st.sel, st.cor, ok);
-      setBanner('q3', ok, `<span class="colour-current">I<sub>C</sub></span> = β × I<sub>B</sub> = ${V.beta} × ${fmtA(IB)} = <b>${fmtA(IC)}</b>`);
-      showQ3Working();
-      applyCircuitState(CIRCUIT_STATES[2].reveal);
-      advanceQuestion(3);
-    }
-
-    function showQ3Working() {
-      const box = document.getElementById('q3Working');
-      box.className = 'working-box visible';
-      document.getElementById('q3WorkingContent').innerHTML = `
+    <div class="working-line" style="margin-top:.6rem">Compare this to a <b>voltage amplifier</b> (e.g. an op-amp or FET), where an input <em>voltage</em> controls the output. In a BJT, it is the input <em>current</em> that is the controlling quantity — hence the name <b style="color:var(--colour-bjt)">current amplifier</b>.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        text: () => `β = ${V.beta} and <span class="colour-current">I<sub>B</sub></span> = <span class="colour-current">${fmtA(IB)}</span>. What is <span class="colour-current">I<sub>C</sub></span>?`,
+        hint: () => 'I<sub>C</sub> = β × I<sub>B</sub>. The base current was found using Ohm\'s Law: I<sub>B</sub> = (V<sub>CC</sub> − V<sub>BE</sub>) / R<sub>B</sub>.',
+        options: () => shuffle([
+          { label: fmtA(IC),           type: 'correct' },
+          { label: fmtA(IB),           type: 'wrong' },
+          { label: fmtA(IB / V.beta),  type: 'wrong' },
+          { label: fmtA(V.vcc / V.rc), type: 'wrong' }
+        ]),
+        correctExplain: () => `<span class="colour-current">I<sub>C</sub></span> = β × I<sub>B</sub> = ${V.beta} × ${fmtA(IB)} = <b>${fmtA(IC)}</b>`,
+        working: () => `
     <div class="working-step">Step 1 — Find I<sub>B</sub> using Ohm's Law:</div>
     <div class="working-formula-row"><span class="colour-current">I<sub>B</sub></span> = ${frac('<span class="colour-supply">V<sub>CC</sub></span> − <span class="colour-bjt">V<sub>BE</sub></span>', '<span class="colour-resistor">R<sub>B</sub></span>')}</div>
     <div class="working-label">Substituting values:</div>
@@ -1671,196 +1690,295 @@
     <div class="working-formula-row"><span class="colour-current">I<sub>C</sub></span> = β × <span class="colour-current">I<sub>B</sub></span></div>
     <div class="working-label">Substituting values:</div>
     <div class="working-formula-row"><span class="colour-current">I<sub>C</sub></span> = ${V.beta} × ${fmtA(IB)}</div>
-    <div class="working-total"><span class="colour-current">I<sub>C</sub></span> = <span class="colour-result">${fmtA(IC)}</span></div>`;
-    }
-
-    function checkQ4() {
-      const st = Q.q4; if (st.ans || st.sel === null) return; st.ans = true;
-      const ok = st.sel === st.cor;
-      markOptions('q4', st.sel, st.cor, ok);
-      setBanner('q4', ok, '<b>β</b> is the current gain, I<sub>C</sub> / I<sub>B</sub>');
-      showQ4Working();
-      applyCircuitState(CIRCUIT_STATES[3].reveal);
-      advanceQuestion(4);
-    }
-
-    function showQ4Working() {
-      const box = document.getElementById('q4Working');
-      box.className = 'working-box visible';
-      document.getElementById('q4WorkingContent').innerHTML = `
+    <div class="working-total"><span class="colour-current">I<sub>C</sub></span> = <span class="colour-result">${fmtA(IC)}</span></div>`
+      },
+      {
+        leftPanel: 'viz',
+        text: () => 'Look at the heading above the interactive diagram: "β = 200, V<sub>BE</sub> = 0.6V, R<sub>C</sub> = 1kΩ, V<sub>CC</sub> = 12V". Which of these values represents the transistor\'s current gain?',
+        hint: () => 'Current gain relates a change in output current (I<sub>C</sub>) to a change in input current (I<sub>B</sub>) — it isn\'t a voltage or a resistance.',
+        options: () => shuffle([
+          { label: 'β (the current gain, IC/IB)',     type: 'correct' },
+          { label: 'VCC (the supply voltage)',         type: 'wrong' },
+          { label: 'RC (the collector resistor)',      type: 'wrong' },
+          { label: 'VBE (the 0.6V turn-on threshold)', type: 'wrong' }
+        ]),
+        correctExplain: () => '<b>β</b> is the current gain, I<sub>C</sub> / I<sub>B</sub>',
+        working: () => `
     <div class="working-step">β is the current gain:</div>
     <div class="working-line">β (also written h<sub>FE</sub>) is the ratio of collector current to base current: β = <span class="colour-current">I<sub>C</sub></span> / <span class="colour-current">I<sub>B</sub></span>. It's a fixed property of the transistor itself — it doesn't change with <span class="colour-supply">V<sub>CC</sub></span> or <span class="colour-resistor">R<sub>C</sub></span>.</div>
 
     <div class="working-step" style="margin-top:.6rem">Why the others aren't gain:</div>
-    <div class="working-line"><span class="colour-supply">V<sub>CC</sub></span> is the supply voltage and <span class="colour-resistor">R<sub>C</sub></span> is the collector resistor — together with β they help set the actual operating point, but neither one describes how much the transistor itself amplifies <span class="colour-current">I<sub>B</sub></span> into <span class="colour-current">I<sub>C</sub></span>. <span class="colour-bjt">V<sub>BE</sub></span> = 0.6V is just the turn-on voltage for the B-E junction — a threshold, not a gain.</div>`;
-    }
-
-    function checkQ5() {
-      const st = Q.q5; if (st.ans || st.sel === null) return; st.ans = true;
-      const ok = st.sel === st.cor;
-      markOptions('q5', st.sel, st.cor, ok);
-      setBanner('q5', ok, '<b>B-E</b> junction forward-biased; <b>B-C</b> junction reverse-biased');
-      showQ5Working();
-      applyCircuitState(CIRCUIT_STATES[4].reveal);
-      advanceQuestion(5);
-    }
-
-    function showQ5Working() {
-      const box = document.getElementById('q5Working');
-      box.className = 'working-box visible';
-      document.getElementById('q5WorkingContent').innerHTML = `
+    <div class="working-line"><span class="colour-supply">V<sub>CC</sub></span> is the supply voltage and <span class="colour-resistor">R<sub>C</sub></span> is the collector resistor — together with β they help set the actual operating point, but neither one describes how much the transistor itself amplifies <span class="colour-current">I<sub>B</sub></span> into <span class="colour-current">I<sub>C</sub></span>. <span class="colour-bjt">V<sub>BE</sub></span> = 0.6V is just the turn-on voltage for the B-E junction — a threshold, not a gain.</div>`
+      },
+      {
+        leftPanel: 'viz',
+        text: () => 'Try moving the 2 sliders on the interactive image. Based on the results you see, which answer best describes the state a circuit needs to be in for a NPN transistor to be in the <em>active region</em>?',
+        hint: () => 'A junction is <b>forward-biased</b> when its P-type side is at higher potential than its N-type side. Check the polarity markers (+/−) in the diagram for each junction.',
+        options: () => shuffle([
+          { label: 'B-E forward-biased (VBE > 0.6V); B-C reverse-biased', type: 'correct' },
+          { label: 'Both junctions forward-biased (saturation)',           type: 'wrong' },
+          { label: 'Both junctions reverse-biased (cutoff)',               type: 'wrong' },
+          { label: 'B-E reverse-biased (VBE < −0.6V); B-C forward-biased', type: 'wrong' }
+        ]),
+        correctExplain: () => '<b>B-E</b> junction forward-biased; <b>B-C</b> junction reverse-biased',
+        working: () => `
     <div class="working-step">B-E Junction — Forward-biased:</div>
     <div class="working-line">The base (P-type) is held at ≈ 0.6 V above the emitter (N-type) by <span class="colour-supply">V<sub>CC</sub></span> through <span class="colour-resistor">R<sub>B</sub></span>. The P-side is at higher potential → <b style="color:var(--colour-ui-correct)">forward-biased</b>. Conventional current I<sub>B</sub> flows base → emitter.</div>
 
     <div class="working-step" style="margin-top:.6rem">B-C Junction — Reverse-biased:</div>
-    <div class="working-line">The collector (N-type) sits near <span class="colour-supply">V<sub>CC</sub></span> through <span class="colour-resistor">R<sub>C</sub></span>, far above the base (P-type). The N-side is at higher potential → <b style="color:var(--colour-ui-wrong)">reverse-biased</b>. This reverse bias allows a large <span class="colour-current">I<sub>C</sub></span> to be controlled by the small <span class="colour-current">I<sub>B</sub></span>.</div>`;
-    }
-
-    function checkQ6() {
-      const st = Q.q6; if (st.ans || st.sel === null) return; st.ans = true;
-      const ok = st.sel === st.cor;
-      markOptions('q6', st.sel, st.cor, ok);
-      setBanner('q6', ok, '<b>I<sub>C</sub></b> is set by the circuit, not β, once saturated');
-      showQ6Working();
-      applyCircuitState(CIRCUIT_STATES[5].reveal);
-      advanceQuestion(6);
-    }
-
-    function showQ6Working() {
-      const box = document.getElementById('q6Working');
-      box.className = 'working-box visible';
-      document.getElementById('q6WorkingContent').innerHTML = `
+    <div class="working-line">The collector (N-type) sits near <span class="colour-supply">V<sub>CC</sub></span> through <span class="colour-resistor">R<sub>C</sub></span>, far above the base (P-type). The N-side is at higher potential → <b style="color:var(--colour-ui-wrong)">reverse-biased</b>. This reverse bias allows a large <span class="colour-current">I<sub>C</sub></span> to be controlled by the small <span class="colour-current">I<sub>B</sub></span>.</div>`
+      },
+      {
+        leftPanel: 'viz',
+        text: () => 'Using the same interactive image, drag V<sub>B</sub> well past 0.6V (with V<sub>E</sub> fixed) until the status badge reads <em>SATURATION</em>. Based on your observations, what best describes the behaviour of a BJT in saturation?',
+        hint: () => 'Watch the I<sub>C</sub> readout and the status badge as V<sub>B</sub> keeps increasing. Does I<sub>C</sub> keep climbing in proportion, or does it stall near a fixed value?',
+        options: () => shuffle([
+          { label: 'IC is near its maximum — increasing IB further has little effect, since the circuit (VCC and RC), not β, now sets the current', type: 'correct' },
+          { label: 'The transistor turns off and IC drops to zero',                type: 'wrong' },
+          { label: 'IC keeps increasing in direct proportion to IB (IC = β × IB)',  type: 'wrong' },
+          { label: 'VCE increases toward VCC as more current flows',               type: 'wrong' }
+        ]),
+        correctExplain: () => '<b>I<sub>C</sub></b> is set by the circuit, not β, once saturated',
+        working: () => `
     <div class="working-step">Saturation — IC is capped by the circuit:</div>
     <div class="working-line">Once <span class="colour-bjt">V<sub>B</sub></span> is pushed high enough, <span class="colour-current">I<sub>C</sub></span> stops growing with <span class="colour-current">I<sub>B</sub></span> and flattens out near <span class="working-formula-row" style="display:inline">(<span class="colour-supply">V<sub>CC</sub></span> − V<sub>CE(sat)</sub>) / <span class="colour-resistor">R<sub>C</sub></span></span> — the maximum current <span class="colour-resistor">R<sub>C</sub></span> and <span class="colour-supply">V<sub>CC</sub></span> can physically supply.</div>
 
     <div class="working-step" style="margin-top:.6rem">Why β stops mattering:</div>
-    <div class="working-line">In the <em>active</em> region <span class="colour-current">I<sub>C</sub></span> = β × <span class="colour-current">I<sub>B</sub></span> — the transistor is the limiting factor. In <em>saturation</em>, the transistor could pass more current if β alone decided it, but the external circuit simply can't supply any more — so extra <span class="colour-current">I<sub>B</sub></span> has almost no effect on <span class="colour-current">I<sub>C</sub></span>.</div>`;
-    }
-
-    function checkQ7() {
-      const st = Q.q7; if (st.ans || st.sel === null) return; st.ans = true;
-      const ok = st.sel === st.cor;
-      markOptions('q7', st.sel, st.cor, ok);
-      setBanner('q7', ok, '<b>Kirchhoff\'s Voltage Law</b> — the loop voltages must always add up to VCC');
-      showQ7Working();
-      applyCircuitState(CIRCUIT_STATES[6].reveal);
-      advanceQuestion(7);
-    }
-
-    function showQ7Working() {
-      const box = document.getElementById('q7Working');
-      box.className = 'working-box visible';
-      document.getElementById('q7WorkingContent').innerHTML = `
+    <div class="working-line">In the <em>active</em> region <span class="colour-current">I<sub>C</sub></span> = β × <span class="colour-current">I<sub>B</sub></span> — the transistor is the limiting factor. In <em>saturation</em>, the transistor could pass more current if β alone decided it, but the external circuit simply can't supply any more — so extra <span class="colour-current">I<sub>B</sub></span> has almost no effect on <span class="colour-current">I<sub>C</sub></span>.</div>`
+      },
+      {
+        leftPanel: 'viz',
+        text: () => 'As I<sub>C</sub> increases, V<sub>C</sub> decreases — even though V<sub>CC</sub> and R<sub>C</sub> haven\'t changed. Which law explains why the voltage drop across R<sub>C</sub> directly reduces V<sub>C</sub>?',
+        hint: () => 'Ohm\'s Law tells you the <em>size</em> of the drop across R<sub>C</sub> (V = IR). Something else explains why that drop has to come directly out of V<sub>C</sub>, given V<sub>CC</sub> is fixed.',
+        options: () => shuffle([
+          { label: "Kirchhoff's Voltage Law", type: 'correct' },
+          { label: "Ohm's Law",               type: 'wrong' },
+          { label: "Kirchhoff's Current Law", type: 'wrong' },
+          { label: "Thevenin's Theorem",      type: 'wrong' }
+        ]),
+        correctExplain: () => '<b>Kirchhoff\'s Voltage Law</b> — the loop voltages must always add up to VCC',
+        working: () => `
     <div class="working-step">Kirchhoff's Voltage Law (KVL):</div>
     <div class="working-line">Around any closed loop, the voltage supplied must equal the voltages dropped: <span class="colour-supply">V<sub>CC</sub></span> = <span class="colour-current">I<sub>C</sub></span> × <span class="colour-resistor">R<sub>C</sub></span> + <span class="colour-result">V<sub>C</sub></span> (this is the same formula shown above the C-B junction box on the interactive diagram). Since <span class="colour-supply">V<sub>CC</sub></span> is fixed, whatever extra voltage <span class="colour-resistor">R<sub>C</sub></span> drops has to come directly out of <span class="colour-result">V<sub>C</sub></span>.</div>
 
     <div class="working-step" style="margin-top:.6rem">Where Ohm's Law fits in:</div>
-    <div class="working-line">Ohm's Law (V = IR) is what lets you calculate <em>how big</em> the drop across <span class="colour-resistor">R<sub>C</sub></span> is once you know <span class="colour-current">I<sub>C</sub></span>. But it doesn't by itself say anything about <span class="colour-result">V<sub>C</sub></span> — it's KVL that ties that drop back to a fixed-supply loop and forces <span class="colour-result">V<sub>C</sub></span> to give up the difference.</div>`;
+    <div class="working-line">Ohm's Law (V = IR) is what lets you calculate <em>how big</em> the drop across <span class="colour-resistor">R<sub>C</sub></span> is once you know <span class="colour-current">I<sub>C</sub></span>. But it doesn't by itself say anything about <span class="colour-result">V<sub>C</sub></span> — it's KVL that ties that drop back to a fixed-supply loop and forces <span class="colour-result">V<sub>C</sub></span> to give up the difference.</div>`
+      }
+    ];
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUIZ ENGINE — generic; driven entirely by QUESTIONS[] via index.
+    // Nothing here should need to change when questions are added/reordered.
+    // ══════════════════════════════════════════════════════════════════════
+
+    function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+    // kind:'multi' questions (e.g. leftPanel:'shapeGrid') allow any number of
+    // selections; everything else is single-select (A/B/C/D). `sel`/`cor` are
+    // a single index for single-select, or an array of indices for multi.
+    function isMulti(data) { return data.kind === 'multi'; }
+    function isAnswerCorrect(data, st) {
+      if (!isMulti(data)) return st.sel === st.cor;
+      const a = [...st.sel].sort((x, y) => x - y), b = [...st.cor].sort((x, y) => x - y);
+      return a.length === b.length && a.every((v, i) => v === b[i]);
+    }
+    function selectedLabel(data, st) {
+      if (!isMulti(data)) return (st.sel != null && st.opts[st.sel]) ? st.opts[st.sel].label : '—';
+      return st.sel.length ? [...st.sel].sort((a, b) => a - b).map(i => i + 1).join(', ') : '—';
     }
 
-    // ── navigation ──
-    function backFromQ2() { resetQuestion('q1'); resetQuestion('q2'); showQuestion(1); }
-    function backFromQ3() { resetQuestion('q2'); resetQuestion('q3'); showQuestion(2); }
-    function backFromQ4() { resetQuestion('q3'); resetQuestion('q4'); showQuestion(3); }
-    function backFromQ5() { resetQuestion('q4'); resetQuestion('q5'); showQuestion(4); }
-    function backFromQ6() { resetQuestion('q5'); resetQuestion('q6'); showQuestion(5); }
-    function backFromQ7() { resetQuestion('q6'); resetQuestion('q7'); showQuestion(6); }
+    let Q = [];   // per-question live state: { sel, ans, cor, opts }
+    let cur = 0;  // 0-based index into QUESTIONS
+
+    function buildProgressDots() {
+      document.getElementById('progressDots').innerHTML =
+        QUESTIONS.map((_, i) => `<div class="progress-dot" id="dot-${i}"></div>`).join('');
+    }
+
+    function updateProgress() {
+      QUESTIONS.forEach((_, i) => {
+        const d = document.getElementById('dot-' + i);
+        d.className = 'progress-dot';
+        if (i === cur) d.classList.add('active'); else if (Q[i].ans) d.classList.add('done');
+      });
+      document.getElementById('progressLabel').textContent = (cur + 1) + ' / ' + QUESTIONS.length;
+    }
+
+    function renderOptions() {
+      const st = Q[cur];
+      const c = document.getElementById('qOptions'); c.innerHTML = '';
+      st.opts.forEach((opt, i) => {
+        const btn = document.createElement('button'); btn.className = 'option-btn';
+        btn.innerHTML = `<span class="option-letter">${LETTERS[i]}</span><span>${opt.label}</span>`;
+        if (st.ans) {
+          btn.disabled = true;
+          if (i === st.cor) { btn.classList.add('correct'); btn.innerHTML += `<span class="result-icon">✓</span>`; }
+          else if (i === st.sel) { btn.classList.add('wrong'); btn.innerHTML += `<span class="result-icon">✗</span>`; }
+          else btn.classList.add('dimmed');
+        } else {
+          if (i === st.sel) btn.classList.add('selected');
+          btn.addEventListener('click', () => selectOption(i));
+        }
+        c.appendChild(btn);
+      });
+    }
+
+    function renderShapeGrid() {
+      const st = Q[cur];
+      const c = document.getElementById('shapeGridCells'); c.innerHTML = '';
+      st.opts.forEach((opt, i) => {
+        const cell = document.createElement('div'); cell.className = 'shape-cell';
+        const selected = st.sel.includes(i);
+        if (st.ans) {
+          if (opt.type === 'correct') cell.classList.add(selected ? 'correct' : 'missed');
+          else cell.classList.add(selected ? 'wrong' : 'dimmed');
+        } else {
+          if (selected) cell.classList.add('selected');
+          cell.addEventListener('click', () => selectOption(i));
+        }
+        cell.innerHTML = `<span class="shape-num">${i + 1}</span><svg viewBox="-32 -36 96 76"><use href="#${opt.shapeId}"/></svg>`;
+        c.appendChild(cell);
+      });
+    }
+
+    function selectOption(i) {
+      const st = Q[cur], data = QUESTIONS[cur];
+      if (st.ans) return;
+      if (isMulti(data)) {
+        const pos = st.sel.indexOf(i);
+        if (pos >= 0) st.sel.splice(pos, 1); else st.sel.push(i);
+      } else {
+        st.sel = i;
+      }
+      renderQuestion();
+    }
+
+    function renderQuestion() {
+      const data = QUESTIONS[cur], st = Q[cur];
+      const multi = isMulti(data);
+
+      document.getElementById('qNum').textContent = 'Q' + (cur + 1);
+      document.getElementById('qText').innerHTML = data.text();
+      document.getElementById('qHint').innerHTML = data.hint();
+
+      if (data.leftPanel === 'shapeGrid') {
+        document.getElementById('qOptions').innerHTML = '';
+        renderShapeGrid();
+      } else {
+        renderOptions();
+      }
+
+      const selList = document.getElementById('qSelectedList');
+      if (multi) {
+        selList.style.display = '';
+        selList.textContent = st.sel.length
+          ? `Selected: ${[...st.sel].sort((a, b) => a - b).map(i => i + 1).join(', ')}`
+          : 'Click the shapes above to select your answer.';
+      } else {
+        selList.style.display = 'none';
+      }
+
+      const banner = document.getElementById('qBanner');
+      if (st.ans) {
+        const ok = isAnswerCorrect(data, st);
+        banner.className = 'result-banner ' + (ok ? 'correct' : 'wrong');
+        document.getElementById('qIcon').textContent = ok ? '✓' : '✗';
+        document.getElementById('qBannerText').innerHTML = ok ? `Correct! ${data.correctExplain(st)}` : `The correct answer is ${data.correctExplain(st)}`;
+      } else {
+        banner.className = 'result-banner';
+      }
+
+      const working = document.getElementById('qWorking');
+      working.className = 'working-box' + (st.ans ? ' visible' : '');
+      document.getElementById('qWorkingContent').innerHTML = st.ans ? data.working(st) : '';
+
+      document.getElementById('qBack').style.display = cur > 0 ? 'inline-block' : 'none';
+      const check = document.getElementById('qCheck');
+      check.style.display = st.ans ? 'none' : 'inline-block';
+      check.disabled = st.ans || (multi ? st.sel.length === 0 : st.sel === null);
+      const isLast = cur === QUESTIONS.length - 1;
+      document.getElementById('qNext').style.display = (st.ans && !isLast) ? 'inline-block' : 'none';
+      document.getElementById('qSummary').style.display = (st.ans && isLast) ? 'inline-block' : 'none';
+
+      swapLeftPanel(data.leftPanel || 'circuit');
+      updateProgress();
+    }
+
+    function checkAnswer() {
+      const st = Q[cur], data = QUESTIONS[cur];
+      if (st.ans) return;
+      if (isMulti(data) ? st.sel.length === 0 : st.sel === null) return;
+      st.ans = true;
+      renderQuestion();
+    }
+
+    function nextQuestion() { if (cur < QUESTIONS.length - 1) { cur++; renderQuestion(); } }
+
+    // Going back re-opens the previous question for a fresh answer — so it and
+    // every question after it (all now "ahead" of where the student is) are
+    // cleared back to unanswered, rather than staying locked from before.
+    function backQuestion() {
+      if (cur <= 0) return;
+      cur--;
+      for (let i = cur; i < QUESTIONS.length; i++) {
+        Q[i].ans = false;
+        Q[i].sel = isMulti(QUESTIONS[i]) ? [] : null;
+      }
+      renderQuestion();
+    }
+
+    function swapLeftPanel(mode) {
+      document.querySelector('.circuit-panel').style.display = mode === 'circuit' ? '' : 'none';
+      document.getElementById('q5VizPanel').style.display = mode === 'viz' ? 'block' : 'none';
+      document.getElementById('qShapeGridPanel').style.display = mode === 'shapeGrid' ? 'block' : 'none';
+    }
+
+    function goToQuestion(n) { // 1-based, for URL/jump compatibility
+      cur = Math.max(0, Math.min(QUESTIONS.length - 1, n - 1));
+      document.getElementById('summaryPanel').style.display = 'none';
+      document.getElementById('qPanel').style.display = 'flex';
+      renderQuestion();
+    }
+
+    function resetQuiz() {
+      Q = QUESTIONS.map(data => {
+        const opts = data.options();
+        if (isMulti(data)) {
+          const cor = opts.map((o, i) => o.type === 'correct' ? i : -1).filter(i => i >= 0);
+          return { sel: [], ans: false, cor, opts };
+        }
+        return { sel: null, ans: false, cor: opts.findIndex(o => o.type === 'correct'), opts };
+      });
+      cur = 0;
+      document.getElementById('summaryPanel').style.display = 'none';
+      document.getElementById('qPanel').style.display = 'flex';
+      renderQuestion();
+    }
 
     function showSummary() {
-      cur = 'summary';
-      QIDS.forEach(q => document.getElementById(q + 'Panel').style.display = 'none');
+      document.getElementById('qPanel').style.display = 'none';
       document.getElementById('summaryPanel').style.display = 'block';
-      applyCircuitState(CIRCUIT_STATES[CIRCUIT_STATES.length - 1].reveal);
-      swapLeftPanel(false);
+      swapLeftPanel('circuit');
       const vals = `<div class="summary-values">
     <span style="color:var(--colour-supply);font-weight:bold">V<sub>CC</sub></span> = <span style="color:var(--colour-supply)">${V.vcc} V</span>&nbsp;&nbsp;&nbsp;
     <span style="color:var(--colour-resistor-labels);font-weight:bold">R<sub>B</sub></span> = <span style="color:var(--colour-resistor-labels)">${fmtO0(V.rb)}</span>&nbsp;&nbsp;
     <span style="color:var(--colour-resistor-labels);font-weight:bold">R<sub>C</sub></span> = <span style="color:var(--colour-resistor-labels)">${fmtO0(V.rc)}</span>
   </div>`;
-      const items = QIDS.map((qid, i) => {
-        const st = Q[qid];
-        const qtext = document.querySelector('#' + qid + 'Panel .q-text').innerHTML;
-        const ans = (st.sel != null && st.opts[st.sel]) ? st.opts[st.sel].label : '—';
-        const ok = st.sel === st.cor;
+      const items = QUESTIONS.map((data, i) => {
+        const st = Q[i];
+        const ans = selectedLabel(data, st);
+        const ok = isAnswerCorrect(data, st);
         const colour = ok ? 'var(--colour-ui-correct)' : '#ff3366';
         const mark = ok ? '✓' : '✗';
-        const working = document.getElementById(qid + 'WorkingContent').innerHTML;
         return `<div class="summary-item">
-      <div class="summary-item-head"><span class="summary-qnum">Q${i + 1}</span><span class="summary-question">${qtext}</span></div>
+      <div class="summary-item-head"><span class="summary-qnum">Q${i + 1}</span><span class="summary-question">${data.text()}</span></div>
       <div class="summary-answer" style="color:${colour}">You answered: ${ans} &nbsp; ${mark}</div>
-      <div class="working-box visible">${working}</div>
+      <div class="working-box visible">${st.ans ? data.working(st) : ''}</div>
     </div>`;
       }).join('');
       document.getElementById('summaryContent').innerHTML = vals + items;
-      QIDS.forEach(q => { const d = document.getElementById('dot-' + q); if (d) d.className = 'progress-dot done'; });
+      QUESTIONS.forEach((_, i) => { const d = document.getElementById('dot-' + i); if (d) d.className = 'progress-dot done'; });
       document.getElementById('progressLabel').textContent = 'Complete';
-    }
-
-    // ══════════════════════════════════════════════════════════════════════
-    // QUIZ ENGINE
-    // ══════════════════════════════════════════════════════════════════════
-
-    function updateProgress() {
-      QIDS.forEach(q => {
-        const d = document.getElementById('dot-' + q); if (!d) return;
-        d.className = 'progress-dot';
-        if (q === cur) d.classList.add('active'); else if (Q[q].ans) d.classList.add('done');
-      });
-      const n = QIDS.indexOf(cur) + 1;
-      const lbl = document.getElementById('progressLabel'); if (lbl && n > 0) lbl.textContent = n + ' / ' + QUIZ_QUESTION_COUNT;
-    }
-
-    function advanceQuestion(n) {
-      const qid = 'q' + n;
-      document.getElementById(qid + 'Check').style.display = 'none';
-      const isLast = (n === QUIZ_QUESTION_COUNT);
-      document.getElementById(qid + (isLast ? 'Summary' : 'Next')).style.display = 'inline-block';
-      updateProgress();
-    }
-
-    function swapLeftPanel(showViz) {
-      document.querySelector('.circuit-panel').style.display = showViz ? 'none' : '';
-      document.getElementById('q5VizPanel').style.display   = showViz ? 'block' : 'none';
-    }
-
-    function showQuestion(n) {
-      const qid = 'q' + n;
-      cur = qid;
-      QIDS.forEach(q => document.getElementById(q + 'Panel').style.display = 'none');
-      document.getElementById('summaryPanel').style.display = 'none';
-      document.getElementById(qid + 'Panel').style.display = 'flex';
-      const s = Q[qid].ans ? CIRCUIT_STATES[n - 1].reveal : CIRCUIT_STATES[n - 1].enter;
-      applyCircuitState(s);
-      swapLeftPanel(n === 4 || n === 5 || n === 6 || n === 7);
-      updateProgress();
-    }
-
-    function resetQuestion(qid) {
-      const st = Q[qid];
-      st.sel = null; st.ans = false;
-      renderOptions(qid);
-      document.getElementById(qid + 'Banner').className = 'result-banner';
-      document.getElementById(qid + 'Working').className = 'working-box';
-      const chk = document.getElementById(qid + 'Check'); chk.style.display = 'inline-block'; chk.disabled = true;
-      const nxt = document.getElementById(qid + 'Next'); if (nxt) nxt.style.display = 'none';
-      const sum = document.getElementById(qid + 'Summary'); if (sum) sum.style.display = 'none';
-    }
-
-    function resetQuiz() {
-      QIDS.forEach((qid, i) => {
-        const opts = QUESTION_BUILDERS[i]();
-        Q[qid] = { sel: null, ans: false, cor: opts.findIndex(o => o.type === 'correct'), opts };
-        renderOptions(qid);
-        document.getElementById(qid + 'Banner').className = 'result-banner';
-        document.getElementById(qid + 'Working').className = 'working-box';
-        const chk = document.getElementById(qid + 'Check');
-        if (chk) { chk.style.display = 'inline-block'; chk.disabled = true; }
-        const isLast = i === QIDS.length - 1;
-        const adv = document.getElementById(qid + (isLast ? 'Summary' : 'Next'));
-        if (adv) adv.style.display = 'none';
-      });
-      document.getElementById('summaryPanel').style.display = 'none';
-      showQuestion(1);
     }
 
     // ── zoom modal ──
@@ -1878,6 +1996,7 @@
     function handleModalClick(e) { if (e.target.closest('.modal-close')) return; closeModal(); }
     document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
+    buildProgressDots();
     setMode('example1');
 
     fetch('../index.html', { method: 'HEAD' })
@@ -1913,25 +2032,27 @@
     window.setXY = setXY;
 
     function jump(n, answered) {
-      if (n < 1 || n > QUIZ_QUESTION_COUNT) { console.warn('jump: no question', n); return; }
-      showQuestion(n);
+      if (n < 1 || n > QUESTIONS.length) { console.warn('jump: no question', n); return; }
+      // Default every question before the target to correctly-answered, so
+      // progress dots and back-navigation see a consistent, completed history.
+      for (let i = 0; i < n - 1; i++) {
+        Q[i].sel = Array.isArray(Q[i].cor) ? [...Q[i].cor] : Q[i].cor;
+        Q[i].ans = true;
+      }
+      goToQuestion(n);
       if (answered) {
-        const st = Q['q' + n];
-        if (st) { st.sel = st.cor; }
-        const check = window['checkQ' + n];
-        if (typeof check === 'function') check();
+        Q[cur].sel = Array.isArray(Q[cur].cor) ? [...Q[cur].cor] : Q[cur].cor;
+        checkAnswer();
       }
     }
     window.jump = jump;
 
     function jumpToSummary() {
-      for (let i = 1; i <= QUIZ_QUESTION_COUNT; i++) {
-        const st = Q['q' + i];
-        if (!st || st.ans) continue;
-        st.sel = st.cor;
-        const check = window['checkQ' + i];
-        if (typeof check === 'function') check();
-      }
+      QUESTIONS.forEach((_, i) => {
+        if (Q[i].ans) return;
+        Q[i].sel = Array.isArray(Q[i].cor) ? [...Q[i].cor] : Q[i].cor;
+        Q[i].ans = true;
+      });
       showSummary();
     }
     window.jumpToSummary = jumpToSummary;
@@ -2027,7 +2148,7 @@
           beTag2.style.display = 'none';
           beOff = true; subThr = true;
         } else {
-          beTag.textContent = 'OFF OR'; beTag.setAttribute('fill', '#ff3344');
+          beTag.textContent = 'CUT-OFF OR'; beTag.setAttribute('fill', '#ff3344');
           beTag2.textContent = 'REVERSE-BIASED'; beTag2.style.display = '';
           beOff = true;
         }
@@ -2070,5 +2191,4 @@
     }
   </script>
 </body>
-
 </html>
