@@ -517,7 +517,6 @@
     }
 
     .bits-cell:hover:not(.correct):not(.wrong) { background: rgba(0, 229, 255, .1); }
-    .bits-cell.blank { color: var(--colour-label); opacity: .5; }
     .bits-cell.correct { background: rgba(0, 255, 153, .12); color: var(--colour-ui-correct); cursor: default; }
     .bits-cell.wrong { background: rgba(255, 61, 154, .12); color: var(--colour-ui-wrong); cursor: default; }
 
@@ -853,7 +852,7 @@
         // = digital) — the real test is discreteness of levels, not shape.
         leftPanel: 'shapeGrid',
         kind: 'multi',
-        text: () => 'Some of the waveforms below represent a <b>digital</b> signal and some represent an <b>analog</b> signal. Click every waveform that is digital.',
+        text: () => `Click every wave that can be <span style="color:var(--colour-ui-primary)">achieved</span> with a <span style="color:var(--colour-ui-primary)">digital</span> signal.`,
         hint: () => 'Don\'t just look for a "square" shape — a signal is digital if it\'s restricted to a fixed set of discrete levels, however many steps that takes, and analog if it can pass through any value in between. A curved envelope built from steps is still digital; a sharp-edged ramp that passes through every voltage is still analog.',
         options: () => shuffle([
           { label: 'Digital, clean square wave',       type: 'correct', shapeId: 'wave-digital-1' },
@@ -876,7 +875,8 @@
     <div class="working-line">Each is restricted to a <b style="color:var(--colour-ui-correct)">fixed set of discrete levels</b> — it can never sit at any value except those. The clean square wave, uneven duty cycle and single transition all use just two levels (e.g. 0V / 5V) with sharp jumps between them. The <b>stepped/quantised sine</b> is the important extra case: its overall envelope curves like a sine wave, but at every instant it's still sitting on one of a fixed set of steps — it never smoothly slides between them. That's exactly what a digitised (sampled) version of an analog signal looks like, and it's still digital even though it isn't a simple square wave.</div>
     <div class="working-step" style="margin-top:.6rem">Analog — waveforms ${wrongNums}:</div>
     <div class="working-line">The sine and triangle waves obviously vary continuously. The <b>sawtooth</b> is the trap in the other direction: it has sharp vertical drops, which can look "digital" at a glance — but the rising ramp passes through <em>every</em> voltage between its minimum and maximum, so it's just as analog as the sine wave.</div>
-    <div class="working-line" style="margin-top:.4rem">The takeaway: a waveform's <em>shape</em> (square vs curvy, sharp vs smooth) doesn't decide digital vs analog — only whether it's confined to discrete levels does. In principle even a clean square wave could be an analog voltage that just happens to be shaped that way (e.g. from a function generator); in this course, a signal confined to two sharp discrete levels is treated as the digital case, since that's exactly how a real logic signal behaves.</div>`;
+    <div class="working-line" style="margin-top:.4rem">The takeaway: a waveform's <em>shape</em> (square vs curvy, sharp vs smooth) doesn't decide digital vs analog — only whether it's confined to discrete levels does. In principle even a clean square wave could be an analog voltage that just happens to be shaped that way (e.g. from a function generator, or summed from sine-wave harmonics) — in fact a square wave can genuinely be built by adding together enough odd-numbered sine harmonics (Fourier synthesis), no digital circuitry involved at all.</div>
+    <div class="working-line" style="margin-top:.4rem">That doesn't change the answer here, though: the question only asks whether each shape <em>can be achieved</em> by a digital signal — not whether digital is the <em>only</em> way to achieve it. A real digital signal genuinely does look exactly like the square/stepped shapes above, so those are correct regardless of whether analog methods could also produce something similar. A true, perfectly smooth sine, triangle or ramp is the one thing no digital signal can ever exactly reproduce — at best it can only be approximated with more and more steps.</div>`;
         }
       },
       {
@@ -952,14 +952,14 @@
     <div class="working-line">0V–0.8V is actually the Logic-0 range, not Logic-1. 3.3V is a valid logic-1 <em>reading</em> but far too narrow — plenty of other voltages within 2V–5V also count. And 12V is well above the 5V supply rail this logic family uses at all.</div>`
       },
       {
-        // kind:'bits' — click-to-cycle binary entry table (see renderBits()/
-        // clickBit() in the engine below). Each cell cycles blank → 0 → 1 →
-        // 0 → 1... on click. `options()` picks 4 unique random decimal
+        // kind:'bits' — click-to-toggle binary entry table (see renderBits()/
+        // clickBit() in the engine below). Every cell starts at 0 and each
+        // click toggles it 0 ↔ 1. `options()` picks 4 unique random decimal
         // values (0-15) each attempt; `cor` (built in resetQuiz) is the
         // correct 4-bit pattern for each row.
         leftPanel: 'none',
         kind: 'bits',
-        text: () => 'Fill in the binary representation of each decimal value below. Click a cell once for 0, twice for 1 — further clicks just toggle between the two.',
+        text: () => 'Fill in the binary representation of each decimal value below. Every cell starts at 0 — click it to toggle to 1, click again to go back to 0.',
         hint: () => 'Each column heading is a power of two (8, 4, 2, 1). Work out which of those add up to the target value — those columns are 1, everything else is 0.',
         options: () => shuffle(Array.from({ length: 16 }, (_, v) => v)).slice(0, 4).map(value => ({ value })),
         correctExplain: (st) => {
@@ -1122,12 +1122,13 @@
     // an array of correct column-per-option and live placement lives in
     // `st.place` (array of column-per-option, null = still in the pool). For
     // bits, `cor` is a 2D array [row][col] of correct 0/1 values and live
-    // input lives in `st.clicks` (2D array [row][col] of click counts — 0 =
-    // still blank, odd = 0, even = 1).
+    // input lives in `st.clicks` (2D array [row][col] of click counts —
+    // every cell starts at 0, each click toggles it: odd = 1, even = 0).
     function isMulti(data) { return data.kind === 'multi'; }
     function isMatch(data) { return data.kind === 'match'; }
     function isBits(data) { return data.kind === 'bits'; }
-    function bitFromClicks(n) { return n === 0 ? null : (n % 2 === 1 ? 0 : 1); }
+    // Every cell defaults to 0 (n=0); each click toggles it (odd clicks = 1, even = 0).
+    function bitFromClicks(n) { return n % 2; }
     function isAnswerCorrect(data, st) {
       if (isBits(data)) return st.clicks.every((row, r) => row.every((n, c) => bitFromClicks(n) === st.cor[r][c]));
       if (isMatch(data)) return st.place.every((p, i) => p === st.cor[i]);
@@ -1153,7 +1154,7 @@
     // questions. Works across all four kinds.
     function fillCorrectSelection(i) {
       const data = QUESTIONS[i], st = Q[i];
-      if (isBits(data)) st.clicks = st.cor.map(row => row.map(b => b === 0 ? 1 : 2));
+      if (isBits(data)) st.clicks = st.cor.map(row => row.slice()); // clicks 0/1 map directly onto bit 0/1
       else if (isMatch(data)) st.place = st.cor.slice();
       else if (isMulti(data)) st.sel = [...st.cor];
       else st.sel = st.cor;
@@ -1305,7 +1306,7 @@
       renderQuestion();
     }
 
-    // ── kind:'bits' — click a cell to cycle it: blank → 0 → 1 → 0 → 1...
+    // ── kind:'bits' — every cell starts at 0; each click toggles 0 ↔ 1.
     function renderBits() {
       const st = Q[cur];
       const body = document.getElementById('bitsBody');
@@ -1318,11 +1319,11 @@
         for (let c = 0; c < 4; c++) {
           const td = document.createElement('td');
           const bit = bitFromClicks(st.clicks[r][c]);
-          td.textContent = bit === null ? '–' : String(bit);
+          td.textContent = String(bit);
           if (st.ans) {
             td.className = 'bits-cell ' + (bit === st.cor[r][c] ? 'correct' : 'wrong');
           } else {
-            td.className = 'bits-cell' + (bit === null ? ' blank' : '');
+            td.className = 'bits-cell';
             td.addEventListener('click', () => clickBit(r, c));
           }
           tr.appendChild(td);
@@ -1389,7 +1390,7 @@
       check.style.display = st.ans ? 'none' : 'inline-block';
       check.disabled = st.ans || (
         isMatch(data) ? !st.place.every(p => p !== null) :
-        isBits(data) ? !st.clicks.every(row => row.every(n => n > 0)) :
+        isBits(data) ? false : // every cell already has a valid default (0), so always checkable
         (multi ? st.sel.length === 0 : st.sel === null)
       );
       const isLast = cur === QUESTIONS.length - 1;
@@ -1404,7 +1405,7 @@
       const st = Q[cur], data = QUESTIONS[cur];
       if (st.ans) return;
       if (isMatch(data)) { if (!st.place.every(p => p !== null)) return; }
-      else if (isBits(data)) { if (!st.clicks.every(row => row.every(n => n > 0))) return; }
+      else if (isBits(data)) { /* always answerable — 0 is a valid default for every cell */ }
       else if (isMulti(data) ? st.sel.length === 0 : st.sel === null) return;
       st.ans = true;
       renderQuestion();
