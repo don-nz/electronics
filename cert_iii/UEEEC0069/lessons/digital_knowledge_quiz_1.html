@@ -1,0 +1,1345 @@
+<!--
+  TEMPLATE FILE — read before cloning for a new weekly quiz.
+
+  This file uses a data-driven quiz engine: a single `QUESTIONS` array (in the
+  <script>, search "QUESTIONS —") drives one generic HTML panel and a generic
+  set of engine functions (renderQuestion, checkAnswer, nextQuestion, etc).
+  There is deliberately NO per-question HTML or per-question JS function.
+
+  When cloning this file for a new quiz — even one that starts with just ONE
+  image and ONE question — KEEP THIS STRUCTURE. Do not revert to a hardcoded
+  per-question panel just because there's only one entry. The whole point of
+  this architecture is that adding question 2, 3, splitting a question into
+  two, or reordering them later is a pure edit of the QUESTIONS array, with
+  zero HTML/JS restructuring. Starting with one question and hardcoding it
+  "for now" recreates exactly the problem this file was refactored to avoid.
+
+  A `leftPanel` field per question ('none' | 'shapeGrid') swaps the left-hand
+  column between nothing (question collapses to a single centred column) and
+  a grid of clickable shapes (see Q1's waveforms or Q7's IC packages). Add new
+  left-panel modes the same way: a new string value, a new container div, one
+  more branch in swapLeftPanel().
+
+  A `kind:'multi'` field per question switches it from single-select
+  (A/B/C/D, one correct answer) to multi-select (any number of options can be
+  toggled on; correctness is a set match) — works for both shapeGrid
+  questions (see Q1/Q7) and plain text-option questions (see the ESD
+  prevention question). Leave `kind` unset for ordinary single-select
+  questions.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Digital Electronics Knowledge Quiz 1</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      --colour-bg: #0a0d14;
+      --colour-panel: #0f1420;
+      --colour-border: #1e2d4a;
+      --colour-ui-primary: #00e5ff;
+      --colour-ui-restart: #ff6b35;
+      --colour-ui-correct: #00ff99;
+      --colour-ui-wrong: #ff3d9a;
+      --colour-ui-summary: #a78bfa;
+      --colour-bjt: #ffb454;
+      --colour-current: #39FF14;
+      --colour-supply: #ff4444;
+      --colour-grid: rgba(0, 229, 255, 0.06);
+      --colour-text: #c8d8e8;
+      --colour-label: #5a7a9a;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--colour-bg);
+      color: var(--colour-text);
+      font-family: 'Share Tech Mono', monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+      background-image: linear-gradient(var(--colour-grid) 1px, transparent 1px), linear-gradient(90deg, var(--colour-grid) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 2rem;
+      width: 100%;
+    }
+
+    header h1 {
+      font-family: 'Orbitron', sans-serif;
+      font-size: clamp(1.4rem, 4vw, 2.2rem);
+      font-weight: 900;
+      letter-spacing: .12em;
+      color: var(--colour-ui-primary);
+      text-shadow: 0 0 30px rgba(0, 229, 255, .5);
+      text-transform: uppercase;
+    }
+
+    header p {
+      margin-top: .5rem;
+      color: var(--colour-label);
+      font-size: .75rem;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+    }
+
+    .quiz-wrap {
+      width: 100%;
+      max-width: clamp(900px, 80vw, 1200px);
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    @media(min-width:900px) {
+      .quiz-wrap {
+        display: grid;
+        grid-template-columns: minmax(340px, 52%) 1fr;
+        gap: 1.2rem;
+        align-items: start;
+      }
+
+      .circuit-col {
+        position: sticky;
+        top: 1.5rem;
+      }
+
+      .questions-col { min-width: 0; }
+      .questions-col .card { padding: 1rem 1.1rem; }
+      .questions-col .option-btn { padding: .5rem .7rem; font-size: .76rem; }
+      .questions-col .q-text { font-size: .86rem; }
+      .questions-col .result-banner { font-size: .72rem; padding: .5rem .8rem; }
+      .questions-col .btn { width: 130px; font-size: .64rem; }
+      .questions-col .working-box { padding: .85rem 1rem; }
+      .questions-col .options { gap: .4rem; }
+
+      /* leftPanel:'none' questions collapse to a single centred column */
+      .quiz-wrap.single-col { grid-template-columns: 1fr; }
+      .quiz-wrap.single-col .questions-col { max-width: 700px; margin: 0 auto; width: 100%; }
+    }
+
+    .card {
+      background: var(--colour-panel);
+      border: 1px solid var(--colour-border);
+      border-radius: 4px;
+      padding: 1.6rem;
+    }
+
+    .panel-label {
+      font-size: .58rem;
+      letter-spacing: .18em;
+      color: var(--colour-label);
+      text-transform: uppercase;
+      text-align: center;
+      margin-bottom: 6px;
+    }
+
+    .q-panel { display: flex; flex-direction: column; gap: 1rem; }
+
+    .q-header { display: flex; align-items: flex-start; gap: 1rem; }
+
+    .q-num {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--colour-ui-primary);
+      white-space: nowrap;
+      padding-top: .15rem;
+    }
+
+    .q-text { color: #d0e4f0; font-size: .9rem; font-weight: bold; line-height: 1.5; }
+
+    .q-hint { font-size: .75rem; color: var(--colour-label); font-weight: normal; margin-top: .3rem; }
+
+    .options { display: flex; flex-direction: column; gap: .6rem; }
+
+    .option-btn {
+      width: 100%;
+      padding: .7rem 1rem;
+      border-radius: 3px;
+      border: 1px solid var(--colour-border);
+      background: rgba(255, 255, 255, .02);
+      color: var(--colour-text);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: .82rem;
+      text-align: left;
+      cursor: pointer;
+      transition: border-color .15s, background .15s;
+      display: flex;
+      align-items: center;
+      gap: .7rem;
+    }
+
+    .option-btn:hover:not(:disabled) {
+      border-color: rgba(0, 229, 255, .4);
+      background: rgba(0, 229, 255, .05);
+    }
+
+    .option-btn.selected {
+      border-color: rgba(0, 229, 255, .6);
+      background: rgba(0, 229, 255, .08);
+      color: var(--colour-ui-primary);
+    }
+
+    .option-btn.correct {
+      border-color: var(--colour-ui-correct);
+      background: rgba(0, 255, 153, .08);
+      color: var(--colour-ui-correct);
+    }
+
+    .option-btn.wrong {
+      border-color: var(--colour-ui-wrong);
+      background: rgba(255, 61, 154, .08);
+      color: var(--colour-ui-wrong);
+    }
+
+    .option-btn.missed {
+      border-color: var(--colour-ui-restart);
+      background: rgba(255, 107, 53, .08);
+      color: var(--colour-ui-restart);
+    }
+
+    .option-btn.dimmed { opacity: .35; }
+
+    .option-letter {
+      font-family: 'Orbitron', sans-serif;
+      font-size: .7rem;
+      font-weight: 700;
+      min-width: 22px;
+    }
+
+    .option-btn span:not(.option-letter) { flex: 1; min-width: 0; }
+
+    .result-icon { font-size: 1.1rem; margin-left: auto; }
+
+    .result-banner {
+      display: none;
+      padding: .65rem 1rem;
+      border-radius: 3px;
+      font-size: .78rem;
+      font-family: 'Orbitron', sans-serif;
+      align-items: center;
+      gap: .6rem;
+      line-height: 1.5;
+    }
+
+    .result-banner.correct {
+      display: flex;
+      background: rgba(0, 255, 153, .08);
+      border: 1px solid rgba(0, 255, 153, .3);
+      color: var(--colour-ui-correct);
+    }
+
+    .result-banner.wrong {
+      display: flex;
+      background: rgba(255, 61, 154, .08);
+      border: 1px solid rgba(255, 61, 154, .3);
+      color: var(--colour-ui-wrong);
+    }
+
+    .working-box {
+      display: none;
+      background: rgba(0, 0, 0, .2);
+      border: 1px solid var(--colour-border);
+      border-radius: 4px;
+      padding: 1.1rem 1.3rem;
+    }
+
+    .working-box.visible { display: block; }
+
+    .working-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: .62rem;
+      letter-spacing: .2em;
+      color: var(--colour-label);
+      text-transform: uppercase;
+      margin-bottom: .7rem;
+      padding-bottom: .4rem;
+      border-bottom: 1px solid var(--colour-border);
+    }
+
+    .working-step {
+      font-size: .85rem;
+      color: var(--colour-ui-primary);
+      padding-top: .4rem;
+      padding-bottom: .2rem;
+      margin: .5rem 0 .1rem;
+      border-top: 1px solid var(--colour-border);
+    }
+
+    .working-line { font-size: .8rem; line-height: 1.7; }
+
+    .colour-current { color: var(--colour-current); }
+    .colour-bjt { color: var(--colour-bjt); }
+    .colour-supply { color: var(--colour-supply); }
+
+    .btn-row { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; }
+
+    .btn {
+      padding: .5rem 0;
+      border-radius: 3px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: .7rem;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all .15s;
+      border: 1px solid;
+      width: 100px;
+      text-align: center;
+    }
+
+    .btn-check {
+      background: rgba(0, 255, 153, .1);
+      border-color: rgba(0, 255, 153, .4);
+      color: var(--colour-ui-correct);
+    }
+
+    .btn-check:hover:not(:disabled) { background: rgba(0, 255, 153, .2); }
+    .btn-check:disabled { opacity: .35; cursor: default; }
+
+    .btn-shuffle {
+      background: rgba(255, 107, 53, .1);
+      border-color: rgba(255, 107, 53, .4);
+      color: var(--colour-ui-restart);
+      margin-left: auto;
+    }
+
+    .btn-shuffle:hover { background: rgba(255, 107, 53, .2); }
+
+    .btn-next {
+      background: rgba(0, 229, 255, .1);
+      border-color: rgba(0, 229, 255, .4);
+      color: var(--colour-ui-primary);
+    }
+
+    .btn-next:hover { background: rgba(0, 229, 255, .2); }
+
+    .btn-prev {
+      background: rgba(90, 122, 154, .1);
+      border-color: rgba(90, 122, 154, .4);
+      color: var(--colour-label);
+    }
+
+    .btn-prev:hover { background: rgba(90, 122, 154, .2); }
+
+    .btn-summary {
+      background: rgba(167, 139, 250, .12);
+      border-color: rgba(167, 139, 250, .4);
+      color: var(--colour-ui-summary);
+    }
+
+    .btn-summary:hover { background: rgba(167, 139, 250, .22); }
+
+    .summary-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: .5rem 0 .8rem;
+      border-bottom: 1px solid var(--colour-border);
+      margin-bottom: 1rem;
+    }
+
+    .summary-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--colour-ui-primary);
+      letter-spacing: .15em;
+      text-transform: uppercase;
+    }
+
+    .summary-item {
+      border: 1px solid var(--colour-border);
+      border-radius: 4px;
+      padding: .9rem 1rem;
+      margin-bottom: 1rem;
+      background: rgba(0, 0, 0, .15);
+    }
+
+    .summary-item-head {
+      display: flex;
+      align-items: baseline;
+      gap: .6rem;
+      margin-bottom: .3rem;
+    }
+
+    .summary-qnum {
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 700;
+      color: var(--colour-ui-primary);
+      font-size: .85rem;
+      white-space: nowrap;
+    }
+
+    .summary-question { font-size: .82rem; color: #d0e4f0; font-weight: bold; line-height: 1.4; }
+    .summary-answer { font-size: .74rem; margin: .45rem 0; font-family: 'Orbitron', sans-serif; letter-spacing: .04em; }
+
+    .progress-wrap { display: flex; gap: .4rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; }
+
+    .progress-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      border: 1.5px solid var(--colour-border);
+      background: transparent;
+      transition: background .2s, border-color .2s;
+    }
+
+    .progress-dot.done { background: var(--colour-ui-correct); border-color: var(--colour-ui-correct); }
+
+    .progress-dot.active {
+      background: var(--colour-ui-primary);
+      border-color: var(--colour-ui-primary);
+      box-shadow: 0 0 6px rgba(0, 229, 255, .6);
+    }
+
+    .progress-label { font-size: .65rem; color: var(--colour-label); margin-left: .4rem; letter-spacing: .1em; }
+
+    .menu-link {
+      margin-left: auto;
+      font-size: .65rem;
+      color: var(--colour-ui-primary);
+      text-decoration: none;
+      letter-spacing: .08em;
+      padding: .15rem .5rem;
+      border-radius: .25rem;
+      border: 1px solid var(--colour-ui-primary);
+      box-shadow: 0 0 5px rgba(0, 229, 255, .35);
+      transition: color .2s, border-color .2s, box-shadow .2s;
+      white-space: nowrap;
+    }
+
+    .menu-link:hover {
+      color: var(--colour-ui-correct);
+      border-color: var(--colour-ui-correct);
+      box-shadow: 0 0 8px rgba(0, 255, 153, .45);
+    }
+
+    .home-bar {
+      align-self: flex-start;
+      font-size: .68rem;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--colour-label);
+      text-decoration: none;
+      padding: .2rem 0;
+      margin-bottom: .4rem;
+      transition: color .15s;
+    }
+
+    .home-bar:hover { color: var(--colour-ui-primary); }
+
+    /* ── Shape-grid left panel (multi-select "click the matching shapes" questions) ── */
+    .shape-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: .7rem;
+    }
+
+    .shape-cell {
+      position: relative;
+      background: rgba(0, 0, 0, .25);
+      border: 2px solid var(--colour-border);
+      border-radius: 4px;
+      cursor: pointer;
+      padding: .5rem .3rem .3rem;
+      transition: border-color .15s, background .15s;
+    }
+
+    .shape-cell svg { width: 100%; height: auto; display: block; }
+
+    .shape-cell:hover { border-color: rgba(0, 229, 255, .5); }
+    .shape-cell.selected { border-color: var(--colour-ui-primary); background: rgba(0, 229, 255, .08); }
+    .shape-cell.correct { border-color: var(--colour-ui-correct); background: rgba(0, 255, 153, .1); }
+    .shape-cell.wrong { border-color: var(--colour-ui-wrong); background: rgba(255, 61, 154, .1); }
+    .shape-cell.missed { border-color: var(--colour-ui-restart); background: rgba(255, 107, 53, .08); }
+    .shape-cell.dimmed { opacity: .4; }
+
+    .shape-cell .shape-num {
+      position: absolute;
+      top: 3px;
+      left: 6px;
+      font-family: 'Orbitron', sans-serif;
+      font-size: .62rem;
+      font-weight: 700;
+      color: var(--colour-label);
+    }
+
+    .selected-list {
+      font-size: .78rem;
+      color: var(--colour-label);
+      font-family: 'Orbitron', sans-serif;
+      letter-spacing: .04em;
+    }
+
+    /* ── Match / sort question (click-to-assign, no drag) ── */
+    .match-wrap { display: flex; flex-direction: column; gap: .8rem; }
+
+    .match-pool {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .5rem;
+      padding: .7rem;
+      background: rgba(0, 0, 0, .15);
+      border: 1px dashed var(--colour-border);
+      border-radius: 4px;
+      min-height: 3rem;
+    }
+
+    .match-chip {
+      padding: .4rem .8rem;
+      border-radius: 3px;
+      border: 1px solid var(--colour-border);
+      background: rgba(255, 255, 255, .03);
+      color: var(--colour-text);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: .78rem;
+      cursor: pointer;
+      transition: border-color .15s, background .15s, box-shadow .15s;
+    }
+
+    .match-chip:hover:not(:disabled) { border-color: rgba(0, 229, 255, .5); }
+    .match-chip.picked { border-color: var(--colour-ui-primary); background: rgba(0, 229, 255, .12); box-shadow: 0 0 8px rgba(0, 229, 255, .3); }
+    .match-chip.correct { border-color: var(--colour-ui-correct); background: rgba(0, 255, 153, .1); color: var(--colour-ui-correct); cursor: default; }
+    .match-chip.wrong { border-color: var(--colour-ui-wrong); background: rgba(255, 61, 154, .1); color: var(--colour-ui-wrong); cursor: default; }
+
+    .match-columns { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; }
+
+    .match-column {
+      border: 1px solid var(--colour-border);
+      border-radius: 4px;
+      padding: .6rem;
+      min-height: 8rem;
+      background: rgba(0, 0, 0, .1);
+      cursor: pointer;
+      transition: border-color .15s, background .15s;
+    }
+
+    .match-column.droppable { border-color: var(--colour-ui-primary); background: rgba(0, 229, 255, .05); box-shadow: 0 0 10px rgba(0, 229, 255, .15); }
+
+    .match-col-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: .68rem;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--colour-label);
+      margin-bottom: .5rem;
+      text-align: center;
+      padding-bottom: .4rem;
+      border-bottom: 1px solid var(--colour-border);
+    }
+
+    .match-col-items { display: flex; flex-direction: column; gap: .4rem; min-height: 2rem; }
+    .match-col-items .match-chip { width: 100%; text-align: left; }
+  </style>
+</head>
+
+<body>
+  <!-- Hidden defs: shapes used by the shape-grid multi-select questions -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur stdDeviation="2" result="b" />
+        <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+      </filter>
+
+      <!-- ── Q1 waveforms: 3 digital (two clean levels), 3 analog (continuously varying) ── -->
+      <g id="wave-axis">
+        <line x1="-28" y1="0" x2="60" y2="0" style="stroke: var(--colour-label)" stroke-width="1" stroke-dasharray="3,3" opacity="0.5" />
+      </g>
+      <g id="wave-digital-1">
+        <use href="#wave-axis" />
+        <path d="M -28,20 L -28,-20 L -13,-20 L -13,20 L 2,20 L 2,-20 L 17,-20 L 17,20 L 32,20 L 32,-20 L 47,-20 L 47,20 L 60,20"
+          fill="none" style="stroke: var(--colour-current)" stroke-width="2.5" stroke-linejoin="round" filter="url(#glow)" />
+      </g>
+      <g id="wave-digital-2">
+        <use href="#wave-axis" />
+        <path d="M -28,-20 L 10,-20 L 10,20 L 18,20 L 18,-20 L 40,-20 L 40,20 L 48,20 L 48,-20 L 60,-20"
+          fill="none" style="stroke: var(--colour-current)" stroke-width="2.5" stroke-linejoin="round" filter="url(#glow)" />
+      </g>
+      <g id="wave-digital-3">
+        <use href="#wave-axis" />
+        <path d="M -28,20 L 10,20 L 10,-20 L 60,-20"
+          fill="none" style="stroke: var(--colour-current)" stroke-width="2.5" stroke-linejoin="round" filter="url(#glow)" />
+      </g>
+      <g id="wave-analog-sine">
+        <use href="#wave-axis" />
+        <path d="M -28,0 C -21,-20 -14,-20 -7,0 C 0,20 7,20 14,0 C 21,-20 28,-20 35,0 C 42,20 49,20 56,0"
+          fill="none" style="stroke: var(--colour-current)" stroke-width="2.5" stroke-linejoin="round" filter="url(#glow)" />
+      </g>
+      <g id="wave-analog-sawtooth">
+        <use href="#wave-axis" />
+        <path d="M -28,20 L 0,-20 L 0,20 L 28,-20 L 28,20 L 56,-20"
+          fill="none" style="stroke: var(--colour-current)" stroke-width="2.5" stroke-linejoin="round" filter="url(#glow)" />
+      </g>
+      <g id="wave-analog-triangle">
+        <use href="#wave-axis" />
+        <path d="M -28,20 L -7,-20 L 14,20 L 35,-20 L 56,20"
+          fill="none" style="stroke: var(--colour-current)" stroke-width="2.5" stroke-linejoin="round" filter="url(#glow)" />
+      </g>
+
+      <!-- ── Q7 DIP/DIL packages: notch = primary pin-1 method, dot = secondary method ── -->
+      <g id="dip-body">
+        <path d="M -20,-28 L -6,-28 A 6,6 0 0 0 6,-28 L 20,-28 L 20,28 L -20,28 Z"
+          fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" stroke-linejoin="round" filter="url(#glow)" />
+        <rect x="-17" y="-25" width="6" height="6" style="fill: var(--colour-bjt)" opacity="0.45" />
+        <rect x="11" y="-25" width="6" height="6" style="fill: var(--colour-bjt)" opacity="0.45" />
+        <rect x="-17" y="19" width="6" height="6" style="fill: var(--colour-bjt)" opacity="0.45" />
+        <rect x="11" y="19" width="6" height="6" style="fill: var(--colour-bjt)" opacity="0.45" />
+      </g>
+      <g id="dip-body-nonotch">
+        <rect x="-20" y="-28" width="40" height="56" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" />
+        <rect x="-17" y="-25" width="6" height="6" style="fill: var(--colour-bjt)" opacity="0.45" />
+        <rect x="11" y="-25" width="6" height="6" style="fill: var(--colour-bjt)" opacity="0.45" />
+        <rect x="-17" y="19" width="6" height="6" style="fill: var(--colour-bjt)" opacity="0.45" />
+        <rect x="11" y="19" width="6" height="6" style="fill: var(--colour-bjt)" opacity="0.45" />
+      </g>
+      <g id="dip-notch-nodot">
+        <use href="#dip-body" />
+      </g>
+      <g id="dip-notch-dot-tl">
+        <use href="#dip-body" />
+        <circle cx="-14" cy="-22" r="4" style="fill: var(--colour-current)" filter="url(#glow)" />
+      </g>
+      <g id="dip-notch-dot-tr">
+        <use href="#dip-body" />
+        <circle cx="14" cy="-22" r="4" style="fill: var(--colour-current)" filter="url(#glow)" />
+      </g>
+      <g id="dip-notch-dot-bl">
+        <use href="#dip-body" />
+        <circle cx="-14" cy="22" r="4" style="fill: var(--colour-current)" filter="url(#glow)" />
+      </g>
+      <g id="dip-notch-dot-br">
+        <use href="#dip-body" />
+        <circle cx="14" cy="22" r="4" style="fill: var(--colour-current)" filter="url(#glow)" />
+      </g>
+      <g id="dip-nonotch-dot-tr">
+        <use href="#dip-body-nonotch" />
+        <circle cx="14" cy="-22" r="4" style="fill: var(--colour-current)" filter="url(#glow)" />
+      </g>
+      <g id="dip-nonotch-dot-bl">
+        <use href="#dip-body-nonotch" />
+        <circle cx="-14" cy="22" r="4" style="fill: var(--colour-current)" filter="url(#glow)" />
+      </g>
+      <g id="dip-nonotch-dot-br">
+        <use href="#dip-body-nonotch" />
+        <circle cx="14" cy="22" r="4" style="fill: var(--colour-current)" filter="url(#glow)" />
+      </g>
+    </defs>
+  </svg>
+
+  <a id="homeBar" class="home-bar" href="../index.html" style="display:none">⌂ Home</a>
+  <header>
+    <h1>Digital Electronics</h1>
+    <p>Conceptual Questions · Analog vs Digital · ESD Awareness</p>
+  </header>
+
+  <div class="quiz-wrap" id="quizWrap">
+
+    <!-- LEFT: shape grid (only shown for leftPanel:'shapeGrid' questions) -->
+    <div class="circuit-col">
+      <div id="qShapeGridPanel" style="display:none">
+        <div class="panel-label">Click the shapes to select your answer</div>
+        <div class="shape-grid" id="shapeGridCells"></div>
+      </div>
+    </div>
+
+    <!-- RIGHT: question -->
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="../index.html" style="display:none">⌂ Menu</a>
+        </div>
+
+        <!-- Single reusable question panel — populated from QUESTIONS[cur] by renderQuestion() -->
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+          <div class="options" id="qOptions"></div>
+          <div class="match-wrap" id="qMatch" style="display:none">
+            <div class="match-pool" id="matchPool"></div>
+            <div class="match-columns">
+              <div class="match-column" data-col="0" onclick="assignToColumn(0)">
+                <div class="match-col-title" id="matchColTitle0"></div>
+                <div class="match-col-items" id="matchColItems0"></div>
+              </div>
+              <div class="match-column" data-col="1" onclick="assignToColumn(1)">
+                <div class="match-col-title" id="matchColTitle1"></div>
+                <div class="match-col-items" id="matchColItems1"></div>
+              </div>
+            </div>
+          </div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Back</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Summary -->
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS — the template. Add, remove, split or reorder questions by
+    // editing this array only — nothing in the engine below needs to change.
+    //
+    // Each entry:
+    //   leftPanel           'none' (default) | 'shapeGrid' — which left-hand
+    //                       panel to show for this question
+    //   kind                'multi' for multi-select (any number of options
+    //                       toggled on); omit for ordinary single-select
+    //   text()              question prompt (HTML string)
+    //   hint()              hint shown under the prompt (HTML string)
+    //   options()           returns a shuffled array of
+    //                       { label, type: 'correct'|'wrong', shapeId? }
+    //                       (shapeId is only used by leftPanel:'shapeGrid' —
+    //                       it names a <g id="..."> in the hidden defs <svg>
+    //                       near the top of <body>)
+    //   correctExplain(st)  short HTML fragment used in the result banner
+    //   working(st)         full worked-solution HTML shown after answering
+    //
+    // text/hint/options take no arguments; correctExplain/working receive the
+    // question's live state `st` ({ sel, ans, cor, opts }) so they can report
+    // on what was actually selected/shuffled — ordinary questions can just
+    // ignore the argument. All fields are functions (even when static) so a
+    // question can freely start simple and later reference live values
+    // without changing shape.
+    // ══════════════════════════════════════════════════════════════════════
+
+    const QUESTIONS = [
+      {
+        // Multi-select shape-grid: 3 digital waveforms (two clean levels) vs
+        // 3 analog waveforms (continuously varying) — includes a sawtooth as
+        // a deliberate "trick" case (sharp edges, but still analog).
+        leftPanel: 'shapeGrid',
+        kind: 'multi',
+        text: () => 'Some of the waveforms below represent a <b>digital</b> signal and some represent an <b>analog</b> signal. Click every waveform that is digital.',
+        hint: () => 'A digital signal only ever sits at one of two discrete levels and switches sharply between them. An analog signal continuously varies and can pass through any value in between — even if part of it has a sharp edge, like a sawtooth ramp.',
+        options: () => shuffle([
+          { label: 'Digital, clean square wave',      type: 'correct', shapeId: 'wave-digital-1' },
+          { label: 'Digital, uneven duty cycle',      type: 'correct', shapeId: 'wave-digital-2' },
+          { label: 'Digital, single transition',      type: 'correct', shapeId: 'wave-digital-3' },
+          { label: 'Analog, sine wave',                type: 'wrong',  shapeId: 'wave-analog-sine' },
+          { label: 'Analog, sawtooth ramp',            type: 'wrong',  shapeId: 'wave-analog-sawtooth' },
+          { label: 'Analog, triangle wave',            type: 'wrong',  shapeId: 'wave-analog-triangle' }
+        ]),
+        correctExplain: (st) => {
+          const nums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(n => n).join(', ');
+          return `Waveforms <b>${nums}</b> are digital`;
+        },
+        working: (st) => {
+          const correctNums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join(', ');
+          const wrongNums = st.opts.map((o, i) => o.type === 'wrong' ? i + 1 : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-step">Digital — waveforms ${correctNums}:</div>
+    <div class="working-line">Each only ever sits at one of <b style="color:var(--colour-ui-correct)">two discrete levels</b> (e.g. 0V / 5V) and jumps sharply between them. The timing can vary — an even square wave, an uneven duty cycle, even a single one-off transition are all still digital, because the <em>voltage</em> never takes any value except the two levels.</div>
+    <div class="working-step" style="margin-top:.6rem">Analog — waveforms ${wrongNums}:</div>
+    <div class="working-line">The sine and triangle waves obviously vary continuously. The <b>sawtooth</b> is the trap: it has sharp vertical drops, which can look "digital" at a glance — but the rising ramp passes through <em>every</em> voltage between its minimum and maximum, so it's just as analog as the sine wave. Digital-ness is about how many discrete levels are allowed, not how sharp the edges look.</div>`;
+        }
+      },
+      {
+        leftPanel: 'none',
+        text: () => 'Which of the following is a genuine advantage of digital electronics over analog electronics?',
+        hint: () => 'Think about what happens when noise or interference is added to a signal that only needs to be read as one of two levels, versus a signal whose exact voltage matters.',
+        options: () => shuffle([
+          { label: 'Digital signals are far more resistant to noise, since only two levels need to be distinguished', type: 'correct' },
+          { label: 'Digital circuits are always physically smaller than an equivalent analog circuit', type: 'wrong' },
+          { label: 'Digital signals can represent infinitely precise values, unlike analog signals', type: 'wrong' },
+          { label: 'Digital circuits never need a power supply', type: 'wrong' }
+        ]),
+        correctExplain: () => 'Digital signals are much more <b>noise-resistant</b>',
+        working: () => `
+    <div class="working-line">A receiver only has to decide "is this closer to 0 or closer to 1?" — so a fair amount of noise can be added to a digital signal without changing that decision. An analog signal has no such margin: any noise added directly corrupts the value it represents, since the exact voltage <em>is</em> the information.</div>
+    <div class="working-step" style="margin-top:.6rem">Why the others are wrong:</div>
+    <div class="working-line">Circuit size depends on the specific design, not the analog/digital choice. Precision is actually the opposite of what's stated — digital values are limited by the number of bits used (a fixed resolution), whereas an analog signal can in principle vary continuously. And every circuit, digital or analog, needs a power supply.</div>`
+      },
+      {
+        // kind:'match' — click-to-assign sort into two columns (see
+        // renderMatch()/selectPoolItem()/assignToColumn()/unassignItem() in
+        // the engine below). `columns()` names the two target columns;
+        // each option carries `col: 0|1` for which one it belongs in.
+        leftPanel: 'none',
+        kind: 'match',
+        columns: () => ['Logic-1', 'Logic-0'],
+        text: () => 'Digital electronics uses several different words for the same two logic states, depending on context. Sort each term below into the column for the logic state it describes.',
+        hint: () => 'Think about where you\'ve seen each word used before: a light switch, a boolean value in programming, an SR latch. Each pair (e.g. On / Off) describes the same two states, just in a different context.',
+        options: () => shuffle([
+          { label: 'High (Hi)', col: 0 },
+          { label: 'True',      col: 0 },
+          { label: 'Closed',    col: 0 },
+          { label: 'Set',       col: 0 },
+          { label: 'On',        col: 0 },
+          { label: 'Low (Lo)',  col: 1 },
+          { label: 'False',     col: 1 },
+          { label: 'Open',      col: 1 },
+          { label: 'Reset',     col: 1 },
+          { label: 'Off',       col: 1 }
+        ]),
+        correctExplain: (st) => {
+          const wrongCount = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).length;
+          return wrongCount === 0 ? 'All 10 terms sorted correctly' : `${st.opts.length - wrongCount} of ${st.opts.length} terms sorted correctly`;
+        },
+        working: (st) => {
+          const mistakes = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).map(o => o.label);
+          const mistakeLine = mistakes.length
+            ? `<div class="working-step" style="margin-top:.6rem">Mislabelled:</div><div class="working-line">${mistakes.join(', ')}</div>`
+            : '';
+          return `
+    <div class="working-step">Logic-1 / High:</div>
+    <div class="working-line"><b style="color:var(--colour-current)">High (Hi)</b>, <b style="color:var(--colour-current)">True</b>, <b style="color:var(--colour-current)">Closed</b> (a switch conducting), <b style="color:var(--colour-current)">Set</b> (an SR latch's active output) and <b style="color:var(--colour-current)">On</b> all describe the same state as Logic-1.</div>
+    <div class="working-step" style="margin-top:.6rem">Logic-0 / Low:</div>
+    <div class="working-line"><b style="color:var(--colour-bjt)">Low (Lo)</b>, <b style="color:var(--colour-bjt)">False</b>, <b style="color:var(--colour-bjt)">Open</b> (a switch not conducting), <b style="color:var(--colour-bjt)">Reset</b> (an SR latch's inactive output) and <b style="color:var(--colour-bjt)">Off</b> all describe the same state as Logic-0.</div>
+    <div class="working-line" style="margin-top:.4rem">Which word gets used just depends on context — a switch is "closed" or "open," a latch is "set" or "reset," a light is "on" or "off" — but they all boil down to the same two logic states.</div>
+    ${mistakeLine}`;
+        }
+      },
+      {
+        leftPanel: 'none',
+        text: () => 'In standard TTL logic, which voltage range is typically recognised as Logic-1 (High)?',
+        hint: () => 'TTL logic typically runs from a 5V supply. Logic-0 sits close to 0V; Logic-1 sits close to the supply rail.',
+        options: () => shuffle([
+          { label: 'Approximately 2V to 5V', type: 'correct' },
+          { label: 'Approximately 0V to 0.8V', type: 'wrong' },
+          { label: 'Exactly 3.3V only', type: 'wrong' },
+          { label: 'Any voltage above 12V', type: 'wrong' }
+        ]),
+        correctExplain: () => 'Logic-1 (High) is roughly <b>2V to 5V</b>',
+        working: () => `
+    <div class="working-line">Standard TTL logic (running from a 5V supply) treats <b style="color:var(--colour-current)">0V–0.8V as Logic-0</b> and <b style="color:var(--colour-current)">2V–5V as Logic-1</b>. The gap between 0.8V and 2V is an undefined/invalid region — a real signal shouldn't sit there for long.</div>
+    <div class="working-step" style="margin-top:.6rem">Why the others are wrong:</div>
+    <div class="working-line">0V–0.8V is actually the Logic-0 range, not Logic-1. 3.3V is a valid logic-1 <em>reading</em> but far too narrow — plenty of other voltages within 2V–5V also count. And 12V is well above the 5V supply rail this logic family uses at all.</div>`
+      },
+      {
+        leftPanel: 'none',
+        text: () => 'What is the decimal value of the binary number 1101?',
+        hint: () => 'Each binary digit represents a power of two. Reading from the right: 1s, 2s, 4s, 8s, 16s... Add up the columns that contain a \'1\'.',
+        options: () => shuffle([
+          { label: '13', type: 'correct' },
+          { label: '11', type: 'wrong' },
+          { label: '14', type: 'wrong' },
+          { label: '9', type: 'wrong' }
+        ]),
+        correctExplain: () => '1101 = <b>13</b> in decimal',
+        working: () => `
+    <div class="working-step">Column by column, from the right:</div>
+    <div class="working-line">1101 → 1×8 + 1×4 + 0×2 + 1×1</div>
+    <div class="working-line">= 8 + 4 + 0 + 1</div>
+    <div class="working-line" style="margin-top:.4rem"><b style="color:var(--colour-current)">= 13</b></div>
+    <div class="working-step" style="margin-top:.6rem">Common mistake:</div>
+    <div class="working-line">Forgetting the doubling pattern (1, 2, 4, 8, 16...) and just adding the digit positions as if they were 1, 2, 3, 4 gives the wrong answer (11) — each column is <em>double</em> the one before it, not one more.</div>`
+      },
+      {
+        leftPanel: 'none',
+        text: () => 'Which IC package type is most commonly used for digital ICs in the lab (e.g. the 7400-series logic ICs)?',
+        hint: () => 'Think of the classic black rectangular chip with two rows of pins along its long edges, that plugs straight into a breadboard.',
+        options: () => shuffle([
+          { label: 'DIP / DIL (Dual In-line Package)', type: 'correct' },
+          { label: 'TO-220', type: 'wrong' },
+          { label: 'SMA diode package', type: 'wrong' },
+          { label: 'BGA (Ball Grid Array)', type: 'wrong' }
+        ]),
+        correctExplain: () => '<b>DIP / DIL</b> (Dual In-line Package)',
+        working: () => `
+    <div class="working-line">The <b style="color:var(--colour-bjt)">DIP</b> (also called <b style="color:var(--colour-bjt)">DIL</b>, Dual In-Line) package is the standard through-hole chip with two parallel rows of pins — exactly the shape used for 7400-series logic ICs on a breadboard.</div>
+    <div class="working-step" style="margin-top:.6rem">Why the others are wrong:</div>
+    <div class="working-line"><b>TO-220</b> is a power-transistor/regulator package (like the ones used for voltage regulators), <b>SMA</b> is a small surface-mount diode package, and <b>BGA</b> is a modern high-pin-count package (used for CPUs and similar) with solder balls underneath instead of pins — none of these are the breadboard-friendly digital IC package.</div>`
+      },
+      {
+        // Multi-select shape-grid: same DIP body reused 8 ways (notch present/
+        // absent × dot present/absent/mispositioned). Exactly 2 valid pin-1
+        // indications (notch alone, or notch+matching dot); 6 invalid.
+        leftPanel: 'shapeGrid',
+        kind: 'multi',
+        text: () => 'Each shape below shows the top view of a DIP/DIL IC package. Click every shape where pin 1 is correctly indicated. There are 2 correct shapes among the 8 shown.',
+        hint: () => 'Pin 1 is always the pin immediately next to the notch (the semi-circular cutout in the top edge) — the top-left pin, when the notch is at the top. A dot is sometimes used as a second marker, but only counts if it lines up with that same pin. No notch and no correctly-placed dot means pin 1 can\'t be identified at all.',
+        options: () => shuffle([
+          { label: 'Notch only, no dot',              type: 'correct', shapeId: 'dip-notch-nodot' },
+          { label: 'Notch, dot agrees (top-left)',     type: 'correct', shapeId: 'dip-notch-dot-tl' },
+          { label: 'Notch, dot top-right',             type: 'wrong',   shapeId: 'dip-notch-dot-tr' },
+          { label: 'Notch, dot bottom-left',           type: 'wrong',   shapeId: 'dip-notch-dot-bl' },
+          { label: 'Notch, dot bottom-right',          type: 'wrong',   shapeId: 'dip-notch-dot-br' },
+          { label: 'No notch, dot top-right',          type: 'wrong',   shapeId: 'dip-nonotch-dot-tr' },
+          { label: 'No notch, dot bottom-left',        type: 'wrong',   shapeId: 'dip-nonotch-dot-bl' },
+          { label: 'No notch, dot bottom-right',       type: 'wrong',   shapeId: 'dip-nonotch-dot-br' }
+        ]),
+        correctExplain: (st) => {
+          const nums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(n => n).join(', ');
+          return `Shapes <b>${nums}</b> correctly indicate pin 1`;
+        },
+        working: (st) => {
+          const correctNums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join(', ');
+          const wrongNums = st.opts.map((o, i) => o.type === 'wrong' ? i + 1 : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-step">Correct — shapes ${correctNums}:</div>
+    <div class="working-line">The <b style="color:var(--colour-ui-correct)">notch</b> alone is a fully valid method — pin 1 is understood to be the top-left pin next to it. A <b style="color:var(--colour-ui-correct)">dot that agrees</b> with the notch (also top-left) simply confirms the same pin using the second method — still correct.</div>
+    <div class="working-step" style="margin-top:.6rem">Incorrect — shapes ${wrongNums}:</div>
+    <div class="working-line">A dot anywhere <em>other</em> than the notch-indicated corner <b style="color:var(--colour-ui-wrong)">contradicts</b> the notch rather than confirming it — a real package would never be marked this way, so it can't be trusted. Without a notch at all, a dot on its own doesn't follow the standard convention (which anchors pin 1 to the notch position) — so pin 1 can't be reliably identified.</div>`;
+        }
+      },
+      {
+        leftPanel: 'none',
+        text: () => 'What is meant by the term \'electrostatic charge\'?',
+        hint: () => 'The word \'static\' is the clue — this charge isn\'t flowing anywhere, it\'s just sitting on a surface.',
+        options: () => shuffle([
+          { label: 'A build-up of static electric charge on the surface of an object, due to an imbalance of electrons', type: 'correct' },
+          { label: 'The continuous flow of electrons through a conductor', type: 'wrong' },
+          { label: 'The charge temporarily stored inside a capacitor while a circuit is powered', type: 'wrong' },
+          { label: 'A charge that only exists while current is flowing', type: 'wrong' }
+        ]),
+        correctExplain: () => 'A <b>static build-up of charge</b> from an electron imbalance',
+        working: () => `
+    <div class="working-line">Electrostatic charge is a build-up of electric charge sitting <b style="color:var(--colour-current)">on the surface</b> of an object — caused by an imbalance between the number of electrons and protons there. It doesn't flow anywhere on its own; it just sits until it finds a path to discharge.</div>
+    <div class="working-step" style="margin-top:.6rem">Why the others are wrong:</div>
+    <div class="working-line">A continuous flow of electrons is <em>current</em>, not a static charge. A capacitor's stored charge is deliberately held by a powered circuit and released in a controlled way — quite different from an unwanted static build-up. And electrostatic charge exists whether or not current is flowing anywhere else — that's exactly why it's called "static."</div>`
+      },
+      {
+        leftPanel: 'none',
+        text: () => 'What is the main way that electrostatic charges build up on a person or object?',
+        hint: () => 'Think about the classic example of getting a static shock after walking across a carpeted room.',
+        options: () => shuffle([
+          { label: 'Friction between two materials (e.g. walking across carpet, or sliding off a chair)', type: 'correct' },
+          { label: 'Exposure to sunlight', type: 'wrong' },
+          { label: 'Connecting to mains earth', type: 'wrong' },
+          { label: 'Running current through a resistor', type: 'wrong' }
+        ]),
+        correctExplain: () => '<b>Friction</b> between two materials (triboelectric charging)',
+        working: () => `
+    <div class="working-line">Rubbing or sliding two different materials against each other — like shoes on carpet, or a chair sliding across clothing — transfers electrons from one surface to the other. This is called <b style="color:var(--colour-current)">triboelectric charging</b>, and it's the main real-world source of ESD build-up.</div>
+    <div class="working-step" style="margin-top:.6rem">Why the others are wrong:</div>
+    <div class="working-line">Sunlight and resistor heating aren't charge-building mechanisms here. Connecting to earth actually does the <em>opposite</em> of building charge — it's the standard way to safely drain a static charge away.</div>`
+      },
+      {
+        leftPanel: 'none',
+        text: () => 'What happens during an Electrostatic Discharge (ESD) event, and why can it damage electronic components?',
+        hint: () => 'ESD happens in a fraction of a second — think about how much voltage can build up on your body, and what an almost-instant current spike could do to microscopic circuitry.',
+        options: () => shuffle([
+          { label: 'A sudden, very high-voltage current spike flows through the component as the charge equalises, which can instantly destroy delicate internal structures', type: 'correct' },
+          { label: 'A small, safe current flows slowly over several seconds, gently warming the component', type: 'wrong' },
+          { label: "The component's internal resistance temporarily increases, causing it to overheat over time", type: 'wrong' },
+          { label: 'ESD only affects components that are already faulty', type: 'wrong' }
+        ]),
+        correctExplain: () => 'A near-instant, <b>very high-voltage current spike</b>',
+        working: () => `
+    <div class="working-line">When a charged object (like a person) touches a component, the charge equalises almost instantly — producing a brief but very high-voltage current spike. Sensitive components (especially CMOS/MOSFET gates) have extremely thin internal insulating layers that this spike can punch straight through, destroying the device instantly or leaving hidden damage that fails later.</div>
+    <div class="working-step" style="margin-top:.6rem">Why the others are wrong:</div>
+    <div class="working-line">ESD is fast, not slow — there's no gentle multi-second warming involved. It's a voltage/current spike doing physical damage, not a gradual resistance change. And ESD can damage perfectly good components; it doesn't require anything to already be faulty.</div>`
+      },
+      {
+        // Multi-select, plain text options (no shape grid) — the ESD
+        // prevention checklist. Demonstrates kind:'multi' without leftPanel:
+        // 'shapeGrid': any question can be multi-select, shapes or not.
+        leftPanel: 'none',
+        kind: 'multi',
+        text: () => 'Which of the following are effective ways to minimise ESD damage when repairing electronic equipment? Click every correct measure.',
+        hint: () => 'Effective ESD precautions all do one of two things: safely drain charge to earth before it builds up, or keep sensitive components away from anything that could shock them.',
+        options: () => shuffle([
+          { label: 'Wear a grounded anti-static wrist strap', type: 'correct' },
+          { label: 'Work on an anti-static mat connected to earth', type: 'correct' },
+          { label: 'Store sensitive components in anti-static bags until needed', type: 'correct' },
+          { label: 'Touch a grounded metal surface before handling components', type: 'correct' },
+          { label: 'Work on a carpeted floor to stay comfortable', type: 'wrong' },
+          { label: 'Wear clothing made from synthetic materials like nylon or polyester', type: 'wrong' },
+          { label: "Run a heater to keep the room's air very dry", type: 'wrong' },
+          { label: "Handle ICs by their pins, since the body shouldn't be touched", type: 'wrong' }
+        ]),
+        correctExplain: (st) => {
+          const nums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(n => n).join(', ');
+          return `Options <b>${nums}</b> are effective ESD precautions`;
+        },
+        working: (st) => {
+          const correctNums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join(', ');
+          const wrongNums = st.opts.map((o, i) => o.type === 'wrong' ? i + 1 : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-step">Effective — options ${correctNums}:</div>
+    <div class="working-line">A <b style="color:var(--colour-ui-correct)">grounded wrist strap</b> and <b style="color:var(--colour-ui-correct)">earthed anti-static mat</b> continuously bleed away any charge before it can build up. <b style="color:var(--colour-ui-correct)">Anti-static bags</b> shield stored components from external fields and discharge paths. <b style="color:var(--colour-ui-correct)">Touching a grounded surface first</b> is the minimum precaution when no other equipment is available.</div>
+    <div class="working-step" style="margin-top:.6rem">Ineffective or harmful — options ${wrongNums}:</div>
+    <div class="working-line"><b style="color:var(--colour-ui-wrong)">Carpet</b> and <b style="color:var(--colour-ui-wrong)">synthetic clothing</b> are both classic triboelectric charge generators — they make ESD more likely, not less. <b style="color:var(--colour-ui-wrong)">Dry air</b> lets charge build up faster (humidity actually helps it dissipate), so deliberately drying the room is counter-productive. And ICs should always be handled by their <b style="color:var(--colour-ui-wrong)">body/edges</b>, never by the pins — touching the pins directly exposes the most sensitive part of the device to exactly the shock you're trying to avoid.</div>`;
+        }
+      }
+    ];
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUIZ ENGINE — generic; driven entirely by QUESTIONS[] via index.
+    // Nothing here should need to change when questions are added/reordered.
+    // ══════════════════════════════════════════════════════════════════════
+
+    const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+
+    function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+    // kind:'multi' questions allow any number of selections; kind:'match'
+    // questions sort every option into one of two columns; everything else
+    // is single-select (A/B/C/D...). `sel`/`cor` are a single index for
+    // single-select, an array of indices for multi, or (for match) `cor` is
+    // an array of correct column-per-option and live placement lives in
+    // `st.place` (array of column-per-option, null = still in the pool).
+    function isMulti(data) { return data.kind === 'multi'; }
+    function isMatch(data) { return data.kind === 'match'; }
+    function isAnswerCorrect(data, st) {
+      if (isMatch(data)) return st.place.every((p, i) => p === st.cor[i]);
+      if (!isMulti(data)) return st.sel === st.cor;
+      const a = [...st.sel].sort((x, y) => x - y), b = [...st.cor].sort((x, y) => x - y);
+      return a.length === b.length && a.every((v, i) => v === b[i]);
+    }
+    function selectedLabel(data, st) {
+      if (isMatch(data)) {
+        const correctCount = st.place.filter((p, i) => p === st.cor[i]).length;
+        return `${correctCount} / ${st.opts.length} correctly sorted`;
+      }
+      if (!isMulti(data)) return (st.sel != null && st.opts[st.sel]) ? st.opts[st.sel].label : '—';
+      return st.sel.length ? [...st.sel].sort((a, b) => a - b).map(i => i + 1).join(', ') : '—';
+    }
+    // Fills in the fully-correct answer for a question without marking it
+    // answered — used by jump()/jumpToSummary() to fast-forward prior
+    // questions. Works across all three kinds.
+    function fillCorrectSelection(i) {
+      const data = QUESTIONS[i], st = Q[i];
+      if (isMatch(data)) st.place = st.cor.slice();
+      else if (isMulti(data)) st.sel = [...st.cor];
+      else st.sel = st.cor;
+    }
+
+    let Q = [];   // per-question live state: { sel, ans, cor, opts, place? }
+    let cur = 0;  // 0-based index into QUESTIONS
+
+    function buildProgressDots() {
+      document.getElementById('progressDots').innerHTML =
+        QUESTIONS.map((_, i) => `<div class="progress-dot" id="dot-${i}"></div>`).join('');
+    }
+
+    function updateProgress() {
+      QUESTIONS.forEach((_, i) => {
+        const d = document.getElementById('dot-' + i);
+        d.className = 'progress-dot';
+        if (i === cur) d.classList.add('active'); else if (Q[i].ans) d.classList.add('done');
+      });
+      document.getElementById('progressLabel').textContent = (cur + 1) + ' / ' + QUESTIONS.length;
+    }
+
+    function renderShapeGrid() {
+      const st = Q[cur];
+      const c = document.getElementById('shapeGridCells'); c.innerHTML = '';
+      st.opts.forEach((opt, i) => {
+        const cell = document.createElement('div'); cell.className = 'shape-cell';
+        const selected = st.sel.includes(i);
+        if (st.ans) {
+          if (opt.type === 'correct') cell.classList.add(selected ? 'correct' : 'missed');
+          else cell.classList.add(selected ? 'wrong' : 'dimmed');
+        } else {
+          if (selected) cell.classList.add('selected');
+          cell.addEventListener('click', () => selectOption(i));
+        }
+        cell.innerHTML = `<span class="shape-num">${i + 1}</span><svg viewBox="-32 -36 96 76"><use href="#${opt.shapeId}"/></svg>`;
+        c.appendChild(cell);
+      });
+    }
+
+    function renderOptions() {
+      const st = Q[cur], data = QUESTIONS[cur], multi = isMulti(data);
+      const c = document.getElementById('qOptions'); c.innerHTML = '';
+      st.opts.forEach((opt, i) => {
+        const btn = document.createElement('button'); btn.className = 'option-btn';
+        const selected = multi ? st.sel.includes(i) : i === st.sel;
+        btn.innerHTML = `<span class="option-letter">${LETTERS[i]}</span><span>${opt.label}</span>`;
+        if (st.ans) {
+          btn.disabled = true;
+          if (opt.type === 'correct') {
+            // The correct answer is always shown correct/green — whether or
+            // not it was selected — matching the single-select convention.
+            // For multi-select, a correct option the student didn't pick is
+            // "missed" (amber) rather than plain wrong (red).
+            const missed = multi && !selected;
+            btn.classList.add(missed ? 'missed' : 'correct');
+            btn.innerHTML += `<span class="result-icon">${missed ? '○' : '✓'}</span>`;
+          } else if (selected) { btn.classList.add('wrong'); btn.innerHTML += `<span class="result-icon">✗</span>`; }
+          else btn.classList.add('dimmed');
+        } else {
+          if (selected) btn.classList.add('selected');
+          btn.addEventListener('click', () => selectOption(i));
+        }
+        c.appendChild(btn);
+      });
+    }
+
+    function selectOption(i) {
+      const st = Q[cur], data = QUESTIONS[cur];
+      if (st.ans) return;
+      if (isMulti(data)) {
+        const pos = st.sel.indexOf(i);
+        if (pos >= 0) st.sel.splice(pos, 1); else st.sel.push(i);
+      } else {
+        st.sel = i;
+      }
+      renderQuestion();
+    }
+
+    // ── kind:'match' — click a pool chip to "pick it up" (st.sel = its
+    // index), then click a column to drop it there. Click a placed chip to
+    // send it back to the pool. No drag events at all, so it behaves
+    // identically on mouse, touch and keyboard.
+    function renderMatch() {
+      const st = Q[cur], data = QUESTIONS[cur];
+      const cols = data.columns();
+      document.getElementById('matchColTitle0').textContent = cols[0];
+      document.getElementById('matchColTitle1').textContent = cols[1];
+
+      const pool = document.getElementById('matchPool');
+      pool.innerHTML = '';
+      st.opts.forEach((opt, i) => {
+        if (st.place[i] !== null) return;
+        const chip = document.createElement('button');
+        chip.className = 'match-chip' + (st.sel === i ? ' picked' : '');
+        chip.textContent = opt.label;
+        chip.disabled = st.ans;
+        if (!st.ans) chip.addEventListener('click', (e) => { e.stopPropagation(); selectPoolItem(i); });
+        pool.appendChild(chip);
+      });
+
+      [0, 1].forEach(colIdx => {
+        const container = document.getElementById('matchColItems' + colIdx);
+        container.innerHTML = '';
+        st.opts.forEach((opt, i) => {
+          if (st.place[i] !== colIdx) return;
+          const chip = document.createElement('button');
+          chip.className = 'match-chip';
+          chip.textContent = opt.label;
+          if (st.ans) {
+            chip.disabled = true;
+            chip.classList.add(st.place[i] === st.cor[i] ? 'correct' : 'wrong');
+          } else {
+            chip.addEventListener('click', (e) => { e.stopPropagation(); unassignItem(i); });
+          }
+          container.appendChild(chip);
+        });
+        container.closest('.match-column').classList.toggle('droppable', !st.ans && st.sel !== null);
+      });
+    }
+
+    function selectPoolItem(i) {
+      const st = Q[cur];
+      if (st.ans) return;
+      st.sel = (st.sel === i) ? null : i;
+      renderQuestion();
+    }
+
+    function assignToColumn(colIdx) {
+      const st = Q[cur];
+      if (st.ans || st.sel === null) return;
+      st.place[st.sel] = colIdx;
+      st.sel = null;
+      renderQuestion();
+    }
+
+    function unassignItem(i) {
+      const st = Q[cur];
+      if (st.ans) return;
+      st.place[i] = null;
+      renderQuestion();
+    }
+
+    function renderQuestion() {
+      const data = QUESTIONS[cur], st = Q[cur];
+      const multi = isMulti(data);
+
+      document.getElementById('qNum').textContent = 'Q' + (cur + 1);
+      document.getElementById('qText').innerHTML = data.text();
+      document.getElementById('qHint').innerHTML = data.hint();
+
+      document.getElementById('qMatch').style.display = isMatch(data) ? 'flex' : 'none';
+      document.getElementById('qOptions').style.display = isMatch(data) ? 'none' : '';
+      if (isMatch(data)) {
+        renderMatch();
+      } else if (data.leftPanel === 'shapeGrid') {
+        document.getElementById('qOptions').innerHTML = '';
+        renderShapeGrid();
+      } else {
+        renderOptions();
+      }
+
+      const selList = document.getElementById('qSelectedList');
+      if (multi) {
+        selList.style.display = '';
+        selList.textContent = st.sel.length
+          ? `Selected: ${[...st.sel].sort((a, b) => a - b).map(i => i + 1).join(', ')}`
+          : (data.leftPanel === 'shapeGrid' ? 'Click the shapes above to select your answer.' : 'Click every option that applies.');
+      } else {
+        selList.style.display = 'none';
+      }
+
+      const banner = document.getElementById('qBanner');
+      if (st.ans) {
+        const ok = isAnswerCorrect(data, st);
+        banner.className = 'result-banner ' + (ok ? 'correct' : 'wrong');
+        document.getElementById('qIcon').textContent = ok ? '✓' : '✗';
+        document.getElementById('qBannerText').innerHTML = ok ? `Correct! ${data.correctExplain(st)}` : `The correct answer is ${data.correctExplain(st)}`;
+      } else {
+        banner.className = 'result-banner';
+      }
+
+      const working = document.getElementById('qWorking');
+      working.className = 'working-box' + (st.ans ? ' visible' : '');
+      document.getElementById('qWorkingContent').innerHTML = st.ans ? data.working(st) : '';
+
+      document.getElementById('qBack').style.display = cur > 0 ? 'inline-block' : 'none';
+      const check = document.getElementById('qCheck');
+      check.style.display = st.ans ? 'none' : 'inline-block';
+      check.disabled = st.ans || (isMatch(data) ? !st.place.every(p => p !== null) : (multi ? st.sel.length === 0 : st.sel === null));
+      const isLast = cur === QUESTIONS.length - 1;
+      document.getElementById('qNext').style.display = (st.ans && !isLast) ? 'inline-block' : 'none';
+      document.getElementById('qSummary').style.display = (st.ans && isLast) ? 'inline-block' : 'none';
+
+      swapLeftPanel(data.leftPanel || 'none');
+      updateProgress();
+    }
+
+    function checkAnswer() {
+      const st = Q[cur], data = QUESTIONS[cur];
+      if (st.ans) return;
+      if (isMatch(data)) { if (!st.place.every(p => p !== null)) return; }
+      else if (isMulti(data) ? st.sel.length === 0 : st.sel === null) return;
+      st.ans = true;
+      renderQuestion();
+    }
+
+    function nextQuestion() { if (cur < QUESTIONS.length - 1) { cur++; renderQuestion(); } }
+
+    // Going back re-opens the previous question for a fresh answer — so it and
+    // every question after it (all now "ahead" of where the student is) are
+    // cleared back to unanswered, rather than staying locked from before.
+    function backQuestion() {
+      if (cur <= 0) return;
+      cur--;
+      for (let i = cur; i < QUESTIONS.length; i++) {
+        const data = QUESTIONS[i];
+        Q[i].ans = false;
+        if (isMatch(data)) { Q[i].place = Q[i].opts.map(() => null); Q[i].sel = null; }
+        else Q[i].sel = isMulti(data) ? [] : null;
+      }
+      renderQuestion();
+    }
+
+    function swapLeftPanel(mode) {
+      document.getElementById('qShapeGridPanel').style.display = mode === 'shapeGrid' ? 'block' : 'none';
+      document.querySelector('.circuit-col').style.display = mode === 'shapeGrid' ? '' : 'none';
+      document.getElementById('quizWrap').classList.toggle('single-col', mode !== 'shapeGrid');
+    }
+
+    function goToQuestion(n) { // 1-based, for URL/jump compatibility
+      cur = Math.max(0, Math.min(QUESTIONS.length - 1, n - 1));
+      document.getElementById('summaryPanel').style.display = 'none';
+      document.getElementById('qPanel').style.display = 'flex';
+      renderQuestion();
+    }
+
+    function resetQuiz() {
+      Q = QUESTIONS.map(data => {
+        const opts = data.options();
+        if (isMatch(data)) {
+          const cor = opts.map(o => o.col);
+          return { sel: null, ans: false, cor, opts, place: opts.map(() => null) };
+        }
+        if (isMulti(data)) {
+          const cor = opts.map((o, i) => o.type === 'correct' ? i : -1).filter(i => i >= 0);
+          return { sel: [], ans: false, cor, opts };
+        }
+        return { sel: null, ans: false, cor: opts.findIndex(o => o.type === 'correct'), opts };
+      });
+      cur = 0;
+      document.getElementById('summaryPanel').style.display = 'none';
+      document.getElementById('qPanel').style.display = 'flex';
+      renderQuestion();
+    }
+
+    function showSummary() {
+      document.getElementById('qPanel').style.display = 'none';
+      document.getElementById('summaryPanel').style.display = 'block';
+      swapLeftPanel('none');
+      const items = QUESTIONS.map((data, i) => {
+        const st = Q[i];
+        const ans = selectedLabel(data, st);
+        const ok = isAnswerCorrect(data, st);
+        const colour = ok ? 'var(--colour-ui-correct)' : '#ff3366';
+        const mark = ok ? '✓' : '✗';
+        return `<div class="summary-item">
+      <div class="summary-item-head"><span class="summary-qnum">Q${i + 1}</span><span class="summary-question">${data.text()}</span></div>
+      <div class="summary-answer" style="color:${colour}">You answered: ${ans} &nbsp; ${mark}</div>
+      <div class="working-box visible">${st.ans ? data.working(st) : ''}</div>
+    </div>`;
+      }).join('');
+      document.getElementById('summaryContent').innerHTML = items;
+      QUESTIONS.forEach((_, i) => { const d = document.getElementById('dot-' + i); if (d) d.className = 'progress-dot done'; });
+      document.getElementById('progressLabel').textContent = 'Complete';
+    }
+
+    buildProgressDots();
+    resetQuiz();
+
+    fetch('../index.html', { method: 'HEAD' })
+      .then(r => { if (r.ok) { document.getElementById('menuLink').style.display = ''; document.getElementById('homeBar').style.display = ''; } })
+      .catch(() => {});
+
+    function jump(n, answered) {
+      if (n < 1 || n > QUESTIONS.length) { console.warn('jump: no question', n); return; }
+      // Default every question before the target to correctly-answered, so
+      // progress dots and back-navigation see a consistent, completed history.
+      for (let i = 0; i < n - 1; i++) { fillCorrectSelection(i); Q[i].ans = true; }
+      goToQuestion(n);
+      if (answered) { fillCorrectSelection(cur); checkAnswer(); }
+    }
+    window.jump = jump;
+
+    function jumpToSummary() {
+      QUESTIONS.forEach((_, i) => {
+        if (Q[i].ans) return;
+        fillCorrectSelection(i);
+        Q[i].ans = true;
+      });
+      showSummary();
+    }
+    window.jumpToSummary = jumpToSummary;
+
+    {
+      const p = new URLSearchParams(location.search);
+      if (p.has('q')) { if (p.get('q') === 's') jumpToSummary(); else jump(+p.get('q'), p.has('ans')); }
+    }
+  </script>
+</body>
+</html>
