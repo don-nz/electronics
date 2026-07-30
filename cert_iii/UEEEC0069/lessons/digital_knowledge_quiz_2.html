@@ -1,0 +1,662 @@
+<!--
+  TEMPLATE FILE — read before cloning for a new weekly quiz.
+
+  This file uses a data-driven quiz engine: a single `QUESTIONS` array (in the
+  <script>, search "QUESTIONS —") drives one generic HTML panel and a generic
+  set of engine functions (renderQuestion, checkAnswer, nextQuestion, etc).
+  There is deliberately NO per-question HTML or per-question JS function.
+
+  When cloning this file for a new quiz — even one that starts with just ONE
+  image and ONE question — KEEP THIS STRUCTURE. Do not revert to a hardcoded
+  per-question panel just because there's only one entry. The whole point of
+  this architecture is that adding question 2, 3, splitting a question into
+  two, or reordering them later is a pure edit of the QUESTIONS array, with
+  zero HTML/JS restructuring. Starting with one question and hardcoding it
+  "for now" recreates exactly the problem this file was refactored to avoid.
+
+  A `leftPanel` field per question ('none' | 'shapeGrid') swaps the left-hand
+  column between nothing (question collapses to a single centred column) and
+  a grid of clickable boxes — either SVG shapes (set `shapeId` on the option)
+  or plain text labels (set `label` only, no `shapeId` — see Q1's gate-name
+  boxes). Add new left-panel modes the same way: a new string value, a new
+  container div, one more branch in swapLeftPanel().
+
+  A `kind` field per question selects the interaction:
+    (unset)  single-select, A/B/C/D, one correct answer
+    'multi'  multi-select — any number of options toggled on (shapeGrid or
+             plain text options both support this)
+    'match'  click-to-assign sort into two labelled columns (see the BJT
+             quiz's logic-state question for a worked example)
+    'bits'   click-to-toggle table of 0/1 cells (see the BJT quiz's binary
+             counting question for a worked example)
+  This file currently only uses 'multi', but the engine below supports all
+  four kinds already — add a 'match' or 'bits' question later just by adding
+  a QUESTIONS entry with the right shape; nothing else needs to change.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Digital Electronics Knowledge Quiz 2</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../assets/quiz-common.css">
+    <style>
+    .colour-bjt { color: var(--colour-bjt); }
+
+    
+    </style>
+</head>
+
+<body>
+  <!-- Hidden defs: shapes for future shapeGrid questions go here (e.g. gate
+       symbols). Q1 below uses plain text boxes, so nothing is defined yet
+       except the shared glow filter. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur stdDeviation="2" result="b" />
+        <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+      </filter>
+    </defs>
+  </svg>
+
+  <a id="homeBar" class="home-bar" href="../index.html" style="display:none">⌂ Home</a>
+  <header>
+    <h1>Digital Electronics</h1>
+    <p>Conceptual Questions · The Seven Logic Gates · Fault Diagnosis</p>
+  </header>
+
+  <div class="quiz-wrap" id="quizWrap">
+
+    <!-- LEFT: shape grid (only shown for leftPanel:'shapeGrid' questions) -->
+    <div class="circuit-col">
+      <div id="qShapeGridPanel" style="display:none">
+        <div class="panel-label">Click the boxes to select your answer</div>
+        <div class="shape-grid" id="shapeGridCells"></div>
+      </div>
+    </div>
+
+    <!-- RIGHT: question -->
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="../index.html" style="display:none">⌂ Menu</a>
+        </div>
+
+        <!-- Single reusable question panel — populated from QUESTIONS[cur] by renderQuestion() -->
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+          <div class="options" id="qOptions"></div>
+          <div class="match-wrap" id="qMatch" style="display:none">
+            <div class="match-pool-row" id="matchPoolRow">
+              <div class="match-pool-arrow">▶</div>
+              <div class="match-pool" id="matchPool"></div>
+            </div>
+            <div class="match-columns">
+              <div class="match-column" data-col="0" onclick="assignToColumn(0)">
+                <div class="match-col-arrow">▼</div>
+                <div class="match-col-title" id="matchColTitle0"></div>
+                <div class="match-col-items" id="matchColItems0"></div>
+              </div>
+              <div class="match-column" data-col="1" onclick="assignToColumn(1)">
+                <div class="match-col-arrow">▼</div>
+                <div class="match-col-title" id="matchColTitle1"></div>
+                <div class="match-col-items" id="matchColItems1"></div>
+              </div>
+            </div>
+          </div>
+          <div class="bits-wrap" id="qBits" style="display:none">
+            <table class="bits-table">
+              <thead>
+                <tr>
+                  <th rowspan="2">Value</th>
+                  <th>2<sup>3</sup></th>
+                  <th>2<sup>2</sup></th>
+                  <th>2<sup>1</sup></th>
+                  <th>2<sup>0</sup></th>
+                </tr>
+                <tr>
+                  <th>8</th>
+                  <th>4</th>
+                  <th>2</th>
+                  <th>1</th>
+                </tr>
+              </thead>
+              <tbody id="bitsBody"></tbody>
+            </table>
+          </div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Back</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Summary -->
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS — the template. Add, remove, split or reorder questions by
+    // editing this array only — nothing in the engine below needs to change.
+    //
+    // Each entry:
+    //   leftPanel           'none' (default) | 'shapeGrid' — which left-hand
+    //                       panel to show for this question
+    //   kind                'multi' | 'match' | 'bits' — see the file-level
+    //                       comment at the top for what each does; omit for
+    //                       ordinary single-select
+    //   text()              question prompt (HTML string)
+    //   hint()              hint shown under the prompt (HTML string)
+    //   options()           returns a shuffled array of
+    //                       { label, type: 'correct'|'wrong', shapeId? }
+    //                       (shapeId is only used by leftPanel:'shapeGrid' —
+    //                       it names a <g id="..."> in the hidden defs <svg>
+    //                       near the top of <body>; omit shapeId to render
+    //                       the box as plain text instead, using `label`)
+    //   correctExplain(st)  short HTML fragment used in the result banner
+    //   working(st)         full worked-solution HTML shown after answering
+    //
+    // text/hint/options take no arguments; correctExplain/working receive the
+    // question's live state `st` so they can report on what was actually
+    // selected/shuffled — ordinary questions can just ignore the argument.
+    // All fields are functions (even when static) so a question can freely
+    // start simple and later reference live values without changing shape.
+    // ══════════════════════════════════════════════════════════════════════
+
+    const QUESTIONS = [
+      {
+        // Multi-select shape-grid with plain-text boxes (no shapeId) — the
+        // seven real logic gates mixed in with other digital building-block
+        // names that a student might mistakenly lump in as "gates."
+        leftPanel: 'shapeGrid',
+        kind: 'multi',
+        text: () => 'The seven standard logic gates are mixed in with some other digital building-block names below. Click every box that names one of the seven logic gates.',
+        hint: () => 'The seven gates are the fundamental building blocks (AND-type and OR-type functions, plus their inverted forms). The other terms describe circuits built <em>from</em> gates — useful digital building blocks, but not gates themselves.',
+        options: () => shuffle([
+          { label: 'AND',  type: 'correct' },
+          { label: 'OR',   type: 'correct' },
+          { label: 'NOT',  type: 'correct' },
+          { label: 'NAND', type: 'correct' },
+          { label: 'NOR',  type: 'correct' },
+          { label: 'XOR',  type: 'correct' },
+          { label: 'XNOR', type: 'correct' },
+          { label: 'BUFFER',     type: 'wrong' },
+          { label: 'COMPARATOR', type: 'wrong' },
+          { label: 'MULTIPLEXER',type: 'wrong' },
+          { label: 'DECODER',    type: 'wrong' },
+          { label: 'FLIP-FLOP',  type: 'wrong' }
+        ]),
+        correctExplain: (st) => {
+          const nums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(n => n).join(', ');
+          return `Boxes <b>${nums}</b> are the seven logic gates`;
+        },
+        working: (st) => {
+          const correctNums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join(', ');
+          const wrongNums = st.opts.map((o, i) => o.type === 'wrong' ? i + 1 : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-step">The seven logic gates — boxes ${correctNums}:</div>
+    <div class="working-line"><b style="color:var(--colour-ui-correct)">AND</b>, <b style="color:var(--colour-ui-correct)">OR</b> and <b style="color:var(--colour-ui-correct)">NOT</b> are the three basic functions. <b style="color:var(--colour-ui-correct)">NAND</b> and <b style="color:var(--colour-ui-correct)">NOR</b> are AND/OR with an inverted (NOT) output. <b style="color:var(--colour-ui-correct)">XOR</b> (exclusive-OR) and <b style="color:var(--colour-ui-correct)">XNOR</b> (exclusive-NOR) output true only when their inputs <em>differ</em> (or agree, for XNOR).</div>
+    <div class="working-step" style="margin-top:.6rem">Not gates — boxes ${wrongNums}:</div>
+    <div class="working-line">A <b style="color:var(--colour-ui-wrong)">buffer</b> just passes its input straight through (no logic decision made). A <b style="color:var(--colour-ui-wrong)">comparator</b>, <b style="color:var(--colour-ui-wrong)">multiplexer</b> and <b style="color:var(--colour-ui-wrong)">decoder</b> are all more complex circuits <em>built from</em> multiple gates. A <b style="color:var(--colour-ui-wrong)">flip-flop</b> stores a single bit and needs a clock signal — it's a memory element, not a gate.</div>`;
+        }
+      }
+    ];
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUIZ ENGINE — generic; driven entirely by QUESTIONS[] via index.
+    // Nothing here should need to change when questions are added/reordered.
+    // ══════════════════════════════════════════════════════════════════════
+
+    const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+
+    function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+    // kind:'multi' questions allow any number of selections; kind:'match'
+    // questions sort every option into one of two columns; kind:'bits' fills
+    // in a table of binary digits by click-cycling each cell; everything
+    // else is single-select (A/B/C/D...). `sel`/`cor` are a single index for
+    // single-select, an array of indices for multi, or (for match) `cor` is
+    // an array of correct column-per-option and live placement lives in
+    // `st.place` (array of column-per-option, null = still in the pool). For
+    // bits, `cor` is a 2D array [row][col] of correct 0/1 values and live
+    // input lives in `st.clicks` (2D array [row][col] of click counts —
+    // every cell starts at 0, each click toggles it: odd = 1, even = 0).
+    function isMulti(data) { return data.kind === 'multi'; }
+    function isMatch(data) { return data.kind === 'match'; }
+    function isBits(data) { return data.kind === 'bits'; }
+    // Every cell defaults to 0 (n=0); each click toggles it (odd clicks = 1, even = 0).
+    function bitFromClicks(n) { return n % 2; }
+    function isAnswerCorrect(data, st) {
+      if (isBits(data)) return st.clicks.every((row, r) => row.every((n, c) => bitFromClicks(n) === st.cor[r][c]));
+      if (isMatch(data)) return st.place.every((p, i) => p === st.cor[i]);
+      if (!isMulti(data)) return st.sel === st.cor;
+      const a = [...st.sel].sort((x, y) => x - y), b = [...st.cor].sort((x, y) => x - y);
+      return a.length === b.length && a.every((v, i) => v === b[i]);
+    }
+    function selectedLabel(data, st) {
+      if (isBits(data)) {
+        let correct = 0, total = 0;
+        st.clicks.forEach((row, r) => row.forEach((n, c) => { total++; if (bitFromClicks(n) === st.cor[r][c]) correct++; }));
+        return `${correct} / ${total} bits correct`;
+      }
+      if (isMatch(data)) {
+        const correctCount = st.place.filter((p, i) => p === st.cor[i]).length;
+        return `${correctCount} / ${st.opts.length} correctly sorted`;
+      }
+      if (!isMulti(data)) return (st.sel != null && st.opts[st.sel]) ? st.opts[st.sel].label : '—';
+      return st.sel.length ? [...st.sel].sort((a, b) => a - b).map(i => i + 1).join(', ') : '—';
+    }
+    // Fills in the fully-correct answer for a question without marking it
+    // answered — used by jump()/jumpToSummary() to fast-forward prior
+    // questions. Works across all four kinds.
+    function fillCorrectSelection(i) {
+      const data = QUESTIONS[i], st = Q[i];
+      if (isBits(data)) st.clicks = st.cor.map(row => row.slice()); // clicks 0/1 map directly onto bit 0/1
+      else if (isMatch(data)) st.place = st.cor.slice();
+      else if (isMulti(data)) st.sel = [...st.cor];
+      else st.sel = st.cor;
+    }
+
+    let Q = [];   // per-question live state: { sel, ans, cor, opts, place?, clicks? }
+    let cur = 0;  // 0-based index into QUESTIONS
+
+    function buildProgressDots() {
+      document.getElementById('progressDots').innerHTML =
+        QUESTIONS.map((_, i) => `<div class="progress-dot" id="dot-${i}"></div>`).join('');
+    }
+
+    function updateProgress() {
+      QUESTIONS.forEach((_, i) => {
+        const d = document.getElementById('dot-' + i);
+        d.className = 'progress-dot';
+        if (i === cur) d.classList.add('active'); else if (Q[i].ans) d.classList.add('done');
+      });
+      document.getElementById('progressLabel').textContent = (cur + 1) + ' / ' + QUESTIONS.length;
+    }
+
+    // Renders each option as either an SVG shape (opt.shapeId set) or a
+    // plain text box (opt.shapeId omitted, opt.label shown directly).
+    function renderShapeGrid() {
+      const st = Q[cur];
+      const c = document.getElementById('shapeGridCells'); c.innerHTML = '';
+      st.opts.forEach((opt, i) => {
+        const cell = document.createElement('div'); cell.className = 'shape-cell';
+        const selected = st.sel.includes(i);
+        if (st.ans) {
+          if (opt.type === 'correct') cell.classList.add(selected ? 'correct' : 'missed');
+          else cell.classList.add(selected ? 'wrong' : 'dimmed');
+        } else {
+          if (selected) cell.classList.add('selected');
+          cell.addEventListener('click', () => selectOption(i));
+        }
+        const content = opt.shapeId
+          ? `<svg viewBox="-32 -36 96 76"><use href="#${opt.shapeId}"/></svg>`
+          : `<div class="shape-cell-text">${opt.label}</div>`;
+        cell.innerHTML = `<span class="shape-num">${i + 1}</span>${content}`;
+        c.appendChild(cell);
+      });
+    }
+
+    function renderOptions() {
+      const st = Q[cur], data = QUESTIONS[cur], multi = isMulti(data);
+      const c = document.getElementById('qOptions'); c.innerHTML = '';
+      st.opts.forEach((opt, i) => {
+        const btn = document.createElement('button'); btn.className = 'option-btn';
+        const selected = multi ? st.sel.includes(i) : i === st.sel;
+        btn.innerHTML = `<span class="option-letter">${LETTERS[i]}</span><span>${opt.label}</span>`;
+        if (st.ans) {
+          btn.disabled = true;
+          if (opt.type === 'correct') {
+            // The correct answer is always shown correct/green — whether or
+            // not it was selected — matching the single-select convention.
+            // For multi-select, a correct option the student didn't pick is
+            // "missed" (amber) rather than plain wrong (red).
+            const missed = multi && !selected;
+            btn.classList.add(missed ? 'missed' : 'correct');
+            btn.innerHTML += `<span class="result-icon">${missed ? '○' : '✓'}</span>`;
+          } else if (selected) { btn.classList.add('wrong'); btn.innerHTML += `<span class="result-icon">✗</span>`; }
+          else btn.classList.add('dimmed');
+        } else {
+          if (selected) btn.classList.add('selected');
+          btn.addEventListener('click', () => selectOption(i));
+        }
+        c.appendChild(btn);
+      });
+    }
+
+    function selectOption(i) {
+      const st = Q[cur], data = QUESTIONS[cur];
+      if (st.ans) return;
+      if (isMulti(data)) {
+        const pos = st.sel.indexOf(i);
+        if (pos >= 0) st.sel.splice(pos, 1); else st.sel.push(i);
+      } else {
+        st.sel = i;
+      }
+      renderQuestion();
+    }
+
+    // ── kind:'match' — click a pool chip to "pick it up" (st.sel = its
+    // index), then click a column to drop it there. Click a placed chip to
+    // send it back to the pool. No drag events at all, so it behaves
+    // identically on mouse, touch and keyboard.
+    function renderMatch() {
+      const st = Q[cur], data = QUESTIONS[cur];
+      const cols = data.columns();
+      document.getElementById('matchColTitle0').textContent = cols[0];
+      document.getElementById('matchColTitle1').textContent = cols[1];
+
+      // While a term is picked up, only that same chip (to allow cancelling
+      // the pick) and the two columns stay clickable — every other pool word
+      // and every already-placed word are locked, so a student can't
+      // accidentally swap their pick or clear a previous answer mid-placement.
+      const picking = st.sel !== null;
+      const poolHasItems = st.opts.some((_, i) => st.place[i] === null);
+      // When nothing is picked yet (and the pool isn't empty), flash the pool
+      // itself to prompt the student to pick a word — the mirror image of
+      // the column glow that prompts them to place one once it's picked.
+      const needsPick = !st.ans && !picking && poolHasItems;
+      document.getElementById('matchPoolRow').classList.toggle('needs-pick', needsPick);
+      document.getElementById('matchPool').classList.toggle('needs-pick', needsPick);
+
+      const pool = document.getElementById('matchPool');
+      pool.innerHTML = '';
+      st.opts.forEach((opt, i) => {
+        if (st.place[i] !== null) return;
+        const chip = document.createElement('button');
+        const isPicked = st.sel === i;
+        chip.className = 'match-chip' + (isPicked ? ' picked' : '');
+        chip.textContent = opt.label;
+        chip.disabled = st.ans || (picking && !isPicked);
+        if (!chip.disabled) chip.addEventListener('click', (e) => { e.stopPropagation(); selectPoolItem(i); });
+        pool.appendChild(chip);
+      });
+
+      [0, 1].forEach(colIdx => {
+        const container = document.getElementById('matchColItems' + colIdx);
+        container.innerHTML = '';
+        st.opts.forEach((opt, i) => {
+          if (st.place[i] !== colIdx) return;
+          const chip = document.createElement('button');
+          chip.className = 'match-chip';
+          chip.textContent = opt.label;
+          if (st.ans) {
+            chip.disabled = true;
+            chip.classList.add(st.place[i] === st.cor[i] ? 'correct' : 'wrong');
+          } else {
+            chip.disabled = picking;
+            if (!chip.disabled) chip.addEventListener('click', (e) => { e.stopPropagation(); unassignItem(i); });
+          }
+          container.appendChild(chip);
+        });
+        container.closest('.match-column').classList.toggle('droppable', !st.ans && picking);
+      });
+    }
+
+    function selectPoolItem(i) {
+      const st = Q[cur];
+      if (st.ans) return;
+      st.sel = (st.sel === i) ? null : i;
+      renderQuestion();
+    }
+
+    function assignToColumn(colIdx) {
+      const st = Q[cur];
+      if (st.ans || st.sel === null) return;
+      st.place[st.sel] = colIdx;
+      st.sel = null;
+      renderQuestion();
+    }
+
+    function unassignItem(i) {
+      const st = Q[cur];
+      if (st.ans) return;
+      st.place[i] = null;
+      renderQuestion();
+    }
+
+    // ── kind:'bits' — every cell starts at 0; each click toggles 0 ↔ 1.
+    function renderBits() {
+      const st = Q[cur];
+      const body = document.getElementById('bitsBody');
+      body.innerHTML = '';
+      st.opts.forEach((row, r) => {
+        const tr = document.createElement('tr');
+        const valTd = document.createElement('td');
+        valTd.textContent = row.value;
+        tr.appendChild(valTd);
+        for (let c = 0; c < 4; c++) {
+          const td = document.createElement('td');
+          const bit = bitFromClicks(st.clicks[r][c]);
+          td.textContent = String(bit);
+          if (st.ans) {
+            td.className = 'bits-cell ' + (bit === st.cor[r][c] ? 'correct' : 'wrong');
+          } else {
+            td.className = 'bits-cell';
+            td.addEventListener('click', () => clickBit(r, c));
+          }
+          tr.appendChild(td);
+        }
+        body.appendChild(tr);
+      });
+    }
+
+    function clickBit(r, c) {
+      const st = Q[cur];
+      if (st.ans) return;
+      st.clicks[r][c]++;
+      renderQuestion();
+    }
+
+    function renderQuestion() {
+      const data = QUESTIONS[cur], st = Q[cur];
+      const multi = isMulti(data);
+
+      document.getElementById('qNum').textContent = 'Q' + (cur + 1);
+      document.getElementById('qText').innerHTML = data.text();
+      document.getElementById('qHint').innerHTML = data.hint();
+
+      document.getElementById('qMatch').style.display = isMatch(data) ? 'flex' : 'none';
+      document.getElementById('qBits').style.display = isBits(data) ? 'block' : 'none';
+      document.getElementById('qOptions').style.display = (isMatch(data) || isBits(data)) ? 'none' : '';
+      if (isMatch(data)) {
+        renderMatch();
+      } else if (isBits(data)) {
+        renderBits();
+      } else if (data.leftPanel === 'shapeGrid') {
+        document.getElementById('qOptions').innerHTML = '';
+        renderShapeGrid();
+      } else {
+        renderOptions();
+      }
+
+      const selList = document.getElementById('qSelectedList');
+      if (multi) {
+        selList.style.display = '';
+        selList.textContent = st.sel.length
+          ? `Selected: ${[...st.sel].sort((a, b) => a - b).map(i => i + 1).join(', ')}`
+          : (data.leftPanel === 'shapeGrid' ? 'Click the boxes above to select your answer.' : 'Click every option that applies.');
+      } else {
+        selList.style.display = 'none';
+      }
+
+      const banner = document.getElementById('qBanner');
+      if (st.ans) {
+        const ok = isAnswerCorrect(data, st);
+        banner.className = 'result-banner ' + (ok ? 'correct' : 'wrong');
+        document.getElementById('qIcon').textContent = ok ? '✓' : '✗';
+        document.getElementById('qBannerText').innerHTML = ok ? `Correct! ${data.correctExplain(st)}` : `The correct answer is ${data.correctExplain(st)}`;
+      } else {
+        banner.className = 'result-banner';
+      }
+
+      const working = document.getElementById('qWorking');
+      working.className = 'working-box' + (st.ans ? ' visible' : '');
+      document.getElementById('qWorkingContent').innerHTML = st.ans ? data.working(st) : '';
+
+      document.getElementById('qBack').style.display = cur > 0 ? 'inline-block' : 'none';
+      const check = document.getElementById('qCheck');
+      check.style.display = st.ans ? 'none' : 'inline-block';
+      check.disabled = st.ans || (
+        isMatch(data) ? !st.place.every(p => p !== null) :
+        isBits(data) ? false : // every cell already has a valid default (0), so always checkable
+        (multi ? st.sel.length === 0 : st.sel === null)
+      );
+      const isLast = cur === QUESTIONS.length - 1;
+      document.getElementById('qNext').style.display = (st.ans && !isLast) ? 'inline-block' : 'none';
+      document.getElementById('qSummary').style.display = (st.ans && isLast) ? 'inline-block' : 'none';
+
+      swapLeftPanel(data.leftPanel || 'none');
+      updateProgress();
+    }
+
+    function checkAnswer() {
+      const st = Q[cur], data = QUESTIONS[cur];
+      if (st.ans) return;
+      if (isMatch(data)) { if (!st.place.every(p => p !== null)) return; }
+      else if (isBits(data)) { /* always answerable — 0 is a valid default for every cell */ }
+      else if (isMulti(data) ? st.sel.length === 0 : st.sel === null) return;
+      st.ans = true;
+      renderQuestion();
+    }
+
+    function nextQuestion() { if (cur < QUESTIONS.length - 1) { cur++; renderQuestion(); } }
+
+    // Going back re-opens the previous question for a fresh answer — so it and
+    // every question after it (all now "ahead" of where the student is) are
+    // cleared back to unanswered, rather than staying locked from before.
+    function backQuestion() {
+      if (cur <= 0) return;
+      cur--;
+      for (let i = cur; i < QUESTIONS.length; i++) {
+        const data = QUESTIONS[i];
+        Q[i].ans = false;
+        if (isMatch(data)) { Q[i].place = Q[i].opts.map(() => null); Q[i].sel = null; }
+        else if (isBits(data)) { Q[i].clicks = Q[i].opts.map(() => [0, 0, 0, 0]); }
+        else Q[i].sel = isMulti(data) ? [] : null;
+      }
+      renderQuestion();
+    }
+
+    function swapLeftPanel(mode) {
+      document.getElementById('qShapeGridPanel').style.display = mode === 'shapeGrid' ? 'block' : 'none';
+      document.querySelector('.circuit-col').style.display = mode === 'shapeGrid' ? '' : 'none';
+      document.getElementById('quizWrap').classList.toggle('single-col', mode !== 'shapeGrid');
+    }
+
+    function goToQuestion(n) { // 1-based, for URL/jump compatibility
+      cur = Math.max(0, Math.min(QUESTIONS.length - 1, n - 1));
+      document.getElementById('summaryPanel').style.display = 'none';
+      document.getElementById('qPanel').style.display = 'flex';
+      renderQuestion();
+    }
+
+    function resetQuiz() {
+      Q = QUESTIONS.map(data => {
+        const opts = data.options();
+        if (isBits(data)) {
+          const cor = opts.map(row => [3, 2, 1, 0].map(shift => (row.value >> shift) & 1));
+          return { ans: false, cor, opts, clicks: opts.map(() => [0, 0, 0, 0]) };
+        }
+        if (isMatch(data)) {
+          const cor = opts.map(o => o.col);
+          return { sel: null, ans: false, cor, opts, place: opts.map(() => null) };
+        }
+        if (isMulti(data)) {
+          const cor = opts.map((o, i) => o.type === 'correct' ? i : -1).filter(i => i >= 0);
+          return { sel: [], ans: false, cor, opts };
+        }
+        return { sel: null, ans: false, cor: opts.findIndex(o => o.type === 'correct'), opts };
+      });
+      cur = 0;
+      document.getElementById('summaryPanel').style.display = 'none';
+      document.getElementById('qPanel').style.display = 'flex';
+      renderQuestion();
+    }
+
+    function showSummary() {
+      document.getElementById('qPanel').style.display = 'none';
+      document.getElementById('summaryPanel').style.display = 'block';
+      swapLeftPanel('none');
+      const items = QUESTIONS.map((data, i) => {
+        const st = Q[i];
+        const ans = selectedLabel(data, st);
+        const ok = isAnswerCorrect(data, st);
+        const colour = ok ? 'var(--colour-ui-correct)' : '#ff3366';
+        const mark = ok ? '✓' : '✗';
+        return `<div class="summary-item">
+      <div class="summary-item-head"><span class="summary-qnum">Q${i + 1}</span><span class="summary-question">${data.text()}</span></div>
+      <div class="summary-answer" style="color:${colour}">You answered: ${ans} &nbsp; ${mark}</div>
+      <div class="working-box visible">${st.ans ? data.working(st) : ''}</div>
+    </div>`;
+      }).join('');
+      document.getElementById('summaryContent').innerHTML = items;
+      QUESTIONS.forEach((_, i) => { const d = document.getElementById('dot-' + i); if (d) d.className = 'progress-dot done'; });
+      document.getElementById('progressLabel').textContent = 'Complete';
+    }
+
+    buildProgressDots();
+    resetQuiz();
+
+    fetch('../index.html', { method: 'HEAD' })
+      .then(r => { if (r.ok) { document.getElementById('menuLink').style.display = ''; document.getElementById('homeBar').style.display = ''; } })
+      .catch(() => {});
+
+    function jump(n, answered) {
+      if (n < 1 || n > QUESTIONS.length) { console.warn('jump: no question', n); return; }
+      // Default every question before the target to correctly-answered, so
+      // progress dots and back-navigation see a consistent, completed history.
+      for (let i = 0; i < n - 1; i++) { fillCorrectSelection(i); Q[i].ans = true; }
+      goToQuestion(n);
+      if (answered) { fillCorrectSelection(cur); checkAnswer(); }
+    }
+    window.jump = jump;
+
+    function jumpToSummary() {
+      QUESTIONS.forEach((_, i) => {
+        if (Q[i].ans) return;
+        fillCorrectSelection(i);
+        Q[i].ans = true;
+      });
+      showSummary();
+    }
+    window.jumpToSummary = jumpToSummary;
+
+    {
+      const p = new URLSearchParams(location.search);
+      if (p.has('q')) { if (p.get('q') === 's') jumpToSummary(); else jump(+p.get('q'), p.has('ans')); }
+    }
+  </script>
+</body>
+</html>
