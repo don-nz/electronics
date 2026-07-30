@@ -25,13 +25,18 @@
     (unset)  single-select, A/B/C/D, one correct answer
     'multi'  multi-select — any number of options toggled on (shapeGrid or
              plain text options both support this)
-    'match'  click-to-assign sort into two labelled columns (see the BJT
-             quiz's logic-state question for a worked example)
+    'match'  click-to-assign sort into a set of labelled columns — usually
+             two (see the BJT quiz's logic-state question), but this file's
+             Q2 generalises it further: `columns()` can return any number of
+             targets, and each one can be plain text OR `{ shapeId }` to
+             render an SVG shape as the column header instead (see Q2 —
+             matching gate names to their symbols). The grid lays itself out
+             at up to 4 columns per row regardless of column count.
     'bits'   click-to-toggle table of 0/1 cells (see the BJT quiz's binary
              counting question for a worked example)
-  This file currently only uses 'multi', but the engine below supports all
-  four kinds already — add a 'match' or 'bits' question later just by adding
-  a QUESTIONS entry with the right shape; nothing else needs to change.
+  This file uses 'multi' and 'match'; the engine below also supports 'bits' —
+  add one later just by adding a QUESTIONS entry with the right shape;
+  nothing else needs to change.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -52,15 +57,61 @@
 </head>
 
 <body>
-  <!-- Hidden defs: shapes for future shapeGrid questions go here (e.g. gate
-       symbols). Q1 below uses plain text boxes, so nothing is defined yet
-       except the shared glow filter. -->
+  <!-- Hidden defs: shapes used by shapeGrid/match questions below. The
+       traditional gate symbols (Q2) are copied from the master reference
+       file ../../assets/shapes/logic-gates.svg — edit shapes there first,
+       then re-copy into this <defs> block; see that file's header comment
+       for why it can't just be <use>'d directly from here (file:// blocks
+       cross-file SVG <use>/fetch()). -->
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
     <defs>
       <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
         <feGaussianBlur stdDeviation="2" result="b" />
         <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
       </filter>
+
+      <!-- ── shared leads (see logic-gates.svg for the geometry notes) ── -->
+      <g id="gate-lead-in2">
+        <line x1="-24" y1="-8" x2="-8" y2="-8" stroke="#ffb454" stroke-width="2" />
+        <line x1="-24" y1="8" x2="-8" y2="8" stroke="#ffb454" stroke-width="2" />
+      </g>
+      <g id="gate-lead-in1">
+        <line x1="-24" y1="0" x2="-8" y2="0" stroke="#ffb454" stroke-width="2" />
+      </g>
+      <g id="gate-lead-in2-or">
+        <line x1="-24" y1="-8" x2="-4.6" y2="-8" stroke="#ffb454" stroke-width="2" />
+        <line x1="-24" y1="8" x2="-4.6" y2="8" stroke="#ffb454" stroke-width="2" />
+      </g>
+      <g id="gate-lead-in2-xor">
+        <line x1="-24" y1="-8" x2="-9.9" y2="-8" stroke="#ffb454" stroke-width="2" />
+        <line x1="-24" y1="8" x2="-9.9" y2="8" stroke="#ffb454" stroke-width="2" />
+      </g>
+      <g id="gate-lead-out">
+        <line x1="24" y1="0" x2="44" y2="0" stroke="#ffb454" stroke-width="2" />
+      </g>
+      <g id="gate-lead-out-inv">
+        <circle cx="28" cy="0" r="4" fill="none" stroke="#ffb454" stroke-width="2" filter="url(#glow)" />
+        <line x1="32" y1="0" x2="44" y2="0" stroke="#ffb454" stroke-width="2" />
+      </g>
+
+      <!-- ── shared bodies ── -->
+      <path id="gate-and-body" d="M -8,-16 L 8,-16 A 16,16 0 0 1 8,16 L -8,16 Z"
+        fill="none" stroke="#ffb454" stroke-width="2" filter="url(#glow)" />
+      <path id="gate-or-body" d="M -8,-16 Q 8,-16 24,0 Q 8,16 -8,16 Q 1,0 -8,-16 Z"
+        fill="none" stroke="#ffb454" stroke-width="2" filter="url(#glow)" />
+      <path id="gate-xor-extra" d="M -14,-16 Q -3,0 -14,16"
+        fill="none" stroke="#ffb454" stroke-width="2" />
+      <path id="gate-tri-body" d="M -8,-16 L -8,16 L 24,0 Z"
+        fill="none" stroke="#ffb454" stroke-width="2" filter="url(#glow)" />
+
+      <!-- ── the 7 gates (BUFFER excluded — Q2 only uses these 7) ── -->
+      <g id="gate-and-trad"><use href="#gate-lead-in2" /><use href="#gate-and-body" /><use href="#gate-lead-out" /></g>
+      <g id="gate-nand-trad"><use href="#gate-lead-in2" /><use href="#gate-and-body" /><use href="#gate-lead-out-inv" /></g>
+      <g id="gate-or-trad"><use href="#gate-lead-in2-or" /><use href="#gate-or-body" /><use href="#gate-lead-out" /></g>
+      <g id="gate-nor-trad"><use href="#gate-lead-in2-or" /><use href="#gate-or-body" /><use href="#gate-lead-out-inv" /></g>
+      <g id="gate-xor-trad"><use href="#gate-lead-in2-xor" /><use href="#gate-xor-extra" /><use href="#gate-or-body" /><use href="#gate-lead-out" /></g>
+      <g id="gate-xnor-trad"><use href="#gate-lead-in2-xor" /><use href="#gate-xor-extra" /><use href="#gate-or-body" /><use href="#gate-lead-out-inv" /></g>
+      <g id="gate-not-trad"><use href="#gate-lead-in1" /><use href="#gate-tri-body" /><use href="#gate-lead-out-inv" /></g>
     </defs>
   </svg>
 
@@ -104,18 +155,7 @@
               <div class="match-pool-arrow">▶</div>
               <div class="match-pool" id="matchPool"></div>
             </div>
-            <div class="match-columns">
-              <div class="match-column" data-col="0" onclick="assignToColumn(0)">
-                <div class="match-col-arrow">▼</div>
-                <div class="match-col-title" id="matchColTitle0"></div>
-                <div class="match-col-items" id="matchColItems0"></div>
-              </div>
-              <div class="match-column" data-col="1" onclick="assignToColumn(1)">
-                <div class="match-col-arrow">▼</div>
-                <div class="match-col-title" id="matchColTitle1"></div>
-                <div class="match-col-items" id="matchColItems1"></div>
-              </div>
-            </div>
+            <div class="match-columns" id="matchColumns"></div>
           </div>
           <div class="bits-wrap" id="qBits" style="display:none">
             <table class="bits-table">
@@ -201,7 +241,7 @@
         // names that a student might mistakenly lump in as "gates."
         leftPanel: 'shapeGrid',
         kind: 'multi',
-        text: () => 'The seven standard logic gates are mixed in with some other digital building-block names below. Click every box that names one of the seven logic gates.',
+        text: () => `The <span style="color:var(--colour-ui-primary)">seven</span> standard logic gates are mixed in with some other digital building-block names below. <span style="color:var(--colour-ui-primary)">Click</span> every box that names one of the seven <span style="color:var(--colour-ui-primary)">logic gates</span>.`,
         hint: () => 'The seven gates are the fundamental building blocks (AND-type and OR-type functions, plus their inverted forms). The other terms describe circuits built <em>from</em> gates — useful digital building blocks, but not gates themselves.',
         options: () => shuffle([
           { label: 'AND',  type: 'correct' },
@@ -229,6 +269,50 @@
     <div class="working-line"><b style="color:var(--colour-ui-correct)">AND</b>, <b style="color:var(--colour-ui-correct)">OR</b> and <b style="color:var(--colour-ui-correct)">NOT</b> are the three basic functions. <b style="color:var(--colour-ui-correct)">NAND</b> and <b style="color:var(--colour-ui-correct)">NOR</b> are AND/OR with an inverted (NOT) output. <b style="color:var(--colour-ui-correct)">XOR</b> (exclusive-OR) and <b style="color:var(--colour-ui-correct)">XNOR</b> (exclusive-NOR) output true only when their inputs <em>differ</em> (or agree, for XNOR).</div>
     <div class="working-step" style="margin-top:.6rem">Not gates — boxes ${wrongNums}:</div>
     <div class="working-line">A <b style="color:var(--colour-ui-wrong)">buffer</b> just passes its input straight through (no logic decision made). A <b style="color:var(--colour-ui-wrong)">comparator</b>, <b style="color:var(--colour-ui-wrong)">multiplexer</b> and <b style="color:var(--colour-ui-wrong)">decoder</b> are all more complex circuits <em>built from</em> multiple gates. A <b style="color:var(--colour-ui-wrong)">flip-flop</b> stores a single bit and needs a clock signal — it's a memory element, not a gate.</div>`;
+        }
+      },
+      {
+        // kind:'match' with shape-based columns — 7 gate symbols (BUFFER
+        // excluded, since it makes no logic decision) shown as column
+        // headers via columns()'s `{ shapeId }` form; the grid wraps at 4
+        // per row, giving the requested 4/3 layout for 7 columns.
+        leftPanel: 'none',
+        kind: 'match',
+        columns: () => [
+          { shapeId: 'gate-and-trad' },
+          { shapeId: 'gate-or-trad' },
+          { shapeId: 'gate-not-trad' },
+          { shapeId: 'gate-nand-trad' },
+          { shapeId: 'gate-nor-trad' },
+          { shapeId: 'gate-xor-trad' },
+          { shapeId: 'gate-xnor-trad' }
+        ],
+        text: () => `The seven logic gates are shown below using their <span style="color:var(--colour-ui-primary)">traditional</span> symbols. <span style="color:var(--colour-ui-primary)">Place</span> each gate's name in the box underneath its symbol.`,
+        hint: () => `Look at the shape of the body first (flat-backed vs pointed vs triangular), then check for a small bubble on the output — that bubble always means the same thing: the output is inverted. If you change your mind, click a placed name to send it back to the pool.`,
+        options: () => shuffle([
+          { label: 'AND',  col: 0 },
+          { label: 'OR',   col: 1 },
+          { label: 'NOT',  col: 2 },
+          { label: 'NAND', col: 3 },
+          { label: 'NOR',  col: 4 },
+          { label: 'XOR',  col: 5 },
+          { label: 'XNOR', col: 6 }
+        ]),
+        correctExplain: (st) => {
+          const wrongCount = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).length;
+          return wrongCount === 0 ? 'All 7 gates named correctly' : `${st.opts.length - wrongCount} of ${st.opts.length} gates named correctly`;
+        },
+        working: (st) => {
+          const mistakes = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).map(o => o.label);
+          const mistakeLine = mistakes.length
+            ? `<div class="working-step" style="margin-top:.6rem">Misplaced:</div><div class="working-line">${mistakes.join(', ')}</div>`
+            : '';
+          return `
+    <div class="working-step">Reading each symbol:</div>
+    <div class="working-line"><b style="color:var(--colour-ui-correct)">AND</b> — flat back, rounded (D-shaped) front. <b style="color:var(--colour-ui-correct)">OR</b> — curved, concave back and a pointed front. <b style="color:var(--colour-ui-correct)">NOT</b> — a triangle with a bubble on its output.</div>
+    <div class="working-line" style="margin-top:.4rem"><b style="color:var(--colour-ui-correct)">NAND</b> and <b style="color:var(--colour-ui-correct)">NOR</b> are just the AND/OR body with that same bubble added on the output. <b style="color:var(--colour-ui-correct)">XOR</b> and <b style="color:var(--colour-ui-correct)">XNOR</b> are the OR/NOR body with one extra curved line across the input side.</div>
+    <div class="working-line" style="margin-top:.4rem">However many bodies or extra lines a symbol has, the bubble always means the same thing: the gate's output is inverted.</div>
+    ${mistakeLine}`;
         }
       }
     ];
@@ -371,15 +455,19 @@
     // index), then click a column to drop it there. Click a placed chip to
     // send it back to the pool. No drag events at all, so it behaves
     // identically on mouse, touch and keyboard.
+    //
+    // columns() may return any number of targets, each either a plain string
+    // (rendered as a text pill, e.g. the logic-state question's "Logic-1" /
+    // "Logic-0") or `{ shapeId }` (rendered as an SVG shape instead — see
+    // Q2's gate-name matching). The grid caps itself at 4 columns per row
+    // (so 7 columns wraps 4/3) but still works for the simple 2-column case.
     function renderMatch() {
       const st = Q[cur], data = QUESTIONS[cur];
       const cols = data.columns();
-      document.getElementById('matchColTitle0').textContent = cols[0];
-      document.getElementById('matchColTitle1').textContent = cols[1];
 
       // While a term is picked up, only that same chip (to allow cancelling
-      // the pick) and the two columns stay clickable — every other pool word
-      // and every already-placed word are locked, so a student can't
+      // the pick) and the columns stay clickable — every other pool word and
+      // every already-placed word are locked, so a student can't
       // accidentally swap their pick or clear a previous answer mid-placement.
       const picking = st.sel !== null;
       const poolHasItems = st.opts.some((_, i) => st.place[i] === null);
@@ -403,9 +491,19 @@
         pool.appendChild(chip);
       });
 
-      [0, 1].forEach(colIdx => {
-        const container = document.getElementById('matchColItems' + colIdx);
-        container.innerHTML = '';
+      const colsEl = document.getElementById('matchColumns');
+      colsEl.innerHTML = '';
+      colsEl.style.gridTemplateColumns = `repeat(${Math.min(cols.length, 4)}, 1fr)`;
+      cols.forEach((col, colIdx) => {
+        const colDiv = document.createElement('div');
+        colDiv.className = 'match-column';
+        colDiv.addEventListener('click', () => assignToColumn(colIdx));
+
+        const arrow = document.createElement('div'); arrow.className = 'match-col-arrow'; arrow.textContent = '▼';
+        const title = document.createElement('div'); title.className = 'match-col-title';
+        title.innerHTML = (typeof col === 'string') ? col : `<svg viewBox="-32 -36 96 76" style="width:100%;max-width:80px;display:block;margin:0 auto"><use href="#${col.shapeId}"/></svg>`;
+        const items = document.createElement('div'); items.className = 'match-col-items';
+
         st.opts.forEach((opt, i) => {
           if (st.place[i] !== colIdx) return;
           const chip = document.createElement('button');
@@ -418,9 +516,12 @@
             chip.disabled = picking;
             if (!chip.disabled) chip.addEventListener('click', (e) => { e.stopPropagation(); unassignItem(i); });
           }
-          container.appendChild(chip);
+          items.appendChild(chip);
         });
-        container.closest('.match-column').classList.toggle('droppable', !st.ans && picking);
+
+        colDiv.append(arrow, title, items);
+        colDiv.classList.toggle('droppable', !st.ans && picking);
+        colsEl.appendChild(colDiv);
       });
     }
 
