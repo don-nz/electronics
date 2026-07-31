@@ -37,9 +37,21 @@
              row regardless of column count.
     'bits'   click-to-toggle table of 0/1 cells (see the BJT quiz's binary
              counting question for a worked example)
-  This file uses 'multi' and 'match'; the engine below also supports 'bits' —
-  add one later just by adding a QUESTIONS entry with the right shape;
-  nothing else needs to change.
+    'truth'  a truth table: fixed/read-only input columns (`inputLabels()`)
+             plus one click-cyclable output column (`outputLabel()`) that
+             cycles blank → 0 → 1 → blank per cell. Each option is
+             `{ inputs: [...], z }`. Optionally offers an input-count toggle
+             (see Q4/Q5/Q7–Q10 — 2-input/3-input OR/AND/NOR/NAND/XOR/XNOR):
+             add `inputCounts()` (array of choices) and `defaultInputCount()`,
+             and make `inputLabels` and `options` take the count `n` as an
+             argument instead of being called plain — the engine detects the
+             toggle via `data.inputCounts` and switches calling convention
+             accordingly. Switching the toggle rebuilds the table and clears
+             the answer. Q6 (NOT) omits the toggle entirely, since a NOT gate
+             is strictly single-input — see GATE_FN/buildTruthRows() below
+             for the shared row-generation logic used by all seven.
+  This file uses 'multi', 'match' and 'truth'; nothing else needs to change
+  to add another question of any of these kinds.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -60,6 +72,31 @@
        padding around it than a text label does. */
     .match-chip-shape { padding: .15rem .3rem; }
     .match-col-items .match-chip-shape { width: auto; margin: 0 auto; }
+
+    /* Read-only input columns (C/B/A) in Q4's truth table — same look as
+       the bits-table's fixed "Value" column, just applied to 3 columns
+       instead of 1. */
+    .truth-input-cell { font-weight: 700; color: var(--colour-text); background: rgba(255, 255, 255, .02); }
+
+    /* Q4's 2-input/3-input toggle — a small segmented control above the table. */
+    .truth-toggle { display: flex; gap: .5rem; margin-bottom: .8rem; }
+    .truth-toggle-btn {
+      padding: .4rem .9rem;
+      border-radius: 3px;
+      border: 1px solid var(--colour-border);
+      background: rgba(255, 255, 255, .03);
+      color: var(--colour-label);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: .78rem;
+      cursor: pointer;
+      transition: border-color .15s, background .15s, color .15s;
+    }
+    .truth-toggle-btn:hover { border-color: rgba(0, 229, 255, .5); }
+    .truth-toggle-btn.active {
+      border-color: var(--colour-ui-primary);
+      background: rgba(0, 229, 255, .12);
+      color: var(--colour-ui-primary);
+    }
     </style>
 </head>
 
@@ -193,6 +230,19 @@
                 </tr>
               </thead>
               <tbody id="bitsBody"></tbody>
+            </table>
+          </div>
+          <div class="bits-wrap" id="qTruth" style="display:none">
+            <div class="truth-toggle" id="truthToggle" style="display:none"></div>
+            <table class="bits-table">
+              <thead>
+                <tr>
+                  <th id="truthInputHead" colspan="3">Inputs</th>
+                  <th id="truthOutputHead">Output</th>
+                </tr>
+                <tr id="truthColLabels"></tr>
+              </thead>
+              <tbody id="truthBody"></tbody>
             </table>
           </div>
           <div class="selected-list" id="qSelectedList" style="display:none"></div>
@@ -375,6 +425,193 @@
     <div class="working-line" style="margin-top:.4rem">Same rule as the traditional symbols: the bubble on the output is what turns AND into NAND, OR into NOR, and XOR into XNOR — the rectangle and qualifying symbol inside it stay the same either way.</div>
     ${mistakeLine}`;
         }
+      },
+      {
+        // kind:'truth' — read-only input columns, all rows in natural
+        // binary-counting order (a truth table shouldn't shuffle), plus one
+        // click-cyclable output column (blank → 0 → 1 → blank per cell).
+        //
+        // This question also has a 2-input/3-input TOGGLE — see
+        // inputCounts()/defaultInputCount() below. Because of that,
+        // inputLabels() and options() take the current input count `n` as an
+        // argument (every other 'truth' field is called the same way as
+        // other kinds' fields; only these two differ, and only because this
+        // question needs them to). Rows are generated generically from `n`
+        // rather than hand-written, since "OR of n inputs" is well-defined
+        // for any n: Z is 0 only when every input is 0.
+        leftPanel: 'none',
+        kind: 'truth',
+        inputCounts: () => [2, 3],
+        defaultInputCount: () => 2,
+        inputLabels: (n) => ['C', 'B', 'A'].slice(3 - n),
+        inputsHeading: () => '<span class="colour-bjt" style="font-size:1.02rem">OR</span> Logic Gate Inputs',
+        outputHeading: () => 'Output',
+        outputLabel: () => 'Z',
+        text: (st) => `Complete the <span style="color:var(--colour-ui-primary)">truth table</span> for a <span style="color:var(--colour-ui-primary)">${st.n}-input OR</span> gate. Tap a cell in the Z column to cycle it 0 → 1 → blank.`,
+        hint: () => `An OR gate's output is 1 if ANY input is 1 — the only row where that's not true is the one where every input is 0.`,
+        options: (n) => buildTruthRows(n, GATE_FN.or),
+        correctExplain: truthCorrectExplain,
+        working: (st) => {
+          const labels = ['C', 'B', 'A'].slice(3 - st.n).join(' ');
+          const allZeroRow = new Array(st.n).fill(0).join(' ');
+          return `
+    <div class="working-step">OR gate logic:</div>
+    <div class="working-line">Z = ${labels.split(' ').join(' + ')} (OR). Z is <b style="color:var(--colour-ui-correct)">1</b> whenever at least one input is 1 — that's every row except ${labels} = ${allZeroRow}, where Z is <b style="color:var(--colour-bjt)">0</b>.</div>
+    <div class="working-line" style="margin-top:.4rem">This is the opposite of an AND gate, whose output is only 1 when <em>every</em> input is 1.</div>
+    ${truthMistakeLine(labels, st)}`;
+        }
+      },
+      {
+        // Q5 — AND, same 2/3-input toggle pattern as Q4.
+        leftPanel: 'none',
+        kind: 'truth',
+        inputCounts: () => [2, 3],
+        defaultInputCount: () => 2,
+        inputLabels: (n) => ['C', 'B', 'A'].slice(3 - n),
+        inputsHeading: () => '<span class="colour-bjt" style="font-size:1.02rem">AND</span> Logic Gate Inputs',
+        outputHeading: () => 'Output',
+        outputLabel: () => 'Z',
+        text: (st) => `Complete the <span style="color:var(--colour-ui-primary)">truth table</span> for a <span style="color:var(--colour-ui-primary)">${st.n}-input AND</span> gate. Tap a cell in the Z column to cycle it 0 → 1 → blank.`,
+        hint: () => `An AND gate's output is 1 only when EVERY input is 1 — every other row is 0.`,
+        options: (n) => buildTruthRows(n, GATE_FN.and),
+        correctExplain: truthCorrectExplain,
+        working: (st) => {
+          const labels = ['C', 'B', 'A'].slice(3 - st.n).join(' ');
+          const allOnesRow = new Array(st.n).fill(1).join(' ');
+          return `
+    <div class="working-step">AND gate logic:</div>
+    <div class="working-line">Z = ${labels.split(' ').join(' · ')} (AND). Z is <b style="color:var(--colour-ui-correct)">1</b> only on the row where ${labels} = ${allOnesRow} — every other row is <b style="color:var(--colour-bjt)">0</b>.</div>
+    <div class="working-line" style="margin-top:.4rem">This is the opposite of an OR gate, whose output is 1 as soon as <em>any</em> input is 1.</div>
+    ${truthMistakeLine(labels, st)}`;
+        }
+      },
+      {
+        // Q6 — NOT. A NOT gate is strictly single-input, so this question
+        // has no toggle at all: inputCounts/defaultInputCount are simply
+        // omitted, which tells the engine (and renderTruth()) to call
+        // inputLabels()/options() plain, exactly like Q1–Q3's non-toggle
+        // kinds. st.n stays undefined for this question — fine, since
+        // nothing here reads it.
+        leftPanel: 'none',
+        kind: 'truth',
+        inputLabels: () => ['A'],
+        inputsHeading: () => '<span class="colour-bjt" style="font-size:1.02rem">NOT</span> Logic Gate Input',
+        outputHeading: () => 'Output',
+        outputLabel: () => 'Z',
+        text: () => `Complete the <span style="color:var(--colour-ui-primary)">truth table</span> for a <span style="color:var(--colour-ui-primary)">NOT</span> gate. Tap the cell in the Z column to cycle it 0 → 1 → blank.`,
+        hint: () => `A NOT gate (inverter) just flips its single input — 0 becomes 1, and 1 becomes 0.`,
+        options: () => buildTruthRows(1, GATE_FN.not),
+        correctExplain: truthCorrectExplain,
+        working: (st) => `
+    <div class="working-step">NOT gate logic:</div>
+    <div class="working-line">Z = <span style="text-decoration:overline">A</span> (NOT). Z is simply the opposite of A — A=0 gives Z=<b style="color:var(--colour-ui-correct)">1</b>, A=1 gives Z=<b style="color:var(--colour-bjt)">0</b>.</div>
+    <div class="working-line" style="margin-top:.4rem">This is the only one of the seven gates with just a single input — every other gate takes two or more.</div>
+    ${truthMistakeLine('A', st)}`
+      },
+      {
+        // Q7 — NOR (OR with the output inverted).
+        leftPanel: 'none',
+        kind: 'truth',
+        inputCounts: () => [2, 3],
+        defaultInputCount: () => 2,
+        inputLabels: (n) => ['C', 'B', 'A'].slice(3 - n),
+        inputsHeading: () => '<span class="colour-bjt" style="font-size:1.02rem">NOR</span> Logic Gate Inputs',
+        outputHeading: () => 'Output',
+        outputLabel: () => 'Z',
+        text: (st) => `Complete the <span style="color:var(--colour-ui-primary)">truth table</span> for a <span style="color:var(--colour-ui-primary)">${st.n}-input NOR</span> gate. Tap a cell in the Z column to cycle it 0 → 1 → blank.`,
+        hint: () => `A NOR gate is an OR gate with the output inverted — it's 1 only on the one row where every input is 0.`,
+        options: (n) => buildTruthRows(n, GATE_FN.nor),
+        correctExplain: truthCorrectExplain,
+        working: (st) => {
+          const labels = ['C', 'B', 'A'].slice(3 - st.n).join(' ');
+          const allZeroRow = new Array(st.n).fill(0).join(' ');
+          return `
+    <div class="working-step">NOR gate logic:</div>
+    <div class="working-line">Z = ${labels.split(' ').join(' + ')} (OR), inverted. Z is <b style="color:var(--colour-ui-correct)">1</b> only on the row where ${labels} = ${allZeroRow} — every other row is <b style="color:var(--colour-bjt)">0</b>.</div>
+    <div class="working-line" style="margin-top:.4rem">NOR is the exact opposite of OR: everywhere OR outputs 1, NOR outputs 0, and vice versa.</div>
+    ${truthMistakeLine(labels, st)}`;
+        }
+      },
+      {
+        // Q8 — NAND (AND with the output inverted).
+        leftPanel: 'none',
+        kind: 'truth',
+        inputCounts: () => [2, 3],
+        defaultInputCount: () => 2,
+        inputLabels: (n) => ['C', 'B', 'A'].slice(3 - n),
+        inputsHeading: () => '<span class="colour-bjt" style="font-size:1.02rem">NAND</span> Logic Gate Inputs',
+        outputHeading: () => 'Output',
+        outputLabel: () => 'Z',
+        text: (st) => `Complete the <span style="color:var(--colour-ui-primary)">truth table</span> for a <span style="color:var(--colour-ui-primary)">${st.n}-input NAND</span> gate. Tap a cell in the Z column to cycle it 0 → 1 → blank.`,
+        hint: () => `A NAND gate is an AND gate with the output inverted — it's 0 only on the one row where every input is 1.`,
+        options: (n) => buildTruthRows(n, GATE_FN.nand),
+        correctExplain: truthCorrectExplain,
+        working: (st) => {
+          const labels = ['C', 'B', 'A'].slice(3 - st.n).join(' ');
+          const allOnesRow = new Array(st.n).fill(1).join(' ');
+          return `
+    <div class="working-step">NAND gate logic:</div>
+    <div class="working-line">Z = ${labels.split(' ').join(' · ')} (AND), inverted. Z is <b style="color:var(--colour-bjt)">0</b> only on the row where ${labels} = ${allOnesRow} — every other row is <b style="color:var(--colour-ui-correct)">1</b>.</div>
+    <div class="working-line" style="margin-top:.4rem">NAND is the exact opposite of AND: everywhere AND outputs 1, NAND outputs 0, and vice versa.</div>
+    ${truthMistakeLine(labels, st)}`;
+        }
+      },
+      {
+        // Q9 — XOR. Generalises to n inputs via parity (odd count of 1s) —
+        // see GATE_FN.xor.
+        leftPanel: 'none',
+        kind: 'truth',
+        inputCounts: () => [2, 3],
+        defaultInputCount: () => 2,
+        inputLabels: (n) => ['C', 'B', 'A'].slice(3 - n),
+        inputsHeading: () => '<span class="colour-bjt" style="font-size:1.02rem">XOR</span> Logic Gate Inputs',
+        outputHeading: () => 'Output',
+        outputLabel: () => 'Z',
+        text: (st) => `Complete the <span style="color:var(--colour-ui-primary)">truth table</span> for a <span style="color:var(--colour-ui-primary)">${st.n}-input XOR</span> gate. Tap a cell in the Z column to cycle it 0 → 1 → blank.`,
+        hint: (st) => st.n === 2
+          ? `A 2-input XOR gate's output is 1 only when its inputs differ (one 0, one 1).`
+          : `XOR generalises to more than 2 inputs by parity: Z is 1 when an ODD number of inputs are 1.`,
+        options: (n) => buildTruthRows(n, GATE_FN.xor),
+        correctExplain: truthCorrectExplain,
+        working: (st) => {
+          const labels = ['C', 'B', 'A'].slice(3 - st.n).join(' ');
+          const parityLine = st.n === 2
+            ? `Z is <b style="color:var(--colour-ui-correct)">1</b> only when the two inputs differ (0,1 or 1,0) — when they agree (0,0 or 1,1), Z is <b style="color:var(--colour-bjt)">0</b>.`
+            : `Z is <b style="color:var(--colour-ui-correct)">1</b> whenever an <em>odd</em> number of inputs are 1 (one or all three) — otherwise Z is <b style="color:var(--colour-bjt)">0</b>.`;
+          return `
+    <div class="working-step">XOR (exclusive-OR) gate logic:</div>
+    <div class="working-line">${parityLine}</div>
+    <div class="working-line" style="margin-top:.4rem">Unlike a plain OR gate, XOR excludes the case where every input is 1 (for 2 inputs) or, more generally, excludes any row with an even count of 1s.</div>
+    ${truthMistakeLine(labels, st)}`;
+        }
+      },
+      {
+        // Q10 — XNOR (XOR with the output inverted; even parity).
+        leftPanel: 'none',
+        kind: 'truth',
+        inputCounts: () => [2, 3],
+        defaultInputCount: () => 2,
+        inputLabels: (n) => ['C', 'B', 'A'].slice(3 - n),
+        inputsHeading: () => '<span class="colour-bjt" style="font-size:1.02rem">XNOR</span> Logic Gate Inputs',
+        outputHeading: () => 'Output',
+        outputLabel: () => 'Z',
+        text: (st) => `Complete the <span style="color:var(--colour-ui-primary)">truth table</span> for a <span style="color:var(--colour-ui-primary)">${st.n}-input XNOR</span> gate. Tap a cell in the Z column to cycle it 0 → 1 → blank.`,
+        hint: (st) => st.n === 2
+          ? `A 2-input XNOR gate's output is 1 only when its inputs agree (both 0 or both 1).`
+          : `XNOR generalises to more than 2 inputs by parity: Z is 1 when an EVEN number of inputs are 1 (including zero).`,
+        options: (n) => buildTruthRows(n, GATE_FN.xnor),
+        correctExplain: truthCorrectExplain,
+        working: (st) => {
+          const labels = ['C', 'B', 'A'].slice(3 - st.n).join(' ');
+          const parityLine = st.n === 2
+            ? `Z is <b style="color:var(--colour-ui-correct)">1</b> only when the two inputs agree (0,0 or 1,1) — when they differ (0,1 or 1,0), Z is <b style="color:var(--colour-bjt)">0</b>.`
+            : `Z is <b style="color:var(--colour-ui-correct)">1</b> whenever an <em>even</em> number of inputs are 1 (zero or two) — otherwise Z is <b style="color:var(--colour-bjt)">0</b>.`;
+          return `
+    <div class="working-step">XNOR gate logic:</div>
+    <div class="working-line">${parityLine}</div>
+    <div class="working-line" style="margin-top:.4rem">XNOR is the exact opposite of XOR: everywhere XOR outputs 1, XNOR outputs 0, and vice versa.</div>
+    ${truthMistakeLine(labels, st)}`;
+        }
       }
     ];
 
@@ -389,21 +626,72 @@
 
     // kind:'multi' questions allow any number of selections; kind:'match'
     // questions sort every option into one of two columns; kind:'bits' fills
-    // in a table of binary digits by click-cycling each cell; everything
+    // in a table of binary digits by click-cycling each cell; kind:'truth'
+    // fills in a truth table's output column by click-cycling each cell
+    // through blank → 0 → 1 → blank (see Q4–Q10, one per logic gate); everything
     // else is single-select (A/B/C/D...). `sel`/`cor` are a single index for
     // single-select, an array of indices for multi, or (for match) `cor` is
     // an array of correct column-per-option and live placement lives in
     // `st.place` (array of column-per-option, null = still in the pool). For
     // bits, `cor` is a 2D array [row][col] of correct 0/1 values and live
     // input lives in `st.clicks` (2D array [row][col] of click counts —
-    // every cell starts at 0, each click toggles it: odd = 1, even = 0).
+    // every cell starts at 0, each click toggles it: odd = 1, even = 0). For
+    // truth, `cor` is a 1D array of correct 0/1 output values (one per row)
+    // and live input lives in `st.clicks` (1D array of click counts — every
+    // cell starts at 0/blank; see zFromClicks()).
     function isMulti(data) { return data.kind === 'multi'; }
     function isMatch(data) { return data.kind === 'match'; }
     function isBits(data) { return data.kind === 'bits'; }
+    function isTruth(data) { return data.kind === 'truth'; }
     // Every cell defaults to 0 (n=0); each click toggles it (odd clicks = 1, even = 0).
     function bitFromClicks(n) { return n % 2; }
+    // Every cell defaults to blank (n=0); each click cycles blank → 0 → 1 → blank.
+    function zFromClicks(n) { const m = n % 3; return m === 0 ? null : m - 1; }
+    // Shared by every 'truth' question (Q4–Q10): generates all 2^n input
+    // combinations in natural binary-counting order and applies `fn` (the
+    // gate's logic) to get each row's correct Z. Used with `fn` from GATE_FN
+    // below so every gate's row-building is one line at the call site.
+    function buildTruthRows(n, fn) {
+      const rows = [];
+      for (let v = 0; v < (1 << n); v++) {
+        const inputs = [];
+        for (let b = n - 1; b >= 0; b--) inputs.push((v >> b) & 1);
+        rows.push({ inputs, z: fn(inputs) });
+      }
+      return rows;
+    }
+    // One-input-array-in, one-bit-out logic for each of the 7 gates used
+    // across Q4–Q10. XOR/XNOR generalise to n inputs via parity (odd/even
+    // count of 1s) — the standard generalisation, since 2-input XOR is just
+    // "an odd number of inputs are 1" restated.
+    const GATE_FN = {
+      or:   (inputs) => inputs.includes(1) ? 1 : 0,
+      and:  (inputs) => inputs.every(x => x === 1) ? 1 : 0,
+      not:  (inputs) => inputs[0] === 1 ? 0 : 1,
+      nor:  (inputs) => inputs.includes(1) ? 0 : 1,
+      nand: (inputs) => inputs.every(x => x === 1) ? 0 : 1,
+      xor:  (inputs) => inputs.filter(x => x === 1).length % 2 === 1 ? 1 : 0,
+      xnor: (inputs) => inputs.filter(x => x === 1).length % 2 === 0 ? 1 : 0
+    };
+    // Shared correctExplain for every 'truth' question — gate-agnostic.
+    function truthCorrectExplain(st) {
+      const wrongCount = st.opts.filter((o, i) => zFromClicks(st.clicks[i]) !== st.cor[i]).length;
+      return wrongCount === 0 ? `All ${st.opts.length} rows correct` : `${st.opts.length - wrongCount} of ${st.opts.length} rows correct`;
+    }
+    // Shared "list the wrong rows" fragment for working() — `labels` is the
+    // space-joined column labels (e.g. "C B A" or "A").
+    function truthMistakeLine(labels, st) {
+      const mistakes = st.opts
+        .map((o, i) => ({ o, i }))
+        .filter(({ i }) => zFromClicks(st.clicks[i]) !== st.cor[i])
+        .map(({ o }) => `${labels} = ${o.inputs.join(' ')}`);
+      return mistakes.length
+        ? `<div class="working-step" style="margin-top:.6rem">Incorrect rows:</div><div class="working-line">${mistakes.join(', ')}</div>`
+        : '';
+    }
     function isAnswerCorrect(data, st) {
       if (isBits(data)) return st.clicks.every((row, r) => row.every((n, c) => bitFromClicks(n) === st.cor[r][c]));
+      if (isTruth(data)) return st.clicks.every((n, r) => zFromClicks(n) === st.cor[r]);
       if (isMatch(data)) return st.place.every((p, i) => p === st.cor[i]);
       if (!isMulti(data)) return st.sel === st.cor;
       const a = [...st.sel].sort((x, y) => x - y), b = [...st.cor].sort((x, y) => x - y);
@@ -415,6 +703,10 @@
         st.clicks.forEach((row, r) => row.forEach((n, c) => { total++; if (bitFromClicks(n) === st.cor[r][c]) correct++; }));
         return `${correct} / ${total} bits correct`;
       }
+      if (isTruth(data)) {
+        const correct = st.clicks.filter((n, r) => zFromClicks(n) === st.cor[r]).length;
+        return `${correct} / ${st.opts.length} rows correct`;
+      }
       if (isMatch(data)) {
         const correctCount = st.place.filter((p, i) => p === st.cor[i]).length;
         return `${correctCount} / ${st.opts.length} correctly sorted`;
@@ -424,10 +716,11 @@
     }
     // Fills in the fully-correct answer for a question without marking it
     // answered — used by jump()/jumpToSummary() to fast-forward prior
-    // questions. Works across all four kinds.
+    // questions. Works across all five kinds.
     function fillCorrectSelection(i) {
       const data = QUESTIONS[i], st = Q[i];
       if (isBits(data)) st.clicks = st.cor.map(row => row.slice()); // clicks 0/1 map directly onto bit 0/1
+      else if (isTruth(data)) st.clicks = st.cor.map(z => z + 1); // n=1 -> zFromClicks 0, n=2 -> zFromClicks 1
       else if (isMatch(data)) st.place = st.cor.slice();
       else if (isMulti(data)) st.sel = [...st.cor];
       else st.sel = st.cor;
@@ -653,21 +946,97 @@
       renderQuestion();
     }
 
+    // ── kind:'truth' — a truth table with fixed/read-only input columns and
+    // a single click-cyclable output column. Every output cell starts blank
+    // (n=0) and each click cycles blank → 0 → 1 → blank (zFromClicks()).
+    function renderTruth() {
+      const st = Q[cur], data = QUESTIONS[cur];
+      const inputLabels = data.inputCounts ? data.inputLabels(st.n) : data.inputLabels();
+      const outputLabel = data.outputLabel();
+      document.getElementById('truthInputHead').colSpan = inputLabels.length;
+      document.getElementById('truthInputHead').innerHTML = data.inputsHeading();
+      document.getElementById('truthOutputHead').textContent = data.outputHeading();
+      document.getElementById('truthColLabels').innerHTML =
+        inputLabels.map(l => `<th>${l}</th>`).join('') + `<th>${outputLabel}</th>`;
+
+      const toggle = document.getElementById('truthToggle');
+      if (data.inputCounts) {
+        toggle.style.display = 'flex';
+        toggle.innerHTML = '';
+        data.inputCounts().forEach(n => {
+          const btn = document.createElement('button');
+          btn.className = 'truth-toggle-btn' + (st.n === n ? ' active' : '');
+          btn.textContent = n + '-input';
+          btn.addEventListener('click', () => setTruthInputCount(n));
+          toggle.appendChild(btn);
+        });
+      } else {
+        toggle.style.display = 'none';
+      }
+
+      const body = document.getElementById('truthBody');
+      body.innerHTML = '';
+      st.opts.forEach((row, r) => {
+        const tr = document.createElement('tr');
+        row.inputs.forEach(v => {
+          const td = document.createElement('td');
+          td.textContent = String(v);
+          td.className = 'truth-input-cell';
+          tr.appendChild(td);
+        });
+        const zTd = document.createElement('td');
+        const z = zFromClicks(st.clicks[r]);
+        zTd.textContent = z === null ? '' : String(z);
+        if (st.ans) {
+          zTd.className = 'bits-cell' + (z === st.cor[r] ? ' correct' : ' wrong');
+        } else {
+          zTd.className = 'bits-cell';
+          zTd.addEventListener('click', () => clickTruthZ(r));
+        }
+        tr.appendChild(zTd);
+        body.appendChild(tr);
+      });
+    }
+
+    function clickTruthZ(r) {
+      const st = Q[cur];
+      if (st.ans) return;
+      st.clicks[r]++;
+      renderQuestion();
+    }
+
+    // Switching input count rebuilds the table from scratch for the new n
+    // and clears any existing answer — the previous table's clicks don't
+    // mean anything once the row count itself has changed.
+    function setTruthInputCount(n) {
+      const st = Q[cur], data = QUESTIONS[cur];
+      if (st.n === n) return;
+      st.n = n;
+      st.opts = data.options(n);
+      st.cor = st.opts.map(row => row.z);
+      st.clicks = st.opts.map(() => 0);
+      st.ans = false;
+      renderQuestion();
+    }
+
     function renderQuestion() {
       const data = QUESTIONS[cur], st = Q[cur];
       const multi = isMulti(data);
 
       document.getElementById('qNum').textContent = 'Q' + (cur + 1);
-      document.getElementById('qText').innerHTML = data.text();
-      document.getElementById('qHint').innerHTML = data.hint();
+      document.getElementById('qText').innerHTML = data.text(st);
+      document.getElementById('qHint').innerHTML = data.hint(st);
 
       document.getElementById('qMatch').style.display = isMatch(data) ? 'flex' : 'none';
       document.getElementById('qBits').style.display = isBits(data) ? 'block' : 'none';
-      document.getElementById('qOptions').style.display = (isMatch(data) || isBits(data)) ? 'none' : '';
+      document.getElementById('qTruth').style.display = isTruth(data) ? 'block' : 'none';
+      document.getElementById('qOptions').style.display = (isMatch(data) || isBits(data) || isTruth(data)) ? 'none' : '';
       if (isMatch(data)) {
         renderMatch();
       } else if (isBits(data)) {
         renderBits();
+      } else if (isTruth(data)) {
+        renderTruth();
       } else if (data.leftPanel === 'shapeGrid') {
         document.getElementById('qOptions').innerHTML = '';
         renderShapeGrid();
@@ -705,6 +1074,7 @@
       check.disabled = st.ans || (
         isMatch(data) ? !st.place.every(p => p !== null) :
         isBits(data) ? false : // every cell already has a valid default (0), so always checkable
+        isTruth(data) ? !st.clicks.every(n => zFromClicks(n) !== null) : // every cell must be filled in (not blank)
         (multi ? st.sel.length === 0 : st.sel === null)
       );
       const isLast = cur === QUESTIONS.length - 1;
@@ -720,6 +1090,7 @@
       if (st.ans) return;
       if (isMatch(data)) { if (!st.place.every(p => p !== null)) return; }
       else if (isBits(data)) { /* always answerable — 0 is a valid default for every cell */ }
+      else if (isTruth(data)) { if (!st.clicks.every(n => zFromClicks(n) !== null)) return; }
       else if (isMulti(data) ? st.sel.length === 0 : st.sel === null) return;
       st.ans = true;
       renderQuestion();
@@ -738,6 +1109,7 @@
         Q[i].ans = false;
         if (isMatch(data)) { Q[i].place = Q[i].opts.map(() => null); Q[i].sel = null; }
         else if (isBits(data)) { Q[i].clicks = Q[i].opts.map(() => [0, 0, 0, 0]); }
+        else if (isTruth(data)) { Q[i].clicks = Q[i].opts.map(() => 0); }
         else Q[i].sel = isMulti(data) ? [] : null;
       }
       renderQuestion();
@@ -758,6 +1130,15 @@
 
     function resetQuiz() {
       Q = QUESTIONS.map(data => {
+        if (isTruth(data)) {
+          // 'truth' questions may offer an input-count toggle (see Q4) — if
+          // so, options() takes the current count as an argument instead of
+          // being called plain, since the rows themselves depend on it.
+          const n = data.inputCounts ? data.defaultInputCount() : undefined;
+          const opts = data.inputCounts ? data.options(n) : data.options();
+          const cor = opts.map(row => row.z);
+          return { ans: false, cor, opts, clicks: opts.map(() => 0), n };
+        }
         const opts = data.options();
         if (isBits(data)) {
           const cor = opts.map(row => [3, 2, 1, 0].map(shift => (row.value >> shift) & 1));
@@ -790,7 +1171,7 @@
         const colour = ok ? 'var(--colour-ui-correct)' : '#ff3366';
         const mark = ok ? '✓' : '✗';
         return `<div class="summary-item">
-      <div class="summary-item-head"><span class="summary-qnum">Q${i + 1}</span><span class="summary-question">${data.text()}</span></div>
+      <div class="summary-item-head"><span class="summary-qnum">Q${i + 1}</span><span class="summary-question">${data.text(st)}</span></div>
       <div class="summary-answer" style="color:${colour}">You answered: ${ans} &nbsp; ${mark}</div>
       <div class="working-box visible">${st.ans ? data.working(st) : ''}</div>
     </div>`;
