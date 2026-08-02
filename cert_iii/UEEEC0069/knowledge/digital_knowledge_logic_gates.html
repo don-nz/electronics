@@ -98,6 +98,14 @@
       background: rgba(0, 229, 255, .12);
       color: var(--colour-ui-primary);
     }
+
+    /* Q1's 12-box shape-grid (7 gates + 5 distractors) defaults to 4 columns
+       (quiz-common.css), which is cramped on phone-width screens — words
+       like "COMPARATOR"/"MULTIPLEXER" get squeezed. 3x4 fits phones better;
+       desktop/tablet keep the shared 4-column default. */
+    @media (max-width: 480px) {
+      #shapeGridCells { grid-template-columns: repeat(3, 1fr); }
+    }
     </style>
 </head>
 
@@ -819,13 +827,22 @@
     // Pool/placed chips work the same way: an option with `shapeId` set (see
     // Q3 — matching IEC symbols to their traditional counterparts) renders
     // as a shape instead of its text label.
-    function matchChipContent(opt) {
+    function matchChipContent(opt, constrained) {
       // Rendered close to native SVG-unit scale (viewBox is 96 units wide) —
       // the IEC gates' qualifying symbols ("&", "≥1") are fine detail that
-      // gets illegible if shrunk much further than this.
-      return opt.shapeId
-        ? `<svg viewBox="-32 -36 96 76" style="width:92px;height:auto;display:block"><use href="#${opt.shapeId}"/></svg>`
-        : opt.label;
+      // gets illegible if shrunk much further than this. Pool chips have
+      // plenty of room and keep a fixed comfortable size; chips placed
+      // inside a narrow match-column (constrained:true) need a responsive
+      // width instead — a fixed px width here would force that column's
+      // grid track wider than its fair share on phone-width screens (and,
+      // since CSS Grid shares column-track widths across every row, that
+      // one wide track drags along every OTHER row's same-position column
+      // too, starving the rest of the row down to almost nothing).
+      if (!opt.shapeId) return opt.label;
+      const svgStyle = constrained
+        ? 'width:100%;max-width:92px;height:auto;display:block'
+        : 'width:92px;height:auto;display:block';
+      return `<svg viewBox="-32 -36 96 76" style="${svgStyle}"><use href="#${opt.shapeId}"/></svg>`;
     }
 
     function renderMatch() {
@@ -875,7 +892,7 @@
           if (st.place[i] !== colIdx) return;
           const chip = document.createElement('button');
           chip.className = 'match-chip' + (opt.shapeId ? ' match-chip-shape' : '');
-          chip.innerHTML = matchChipContent(opt);
+          chip.innerHTML = matchChipContent(opt, true);
           if (st.ans) {
             chip.disabled = true;
             chip.classList.add(st.place[i] === st.cor[i] ? 'correct' : 'wrong');
