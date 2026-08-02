@@ -1,0 +1,647 @@
+<!--
+  Primer quiz for the "BJT amplifier configurations" lesson objectives:
+  identifying Common Emitter / Common Collector / Common Base from a
+  schematic, their input/output/common terminals, how quiescent values
+  react to an AC signal, input-output phase relationship, and the main
+  characteristics/applications of each. Also includes a conceptual (non-
+  numeric) intro to the two factors limiting max peak-to-peak output
+  voltage. Deliberately stops short of numeric gain/Vpp calculation and
+  measurement — those objectives belong to a future dedicated analysis
+  quiz, same split as bjt_knowledge_biasing.html vs the numeric DC-analysis
+  quizzes.
+
+  Same data-driven QUESTIONS[] engine as bjt_knowledge_basics.html — see
+  that file's header comment for the architecture. Add/reorder questions
+  by editing the QUESTIONS array only.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BJT Knowledge Quiz — Amplifier Configurations</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../assets/quiz-common.css">
+  <script src="../../../assets/breadcrumb.js" defer></script>
+  <style>
+    .progress-wrap { display: flex; gap: .4rem; align-items: center; margin-bottom: 1rem; }
+    #shapeGridCells { grid-template-columns: repeat(3, 1fr); }
+  </style>
+</head>
+
+<body>
+  <!-- Hidden defs: simplified schematic thumbnails for the 3 amplifier
+       configurations. Deliberately stripped down to match the textbook
+       figures exactly — a transistor, at most one resistor, and labelled
+       input/output/common terminals. No bias network (R1/R2/RE dividers)
+       is shown, since these questions test configuration recognition, not
+       DC bias-point calculation. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <!-- ── shared primitives ── -->
+      <g id="mbjt-npn-standard">
+        <circle cx="7" cy="0" r="24" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" />
+        <line x1="-17" y1="0" x2="0" y2="0" style="stroke: var(--colour-bjt)" stroke-width="2" />
+        <line x1="0" y1="-12" x2="0" y2="12" style="stroke: var(--colour-bjt)" stroke-width="2.5" />
+        <polyline points="14,-34 14,-20 0,-8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+        <polyline points="14,34 14,20 0,8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+        <polygon points="12,18 1,14 6,8" style="fill: var(--colour-bjt)" />
+      </g>
+      <g id="mres"><rect x="-7" y="-15" width="14" height="30" rx="2" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="1.5" /></g>
+
+      <!-- ── Common Emitter: input=base, output=collector (via RC), common=emitter ── -->
+      <g id="amp-common-emitter">
+        <line x1="20" y1="15" x2="120" y2="15" style="stroke: var(--colour-series)" stroke-width="1.5" />
+        <text x="70" y="8" style="fill: var(--colour-supply)" font-size="12" text-anchor="middle" font-weight="bold">+V<tspan baseline-shift="sub" font-size="8">CC</tspan></text>
+        <line x1="20" y1="185" x2="120" y2="185" style="stroke: var(--colour-series)" stroke-width="1.5" />
+
+        <line x1="104" y1="15" x2="104" y2="66" style="stroke: var(--colour-series)" stroke-width="1.5" />
+        <use href="#mres" transform="translate(104,40)" /><text x="120" y="44" style="fill: var(--colour-resistor-labels)" font-size="9" text-anchor="start">RC</text>
+        <line x1="104" y1="66" x2="125" y2="66" style="stroke: var(--colour-series)" stroke-width="1.5" />
+        <circle cx="125" cy="66" r="3" style="fill: var(--colour-signal)" />
+        <text x="129" y="69" style="fill: var(--colour-signal)" font-size="10">output</text>
+
+        <line x1="20" y1="100" x2="73" y2="100" style="stroke: var(--colour-series)" stroke-width="1.5" />
+        <circle cx="20" cy="100" r="3" style="fill: var(--colour-signal)" />
+        <text x="16" y="97" style="fill: var(--colour-signal)" font-size="10" text-anchor="end">input</text>
+
+        <line x1="104" y1="134" x2="104" y2="185" style="stroke: var(--colour-series)" stroke-width="1.5" />
+        <circle cx="20" cy="185" r="3" style="fill: var(--colour-gnd)" />
+        <text x="16" y="182" style="fill: var(--colour-gnd)" font-size="10" text-anchor="end">common</text>
+
+        <g transform="translate(90,100)"><use href="#mbjt-npn-standard" /></g>
+      </g>
+
+      <!-- ── Common Collector: input=base, output=emitter (via RE), common=collector (AC-bypassed to +VCC) ── -->
+      <g id="amp-common-collector">
+        <line x1="20" y1="15" x2="120" y2="15" style="stroke: var(--colour-series)" stroke-width="1.5" />
+        <text x="70" y="8" style="fill: var(--colour-supply)" font-size="12" text-anchor="middle" font-weight="bold">+V<tspan baseline-shift="sub" font-size="8">CC</tspan></text>
+        <line x1="20" y1="185" x2="120" y2="185" style="stroke: var(--colour-series)" stroke-width="1.5" />
+
+        <line x1="104" y1="15" x2="104" y2="66" style="stroke: var(--colour-series)" stroke-width="1.5" />
+
+        <line x1="104" y1="134" x2="104" y2="185" style="stroke: var(--colour-series)" stroke-width="1.5" />
+        <use href="#mres" transform="translate(104,160)" /><text x="120" y="164" style="fill: var(--colour-resistor-labels)" font-size="9" text-anchor="start">RE</text>
+        <line x1="104" y1="145" x2="125" y2="145" style="stroke: var(--colour-series)" stroke-width="1.5" />
+        <circle cx="125" cy="145" r="3" style="fill: var(--colour-signal)" />
+        <text x="129" y="148" style="fill: var(--colour-signal)" font-size="10">output</text>
+
+        <line x1="20" y1="100" x2="73" y2="100" style="stroke: var(--colour-series)" stroke-width="1.5" />
+        <circle cx="20" cy="100" r="3" style="fill: var(--colour-signal)" />
+        <text x="16" y="97" style="fill: var(--colour-signal)" font-size="10" text-anchor="end">input</text>
+
+        <circle cx="20" cy="185" r="3" style="fill: var(--colour-gnd)" />
+        <text x="16" y="182" style="fill: var(--colour-gnd)" font-size="10" text-anchor="end">common</text>
+
+        <g transform="translate(90,100)"><use href="#mbjt-npn-standard" /></g>
+      </g>
+
+      <!-- ── Common Base: input=emitter, output=collector (via RC), common=base ── -->
+      <g id="amp-common-base">
+        <line x1="20" y1="15" x2="120" y2="15" style="stroke: var(--colour-series)" stroke-width="1.5" />
+        <text x="70" y="8" style="fill: var(--colour-supply)" font-size="12" text-anchor="middle" font-weight="bold">+V<tspan baseline-shift="sub" font-size="8">CC</tspan></text>
+        <line x1="20" y1="185" x2="120" y2="185" style="stroke: var(--colour-series)" stroke-width="1.5" />
+
+        <line x1="104" y1="15" x2="104" y2="66" style="stroke: var(--colour-series)" stroke-width="1.5" />
+        <use href="#mres" transform="translate(104,40)" /><text x="120" y="44" style="fill: var(--colour-resistor-labels)" font-size="9" text-anchor="start">RC</text>
+        <line x1="104" y1="66" x2="125" y2="66" style="stroke: var(--colour-series)" stroke-width="1.5" />
+        <circle cx="125" cy="66" r="3" style="fill: var(--colour-signal)" />
+        <text x="129" y="69" style="fill: var(--colour-signal)" font-size="10">output</text>
+
+        <line x1="73" y1="100" x2="55" y2="100" style="stroke: var(--colour-series)" stroke-width="1.5" />
+        <line x1="55" y1="100" x2="55" y2="185" style="stroke: var(--colour-series)" stroke-width="1.5" />
+        <circle cx="20" cy="185" r="3" style="fill: var(--colour-gnd)" />
+        <text x="16" y="182" style="fill: var(--colour-gnd)" font-size="10" text-anchor="end">common</text>
+
+        <line x1="104" y1="134" x2="104" y2="160" style="stroke: var(--colour-series)" stroke-width="1.5" />
+        <line x1="104" y1="160" x2="20" y2="160" style="stroke: var(--colour-series)" stroke-width="1.5" />
+        <circle cx="20" cy="160" r="3" style="fill: var(--colour-signal)" />
+        <text x="16" y="157" style="fill: var(--colour-signal)" font-size="10" text-anchor="end">input</text>
+
+        <g transform="translate(90,100)"><use href="#mbjt-npn-standard" /></g>
+      </g>
+    </defs>
+  </svg>
+
+  <div class="crumb" id="crumb" data-current="Amplifier Configurations"></div>
+  <header>
+    <h1>BJT Amplifier Configurations</h1>
+    <p>Conceptual Primer · Common Emitter, Collector &amp; Base · Terminals, Phase &amp; Characteristics</p>
+  </header>
+
+  <div class="quiz-wrap">
+
+    <!-- LEFT: circuit diagram -->
+    <div class="circuit-col">
+      <div class="circuit-panel" style="cursor:default">
+        <div class="panel-label" id="circuitRefLabel">Reference Circuit</div>
+        <svg id="circuitRefSvg" viewBox="-30 0 200 200" xmlns="http://www.w3.org/2000/svg" style="max-width:280px;margin:0 auto">
+          <use id="circuitRefUse" href="#amp-common-emitter" />
+        </svg>
+      </div>
+      <div id="qShapeGridPanel" style="display:none">
+        <div class="panel-label">Click the circuits to select your answer</div>
+        <div class="shape-grid" id="shapeGridCells"></div>
+      </div>
+    </div>
+
+    <!-- RIGHT: question -->
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <!-- Single reusable question panel — populated from QUESTIONS[cur] by renderQuestion() -->
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+          <div class="options" id="qOptions"></div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Back</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Summary -->
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
+    function frac(num, den) { return `<span class="working-frac"><span class="num">${num}</span><span class="den">${den}</span></span>`; }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS — see bjt_knowledge_basics.html's header comment for the
+    // full field reference. This file only uses leftPanel 'shapeGrid' (the
+    // 3-circuit recognition grid) and the default 'circuit' (a single
+    // reference diagram, picked per-question via circuitId).
+    // ══════════════════════════════════════════════════════════════════════
+
+    const AMP_CIRCUITS = [
+      { id: 'amp-common-emitter', label: 'Common Emitter', inputBase: true, outputCollector: true, inverting: true },
+      { id: 'amp-common-collector', label: 'Common Collector', inputBase: true, outputCollector: false, inverting: false },
+      { id: 'amp-common-base', label: 'Common Base', inputBase: false, outputCollector: true, inverting: false },
+    ];
+
+    const QUESTIONS = [
+      {
+        leftPanel: 'shapeGrid',
+        kind: 'multi',
+        text: () => '<b style="color:var(--colour-ui-primary)">Click</b> every configuration below where the <b style="color:var(--colour-signal)">input</b> signal is applied to the <b class="colour-bjt">base</b>. There are <b style="color:var(--colour-ui-correct)">2 correct</b> circuits among the 3 shown.',
+        hint: () => 'Trace the "input" terminal in each diagram back to the transistor lead it connects to.',
+        options: () => shuffle(AMP_CIRCUITS.map((c) => ({ label: c.id, type: c.inputBase ? 'correct' : 'wrong', shapeId: c.id }))),
+        correctExplain: (st) => {
+          const nums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join(', ');
+          return `Circuits <b>${nums}</b> apply the input to the base`;
+        },
+        working: (st) => {
+          const correctNums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join(', ');
+          const wrongNums = st.opts.map((o, i) => o.type === 'wrong' ? i + 1 : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-step">Input at the base — circuits ${correctNums}:</div>
+    <div class="working-line"><b class="colour-bjt">Common Emitter</b> and <b class="colour-bjt">Common Collector</b> both drive the <b class="colour-bjt">base</b> with the input signal — the base is never the "common" terminal in either of these, so it's free to carry the input.</div>
+    <div class="working-step" style="margin-top:.6rem">Input at the emitter instead — circuit ${wrongNums}:</div>
+    <div class="working-line">In <b class="colour-bjt">Common Base</b>, the <b class="colour-bjt">base</b> IS the common terminal (tied to AC ground), so the input has to go somewhere else — the <b class="colour-bjt">emitter</b>.</div>`;
+        }
+      },
+      {
+        leftPanel: 'shapeGrid',
+        kind: 'multi',
+        text: () => '<b style="color:var(--colour-ui-primary)">Click</b> every configuration below where the <b style="color:var(--colour-signal)">output</b> signal is taken from the <b class="colour-bjt">collector</b>. There are <b style="color:var(--colour-ui-correct)">2 correct</b> circuits among the 3 shown.',
+        hint: () => 'Trace the "output" terminal in each diagram back to the transistor lead it connects to.',
+        options: () => shuffle(AMP_CIRCUITS.map((c) => ({ label: c.id, type: c.outputCollector ? 'correct' : 'wrong', shapeId: c.id }))),
+        correctExplain: (st) => {
+          const nums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join(', ');
+          return `Circuits <b>${nums}</b> take the output from the collector`;
+        },
+        working: (st) => {
+          const correctNums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join(', ');
+          const wrongNums = st.opts.map((o, i) => o.type === 'wrong' ? i + 1 : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-step">Output at the collector — circuits ${correctNums}:</div>
+    <div class="working-line"><b class="colour-bjt">Common Emitter</b> and <b class="colour-bjt">Common Base</b> both take the output from <b class="colour-resistor">R<sub>C</sub></b>/collector — neither uses the collector as its common terminal, so it's free to carry the output.</div>
+    <div class="working-step" style="margin-top:.6rem">Output at the emitter instead — circuit ${wrongNums}:</div>
+    <div class="working-line">In <b class="colour-bjt">Common Collector</b>, the collector IS the common terminal (tied straight to <b class="colour-supply">V<sub>CC</sub></b>, which is AC-grounded), so the output has to come from the <b class="colour-bjt">emitter</b> instead — this is the classic "emitter follower".</div>`;
+        }
+      },
+      {
+        circuitId: 'amp-common-collector',
+        circuitLabel: 'Common Collector',
+        text: () => 'In this <b class="colour-bjt">Common Collector</b> circuit, the collector connects <b style="color:var(--colour-ui-primary)">directly</b> to <b class="colour-supply">V<sub>CC</sub></b> with no resistor. A real <b class="colour-supply">V<sub>CC</sub></b> rail is bypassed to ground through a large decoupling capacitor. Which terminal actually behaves as the <b style="color:var(--colour-gnd)">AC common</b> (ground reference) for this amplifier?',
+        hint: () => 'A capacitor from VCC to ground has almost zero impedance at signal frequencies — for the AC signal, that makes the rail (and anything wired straight to it) behave as if it were grounded, even though its DC voltage sits at +VCC.',
+        options: () => shuffle([
+          { label: 'The collector — bypassed to AC ground via the supply\'s decoupling capacitor', type: 'correct' },
+          { label: 'The base', type: 'wrong' },
+          { label: 'The emitter', type: 'wrong' },
+          { label: 'None of the terminals reference AC ground in this configuration', type: 'wrong' },
+        ]),
+        correctExplain: () => 'the <b class="colour-bjt">collector</b> — bypassed to AC ground via the decoupling capacitor',
+        working: () => `
+    <div class="working-step">DC picture vs AC picture:</div>
+    <div class="working-line">DC-wise, the collector sits at <b class="colour-supply">V<sub>CC</sub></b>, not 0V — nothing unusual there. But every real power supply rail is bypassed with a large capacitor to ground, specifically so that AC signals see almost no impedance between the rail and true ground.</div>
+    <div class="working-total">For the <b style="color:var(--colour-signal)">signal</b>, that decoupling capacitor makes <b class="colour-supply">V<sub>CC</sub></b> — and therefore the collector, which is wired straight to it — behave exactly like a grounded, <b style="color:var(--colour-gnd)">common</b> terminal. That's the whole reason this configuration is called <b class="colour-bjt">Common Collector</b>: the collector is common to both the input loop (base to collector) and the output loop (emitter to collector) in the AC sense, even though it's sitting at +V<sub>CC</sub> in the DC sense.</div>`
+      },
+      {
+        circuitId: 'amp-common-emitter',
+        circuitLabel: 'Common Emitter (biased)',
+        kind: 'multi',
+        text: () => 'When an AC <b style="color:var(--colour-signal)">input</b> signal is applied to a biased BJT amplifier like this one, which of the following <b style="color:var(--colour-ui-primary)">begin to vary</b> around their DC quiescent value? <b style="color:var(--colour-ui-primary)">Select</b> every option that applies.',
+        hint: () => 'The AC signal is superimposed on top of the DC bias point — think about which quantities are directly part of the signal path, and which ones are fixed externally or pinned by the B-E junction.',
+        options: () => shuffle([
+          { label: 'IB — base current', type: 'correct' },
+          { label: 'IC — collector current', type: 'correct' },
+          { label: 'VCE — collector-emitter voltage', type: 'correct' },
+          { label: 'VBE — base-emitter voltage (stays pinned near ~0.7 V by the forward-biased junction)', type: 'wrong' },
+          { label: 'VCC — the supply rail voltage', type: 'wrong' },
+        ]),
+        correctExplain: (st) => {
+          const nums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join(', ');
+          return `Options <b>${nums}</b> all swing around their Q-point`;
+        },
+        working: (st) => {
+          const correctNums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join(', ');
+          const wrongNums = st.opts.map((o, i) => o.type === 'wrong' ? i + 1 : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-step">Vary with the signal — options ${correctNums}:</div>
+    <div class="working-line">The AC input rides on top of the DC bias point, so <b class="colour-current">I<sub>B</sub></b>, <b class="colour-current">I<sub>C</sub></b> (= <b class="colour-bjt">β</b> × <b class="colour-current">I<sub>B</sub></b>) and <b class="colour-voltage">V<sub>CE</sub></b> all swing above and below their quiescent (Q-point) values in step with the signal — that swing IS the amplified output.</div>
+    <div class="working-step" style="margin-top:.6rem">Stay essentially fixed — options ${wrongNums}:</div>
+    <div class="working-line"><b class="colour-voltage">V<sub>BE</sub></b> is a forward-biased diode junction — it barely moves regardless of current, staying close to ~0.7 V. <b class="colour-supply">V<sub>CC</sub></b> is set by the external power supply and has nothing to do with the amplifier's own signal.</div>`;
+        }
+      },
+      {
+        leftPanel: 'shapeGrid',
+        kind: 'multi',
+        text: () => '<b style="color:var(--colour-ui-primary)">Click</b> every configuration below whose output is <b class="colour-gain">in phase</b> (0°, non-inverting) with its input. There are <b style="color:var(--colour-ui-correct)">2 correct</b> circuits among the 3 shown.',
+        hint: () => 'Only one of the three configurations flips the output signal upside-down (180° phase shift) — it\'s the same one that inverts in the numeric DC-analysis quizzes.',
+        options: () => shuffle(AMP_CIRCUITS.map((c) => ({ label: c.id, type: c.inverting ? 'wrong' : 'correct', shapeId: c.id }))),
+        correctExplain: (st) => {
+          const nums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join(', ');
+          return `Circuits <b>${nums}</b> are non-inverting`;
+        },
+        working: (st) => {
+          const correctNums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join(', ');
+          const wrongNums = st.opts.map((o, i) => o.type === 'wrong' ? i + 1 : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-step">Non-inverting — circuits ${correctNums}:</div>
+    <div class="working-line"><b class="colour-bjt">Common Collector</b>'s output (the emitter) directly follows the base voltage minus the fixed <b class="colour-voltage">V<sub>BE</sub></b> drop — it rises when the input rises. <b class="colour-bjt">Common Base</b>'s output (the collector) rises when its input (the emitter) falls, but since the emitter signal itself is already inverted relative to a base-referenced input, the net collector-vs-original-input relationship is non-inverting.</div>
+    <div class="working-step" style="margin-top:.6rem">Inverting (180°) — circuit ${wrongNums}:</div>
+    <div class="working-line">In <b class="colour-bjt">Common Emitter</b>, a rising input at the base increases <b class="colour-current">I<sub>C</sub></b>, which increases the voltage dropped across <b class="colour-resistor">R<sub>C</sub></b> — leaving <em>less</em> voltage at the collector. Output falls when input rises: a 180° phase flip.</div>`;
+        }
+      },
+      {
+        circuitId: 'amp-common-emitter',
+        circuitLabel: 'Common Emitter',
+        text: () => 'Which configuration provides significant <b class="colour-gain">voltage gain</b> AND significant <b class="colour-gain">current gain</b> at the same time, making it the most commonly used general-purpose amplifier stage?',
+        hint: () => 'The other two configurations each sacrifice one type of gain (voltage or current) in exchange for a near-unity value on that side.',
+        options: () => shuffle([
+          { label: 'Common Emitter', type: 'correct' },
+          { label: 'Common Collector — voltage gain is only ≈1', type: 'wrong' },
+          { label: 'Common Base — current gain is only ≈1', type: 'wrong' },
+          { label: 'All three provide equal voltage and current gain', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b class="colour-bjt">Common Emitter</b>',
+        working: () => `
+    <div class="working-total"><b class="colour-bjt">Common Emitter</b> is the only configuration that amplifies both voltage and current substantially, which is why it's the default choice for general-purpose voltage/audio amplification — <b class="colour-bjt">Common Collector</b> trades away voltage gain (≈1) for a current buffer, and <b class="colour-bjt">Common Base</b> trades away current gain (≈1) for a voltage stage with different impedance properties.</div>`
+      },
+      {
+        circuitId: 'amp-common-collector',
+        circuitLabel: 'Common Collector',
+        text: () => 'Which configuration has a <b class="colour-gain">voltage gain</b> of approximately 1 (unity), and is mainly used as a <b style="color:var(--colour-ui-primary)">buffer</b> or for <b style="color:var(--colour-ui-primary)">impedance matching</b> — thanks to a high input impedance and a low output impedance?',
+        hint: () => 'This configuration is also known by another name: the "emitter follower", because its output (the emitter) follows the input voltage almost exactly.',
+        options: () => shuffle([
+          { label: 'Common Collector (the "emitter follower")', type: 'correct' },
+          { label: 'Common Emitter', type: 'wrong' },
+          { label: 'Common Base — has a LOW input impedance, the opposite of a good buffer stage', type: 'wrong' },
+          { label: 'None of these — unity voltage gain doesn\'t occur in any BJT configuration', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b class="colour-bjt">Common Collector</b>',
+        working: () => `
+    <div class="working-total">Because the emitter voltage always sits ~0.7 V below the base voltage, the output (emitter) tracks the input (base) almost exactly — voltage gain ≈1. Combined with its naturally high input impedance and low output impedance, this makes <b class="colour-bjt">Common Collector</b> the standard choice for buffering a high-impedance source so it can drive a low-impedance load without loading either one down.</div>`
+      },
+      {
+        circuitId: 'amp-common-base',
+        circuitLabel: 'Common Base',
+        text: () => 'Which configuration has a <b class="colour-gain">current gain</b> of approximately 1 (unity), a <b style="color:var(--colour-ui-wrong)">low</b> input impedance, and is best suited to <b style="color:var(--colour-ui-primary)">high-frequency/RF</b> applications?',
+        hint: () => 'Think about which current is being compared to which — IE and IC are already almost equal, since IB is small to begin with.',
+        options: () => shuffle([
+          { label: 'Common Base', type: 'correct' },
+          { label: 'Common Emitter', type: 'wrong' },
+          { label: 'Common Collector — has a HIGH input impedance, the opposite of Common Base', type: 'wrong' },
+          { label: 'None of these — unity current gain doesn\'t occur in any BJT configuration', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b class="colour-bjt">Common Base</b>',
+        working: () => `
+    <div class="working-total"><b class="colour-current">I<sub>E</sub></b> and <b class="colour-current">I<sub>C</sub></b> are already very close in value (<b class="colour-current">I<sub>E</sub></b> = <b class="colour-current">I<sub>C</sub></b> + <b class="colour-current">I<sub>B</sub></b>, and <b class="colour-current">I<sub>B</sub></b> is tiny), so <b class="colour-bjt">Common Base</b>'s current gain sits just under 1. Its low input impedance (looking into the emitter) and grounded base — which removes a feedback path present in Common Emitter — give it a better high-frequency response, making it a common choice for RF and video front-end stages.</div>`
+      },
+      {
+        circuitId: 'amp-common-emitter',
+        circuitLabel: 'Common Emitter (biased)',
+        kind: 'multi',
+        text: () => 'What are the <b style="color:var(--colour-ui-correct)">two factors</b> that determine the maximum peak-to-peak <b style="color:var(--colour-signal)">output</b> voltage swing a BJT amplifier can produce before the output starts to clip? <b style="color:var(--colour-ui-primary)">Select</b> both correct factors.',
+        hint: () => 'The DC quiescent point (Q-point) sits somewhere between two extremes on the load line — think about what those two extremes are, and what happens if the signal tries to swing past either one.',
+        options: () => shuffle([
+          { label: 'How close the Q-point sits to cutoff (VCE near VCC, IC near 0)', type: 'correct' },
+          { label: 'How close the Q-point sits to saturation (VCE near 0, IC near maximum)', type: 'correct' },
+          { label: 'The frequency of the AC input signal', type: 'wrong' },
+          { label: 'The value of the coupling capacitors', type: 'wrong' },
+        ]),
+        correctExplain: (st) => {
+          const nums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join(', ');
+          return `Options <b>${nums}</b> — distance to cutoff AND to saturation`;
+        },
+        working: (st) => {
+          const correctNums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join(', ');
+          const wrongNums = st.opts.map((o, i) => o.type === 'wrong' ? i + 1 : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-step">The Q-point sits between two clipping limits — options ${correctNums}:</div>
+    <div class="working-line">Push the output too far one way and the transistor runs out of headroom near <b class="colour-supply">V<sub>CC</sub></b> — <b>cutoff</b>, where <b class="colour-current">I<sub>C</sub></b> → 0. Push it too far the other way and <b class="colour-voltage">V<sub>CE</sub></b> collapses towards 0 V — <b>saturation</b>. The output can only swing as far as whichever of these two limits is closer to the quiescent (Q) point.</div>
+    <div class="working-total">Maximum <em>symmetrical</em> peak-to-peak swing = 2 × whichever distance (Q-point-to-cutoff, or Q-point-to-saturation) is smaller. That's also why a well-designed bias point is placed near the <em>middle</em> of the load line — centring the Q-point maximises how far the signal can swing in both directions before clipping on one side or the other.</div>
+    <div class="working-step" style="margin-top:.6rem">Not factors — options ${wrongNums}:</div>
+    <div class="working-line">Signal frequency and coupling-capacitor values affect the AC gain/response of the stage, but they don't change where the transistor physically clips on the DC load line.</div>`;
+        }
+      },
+    ];
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUIZ ENGINE — generic; driven entirely by QUESTIONS[] via index.
+    // (Identical to bjt_knowledge_basics.html's engine.)
+    // ══════════════════════════════════════════════════════════════════════
+
+    function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+    function isMulti(data) { return data.kind === 'multi'; }
+    function isAnswerCorrect(data, st) {
+      if (!isMulti(data)) return st.sel === st.cor;
+      const a = [...st.sel].sort((x, y) => x - y), b = [...st.cor].sort((x, y) => x - y);
+      return a.length === b.length && a.every((v, i) => v === b[i]);
+    }
+    function selectedLabel(data, st) {
+      if (!isMulti(data)) return (st.sel != null && st.opts[st.sel]) ? st.opts[st.sel].label : '—';
+      return st.sel.length ? [...st.sel].sort((a, b) => a - b).map(i => i + 1).join(', ') : '—';
+    }
+
+    let Q = [];
+    let cur = 0;
+
+    function buildProgressDots() {
+      document.getElementById('progressDots').innerHTML =
+        QUESTIONS.map((_, i) => `<div class="progress-dot" id="dot-${i}"></div>`).join('');
+    }
+
+    function updateProgress() {
+      QUESTIONS.forEach((_, i) => {
+        const d = document.getElementById('dot-' + i);
+        d.className = 'progress-dot';
+        if (i === cur) d.classList.add('active'); else if (Q[i].ans) d.classList.add('done');
+      });
+      document.getElementById('progressLabel').textContent = (cur + 1) + ' / ' + QUESTIONS.length;
+    }
+
+    function renderOptions() {
+      const st = Q[cur], data = QUESTIONS[cur];
+      const multi = isMulti(data);
+      const c = document.getElementById('qOptions'); c.innerHTML = '';
+      st.opts.forEach((opt, i) => {
+        const btn = document.createElement('button'); btn.className = 'option-btn';
+        btn.innerHTML = `<span class="option-letter">${LETTERS[i]}</span><span>${opt.label}</span>`;
+        if (st.ans) {
+          btn.disabled = true;
+          if (multi) {
+            const selected = st.sel.includes(i);
+            if (opt.type === 'correct') { btn.classList.add(selected ? 'correct' : 'missed'); if (selected) btn.innerHTML += `<span class="result-icon">✓</span>`; }
+            else { btn.classList.add(selected ? 'wrong' : 'dimmed'); if (selected) btn.innerHTML += `<span class="result-icon">✗</span>`; }
+          } else {
+            if (i === st.cor) { btn.classList.add('correct'); btn.innerHTML += `<span class="result-icon">✓</span>`; }
+            else if (i === st.sel) { btn.classList.add('wrong'); btn.innerHTML += `<span class="result-icon">✗</span>`; }
+            else btn.classList.add('dimmed');
+          }
+        } else {
+          if (multi ? st.sel.includes(i) : i === st.sel) btn.classList.add('selected');
+          btn.addEventListener('click', () => selectOption(i));
+        }
+        c.appendChild(btn);
+      });
+    }
+
+    function renderShapeGrid() {
+      const st = Q[cur];
+      const c = document.getElementById('shapeGridCells'); c.innerHTML = '';
+      st.opts.forEach((opt, i) => {
+        const cell = document.createElement('div'); cell.className = 'shape-cell';
+        const selected = st.sel.includes(i);
+        if (st.ans) {
+          if (opt.type === 'correct') cell.classList.add(selected ? 'correct' : 'missed');
+          else cell.classList.add(selected ? 'wrong' : 'dimmed');
+        } else {
+          if (selected) cell.classList.add('selected');
+          cell.addEventListener('click', () => selectOption(i));
+        }
+        cell.innerHTML = `<span class="shape-num">${i + 1}</span><svg viewBox="-30 0 200 200"><use href="#${opt.shapeId}"/></svg>`;
+        c.appendChild(cell);
+      });
+    }
+
+    function selectOption(i) {
+      const st = Q[cur], data = QUESTIONS[cur];
+      if (st.ans) return;
+      if (isMulti(data)) {
+        const pos = st.sel.indexOf(i);
+        if (pos >= 0) st.sel.splice(pos, 1); else st.sel.push(i);
+      } else {
+        st.sel = i;
+      }
+      renderQuestion();
+    }
+
+    function showCircuitRef(id, label) {
+      document.getElementById('circuitRefUse').setAttribute('href', '#' + id);
+      document.getElementById('circuitRefLabel').textContent = label || 'Reference Circuit';
+    }
+
+    function renderQuestion() {
+      const data = QUESTIONS[cur], st = Q[cur];
+      const multi = isMulti(data);
+
+      document.getElementById('qNum').textContent = 'Q' + (cur + 1);
+      document.getElementById('qText').innerHTML = data.text();
+      document.getElementById('qHint').innerHTML = data.hint();
+
+      if (data.leftPanel === 'shapeGrid') {
+        document.getElementById('qOptions').innerHTML = '';
+        renderShapeGrid();
+      } else {
+        renderOptions();
+      }
+
+      const selList = document.getElementById('qSelectedList');
+      if (multi) {
+        selList.style.display = '';
+        selList.textContent = st.sel.length
+          ? `Selected: ${[...st.sel].sort((a, b) => a - b).map(i => i + 1).join(', ')}`
+          : 'Click the options above to select your answer.';
+      } else {
+        selList.style.display = 'none';
+      }
+
+      const banner = document.getElementById('qBanner');
+      if (st.ans) {
+        const ok = isAnswerCorrect(data, st);
+        banner.className = 'result-banner ' + (ok ? 'correct' : 'wrong');
+        document.getElementById('qIcon').textContent = ok ? '✓' : '✗';
+        document.getElementById('qBannerText').innerHTML = ok ? `Correct! ${data.correctExplain(st)}` : `The correct answer is ${data.correctExplain(st)}`;
+      } else {
+        banner.className = 'result-banner';
+      }
+
+      const working = document.getElementById('qWorking');
+      working.className = 'working-box' + (st.ans ? ' visible' : '');
+      document.getElementById('qWorkingContent').innerHTML = st.ans ? data.working(st) : '';
+
+      document.getElementById('qBack').style.display = cur > 0 ? 'inline-block' : 'none';
+      const check = document.getElementById('qCheck');
+      check.style.display = st.ans ? 'none' : 'inline-block';
+      check.disabled = st.ans || (multi ? st.sel.length === 0 : st.sel === null);
+      const isLast = cur === QUESTIONS.length - 1;
+      document.getElementById('qNext').style.display = (st.ans && !isLast) ? 'inline-block' : 'none';
+      document.getElementById('qSummary').style.display = (st.ans && isLast) ? 'inline-block' : 'none';
+
+      document.querySelector('.circuit-panel').style.display = data.leftPanel === 'shapeGrid' ? 'none' : '';
+      document.getElementById('qShapeGridPanel').style.display = data.leftPanel === 'shapeGrid' ? 'block' : 'none';
+      if (data.leftPanel !== 'shapeGrid') showCircuitRef(data.circuitId, data.circuitLabel);
+      updateProgress();
+    }
+
+    function checkAnswer() {
+      const st = Q[cur], data = QUESTIONS[cur];
+      if (st.ans) return;
+      if (isMulti(data) ? st.sel.length === 0 : st.sel === null) return;
+      st.ans = true;
+      renderQuestion();
+    }
+
+    function nextQuestion() { if (cur < QUESTIONS.length - 1) { cur++; renderQuestion(); } }
+
+    function backQuestion() {
+      if (cur <= 0) return;
+      cur--;
+      for (let i = cur; i < QUESTIONS.length; i++) {
+        Q[i].ans = false;
+        Q[i].sel = isMulti(QUESTIONS[i]) ? [] : null;
+      }
+      renderQuestion();
+    }
+
+    function goToQuestion(n) {
+      cur = Math.max(0, Math.min(QUESTIONS.length - 1, n - 1));
+      document.getElementById('summaryPanel').style.display = 'none';
+      document.getElementById('qPanel').style.display = 'flex';
+      renderQuestion();
+    }
+
+    function resetQuiz() {
+      Q = QUESTIONS.map(data => {
+        const opts = data.options();
+        if (isMulti(data)) {
+          const cor = opts.map((o, i) => o.type === 'correct' ? i : -1).filter(i => i >= 0);
+          return { sel: [], ans: false, cor, opts };
+        }
+        return { sel: null, ans: false, cor: opts.findIndex(o => o.type === 'correct'), opts };
+      });
+      cur = 0;
+      document.getElementById('summaryPanel').style.display = 'none';
+      document.getElementById('qPanel').style.display = 'flex';
+      renderQuestion();
+    }
+
+    function showSummary() {
+      document.getElementById('qPanel').style.display = 'none';
+      document.getElementById('summaryPanel').style.display = 'block';
+      document.querySelector('.circuit-panel').style.display = '';
+      document.getElementById('qShapeGridPanel').style.display = 'none';
+      showCircuitRef('amp-common-emitter', 'Reference Circuit');
+      const items = QUESTIONS.map((data, i) => {
+        const st = Q[i];
+        const ans = selectedLabel(data, st);
+        const ok = isAnswerCorrect(data, st);
+        const colour = ok ? 'var(--colour-ui-correct)' : '#ff3366';
+        const mark = ok ? '✓' : '✗';
+        return `<div class="summary-item">
+      <div class="summary-item-head"><span class="summary-qnum">Q${i + 1}</span><span class="summary-question">${data.text()}</span></div>
+      <div class="summary-answer" style="color:${colour}">You answered: ${ans} &nbsp; ${mark}</div>
+      <div class="working-box visible">${st.ans ? data.working(st) : ''}</div>
+    </div>`;
+      }).join('');
+      document.getElementById('summaryContent').innerHTML = items;
+      QUESTIONS.forEach((_, i) => { const d = document.getElementById('dot-' + i); if (d) d.className = 'progress-dot done'; });
+      document.getElementById('progressLabel').textContent = 'Complete';
+    }
+
+    buildProgressDots();
+    resetQuiz();
+
+    function goBack(e) { e.preventDefault(); history.back(); }
+    if (history.length > 1) {
+      document.getElementById('menuLink').style.display = '';
+    }
+
+    function jump(n, answered) {
+      if (n < 1 || n > QUESTIONS.length) { console.warn('jump: no question', n); return; }
+      for (let i = 0; i < n - 1; i++) {
+        Q[i].sel = Array.isArray(Q[i].cor) ? [...Q[i].cor] : Q[i].cor;
+        Q[i].ans = true;
+      }
+      goToQuestion(n);
+      if (answered) {
+        Q[cur].sel = Array.isArray(Q[cur].cor) ? [...Q[cur].cor] : Q[cur].cor;
+        checkAnswer();
+      }
+    }
+    window.jump = jump;
+
+    function jumpToSummary() {
+      QUESTIONS.forEach((_, i) => {
+        if (Q[i].ans) return;
+        Q[i].sel = Array.isArray(Q[i].cor) ? [...Q[i].cor] : Q[i].cor;
+        Q[i].ans = true;
+      });
+      showSummary();
+    }
+    window.jumpToSummary = jumpToSummary;
+
+    {
+      const p = new URLSearchParams(location.search);
+      if (p.has('q')) { if (p.get('q') === 's') jumpToSummary(); else jump(+p.get('q'), p.has('ans')); }
+    }
+  </script>
+</body>
+
+</html>
