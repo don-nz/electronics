@@ -383,13 +383,15 @@
       },
       {
         // kind:'bits' — click-to-toggle binary entry table (see renderBits()/
-        // clickBit() in the engine below). Every cell starts at 0 and each
-        // click toggles it 0 ↔ 1. `options()` picks 4 unique random decimal
-        // values (0-15) each attempt; `cor` (built in resetQuiz) is the
-        // correct 4-bit pattern for each row.
+        // clickBit() in the engine below). Every cell starts blank and each
+        // click cycles it blank -> 0 -> 1 -> blank (matching
+        // digital_knowledge_logic_gates.html's truth-table output toggle).
+        // `options()` picks 4 unique random decimal values (0-15) each
+        // attempt; `cor` (built in resetQuiz) is the correct 4-bit pattern
+        // for each row.
         leftPanel: 'none',
         kind: 'bits',
-        text: () => `Fill in the <span style="color:var(--colour-ui-primary)">binary representation</span> of each decimal value below. Every cell starts at 0 — click it to toggle to 1, click again to go back to 0.`,
+        text: () => `Fill in the <span style="color:var(--colour-ui-primary)">binary representation</span> of each decimal value below. Every cell starts blank — click it to cycle 0, then 1, then back to blank.`,
         hint: () => 'Each column heading is a power of two (8, 4, 2, 1). Work out which of those add up to the target value — those columns are 1, everything else is 0.',
         options: () => shuffle(Array.from({ length: 16 }, (_, v) => v)).slice(0, 4).map(value => ({ value })),
         correctExplain: (st) => {
@@ -553,12 +555,13 @@
     // `st.place` (array of column-per-option, null = still in the pool). For
     // bits, `cor` is a 2D array [row][col] of correct 0/1 values and live
     // input lives in `st.clicks` (2D array [row][col] of click counts —
-    // every cell starts at 0, each click toggles it: odd = 1, even = 0).
+    // every cell starts blank, each click cycles it: blank -> 0 -> 1 -> blank).
     function isMulti(data) { return data.kind === 'multi'; }
     function isMatch(data) { return data.kind === 'match'; }
     function isBits(data) { return data.kind === 'bits'; }
-    // Every cell defaults to 0 (n=0); each click toggles it (odd clicks = 1, even = 0).
-    function bitFromClicks(n) { return n % 2; }
+    // Every cell starts blank (n=0 -> null); each click cycles blank -> 0 -> 1 -> blank,
+    // matching digital_knowledge_logic_gates.html's truth-table output toggle (zFromClicks()).
+    function bitFromClicks(n) { const m = n % 3; return m === 0 ? null : m - 1; }
     function isAnswerCorrect(data, st) {
       if (isBits(data)) return st.clicks.every((row, r) => row.every((n, c) => bitFromClicks(n) === st.cor[r][c]));
       if (isMatch(data)) return st.place.every((p, i) => p === st.cor[i]);
@@ -584,7 +587,7 @@
     // questions. Works across all four kinds.
     function fillCorrectSelection(i) {
       const data = QUESTIONS[i], st = Q[i];
-      if (isBits(data)) st.clicks = st.cor.map(row => row.slice()); // clicks 0/1 map directly onto bit 0/1
+      if (isBits(data)) st.clicks = st.cor.map(row => row.map(bit => bit + 1)); // clicks bit+1 -> bitFromClicks() lands on 0/1 (0 would land on blank)
       else if (isMatch(data)) st.place = st.cor.slice();
       else if (isMulti(data)) st.sel = [...st.cor];
       else st.sel = st.cor;
@@ -743,7 +746,7 @@
       renderQuestion();
     }
 
-    // ── kind:'bits' — every cell starts at 0; each click toggles 0 ↔ 1.
+    // ── kind:'bits' — every cell starts blank; each click cycles blank -> 0 -> 1 -> blank.
     function renderBits() {
       const st = Q[cur];
       const body = document.getElementById('bitsBody');
@@ -756,7 +759,7 @@
         for (let c = 0; c < 4; c++) {
           const td = document.createElement('td');
           const bit = bitFromClicks(st.clicks[r][c]);
-          td.textContent = String(bit);
+          td.textContent = bit === null ? '' : String(bit);
           if (st.ans) {
             td.className = 'bits-cell ' + (bit === st.cor[r][c] ? 'correct' : 'wrong');
           } else {
@@ -827,7 +830,7 @@
       check.style.display = st.ans ? 'none' : 'inline-block';
       check.disabled = st.ans || (
         isMatch(data) ? !st.place.every(p => p !== null) :
-        isBits(data) ? false : // every cell already has a valid default (0), so always checkable
+        isBits(data) ? !st.clicks.every(row => row.every(n => bitFromClicks(n) !== null)) : // every cell must be filled in (not blank)
         (multi ? st.sel.length === 0 : st.sel === null)
       );
       const isLast = cur === QUESTIONS.length - 1;
@@ -842,7 +845,7 @@
       const st = Q[cur], data = QUESTIONS[cur];
       if (st.ans) return;
       if (isMatch(data)) { if (!st.place.every(p => p !== null)) return; }
-      else if (isBits(data)) { /* always answerable — 0 is a valid default for every cell */ }
+      else if (isBits(data)) { if (!st.clicks.every(row => row.every(n => bitFromClicks(n) !== null))) return; }
       else if (isMulti(data) ? st.sel.length === 0 : st.sel === null) return;
       st.ans = true;
       renderQuestion();
