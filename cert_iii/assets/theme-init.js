@@ -16,7 +16,9 @@
 (function () {
     var KEY = 'cert3-theme';
 
-    if (localStorage.getItem(KEY) === 'light') {
+    // Light is the default theme — it applies unless the visitor has
+    // explicitly chosen dark (stored 'dark' below via toggleTheme()).
+    if (localStorage.getItem(KEY) !== 'dark') {
         document.documentElement.setAttribute('data-theme', 'light');
     }
 
