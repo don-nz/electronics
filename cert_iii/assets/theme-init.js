@@ -22,6 +22,17 @@
         document.documentElement.setAttribute('data-theme', 'light');
     }
 
+    // Always land at the top of the page — mobile browsers in particular
+    // restore the previous scroll position on history back/forward and on
+    // bfcache restores, which can leave a freshly-opened quiz or menu page
+    // scrolled part-way down. 'manual' stops the browser doing that itself;
+    // the pageshow listener forces it back to the top on every kind of
+    // navigation, including the bfcache-restore case that 'load' misses.
+    if (window.history && 'scrollRestoration' in window.history) {
+        window.history.scrollRestoration = 'manual';
+    }
+    window.addEventListener('pageshow', function () { window.scrollTo(0, 0); });
+
     window.toggleTheme = function () {
         var isLight = document.documentElement.getAttribute('data-theme') === 'light';
         if (isLight) {
