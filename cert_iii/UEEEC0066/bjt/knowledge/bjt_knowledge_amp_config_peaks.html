@@ -374,14 +374,9 @@
             <text id="vsValue" x="480" y="240" style="fill: var(--colour-signal)" text-anchor="start" font-size="12"
               font-weight="bold"><tspan fill="var(--colour-signal)"> output</tspan></text>
 
-            <!-- ════════════════════ GND SYMBOL ════════════════════ -->
+            <!-- ════════════════════ COMMON LABEL ════════════════════ -->
 
-            <g id="gndGroup" transform="translate(20,521)">
-              <line x1="0" y1="0" x2="0" y2="15" style="stroke: var(--colour-gnd)" stroke-width="2" />
-              <line x1="-14" y1="15" x2="14" y2="15" style="stroke: var(--colour-gnd)" stroke-width="2" />
-              <line x1="-9" y1="20" x2="9" y2="20" style="stroke: var(--colour-gnd)" stroke-width="1.5" />
-              <line x1="-4" y1="25" x2="4" y2="25" style="stroke: var(--colour-gnd)" stroke-width="1.5" />
-            </g>
+            <text id="nm-cin" x="20" y="540" fill="var(--colour-gnd)" text-anchor="middle" font-size="14"font-weight="bold">Common</text>
 
             <!-- ════════════════════ Q1 — NPN ════════════════════ -->
 
@@ -642,14 +637,9 @@
             <text x="480" y="240" style="fill: var(--colour-signal)" text-anchor="start" font-size="12"
               font-weight="bold"><tspan fill="var(--colour-signal)"> output</tspan></text>
 
-            <!-- ════════════════════ GND SYMBOL ════════════════════ -->
+            <!-- ════════════════════ COMMON LABEL ════════════════════ -->
 
-            <g transform="translate(20,521)">
-              <line x1="0" y1="0" x2="0" y2="15" style="stroke: var(--colour-gnd)" stroke-width="2" />
-              <line x1="-14" y1="15" x2="14" y2="15" style="stroke: var(--colour-gnd)" stroke-width="2" />
-              <line x1="-9" y1="20" x2="9" y2="20" style="stroke: var(--colour-gnd)" stroke-width="1.5" />
-              <line x1="-4" y1="25" x2="4" y2="25" style="stroke: var(--colour-gnd)" stroke-width="1.5" />
-            </g>
+            <text id="nm-cin" x="20" y="540" fill="var(--colour-gnd)" text-anchor="middle" font-size="14"font-weight="bold">Common</text>
 
             <!-- ════════════════════ Q1 — PNP ════════════════════ -->
 
@@ -1087,6 +1077,19 @@
     function fmtV(v) { const a = Math.abs(v); if (a >= 1) return parseFloat(v.toFixed(2)) + ' V'; if (a >= 0.001) return parseFloat((v * 1000).toFixed(2)) + ' mV'; return parseFloat((v * 1e6).toFixed(1)) + ' µV'; }
     function frac(num, den) { return `<span class="working-frac"><span class="num">${num}</span><span class="den">${den}</span></span>`; }
 
+    // Round to the SAME precision the on-screen meters/answers display
+    // (2dp for volts, 3dp for the PNP gain) — used for any "chain" answer
+    // that operates on a value the student would first read off the
+    // circuit (e.g. doubling a gap, dividing by a gain). Chaining raw,
+    // unrounded floats instead can silently disagree with what a student
+    // gets by hand from the displayed numbers — e.g. VE reads "4.89 V" on
+    // the meter, but the raw float is 4.8857...V; doubling the raw float
+    // gives 9.77V while doubling the displayed 4.89 gives 9.78V. Rounding
+    // FIRST (matching the meter), then computing, keeps every chained
+    // answer consistent with what's actually shown on screen.
+    function r2(v) { return Math.round(v * 100) / 100; }
+    function r3(v) { return Math.round(v * 1000) / 1000; }
+
     // ── derived (recomputed if V ever changes, e.g. via the ?vcc&r1&r2&rc&re URL override) ──
     let VB, VE, IE, IC, VRC, VC;
     function recompute() {
@@ -1186,7 +1189,7 @@
         hint: '|A<sub>v</sub>| ≈ R<sub>C</sub> / R<sub>E</sub> for a common-emitter stage with an unbypassed emitter — there\'s no bypass capacitor across RE here.'
       },
       {
-        text: `Using the max output swing of ${parseFloat((2 * Math.min(V.vcc - VC, VC)).toFixed(2))} <span class="colour-signal">V p-p</span> (Q2) and the <span class="colour-gain">gain</span> of ${parseFloat((V.rc / V.re).toFixed(2))} (Q3): what is the <span style="color:var(--colour-ui-primary)">maximum</span> peak to peak <span style="color:var(--colour-ui-primary)">INPUT</span> this circuit can accept without <span style="color:var(--colour-ui-wrong)">clipping</span>?`,
+        text: `Using the max output swing of <span class="colour-signal">${(() => { const { A, B } = gapsNPN(); return 2 * Math.min(A, B); })()} V p-p</span> (Q2) and the gain of <span class="colour-gain">${r2(V.rc / V.re)}</span> (Q3): what is the <span style="color:var(--colour-ui-primary)">maximum</span> peak to peak <span style="color:var(--colour-ui-primary)">INPUT</span> this circuit can accept without <span style="color:var(--colour-ui-wrong)">clipping</span>?`,
         hint: 'The output swing is the input swing multiplied by the gain — so work backwards: divide the max output swing by the gain.'
       },
       {
@@ -1202,7 +1205,7 @@
         hint: 'This is <b>not</b> the same formula as Q3. Because the output here is taken from the <b>emitter</b> instead of the collector, this is a common-collector (<b>emitter-follower</b>) stage, not common-emitter. For an emitter follower, |A<sub>v</sub>| ≈ R<sub>E</sub> / (R<sub>E</sub> + r<sub>e</sub>′), where r<sub>e</sub>′ is the transistor\'s own internal emitter resistance, r<sub>e</sub>′ ≈ 26 mV / I<sub>E</sub>.'
       },
       {
-        text: `Using the max output swing (Q6) and the <span class="colour-gain">gain</span> (Q7) from this PNP stage: what is the <span style="color:var(--colour-ui-primary)">maximum</span> peak to peak <span style="color:var(--colour-ui-primary)">INPUT</span> this circuit can accept without <span style="color:var(--colour-ui-wrong)">clipping</span>?`,
+        text: `Using the max output swing of <span class="colour-signal">${(() => { const { A, B } = gapsPNP(); return 2 * Math.min(A, B); })()} V p-p</span> (Q6) and the gain of <span class="colour-gain">${r3(avPNP())}</span> (Q7): what is the <span style="color:var(--colour-ui-primary)">maximum</span> peak to peak <span style="color:var(--colour-ui-primary)">INPUT</span> this circuit can accept without <span style="color:var(--colour-ui-wrong)">clipping</span>?`,
         hint: 'Same relationship as Q4 — the output swing is the input swing multiplied by the gain, so divide the max output swing by the gain to work backwards.'
       }
     ];
@@ -1216,6 +1219,13 @@
     // ══════════════════════════════════════════════════════════════════════
 
     function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+    // Gap A/B rounded to the meter's own 2dp display precision BEFORE use
+    // (see the r2()/r3() comment above) — Q2/Q4 (NPN) and Q6/Q8 (PNP) all
+    // build their answers from these, so "double the smaller gap" always
+    // matches what a student gets from the on-screen VC/VE readings.
+    function gapsNPN() { return { A: r2(V.vcc - VC), B: r2(VC) }; }
+    function gapsPNP() { return { A: r2(V_PNP.vcc - VE_PNP), B: r2(VE_PNP) }; }
 
     function buildQ1Options() {
       // correct: VCC - VC (headroom to cutoff)
@@ -1236,7 +1246,7 @@
       // to stay undistorted — the smaller gap is what actually limits it.
       // distractors: doubled the wrong (larger) gap, used VCC alone
       // (ignored VC entirely), forgot to double the smaller gap
-      const A = V.vcc - VC, B = VC;
+      const { A, B } = gapsNPN();
       const smaller = Math.min(A, B), larger = Math.max(A, B);
       return shuffle([
         { label: fmtV(2 * smaller) + ' p-p', type: 'correct' },
@@ -1264,9 +1274,9 @@
       // distractors: multiplied by gain instead of dividing, used the max swing based on the
       // WRONG (larger) gap instead of the correct saturation/cutoff-limited one, forgot to
       // double the smaller gap (single-sided headroom instead of the full symmetric swing)
-      const A = V.vcc - VC, B = VC;
+      const { A, B } = gapsNPN();
       const smaller = Math.min(A, B), larger = Math.max(A, B);
-      const gainNum = V.rc / V.re;
+      const gainNum = r2(V.rc / V.re);
       const maxSwing = 2 * smaller;
       return shuffle([
         { label: fmtV(maxSwing / gainNum) + ' p-p', type: 'correct' },
@@ -1295,14 +1305,18 @@
     // re′ ≈ 26mV / IE — needed for the PNP stage's emitter-follower gain
     // (Q7/Q8), since this stage is common-collector, not common-emitter
     // like Q1-4 (see the file header comment for why RC/RE doesn't apply).
-    function rePrimePNP() { return 0.026 / IE_PNP; }
+    // Uses the ammeter's DISPLAYED IE (rounded to its own 2dp-in-mA
+    // precision, matching fmtAParts) rather than the raw float, for the
+    // same reason gapsNPN()/gapsPNP() round first — see the r2()/r3()
+    // comment above.
+    function rePrimePNP() { return 0.026 / (r2(IE_PNP * 1000) / 1000); }
     function avPNP() { return V_PNP.re / (V_PNP.re + rePrimePNP()); }
 
     function buildQ6Options() {
       // Same two-gap model as Q2, applied to the PNP stage's VE instead
       // of VC. distractors: doubled the wrong (larger) gap, used VCC
       // alone (ignored VE entirely), forgot to double the smaller gap
-      const A = V_PNP.vcc - VE_PNP, B = VE_PNP;
+      const { A, B } = gapsPNP();
       const smaller = Math.min(A, B), larger = Math.max(A, B);
       return shuffle([
         { label: fmtV(2 * smaller) + ' p-p', type: 'correct' },
@@ -1335,9 +1349,9 @@
       // distractors: multiplied by gain instead of dividing, used the max
       // swing based on the WRONG (larger) gap, forgot to double the
       // smaller gap (single-sided headroom instead of full symmetric swing)
-      const A = V_PNP.vcc - VE_PNP, B = VE_PNP;
+      const { A, B } = gapsPNP();
       const smaller = Math.min(A, B), larger = Math.max(A, B);
-      const av = avPNP();
+      const av = r3(avPNP());
       const maxSwing = 2 * smaller;
       return shuffle([
         { label: fmtV(maxSwing / av) + ' p-p', type: 'correct' },
@@ -1484,7 +1498,7 @@
       const st = Q.q2; if (st.ans || st.sel === null) return; st.ans = true;
       const ok = st.sel === st.cor;
       markOptions('q2', st.sel, st.cor, ok);
-      const A = V.vcc - VC, B = VC, maxSwing = 2 * Math.min(A, B);
+      const { A, B } = gapsNPN(), maxSwing = 2 * Math.min(A, B);
       setBanner('q2', ok, `Max swing ≈ ${fmtV(maxSwing)} p-p`);
       showQ2Working();
       applyCircuitState(CIRCUIT_STATES[1].reveal);
@@ -1493,7 +1507,7 @@
     function showQ2Working() {
       const box = document.getElementById('q2Working');
       box.className = 'working-box visible';
-      const A = V.vcc - VC, B = VC;
+      const { A, B } = gapsNPN();
       const smallerLabel = A <= B ? 'A (up to VCC)' : 'B (down to 0 V)';
       const smaller = Math.min(A, B);
       document.getElementById('q2WorkingContent').innerHTML = `
@@ -1537,7 +1551,7 @@
       const st = Q.q4; if (st.ans || st.sel === null) return; st.ans = true;
       const ok = st.sel === st.cor;
       markOptions('q4', st.sel, st.cor, ok);
-      const A = V.vcc - VC, B = VC, maxSwing = 2 * Math.min(A, B), gainNum = V.rc / V.re;
+      const { A, B } = gapsNPN(), maxSwing = 2 * Math.min(A, B), gainNum = r2(V.rc / V.re);
       setBanner('q4', ok, `Max input ≈ ${fmtV(maxSwing / gainNum)} p-p`);
       showQ4Working();
       applyCircuitState(CIRCUIT_STATES[3].reveal);
@@ -1546,7 +1560,7 @@
     function showQ4Working() {
       const box = document.getElementById('q4Working');
       box.className = 'working-box visible';
-      const A = V.vcc - VC, B = VC, maxSwing = 2 * Math.min(A, B), gainNum = V.rc / V.re;
+      const { A, B } = gapsNPN(), maxSwing = 2 * Math.min(A, B), gainNum = r2(V.rc / V.re);
       document.getElementById('q4WorkingContent').innerHTML = `
     <div class="working-line">The output swing is the input swing multiplied by the <span class="colour-gain">gain</span> — so the maximum <span style="color:var(--colour-ui-primary)">INPUT</span> before <span style="color:var(--colour-ui-wrong)">clipping</span> is found by working backwards: divide the max output swing (from Q2) by the gain (from Q3).</div>
 
@@ -1585,7 +1599,7 @@
       const st = Q.q6; if (st.ans || st.sel === null) return; st.ans = true;
       const ok = st.sel === st.cor;
       markOptions('q6', st.sel, st.cor, ok);
-      const A = V_PNP.vcc - VE_PNP, B = VE_PNP, maxSwing = 2 * Math.min(A, B);
+      const { A, B } = gapsPNP(), maxSwing = 2 * Math.min(A, B);
       setBanner('q6', ok, `Max swing ≈ ${fmtV(maxSwing)} p-p`);
       showQ6Working();
       applyCircuitState(CIRCUIT_STATES[5].reveal);
@@ -1594,7 +1608,7 @@
     function showQ6Working() {
       const box = document.getElementById('q6Working');
       box.className = 'working-box visible';
-      const A = V_PNP.vcc - VE_PNP, B = VE_PNP;
+      const { A, B } = gapsPNP();
       const smallerLabel = A <= B ? 'A (up to VCC)' : 'B (down to 0 V)';
       const smaller = Math.min(A, B);
       document.getElementById('q6WorkingContent').innerHTML = `
@@ -1647,7 +1661,7 @@
       const st = Q.q8; if (st.ans || st.sel === null) return; st.ans = true;
       const ok = st.sel === st.cor;
       markOptions('q8', st.sel, st.cor, ok);
-      const A = V_PNP.vcc - VE_PNP, B = VE_PNP, maxSwing = 2 * Math.min(A, B), av = avPNP();
+      const { A, B } = gapsPNP(), maxSwing = 2 * Math.min(A, B), av = r3(avPNP());
       setBanner('q8', ok, `Max input ≈ ${fmtV(maxSwing / av)} p-p`);
       showQ8Working();
       applyCircuitState(CIRCUIT_STATES[7].reveal);
@@ -1656,7 +1670,7 @@
     function showQ8Working() {
       const box = document.getElementById('q8Working');
       box.className = 'working-box visible';
-      const A = V_PNP.vcc - VE_PNP, B = VE_PNP, maxSwing = 2 * Math.min(A, B), av = avPNP();
+      const { A, B } = gapsPNP(), maxSwing = 2 * Math.min(A, B), av = r3(avPNP());
       document.getElementById('q8WorkingContent').innerHTML = `
     <div class="working-line">Same relationship as Q4: the output swing is the input swing multiplied by the <span class="colour-gain">gain</span> — so the maximum <span style="color:var(--colour-ui-primary)">INPUT</span> before <span style="color:var(--colour-ui-wrong)">clipping</span> is found by dividing the max output swing (Q6) by the gain (Q7).</div>
 
