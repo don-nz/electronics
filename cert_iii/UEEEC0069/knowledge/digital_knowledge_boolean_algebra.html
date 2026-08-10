@@ -1,0 +1,973 @@
+<!--
+  Week 4 — "Boolean Algebra" lesson objectives: describing similarities/
+  differences between Boolean and conventional algebra, writing the
+  Boolean expression for each of the seven logic gates, developing the
+  Boolean expression for a combinational circuit (up to three inputs and
+  three stages), writing a truth table from a sum-of-products expression,
+  stating DeMorgan's theorems, simplifying expressions using DeMorgan's
+  theorems, and analysing a combinational circuit by writing its output
+  expression, simplifying it to sum-of-products form, and writing its
+  truth table. Deliberately stops short of the lesson's practical
+  objective (using a DMM and logic probe to test/verify a real circuit) —
+  that needs physical hardware, not a knowledge quiz, matching the
+  existing split between conceptual-primer quizzes and hands-on/
+  troubleshooter content elsewhere on this site (e.g.
+  digital_knowledge_logic_combos.html similarly deferred its own
+  fault-finding objectives to a dedicated future quiz).
+
+  Same data-driven QUESTIONS[] engine as digital_knowledge_logic_combos.html
+  (itself cloned from digital_knowledge_logic_gates.html), trimmed to only
+  the kinds this quiz actually uses: 'multi', 'truth' (single-pass, not
+  staged — see Q5) and 'match' (ported in from digital_knowledge_logic_gates.
+  html for the seven-gate-expression question, Q2 — this quiz's one addition
+  beyond what logic_combos.html itself carries), plus leftPanel:'circuit'
+  for the three questions with a reference circuit diagram. No 'bits' kind
+  and no leftPanel:'shapeGrid' — unused here, so left out entirely, matching
+  the site's established "only carry the engine features actually used"
+  convention.
+
+  Boolean notation used throughout: "·" for AND, "+" for OR, and an
+  overline (CSS class .ovl, text-decoration:overline) for NOT/complement —
+  applied to a <span> wrapping whatever the bar needs to cover, so it works
+  identically for a single variable (Ā) or a whole grouped sub-expression
+  (overline over "A + B"). Deliberately avoided any expression needing a
+  NESTED overline (a bar-within-a-bar) anywhere in this file — two
+  independent text-decoration:overline elements stacked inside one another
+  isn't guaranteed to render as two cleanly separated bars across browsers,
+  so every worked example here only ever negates plain, not-already-barred
+  content.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../assets/theme-init.js"></script>
+  <title>Digital Electronics Knowledge Quiz 4</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../assets/quiz-common.css">
+  <script src="../../assets/breadcrumb.js" defer></script>
+  <style>
+    .colour-bjt { color: var(--colour-bjt); }
+
+    /* Boolean complement/NOT bar — wraps whatever content needs the
+       overline, so it works the same for a single variable or a whole
+       grouped sub-expression. See the file header comment for why no
+       expression in this file ever nests one of these inside another. */
+    .ovl { text-decoration: overline; text-decoration-thickness: .09em; }
+
+    /* Read-only input columns (C/B/A) in Q5's truth table — same look as
+       the bits-table's fixed "Value" column, themed. */
+    .truth-input-cell { font-weight: 700; color: var(--colour-text); background: rgba(var(--colour-label-rgb), .04); }
+  </style>
+</head>
+
+<body>
+  <!-- Hidden defs: the seven traditional gate symbols (copied from
+       ../../assets/shapes/logic-gates.svg and re-themed to
+       var(--colour-bjt) — see digital_knowledge_logic_combos.html's own
+       header comment for why they can't just be <use>'d directly from
+       here), used by Q2's match columns; plus three new combinational
+       circuit diagrams (Q3, Q4, Q9) built from those same gate
+       primitives, generic A/B/C labels throughout (no fixed 0/1 values —
+       every question here asks for the EXPRESSION, never a numeric
+       prediction, so there's nothing for a fixed value to usefully show). -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" font-family="'Share Tech Mono', monospace">
+    <defs>
+      <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur stdDeviation="2" result="b" />
+        <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+      </filter>
+
+      <!-- ── shared leads ── -->
+      <g id="gate-lead-in2">
+        <line x1="-24" y1="-8" x2="-8" y2="-8" style="stroke: var(--colour-bjt)" stroke-width="2" />
+        <line x1="-24" y1="8" x2="-8" y2="8" style="stroke: var(--colour-bjt)" stroke-width="2" />
+      </g>
+      <g id="gate-lead-in1">
+        <line x1="-24" y1="0" x2="-8" y2="0" style="stroke: var(--colour-bjt)" stroke-width="2" />
+      </g>
+      <g id="gate-lead-in2-or">
+        <line x1="-24" y1="-8" x2="-4.6" y2="-8" style="stroke: var(--colour-bjt)" stroke-width="2" />
+        <line x1="-24" y1="8" x2="-4.6" y2="8" style="stroke: var(--colour-bjt)" stroke-width="2" />
+      </g>
+      <g id="gate-lead-in2-xor">
+        <line x1="-24" y1="-8" x2="-9.9" y2="-8" style="stroke: var(--colour-bjt)" stroke-width="2" />
+        <line x1="-24" y1="8" x2="-9.9" y2="8" style="stroke: var(--colour-bjt)" stroke-width="2" />
+      </g>
+      <g id="gate-lead-out">
+        <line x1="24" y1="0" x2="44" y2="0" style="stroke: var(--colour-bjt)" stroke-width="2" />
+      </g>
+      <g id="gate-lead-out-inv">
+        <circle cx="28" cy="0" r="4" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+        <line x1="32" y1="0" x2="44" y2="0" style="stroke: var(--colour-bjt)" stroke-width="2" />
+      </g>
+
+      <!-- ── shared bodies ── -->
+      <path id="gate-and-body" d="M -8,-16 L 8,-16 A 16,16 0 0 1 8,16 L -8,16 Z"
+        fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+      <path id="gate-or-body" d="M -8,-16 Q 8,-16 24,0 Q 8,16 -8,16 Q 1,0 -8,-16 Z"
+        fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+      <path id="gate-xor-extra" d="M -14,-16 Q -3,0 -14,16"
+        fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" />
+      <path id="gate-tri-body" d="M -8,-16 L -8,16 L 24,0 Z"
+        fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+
+      <!-- ── the seven traditional gates ── -->
+      <g id="gate-and-trad"><use href="#gate-lead-in2" /><use href="#gate-and-body" /><use href="#gate-lead-out" /></g>
+      <g id="gate-nand-trad"><use href="#gate-lead-in2" /><use href="#gate-and-body" /><use href="#gate-lead-out-inv" /></g>
+      <g id="gate-or-trad"><use href="#gate-lead-in2-or" /><use href="#gate-or-body" /><use href="#gate-lead-out" /></g>
+      <g id="gate-nor-trad"><use href="#gate-lead-in2-or" /><use href="#gate-or-body" /><use href="#gate-lead-out-inv" /></g>
+      <g id="gate-xor-trad"><use href="#gate-lead-in2-xor" /><use href="#gate-xor-extra" /><use href="#gate-or-body" /><use href="#gate-lead-out" /></g>
+      <g id="gate-xnor-trad"><use href="#gate-lead-in2-xor" /><use href="#gate-xor-extra" /><use href="#gate-or-body" /><use href="#gate-lead-out-inv" /></g>
+      <g id="gate-not-trad"><use href="#gate-lead-in1" /><use href="#gate-tri-body" /><use href="#gate-lead-out-inv" /></g>
+
+      <!-- ── Q3: 2-stage network, Z = Ā · B — every wire endpoint below is
+           computed directly from each gate's own translate(tx,ty)
+           scale(s): 2-input gates' outer lead tips sit at local
+           (-24,∓8)/(44,0), a 1-input gate's at local (-24,0)/(44,0); world
+           position = (tx + lx·s, ty + ly·s). See
+           digital_knowledge_logic_combos.html's own memory notes on the
+           wiring-gap bug this exact method was adopted to avoid. ── -->
+      <g id="expr-2stage">
+        <!-- ══ A → NOT gate input ══ -->
+        <line x1="-15" y1="-10" x2="56.4" y2="-10" style="stroke: var(--colour-series)" stroke-width="2" />
+        <text x="-18" y="-10" text-anchor="end" dominant-baseline="middle" font-size="20" style="fill: var(--colour-signal)">A</text>
+
+        <g transform="translate(90,-10) scale(1.4)"><use href="#gate-not-trad" /></g>
+
+        <!-- ══ NOT gate output → AND gate top input (bend) ══ -->
+        <line x1="151.6" y1="-10" x2="151.6" y2="-1.2" style="stroke: var(--colour-series)" stroke-width="2" />
+        <line x1="151.6" y1="-1.2" x2="176.4" y2="-1.2" style="stroke: var(--colour-series)" stroke-width="2" />
+
+        <!-- ══ B → AND gate bottom input ══ -->
+        <line x1="-15" y1="21.2" x2="176.4" y2="21.2" style="stroke: var(--colour-series)" stroke-width="2" />
+        <text x="-18" y="21.2" text-anchor="end" dominant-baseline="middle" font-size="20" style="fill: var(--colour-signal)">B</text>
+
+        <g transform="translate(210,10) scale(1.4)"><use href="#gate-and-trad" /></g>
+
+        <!-- ══ AND gate output → Z ══ -->
+        <line x1="271.6" y1="10" x2="300" y2="10" style="stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="300" cy="10" r="3" style="fill: var(--colour-signal)" />
+        <text x="306" y="14" font-size="24" font-weight="bold" style="fill: var(--colour-signal)">Z</text>
+      </g>
+
+      <!-- ── Q4: 3-stage network, Z = (A + B) · C, then inverted — same
+           layout/coordinates as digital_knowledge_logic_combos.html's own
+           combo-3level-generic (proven wiring), with the AND/OR gate
+           types swapped at stages 1/2. ── -->
+      <g id="expr-3stage">
+        <!-- ══ A, B → OR gate inputs ══ -->
+        <line x1="-15" y1="-41.2" x2="66.4" y2="-41.2" style="stroke: var(--colour-series)" stroke-width="2" />
+        <text x="-18" y="-41.2" text-anchor="end" dominant-baseline="middle" font-size="20" style="fill: var(--colour-signal)">A</text>
+        <line x1="-15" y1="-18.8" x2="66.4" y2="-18.8" style="stroke: var(--colour-series)" stroke-width="2" />
+        <text x="-18" y="-18.8" text-anchor="end" dominant-baseline="middle" font-size="20" style="fill: var(--colour-signal)">B</text>
+
+        <g transform="translate(100,-30) scale(1.4)"><use href="#gate-or-trad" /></g>
+
+        <!-- ══ OR gate output → AND gate top input (bend) ══ -->
+        <line x1="161.6" y1="-30" x2="161.6" y2="-1.2" style="stroke: var(--colour-series)" stroke-width="2" />
+        <line x1="161.6" y1="-1.2" x2="166.4" y2="-1.2" style="stroke: var(--colour-series)" stroke-width="2" />
+
+        <!-- ══ C → AND gate bottom input ══ -->
+        <line x1="-15" y1="21.2" x2="166.4" y2="21.2" style="stroke: var(--colour-series)" stroke-width="2" />
+        <text x="-18" y="21.2" text-anchor="end" dominant-baseline="middle" font-size="20" style="fill: var(--colour-signal)">C</text>
+
+        <g transform="translate(200,10) scale(1.4)"><use href="#gate-and-trad" /></g>
+
+        <!-- ══ AND gate output → NOT gate input ══ -->
+        <line x1="261.6" y1="10" x2="336.4" y2="10" style="stroke: var(--colour-series)" stroke-width="2" />
+
+        <g transform="translate(370,10) scale(1.4)"><use href="#gate-not-trad" /></g>
+
+        <!-- ══ NOT gate output → Z ══ -->
+        <line x1="431.6" y1="10" x2="460" y2="10" style="stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="460" cy="10" r="3" style="fill: var(--colour-signal)" />
+        <text x="466" y="18" font-size="24" font-weight="bold" style="fill: var(--colour-signal)">Z</text>
+      </g>
+
+      <!-- ── Q9: NAND(A,B) → AND with C, Z = (A·B)′ · C — the integration
+           question's circuit; raw expression needs DeMorgan + distribution
+           to reach sum-of-products form. ── -->
+      <g id="expr-nand-and">
+        <!-- ══ A, B → NAND gate inputs ══ -->
+        <line x1="-15" y1="-21.2" x2="66.4" y2="-21.2" style="stroke: var(--colour-series)" stroke-width="2" />
+        <text x="-18" y="-21.2" text-anchor="end" dominant-baseline="middle" font-size="20" style="fill: var(--colour-signal)">A</text>
+        <line x1="-15" y1="1.2" x2="66.4" y2="1.2" style="stroke: var(--colour-series)" stroke-width="2" />
+        <text x="-18" y="1.2" text-anchor="end" dominant-baseline="middle" font-size="20" style="fill: var(--colour-signal)">B</text>
+
+        <g transform="translate(100,-10) scale(1.4)"><use href="#gate-nand-trad" /></g>
+
+        <!-- ══ NAND gate output → AND gate top input (bend) ══ -->
+        <line x1="161.6" y1="-10" x2="161.6" y2="-1.2" style="stroke: var(--colour-series)" stroke-width="2" />
+        <line x1="161.6" y1="-1.2" x2="186.4" y2="-1.2" style="stroke: var(--colour-series)" stroke-width="2" />
+
+        <!-- ══ C → AND gate bottom input ══ -->
+        <line x1="-15" y1="21.2" x2="186.4" y2="21.2" style="stroke: var(--colour-series)" stroke-width="2" />
+        <text x="-18" y="21.2" text-anchor="end" dominant-baseline="middle" font-size="20" style="fill: var(--colour-signal)">C</text>
+
+        <g transform="translate(220,10) scale(1.4)"><use href="#gate-and-trad" /></g>
+
+        <!-- ══ AND gate output → Z ══ -->
+        <line x1="281.6" y1="10" x2="310" y2="10" style="stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="310" cy="10" r="3" style="fill: var(--colour-signal)" />
+        <text x="316" y="14" font-size="24" font-weight="bold" style="fill: var(--colour-signal)">Z</text>
+      </g>
+
+    </defs>
+  </svg>
+
+  <div class="crumb" id="crumb" data-current="Boolean Algebra"></div>
+  <header>
+    <h1>Digital Electronics</h1>
+    <p>Conceptual Questions · Boolean Algebra · Expressions, Truth Tables &amp; DeMorgan's Theorems</p>
+  </header>
+
+  <div class="quiz-wrap" id="quizWrap">
+
+    <!-- LEFT: static reference circuit (leftPanel:'circuit') or the
+         match-question pool/columns (kind:'match') — never both at once. -->
+    <div class="circuit-col">
+      <div class="circuit-panel" style="cursor:default" id="circuitPanelDiv">
+        <div class="panel-label" id="circuitRefLabel">Reference Circuit</div>
+        <svg id="circuitRefSvg" viewBox="-50 -70 560 140" xmlns="http://www.w3.org/2000/svg" style="max-width:360px;margin:0 auto">
+          <use id="circuitRefUse" href="#expr-2stage" />
+        </svg>
+      </div>
+    </div>
+
+    <!-- RIGHT: question -->
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <!-- Single reusable question panel — populated from QUESTIONS[cur] by renderQuestion() -->
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+          <div class="options" id="qOptions"></div>
+          <div class="match-wrap" id="qMatch" style="display:none">
+            <div class="match-pool-row" id="matchPoolRow">
+              <div class="match-pool-arrow">▶</div>
+              <div class="match-pool" id="matchPool"></div>
+            </div>
+            <div class="match-columns" id="matchColumns"></div>
+          </div>
+          <div class="bits-wrap" id="qTruth" style="display:none">
+            <table class="bits-table">
+              <thead>
+                <tr id="truthGroupHeads"></tr>
+                <tr id="truthColLabels"></tr>
+              </thead>
+              <tbody id="truthBody"></tbody>
+            </table>
+          </div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Summary -->
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS — see digital_knowledge_logic_gates.html's header comment
+    // for the fuller field reference this file's engine follows. This file
+    // uses: default (single-select), 'multi', 'truth' (single-pass, via
+    // buildTableRows below — no staging, unlike logic_combos.html's own
+    // 'truth' questions, since "write a truth table from a given SOP
+    // expression" is a one-shot skill, not a multi-gate build-up), 'match'
+    // (ported from digital_knowledge_logic_gates.html for Q2), and
+    // leftPanel:'circuit' (borrowed from the BJT quizzes, same as
+    // logic_combos.html) for Q3/Q4/Q9.
+    // ══════════════════════════════════════════════════════════════════════
+
+    const QUESTIONS = [
+      {
+        // Objective: describe similarities/differences, Boolean vs
+        // conventional algebra.
+        kind: 'multi',
+        text: () => 'Boolean algebra and conventional (ordinary) algebra share some ideas but differ in important ways. <b style="color:var(--colour-ui-primary)">Select</b> every statement below that correctly describes Boolean algebra. There are <b style="color:var(--colour-ui-correct)">4 correct</b> statements among the 6 shown.',
+        hint: () => 'Think about what values a variable is allowed to take, and what the + and · symbols actually mean here, compared with ordinary arithmetic.',
+        options: () => shuffle([
+          { label: 'A Boolean variable can only ever be 0 or 1 — conventional algebra variables can take any real number', type: 'correct' },
+          { label: 'Just like conventional algebra, Boolean algebra has variables, constants, and operators that combine into expressions you can simplify', type: 'correct' },
+          { label: 'In Boolean algebra, 1 + 1 = 1, not 2 — "+" means OR here, not arithmetic addition', type: 'correct' },
+          { label: 'Both algebras obey a distributive law — e.g. A·(B + C) = A·B + A·C works in Boolean algebra just like conventional algebra\'s a(b+c) = ab+ac', type: 'correct' },
+          { label: 'Both algebras include subtraction and division as basic operations', type: 'wrong' },
+          { label: 'The commutative law (A + B = B + A) holds in conventional algebra but not in Boolean algebra', type: 'wrong' },
+        ]),
+        correctExplain: (st) => {
+          const nums = st.opts.map((o, i) => o.type === 'correct' ? LETTERS[i] : null).filter(Boolean).join(', ');
+          return `Options <b>${nums}</b> — restricted to 0/1, but still algebraic`;
+        },
+        working: (st) => {
+          const wrongL = st.opts.map((o, i) => o.type === 'wrong' ? LETTERS[i] : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-step">The key difference:</div>
+    <div class="working-line">Boolean variables are restricted to exactly two values, <b class="colour-bjt">0</b> and <b class="colour-bjt">1</b> — conventional algebra's variables can be any real number. "+" means <b class="colour-bjt">OR</b> and "·" means <b class="colour-bjt">AND</b>, not arithmetic sum/product — which is why 1 + 1 = 1 (still just "true"), not 2.</div>
+    <div class="working-step" style="margin-top:.6rem">The key similarity:</div>
+    <div class="working-line">Despite that restriction, Boolean algebra is still a genuine algebra — it has its own commutative, associative and distributive laws (matching conventional algebra's own laws in <em>form</em>, even though the values and operators mean something different), and expressions built from variables and operators can be manipulated and simplified the same way.</div>
+    <div class="working-step" style="margin-top:.6rem">Why options ${wrongL} are wrong:</div>
+    <div class="working-line">Boolean algebra has no subtraction or division — there's no Boolean value that "undoes" OR or AND the way subtraction undoes addition. And the commutative law holds in <em>both</em> algebras: A + B = B + A is just as true in Boolean algebra as a + b = b + a is in conventional algebra.</div>`;
+        }
+      },
+      {
+        // Objective: write the Boolean expression for each of the seven
+        // logic gates — kind:'match' with shape-based columns (ported from
+        // digital_knowledge_logic_gates.html's own Q2, which does the same
+        // thing for gate NAMES rather than expressions).
+        leftPanel: 'none',
+        kind: 'match',
+        columns: () => [
+          { shapeId: 'gate-and-trad' },
+          { shapeId: 'gate-or-trad' },
+          { shapeId: 'gate-not-trad' },
+          { shapeId: 'gate-nand-trad' },
+          { shapeId: 'gate-nor-trad' },
+          { shapeId: 'gate-xor-trad' },
+          { shapeId: 'gate-xnor-trad' }
+        ],
+        text: () => 'Each of the seven logic gates has its own Boolean expression. <span style="color:var(--colour-ui-primary)">Place</span> each expression in the box under the gate it belongs to.',
+        hint: () => 'Start with the three basic gates — AND uses ·, OR uses +, NOT uses an overline. Every other gate is just one of those three with an overline added over the whole thing, to invert the output. If you change your mind, click a placed expression to send it back to the pool.',
+        options: () => shuffle([
+          { label: 'A · B', col: 0 },
+          { label: 'A + B', col: 1 },
+          { label: '<span class="ovl">A</span>', col: 2 },
+          { label: '<span class="ovl">A · B</span>', col: 3 },
+          { label: '<span class="ovl">A + B</span>', col: 4 },
+          { label: 'A ⊕ B', col: 5 },
+          { label: '<span class="ovl">A ⊕ B</span>', col: 6 },
+        ]),
+        correctExplain: (st) => {
+          const wrongCount = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).length;
+          return wrongCount === 0 ? 'All 7 expressions placed correctly' : `${st.opts.length - wrongCount} of ${st.opts.length} expressions placed correctly`;
+        },
+        working: (st) => {
+          const mistakes = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).map(o => o.label);
+          const mistakeLine = mistakes.length
+            ? `<div class="working-step" style="margin-top:.6rem">Misplaced:</div><div class="working-line">${mistakes.join(', ')}</div>`
+            : '';
+          return `
+    <div class="working-step">The three basic gates:</div>
+    <div class="working-line"><b class="colour-bjt">AND</b> = A · B. <b class="colour-bjt">OR</b> = A + B. <b class="colour-bjt">NOT</b> = <span class="ovl">A</span> — an overline over whatever it's inverting.</div>
+    <div class="working-step" style="margin-top:.6rem">The inverting gates — just add an overline:</div>
+    <div class="working-line"><b class="colour-bjt">NAND</b> = <span class="ovl">A · B</span> (AND, inverted). <b class="colour-bjt">NOR</b> = <span class="ovl">A + B</span> (OR, inverted). <b class="colour-bjt">XOR</b> = A ⊕ B (true when the inputs <em>differ</em>). <b class="colour-bjt">XNOR</b> = <span class="ovl">A ⊕ B</span> (XOR, inverted — true when the inputs <em>agree</em>).</div>
+    <div class="working-line" style="margin-top:.4rem">Same rule every time: the overline always means "take everything underneath it, and invert the result" — whether that's a single variable or a whole expression.</div>
+    ${mistakeLine}`;
+        }
+      },
+      {
+        // Objective: develop the Boolean expression for a combinational
+        // circuit — simplest case, 2 inputs, 2 stages.
+        circuitId: 'expr-2stage',
+        circuitLabel: '2-Stage Combinational Circuit',
+        text: () => 'For the circuit shown, what is the Boolean expression for the output <span style="color:var(--colour-signal)">Z</span>?',
+        hint: () => 'Trace it stage by stage: first write the expression for the NOT gate\'s output, then combine that result with B at the AND gate.',
+        options: () => shuffle([
+          { label: '<span class="ovl">A</span> · B', type: 'correct' },
+          { label: 'A · B', type: 'wrong' },
+          { label: '<span class="ovl">A · B</span>', type: 'wrong' },
+          { label: '<span class="ovl">A</span> + B', type: 'wrong' },
+        ]),
+        correctExplain: () => 'Z = <span class="ovl">A</span> · B',
+        working: () => `
+    <div class="working-step">Stage 1 — the NOT gate:</div>
+    <div class="working-line">The NOT gate only sees A, so its output is simply <b style="color:var(--colour-ui-correct)"><span class="ovl">A</span></b>.</div>
+    <div class="working-step" style="margin-top:.6rem">Stage 2 — the AND gate:</div>
+    <div class="working-line">The AND gate combines that result with B: Z = <b style="color:var(--colour-ui-correct)"><span class="ovl">A</span> · B</b>.</div>
+    <div class="working-line" style="margin-top:.4rem">A common mistake is writing <span class="ovl">A · B</span> — that puts the overline over the <em>whole product</em>, as if the NOT gate came <em>after</em> the AND gate instead of before it. Always match the overline's reach to what the NOT gate actually sees as its input.</div>`
+      },
+      {
+        // Objective: develop the Boolean expression for a combinational
+        // circuit — full spec, 3 inputs, 3 stages.
+        circuitId: 'expr-3stage',
+        circuitLabel: '3-Stage Combinational Circuit',
+        text: () => 'For the circuit shown, what is the Boolean expression for the output <span style="color:var(--colour-signal)">Z</span>?',
+        hint: () => 'Work through the three stages strictly in order: the OR gate first (A, B), then AND with C, then the final NOT.',
+        options: () => shuffle([
+          { label: '<span class="ovl">(A + B) · C</span>', type: 'correct' },
+          { label: '(A + B) · C', type: 'wrong' },
+          { label: '<span class="ovl">A + B</span> · C', type: 'wrong' },
+          { label: 'A + B · C', type: 'wrong' },
+        ]),
+        correctExplain: () => 'Z = <span class="ovl">(A + B) · C</span>',
+        working: () => `
+    <div class="working-step">Stage 1 — the OR gate:</div>
+    <div class="working-line">A + B.</div>
+    <div class="working-step" style="margin-top:.6rem">Stage 2 — the AND gate:</div>
+    <div class="working-line">(A + B) · C — the parentheses matter here: C is ANDed with the <em>whole</em> OR result, not just B.</div>
+    <div class="working-step" style="margin-top:.6rem">Stage 3 — the NOT gate:</div>
+    <div class="working-line">The final NOT gate inverts everything that came before it: Z = <b style="color:var(--colour-ui-correct)"><span class="ovl">(A + B) · C</span></b>.</div>
+    <div class="working-line" style="margin-top:.4rem">Three inputs and three gate-stages is exactly the upper limit this course covers — the same level-by-level method scales to any combinational network, however many gates it has.</div>`
+      },
+      {
+        // Objective: write a truth table from a sum-of-products Boolean
+        // expression. Single-pass (all 8 rows fillable at once) — unlike
+        // digital_knowledge_logic_combos.html's staged truth questions
+        // (which build up a multi-gate network's output one internal stage
+        // at a time), this is a one-shot skill: given a finished SOP
+        // expression, evaluate it directly for every input combination.
+        kind: 'truth',
+        inputLabels: () => ['C', 'B', 'A'],
+        headerGroups: () => [{ label: 'Inputs', span: 3 }, { label: 'Output', span: 1 }],
+        outputLabel: () => 'Z',
+        text: () => 'Build the truth table for <b>Z = A · B + <span class="ovl">A</span> · C</b>.',
+        hint: () => 'Z is 1 whenever EITHER product term is 1. Check A·B first, then <span class="ovl">A</span>·C, and OR the two results together for each row.',
+        options: () => buildTableRows((c, b, a) => ((a === 1 && b === 1) || (a === 0 && c === 1)) ? 1 : 0),
+        correctExplain: truthCorrectExplain,
+        working: (st) => `
+    <div class="working-step">Z = A·B + <span class="ovl">A</span>·C:</div>
+    <div class="working-line">This is a <b class="colour-bjt">sum-of-products</b> expression — two AND terms (products) combined with OR (the sum). Z is <b style="color:var(--colour-ui-correct)">1</b> on any row where A·B is 1, OR <span class="ovl">A</span>·C is 1 — and <b style="color:var(--colour-bjt)">0</b> only when both terms are 0.</div>
+    <div class="working-line" style="margin-top:.4rem">Notice the two terms never need A to agree — A·B needs A = 1, while <span class="ovl">A</span>·C needs A = 0 — so exactly one of the two terms can possibly be 1 on any given row (never both at once here).</div>
+    ${truthMistakeLine('C B A', st)}`
+      },
+      {
+        // Objective: state DeMorgan's theorems.
+        kind: 'multi',
+        text: () => '<b style="color:var(--colour-ui-primary)">Select</b> the two correct statements of DeMorgan\'s theorems.',
+        hint: () => 'Both theorems do the same two things at once: they flip AND to OR (or OR to AND), AND they move the overline from covering the whole expression to covering each variable separately.',
+        options: () => shuffle([
+          { label: '<span class="ovl">A · B</span> = <span class="ovl">A</span> + <span class="ovl">B</span>', type: 'correct' },
+          { label: '<span class="ovl">A + B</span> = <span class="ovl">A</span> · <span class="ovl">B</span>', type: 'correct' },
+          { label: '<span class="ovl">A · B</span> = <span class="ovl">A</span> · <span class="ovl">B</span>', type: 'wrong' },
+          { label: '<span class="ovl">A + B</span> = <span class="ovl">A</span> + <span class="ovl">B</span>', type: 'wrong' },
+          { label: '<span class="ovl">A</span> + <span class="ovl">B</span> = A · B', type: 'wrong' },
+        ]),
+        correctExplain: (st) => {
+          const nums = st.opts.map((o, i) => o.type === 'correct' ? LETTERS[i] : null).filter(Boolean).join(', ');
+          return `Options <b>${nums}</b> are DeMorgan's theorems`;
+        },
+        working: (st) => {
+          const wrongL = st.opts.map((o, i) => o.type === 'wrong' ? LETTERS[i] : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-step">DeMorgan's two theorems:</div>
+    <div class="working-line"><b class="colour-bjt">Theorem 1</b>: <span class="ovl">A · B</span> = <span class="ovl">A</span> + <span class="ovl">B</span> — breaking a NAND apart flips AND into OR. <b class="colour-bjt">Theorem 2</b>: <span class="ovl">A + B</span> = <span class="ovl">A</span> · <span class="ovl">B</span> — breaking a NOR apart flips OR into AND.</div>
+    <div class="working-step" style="margin-top:.6rem">Why options ${wrongL} are wrong:</div>
+    <div class="working-line">The two options that keep the same operator (· stays ·, + stays +) never actually apply the theorem — the whole point of DeMorgan's is that the operator flips when the overline moves. The remaining option drops the overline on the right-hand side entirely, which changes what's being claimed — <span class="ovl">A</span> + <span class="ovl">B</span> actually equals <span class="ovl">A · B</span> (still barred), not A · B (unbarred).</div>`;
+        }
+      },
+      {
+        // Objective: simplify a Boolean expression using DeMorgan's —
+        // theorem 1 direction (NOR-form starting point).
+        text: () => 'Simplify <b>Z = <span class="ovl">A + B</span></b> using DeMorgan\'s theorem.',
+        hint: () => 'Apply DeMorgan\'s directly: flip the + to a ·, and move the overline from the whole expression onto each variable separately.',
+        options: () => shuffle([
+          { label: '<span class="ovl">A</span> · <span class="ovl">B</span>', type: 'correct' },
+          { label: '<span class="ovl">A</span> + <span class="ovl">B</span>', type: 'wrong' },
+          { label: 'A · B', type: 'wrong' },
+          { label: '<span class="ovl">A</span> + B', type: 'wrong' },
+        ]),
+        correctExplain: () => 'Z = <span class="ovl">A</span> · <span class="ovl">B</span>',
+        working: () => `
+    <div class="working-step">Applying DeMorgan's theorem:</div>
+    <div class="working-line"><span class="ovl">A + B</span> = <span class="ovl">A</span> · <span class="ovl">B</span> — the overline moves off the whole sum and onto each variable individually, and + becomes ·.</div>
+    <div class="working-line" style="margin-top:.4rem">Keeping the + unchanged (giving <span class="ovl">A</span> + <span class="ovl">B</span>) is the single most common mistake here — that expression is NOT equal to the original; it's a different function entirely. Dropping the overline altogether (A · B) loses the inversion completely.</div>`
+      },
+      {
+        // Objective: simplify a Boolean expression using DeMorgan's —
+        // theorem 2 direction (NAND-form starting point).
+        text: () => 'Simplify <b>Z = <span class="ovl">A · B</span></b> using DeMorgan\'s theorem.',
+        hint: () => 'Apply DeMorgan\'s directly: flip the · to a +, and move the overline from the whole expression onto each variable separately.',
+        options: () => shuffle([
+          { label: '<span class="ovl">A</span> + <span class="ovl">B</span>', type: 'correct' },
+          { label: '<span class="ovl">A</span> · <span class="ovl">B</span>', type: 'wrong' },
+          { label: 'A + B', type: 'wrong' },
+          { label: '<span class="ovl">A</span> · B', type: 'wrong' },
+        ]),
+        correctExplain: () => 'Z = <span class="ovl">A</span> + <span class="ovl">B</span>',
+        working: () => `
+    <div class="working-step">Applying DeMorgan's theorem:</div>
+    <div class="working-line"><span class="ovl">A · B</span> = <span class="ovl">A</span> + <span class="ovl">B</span> — the overline moves off the whole product and onto each variable individually, and · becomes +.</div>
+    <div class="working-line" style="margin-top:.4rem">Keeping the · unchanged (giving <span class="ovl">A</span> · <span class="ovl">B</span>) is the single most common mistake here — that expression is NOT equal to the original; it's a different function entirely. Dropping the overline altogether (A + B) loses the inversion completely.</div>`
+      },
+      {
+        // Objective: analyse a combinational circuit — write its output
+        // expression, simplify it using DeMorgan's, and express the
+        // result in sum-of-products form. Deliberately combines Q3/Q4's
+        // skill (develop the expression from a circuit) with Q7/Q8's
+        // skill (simplify using DeMorgan's) into one integration question —
+        // the truth-table half of this same objective is covered
+        // separately by Q5.
+        circuitId: 'expr-nand-and',
+        circuitLabel: 'NAND–AND Combinational Circuit',
+        text: () => 'For the circuit shown, write the output <span style="color:var(--colour-signal)">Z</span> as a simplified <b>sum-of-products</b> expression.',
+        hint: () => 'First write the raw expression stage by stage (NAND, then AND with C). Then apply DeMorgan\'s theorem to the NAND\'s output, and distribute C across the result to reach sum-of-products form.',
+        options: () => shuffle([
+          { label: '<span class="ovl">A</span> · C + <span class="ovl">B</span> · C', type: 'correct' },
+          { label: '<span class="ovl">A · B</span> · C', type: 'wrong' },
+          { label: '<span class="ovl">A</span> + <span class="ovl">B</span> · C', type: 'wrong' },
+          { label: 'A · B · <span class="ovl">C</span>', type: 'wrong' },
+        ]),
+        correctExplain: () => 'Z = <span class="ovl">A</span> · C + <span class="ovl">B</span> · C',
+        working: () => `
+    <div class="working-step">Step 1 — the raw expression:</div>
+    <div class="working-line">The NAND gate gives <span class="ovl">A · B</span>; the AND gate combines that with C: Z = <span class="ovl">A · B</span> · C.</div>
+    <div class="working-step" style="margin-top:.6rem">Step 2 — apply DeMorgan's theorem:</div>
+    <div class="working-line"><span class="ovl">A · B</span> = <span class="ovl">A</span> + <span class="ovl">B</span>, so Z = (<span class="ovl">A</span> + <span class="ovl">B</span>) · C.</div>
+    <div class="working-step" style="margin-top:.6rem">Step 3 — distribute C to reach sum-of-products:</div>
+    <div class="working-line">(<span class="ovl">A</span> + <span class="ovl">B</span>) · C = <span class="ovl">A</span> · C + <span class="ovl">B</span> · C — same distributive law as conventional algebra's a(b+c) = ab+ac. Two product terms, ORed together: sum-of-products, and about as simple as this expression gets.</div>
+    <div class="working-line" style="margin-top:.4rem">Not distributing C across both terms (leaving <span class="ovl">A</span> + <span class="ovl">B</span> · C) is a common stopping-too-early mistake — DeMorgan's alone gets you to the right operators, but you still need the distributive law to actually reach sum-of-products form.</div>`
+      },
+    ];
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUIZ ENGINE — generic; driven entirely by QUESTIONS[] via index.
+    // ══════════════════════════════════════════════════════════════════════
+
+    function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+    function isMulti(data) { return data.kind === 'multi'; }
+    function isTruth(data) { return data.kind === 'truth'; }
+    function isMatch(data) { return data.kind === 'match'; }
+
+    // ── kind:'truth' — single-pass, fixed at 3 inputs (C,B,A), matching
+    // the lesson's own "up to three inputs" scope. Unlike
+    // digital_knowledge_logic_combos.html's buildStagedRows (which derives
+    // extra reference columns from c,b,a for a staged multi-gate build-up),
+    // this file has no staged questions, so it just needs the 8 rows and
+    // one zFn(c,b,a) evaluating the given expression directly. ──
+    function zFromClicks(n) { const m = n % 3; return m === 0 ? null : m - 1; }
+    function buildTableRows(zFn) {
+      const rows = [];
+      for (let v = 0; v < 8; v++) {
+        const c = (v >> 2) & 1, b = (v >> 1) & 1, a = v & 1;
+        rows.push({ inputs: [c, b, a], z: zFn(c, b, a) });
+      }
+      return rows;
+    }
+    function truthCorrectExplain(st) {
+      const wrongCount = st.opts.filter((o, i) => zFromClicks(st.clicks[i]) !== st.cor[i]).length;
+      return wrongCount === 0 ? `All ${st.opts.length} rows correct` : `${st.opts.length - wrongCount} of ${st.opts.length} rows correct`;
+    }
+    function truthMistakeLine(labels, st) {
+      const mistakes = st.opts
+        .map((o, i) => ({ o, i }))
+        .filter(({ i }) => zFromClicks(st.clicks[i]) !== st.cor[i])
+        .map(({ o }) => `${labels} = ${o.inputs.join(' ')}`);
+      return mistakes.length
+        ? `<div class="working-step" style="margin-top:.6rem">Incorrect rows:</div><div class="working-line">${mistakes.join(', ')}</div>`
+        : '';
+    }
+
+    // ── kind:'match' — ported from digital_knowledge_logic_gates.html
+    // (its Q2/Q3), unchanged. columns() gives `{shapeId}` (or a plain
+    // string) per column; options() gives `{label, col}` (or `{shapeId,
+    // col}`) pool items the student drags/clicks into place. ──
+    function matchChipContent(opt, constrained) {
+      if (!opt.shapeId) return opt.label;
+      const svgStyle = constrained
+        ? 'width:100%;max-width:92px;height:auto;display:block'
+        : 'width:92px;height:auto;display:block';
+      return `<svg viewBox="-32 -36 96 76" style="${svgStyle}"><use href="#${opt.shapeId}"/></svg>`;
+    }
+    function renderMatch() {
+      const st = Q[cur], data = QUESTIONS[cur];
+      const cols = data.columns();
+
+      const picking = st.sel !== null;
+      const poolHasItems = st.opts.some((_, i) => st.place[i] === null);
+      const needsPick = !st.ans && !picking && poolHasItems;
+      document.getElementById('matchPoolRow').classList.toggle('needs-pick', needsPick);
+      document.getElementById('matchPool').classList.toggle('needs-pick', needsPick);
+
+      const pool = document.getElementById('matchPool');
+      pool.innerHTML = '';
+      st.opts.forEach((opt, i) => {
+        if (st.place[i] !== null) return;
+        const chip = document.createElement('button');
+        const isPicked = st.sel === i;
+        chip.className = 'match-chip' + (isPicked ? ' picked' : '') + (opt.shapeId ? ' match-chip-shape' : '');
+        chip.innerHTML = matchChipContent(opt);
+        chip.disabled = st.ans || (picking && !isPicked);
+        if (!chip.disabled) chip.addEventListener('click', (e) => { e.stopPropagation(); selectPoolItem(i); });
+        pool.appendChild(chip);
+      });
+
+      const colsEl = document.getElementById('matchColumns');
+      colsEl.innerHTML = '';
+      colsEl.style.gridTemplateColumns = `repeat(${Math.min(cols.length, 4)}, 1fr)`;
+      cols.forEach((col, colIdx) => {
+        const colDiv = document.createElement('div');
+        colDiv.className = 'match-column';
+        colDiv.addEventListener('click', () => assignToColumn(colIdx));
+
+        const arrow = document.createElement('div'); arrow.className = 'match-col-arrow'; arrow.textContent = '▼';
+        const title = document.createElement('div'); title.className = 'match-col-title';
+        title.innerHTML = (typeof col === 'string') ? col : `<svg viewBox="-32 -36 96 76" style="width:100%;max-width:80px;display:block;margin:0 auto"><use href="#${col.shapeId}"/></svg>`;
+        const items = document.createElement('div'); items.className = 'match-col-items';
+
+        st.opts.forEach((opt, i) => {
+          if (st.place[i] !== colIdx) return;
+          const chip = document.createElement('button');
+          chip.className = 'match-chip' + (opt.shapeId ? ' match-chip-shape' : '');
+          chip.innerHTML = matchChipContent(opt, true);
+          if (st.ans) {
+            chip.disabled = true;
+            chip.classList.add(st.place[i] === st.cor[i] ? 'correct' : 'wrong');
+          } else {
+            chip.disabled = picking;
+            if (!chip.disabled) chip.addEventListener('click', (e) => { e.stopPropagation(); unassignItem(i); });
+          }
+          items.appendChild(chip);
+        });
+
+        colDiv.append(arrow, title, items);
+        colDiv.classList.toggle('droppable', !st.ans && picking);
+        colsEl.appendChild(colDiv);
+      });
+    }
+    function selectPoolItem(i) {
+      const st = Q[cur];
+      if (st.ans) return;
+      st.sel = (st.sel === i) ? null : i;
+      renderQuestion();
+    }
+    function assignToColumn(colIdx) {
+      const st = Q[cur];
+      if (st.ans || st.sel === null) return;
+      st.place[st.sel] = colIdx;
+      st.sel = null;
+      renderQuestion();
+    }
+    function unassignItem(i) {
+      const st = Q[cur];
+      if (st.ans) return;
+      st.place[i] = null;
+      renderQuestion();
+    }
+
+    function isAnswerCorrect(data, st) {
+      if (isTruth(data)) return st.clicks.every((n, r) => zFromClicks(n) === st.cor[r]);
+      if (isMatch(data)) return st.place.every((p, i) => p === st.cor[i]);
+      if (!isMulti(data)) return st.sel === st.cor;
+      const a = [...st.sel].sort((x, y) => x - y), b = [...st.cor].sort((x, y) => x - y);
+      return a.length === b.length && a.every((v, i) => v === b[i]);
+    }
+    function selectedLabel(data, st) {
+      if (isTruth(data)) {
+        const correct = st.clicks.filter((n, r) => zFromClicks(n) === st.cor[r]).length;
+        return `${correct} / ${st.opts.length} rows correct`;
+      }
+      if (isMatch(data)) {
+        const correctCount = st.place.filter((p, i) => p === st.cor[i]).length;
+        return `${correctCount} / ${st.opts.length} correctly placed`;
+      }
+      if (!isMulti(data)) return (st.sel != null && st.opts[st.sel]) ? st.opts[st.sel].label : '—';
+      return st.sel.length ? [...st.sel].sort((a, b) => a - b).map(i => LETTERS[i]).join(', ') : '—';
+    }
+    function fillCorrectSelection(i) {
+      const data = QUESTIONS[i], st = Q[i];
+      if (isTruth(data)) st.clicks = st.cor.map(z => z + 1);
+      else if (isMatch(data)) st.place = st.cor.slice();
+      else if (isMulti(data)) st.sel = [...st.cor];
+      else st.sel = st.cor;
+    }
+
+    let Q = [];
+    let cur = 0;
+
+    function buildProgressDots() {
+      document.getElementById('progressDots').innerHTML =
+        QUESTIONS.map((_, i) => `<div class="progress-dot" id="dot-${i}"></div>`).join('');
+    }
+
+    function updateProgress() {
+      QUESTIONS.forEach((_, i) => {
+        const d = document.getElementById('dot-' + i);
+        d.className = 'progress-dot';
+        if (i === cur) d.classList.add('active'); else if (Q[i].ans) d.classList.add('done');
+      });
+      document.getElementById('progressLabel').textContent = (cur + 1) + ' / ' + QUESTIONS.length;
+    }
+
+    function renderOptions() {
+      const st = Q[cur], data = QUESTIONS[cur], multi = isMulti(data);
+      const c = document.getElementById('qOptions'); c.innerHTML = '';
+      st.opts.forEach((opt, i) => {
+        const btn = document.createElement('button'); btn.className = 'option-btn';
+        const selected = multi ? st.sel.includes(i) : i === st.sel;
+        btn.innerHTML = `<span class="option-letter">${LETTERS[i]}</span><span>${opt.label}</span>`;
+        if (st.ans) {
+          btn.disabled = true;
+          if (opt.type === 'correct') {
+            const missed = multi && !selected;
+            btn.classList.add(missed ? 'missed' : 'correct');
+            btn.innerHTML += `<span class="result-icon">${missed ? '○' : '✓'}</span>`;
+          } else if (selected) { btn.classList.add('wrong'); btn.innerHTML += `<span class="result-icon">✗</span>`; }
+          else btn.classList.add('dimmed');
+        } else {
+          if (selected) btn.classList.add('selected');
+          btn.addEventListener('click', () => selectOption(i));
+        }
+        c.appendChild(btn);
+      });
+    }
+
+    function renderTruth() {
+      const st = Q[cur], data = QUESTIONS[cur];
+      const inputLabels = data.inputLabels();
+      document.getElementById('truthGroupHeads').innerHTML =
+        data.headerGroups().map(g => `<th colspan="${g.span}">${g.label}</th>`).join('');
+      document.getElementById('truthColLabels').innerHTML =
+        inputLabels.map(l => `<th>${l}</th>`).join('') + `<th>${data.outputLabel()}</th>`;
+
+      const body = document.getElementById('truthBody');
+      body.innerHTML = '';
+      st.opts.forEach((row, r) => {
+        const tr = document.createElement('tr');
+        row.inputs.forEach(v => {
+          const td = document.createElement('td');
+          td.textContent = String(v);
+          td.className = 'truth-input-cell';
+          tr.appendChild(td);
+        });
+        const zTd = document.createElement('td');
+        const z = zFromClicks(st.clicks[r]);
+        zTd.textContent = z === null ? '' : String(z);
+        if (st.ans) {
+          zTd.className = 'bits-cell' + (z === st.cor[r] ? ' correct' : ' wrong');
+        } else {
+          zTd.className = 'bits-cell';
+          zTd.addEventListener('click', () => clickTruthZ(r));
+        }
+        tr.appendChild(zTd);
+        body.appendChild(tr);
+      });
+    }
+
+    function clickTruthZ(r) {
+      const st = Q[cur];
+      if (st.ans) return;
+      st.clicks[r]++;
+      renderQuestion();
+    }
+
+    function selectOption(i) {
+      const st = Q[cur], data = QUESTIONS[cur];
+      if (st.ans) return;
+      if (isMulti(data)) {
+        const pos = st.sel.indexOf(i);
+        if (pos >= 0) st.sel.splice(pos, 1); else st.sel.push(i);
+      } else {
+        st.sel = i;
+      }
+      renderQuestion();
+    }
+
+    function renderQuestion() {
+      const data = QUESTIONS[cur], st = Q[cur];
+      const multi = isMulti(data);
+
+      document.getElementById('qNum').textContent = 'Q' + (cur + 1);
+      document.getElementById('qText').innerHTML = data.text(st);
+      document.getElementById('qHint').innerHTML = data.hint(st);
+
+      document.getElementById('qMatch').style.display = isMatch(data) ? 'flex' : 'none';
+      document.getElementById('qTruth').style.display = isTruth(data) ? 'block' : 'none';
+      document.getElementById('qOptions').style.display = (isMatch(data) || isTruth(data)) ? 'none' : '';
+      if (isMatch(data)) {
+        renderMatch();
+      } else if (isTruth(data)) {
+        renderTruth();
+      } else {
+        renderOptions();
+      }
+
+      if (data.circuitId) {
+        document.getElementById('circuitRefUse').setAttribute('href', '#' + data.circuitId);
+        document.getElementById('circuitRefLabel').textContent = data.circuitLabel || 'Reference Circuit';
+      }
+
+      const selList = document.getElementById('qSelectedList');
+      if (multi) {
+        selList.style.display = '';
+        selList.textContent = st.sel.length
+          ? `Selected: ${[...st.sel].sort((a, b) => a - b).map(i => LETTERS[i]).join(', ')}`
+          : 'Click every option that applies.';
+      } else {
+        selList.style.display = 'none';
+      }
+
+      const banner = document.getElementById('qBanner');
+      if (st.ans) {
+        const ok = isAnswerCorrect(data, st);
+        banner.className = 'result-banner ' + (ok ? 'correct' : 'wrong');
+        document.getElementById('qIcon').textContent = ok ? '✓' : '✗';
+        document.getElementById('qBannerText').innerHTML = ok ? `Correct! ${data.correctExplain(st)}` : `The correct answer is ${data.correctExplain(st)}`;
+      } else {
+        banner.className = 'result-banner';
+      }
+
+      const working = document.getElementById('qWorking');
+      working.className = 'working-box' + (st.ans ? ' visible' : '');
+      document.getElementById('qWorkingContent').innerHTML = st.ans ? data.working(st) : '';
+
+      document.getElementById('qBack').style.display = cur > 0 ? 'inline-block' : 'none';
+      const check = document.getElementById('qCheck');
+      check.style.display = st.ans ? 'none' : 'inline-block';
+      check.disabled = st.ans || (
+        isMatch(data) ? !st.place.every(p => p !== null) :
+        isTruth(data) ? !st.clicks.every(n => zFromClicks(n) !== null) :
+        (multi ? st.sel.length === 0 : st.sel === null)
+      );
+      const isLast = cur === QUESTIONS.length - 1;
+      document.getElementById('qNext').style.display = (st.ans && !isLast) ? 'inline-block' : 'none';
+      document.getElementById('qSummary').style.display = (st.ans && isLast) ? 'inline-block' : 'none';
+
+      swapLeftPanel(data.circuitId ? 'circuit' : 'none');
+      updateProgress();
+    }
+
+    function checkAnswer() {
+      const st = Q[cur], data = QUESTIONS[cur];
+      if (st.ans) return;
+      if (isMatch(data)) { if (!st.place.every(p => p !== null)) return; }
+      else if (isTruth(data)) { if (!st.clicks.every(n => zFromClicks(n) !== null)) return; }
+      else if (isMulti(data) ? st.sel.length === 0 : st.sel === null) return;
+      st.ans = true;
+      renderQuestion();
+      document.getElementById('qBanner').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function nextQuestion() { if (cur < QUESTIONS.length - 1) { cur++; renderQuestion(); } }
+
+    function backQuestion() {
+      if (cur <= 0) return;
+      cur--;
+      for (let i = cur; i < QUESTIONS.length; i++) {
+        const data = QUESTIONS[i];
+        Q[i].ans = false;
+        if (isMatch(data)) { Q[i].place = Q[i].opts.map(() => null); Q[i].sel = null; }
+        else if (isTruth(data)) { Q[i].clicks = Q[i].opts.map(() => 0); }
+        else Q[i].sel = isMulti(data) ? [] : null;
+      }
+      renderQuestion();
+    }
+
+    function swapLeftPanel(mode) {
+      document.getElementById('circuitPanelDiv').style.display = mode === 'circuit' ? '' : 'none';
+      document.getElementById('quizWrap').classList.toggle('single-col', mode === 'none');
+    }
+
+    function goToQuestion(n) {
+      cur = Math.max(0, Math.min(QUESTIONS.length - 1, n - 1));
+      document.getElementById('summaryPanel').style.display = 'none';
+      document.getElementById('qPanel').style.display = 'flex';
+      renderQuestion();
+    }
+
+    function resetQuiz() {
+      Q = QUESTIONS.map(data => {
+        if (isTruth(data)) {
+          const opts = data.options();
+          const cor = opts.map(row => row.z);
+          return { ans: false, cor, opts, clicks: opts.map(() => 0) };
+        }
+        const opts = data.options();
+        if (isMatch(data)) {
+          const cor = opts.map(o => o.col);
+          return { sel: null, ans: false, cor, opts, place: opts.map(() => null) };
+        }
+        if (isMulti(data)) {
+          const cor = opts.map((o, i) => o.type === 'correct' ? i : -1).filter(i => i >= 0);
+          return { sel: [], ans: false, cor, opts };
+        }
+        return { sel: null, ans: false, cor: opts.findIndex(o => o.type === 'correct'), opts };
+      });
+      cur = 0;
+      document.getElementById('summaryPanel').style.display = 'none';
+      document.getElementById('qPanel').style.display = 'flex';
+      renderQuestion();
+    }
+
+    function showSummary() {
+      document.getElementById('qPanel').style.display = 'none';
+      document.getElementById('summaryPanel').style.display = 'block';
+      swapLeftPanel('none');
+      const items = QUESTIONS.map((data, i) => {
+        const st = Q[i];
+        const ans = selectedLabel(data, st);
+        const ok = isAnswerCorrect(data, st);
+        const colour = ok ? 'var(--colour-ui-correct)' : '#ff3366';
+        const mark = ok ? '✓' : '✗';
+        return `<div class="summary-item">
+      <div class="summary-item-head"><span class="summary-qnum">Q${i + 1}</span><span class="summary-question">${data.text(st)}</span></div>
+      <div class="summary-answer" style="color:${colour}">You answered: ${ans} &nbsp; ${mark}</div>
+      <div class="working-box visible">${st.ans ? data.working(st) : ''}</div>
+    </div>`;
+      }).join('');
+      document.getElementById('summaryContent').innerHTML = items;
+      QUESTIONS.forEach((_, i) => { const d = document.getElementById('dot-' + i); if (d) d.className = 'progress-dot done'; });
+      document.getElementById('progressLabel').textContent = 'Complete';
+    }
+
+    buildProgressDots();
+    resetQuiz();
+
+    function goBack(e) { e.preventDefault(); history.back(); }
+    if (history.length > 1) {
+      document.getElementById('menuLink').style.display = '';
+    }
+
+    function jump(n, answered) {
+      if (n < 1 || n > QUESTIONS.length) { console.warn('jump: no question', n); return; }
+      for (let i = 0; i < n - 1; i++) { fillCorrectSelection(i); Q[i].ans = true; }
+      goToQuestion(n);
+      if (answered) { fillCorrectSelection(cur); checkAnswer(); }
+    }
+    window.jump = jump;
+
+    function jumpToSummary() {
+      QUESTIONS.forEach((_, i) => {
+        if (Q[i].ans) return;
+        fillCorrectSelection(i);
+        Q[i].ans = true;
+      });
+      showSummary();
+    }
+    window.jumpToSummary = jumpToSummary;
+
+    {
+      const p = new URLSearchParams(location.search);
+      if (p.has('q')) { if (p.get('q') === 's') jumpToSummary(); else jump(+p.get('q'), p.has('ans')); }
+    }
+  </script>
+</body>
+
+</html>
