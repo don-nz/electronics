@@ -41,10 +41,11 @@
   removed since Q5 doesn't ask about gain at all — it's the PNP peak-
   voltage mirror of Q1, not of Q3. It lives in a second top-level SVG
   group, `circuitGroupPNP` (sibling to `circuitGroup`), toggled via
-  `showCircuitVariant(isPNP)` — called from
-  `showQuestion(n)` as `showCircuitVariant(n >= 5)` (Q5-Q8 all use the
-  PNP circuit) and forced false in `showSummary()`. R1/R2 do NOT reuse
-  the NPN circuit's values: a PNP
+  `showCircuitVariant(variant)` — called from
+  `showQuestion(n)` as `showCircuitVariant(n >= 9 ? 'cb' : n >= 5 ? 'pnp' : 'npn')`
+  (Q5-Q8 use the PNP circuit, Q9-Q11 use a third `circuitGroupCB` — see
+  further down for that one) and forced to `'npn'` in `showSummary()`.
+  R1/R2 do NOT reuse the NPN circuit's values: a PNP
   divider needs VB sitting HIGH near VCC (VE = VB + VBE, current flows
   VCC→RE→emitter), so R1/R2 were first swapped from the NPN circuit's
   ratio (giving R1=15k/R2=120k, VE≈11.27V) to fix an initial ~67 V
@@ -84,6 +85,26 @@
   |Av| ≈ 0.996 — very close to but always just under 1, as expected for
   an emitter follower. Q8 chains Q6's swing and Q7's gain the same way
   Q4 chains Q2/Q3.
+
+  Q9 rounds off the quiz with a THIRD circuit, `circuitGroupCB`, a
+  genuine common-base stage. It started as a literal, unmodified clone
+  of Q1's common-emitter circuit (same NPN shape/wiring, same values via
+  the independent `V_CB` config object), then was hand-rewired by the
+  user into common base: input coupled to the EMITTER via CIN, base
+  bypassed to AC ground via a new CB capacitor, output taken from the
+  COLLECTOR via COUT — RE keeps its original position/value but no
+  longer sits in the AC signal path at all (it only sets the DC bias
+  current now). `showCircuitVariant()` was widened from a boolean
+  (NPN/PNP) to a 3-way `'npn'|'pnp'|'cb'` string to accommodate the
+  third circuit. Q9 asks for this stage's voltage gain — deliberately
+  NEITHER Q3's formula (RC/RE, common-emitter) NOR Q7's (RE/(RE+re′),
+  common-collector): because the input is applied directly at the
+  emitter, RE never enters the AC gain equation at all, and the answer
+  is |Av| ≈ RC/re′ instead — the same re′ concept as Q7, on the other
+  side of the fraction. A third distinct formula for a third distinct
+  AC-common terminal, reinforcing that it's the topology (which
+  terminal is AC-grounded), not the resistor values, that decides which
+  gain formula applies.
 
   This intentionally does NOT use the data-driven QUESTIONS[] engine
   found in bjt_knowledge_amp_config.html/bjt_knowledge_thevenin.html — it
@@ -293,6 +314,7 @@
             <!-- ── BOTTOM HORIZONTAL ── -->
             <line x1="-90" y1="520" x2="360" y2="520" style="stroke: var(--colour-series)" stroke-width="2" /><!-- GND rail (Source column to RE column) -->
             <circle cx="-70" cy="520" r="5" style="fill: var(--colour-series)" />
+            <circle cx="100" cy="520" r="5" style="fill: var(--colour-series)" />
             <circle cx="340" cy="520" r="5" style="fill: var(--colour-series)" />
 
             <!-- ── CENTRE HORIZONTAL ── -->
@@ -301,7 +323,7 @@
             <line x1="4" y1="255" x2="100" y2="255" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Cin to Base node -->
 
             <!-- ── OUTPUT HORIZONTAL ── -->
-            <line x1="340" y1="221" x2="484" y2="221" style="stroke: var(--colour-series)" stroke-width="2" />
+            <line x1="340" y1="210" x2="484" y2="210" style="stroke: var(--colour-series)" stroke-width="2" />
 
 
             <!-- ════════════════════ NODES ════════════════════ -->
@@ -315,7 +337,6 @@
             </g>
 
             <!-- ── NODE C ── -->
-            <circle cx="340" cy="221" r="5" style="fill: var(--colour-series)" />
             <g id="nodeC_lbl" transform="translate(310,200)">
               <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5" />
               <text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14"
@@ -363,16 +384,17 @@
 
             <!-- ════════════════════ AC OUTPUT COMPONENTS ════════════════════ -->
 
-            <g id="coutGroup" transform="translate(440,221)">
+            <g transform="translate(440,210)">
               <use href="#cap-shape" />
-              <text id="nm-cout" x="0" y="-25" fill="var(--colour-capacitor-labels)" text-anchor="middle" font-size="13"
+              <text x="0" y="-25" fill="var(--colour-capacitor-labels)" text-anchor="middle" font-size="13"
                 font-weight="bold">C<tspan baseline-shift="sub" font-size="9">OUT</tspan></text>
-              <text id="lbl-cout" x="0" y="25" fill="var(--colour-text)" text-anchor="middle"
+              <text x="0" y="25" fill="var(--colour-text)" text-anchor="middle"
                 font-size="12"><tspan fill="var(--colour-text)">1</tspan><tspan fill="var(--colour-capacitor-labels)"> µF</tspan></text>
             </g>
-            <circle cx="484" cy="221" r="5" style="fill: var(--colour-series)" />
-            <text id="vsValue" x="480" y="240" style="fill: var(--colour-signal)" text-anchor="start" font-size="12"
+            <text x="480" y="230" style="fill: var(--colour-signal)" text-anchor="start" font-size="12"
               font-weight="bold"><tspan fill="var(--colour-signal)"> output</tspan></text>
+            <circle cx="484" cy="210" r="5" style="fill: var(--colour-series)" />
+            <circle cx="340" cy="210" r="5" style="fill: var(--colour-series)" />
 
             <!-- ════════════════════ COMMON LABEL ════════════════════ -->
 
@@ -541,26 +563,34 @@
             </g>
 
             <!-- ════════════════════ WIRES ════════════════════ -->
+            <!-- ── LEFT VERTICAL (AC source ground return, x=-110) ── -->
             <line x1="-70" y1="279" x2="-70" y2="520" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Source return down to GND level -->
 
+            <!-- ── CENTER VERTICAL (base-bias rail, x=100) ── -->
             <line x1="100" y1="50" x2="100" y2="80" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC rail down to R1 -->
             <line x1="100" y1="160" x2="100" y2="255" style="stroke: var(--colour-series)" stroke-width="2" /><!-- R1 down to Base node -->
             <line x1="100" y1="255" x2="100" y2="350" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Base node down to R2 -->
             <line x1="100" y1="430" x2="100" y2="520" style="stroke: var(--colour-series)" stroke-width="2" /><!-- R2 down to GND rail -->
 
+            <!-- ── RIGHT VERTICAL (emitter/collector rail, x=340 — RE/RC
+                 swapped from Q1's NPN circuit, so this rail's order is
+                 reversed top-to-bottom) ── -->
             <line x1="340" y1="50" x2="340" y2="80" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC rail down to RE -->
             <line x1="340" y1="160" x2="340" y2="221" style="stroke: var(--colour-series)" stroke-width="2" /><!-- RE down to Emitter pin -->
             <line x1="340" y1="289" x2="340" y2="350" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Collector pin down to RC -->
             <line x1="340" y1="430" x2="340" y2="520" style="stroke: var(--colour-series)" stroke-width="2" /><!-- RC down to GND rail -->
 
+            <!-- ── TOP HORIZONTAL ── -->
             <line x1="80" y1="50" x2="360" y2="50" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC rail (R1 column to RE column) -->
             <circle cx="100" cy="50" r="5" style="fill: var(--colour-series)" />
             <circle cx="340" cy="50" r="5" style="fill: var(--colour-series)" />
 
+            <!-- ── BOTTOM HORIZONTAL ── -->
             <line x1="-90" y1="520" x2="360" y2="520" style="stroke: var(--colour-series)" stroke-width="2" /><!-- GND rail (Source column to RC column) -->
             <circle cx="-70" cy="520" r="5" style="fill: var(--colour-series)" />
             <circle cx="340" cy="520" r="5" style="fill: var(--colour-series)" />
 
+            <!-- ── CENTRE HORIZONTAL ── -->
             <line x1="100" y1="255" x2="309" y2="255" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Base node across to transistor base pin -->
             <line x1="-47" y1="255" x2="-4" y2="255" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Source to Cin -->
             <line x1="4" y1="255" x2="100" y2="255" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Cin to Base node -->
@@ -705,7 +735,7 @@
                 font-weight="bold">V<tspan baseline-shift="sub" font-size="10">B</tspan></text>
               <text id="meterVBValue-pnp" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle"
                 font-size="15" font-weight="bold">—</text>
-              <text style="fill: var(--colour-red)" text-anchor="middle" font-size="14" x="0" y="22">V</text>
+              <text id="meterVBUnit-pnp" style="fill: var(--colour-red)" text-anchor="middle" font-size="14" x="0" y="22">V</text>
             </g>
 
             <!-- ══ V_E METER (now the TOP position) ══ -->
@@ -716,7 +746,7 @@
                 font-weight="bold">V<tspan baseline-shift="sub" font-size="10">E</tspan></text>
               <text id="meterVEValue-pnp" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle"
                 font-size="15" font-weight="bold">—</text>
-              <text style="fill: var(--colour-red)" text-anchor="middle" font-size="14" x="0" y="22">V</text>
+              <text id="meterVEUnit-pnp" style="fill: var(--colour-red)" text-anchor="middle" font-size="14" x="0" y="22">V</text>
             </g>
 
             <!-- ══ V_C METER (now the BOTTOM position) ══ -->
@@ -727,7 +757,7 @@
                 font-weight="bold">V<tspan baseline-shift="sub" font-size="10">C</tspan></text>
               <text id="meterVCValue-pnp" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle"
                 font-size="15" font-weight="bold">—</text>
-              <text style="fill: var(--colour-red)" text-anchor="middle" font-size="14" x="0" y="22">V</text>
+              <text id="meterVCUnit-pnp" style="fill: var(--colour-red)" text-anchor="middle" font-size="14" x="0" y="22">V</text>
             </g>
 
             <!-- ══ I_E INDICATOR ══ -->
@@ -737,10 +767,284 @@
                 font-weight="bold">I<tspan baseline-shift="sub" font-size="10">E</tspan></text>
               <text id="ieValue-pnp" x="0" y="-2" style="fill: var(--colour-text)" text-anchor="middle"
                 font-size="15" font-weight="bold">—</text>
-              <text style="fill: var(--colour-current)" text-anchor="middle" font-size="12" x="0" y="15">mA</text>
+              <text id="ieUnit-pnp" style="fill: var(--colour-current)" text-anchor="middle" font-size="12" x="0" y="15">mA</text>
             </g>
 
           </g><!-- /circuitGroupPNP -->
+
+          <!-- ════════════════════ COMMON BASE CIRCUIT GROUP (Q9 only) ════════════════════
+               Starting point ONLY — a literal, unmodified clone of circuitGroup
+               (Q1's common-emitter circuit: same NPN shape, same wiring, same
+               R1/R2/RC/RE/VCC values via V_CB, which is itself a straight copy
+               of V's current values) per explicit request, so the user can
+               rewire it into a genuine common-base topology by hand (input at
+               emitter, output at collector, base tied to AC ground) rather than
+               the assistant guessing at a specific CB layout. Same "always
+               visible meters, no progressive reveal" pattern as circuitGroupPNP
+               — Q9 is a single question, same as Q5. All ids suffixed `-cb`.
+               No gain indicator (matching circuitGroupPNP's precedent) — add
+               one back if Q9 ends up testing gain. -->
+          <g id="circuitGroupCB" transform="translate(150,5)" display="none">
+
+            <!-- ════════════════════ BJT DATASHEET REFERENCE TABLE ════════════════════ -->
+
+            <g id="datasheetTableCB" transform="translate(-145,0)">
+              <rect x="0" y="0" width="130" height="145" rx="4" style="fill: rgba(0,0,0,.25)" stroke="var(--colour-bjt)" stroke-width="1" />
+              <text x="6" y="13" style="fill: var(--colour-text)" text-anchor="start" font-size="9" font-weight="bold" letter-spacing=".03em">BC549 — TYPICAL RATINGS</text>
+              <line x1="6" y1="19" x2="134" y2="19" style="stroke: var(--colour-border)" stroke-width="1" />
+
+              <text x="6" y="32" style="fill: var(--colour-bjt)" font-size="12">V<tspan baseline-shift="sub" font-size="6.5">BE</tspan>(on)</text>
+              <text x="124" y="32" style="fill: var(--colour-text)" text-anchor="end" font-size="12">0.6 V typ</text>
+
+              <text x="6" y="49" style="fill: var(--colour-bjt)" font-size="12">V<tspan baseline-shift="sub" font-size="6.5">CE</tspan>(sat)</text>
+              <text x="124" y="49" style="fill: var(--colour-text)" text-anchor="end" font-size="12">0.2 V typ</text>
+
+              <text x="6" y="66" style="fill: var(--colour-bjt)" font-size="12">V<tspan baseline-shift="sub" font-size="6.5">CEO</tspan>(max)</text>
+              <text x="124" y="66" style="fill: var(--colour-text)" text-anchor="end" font-size="12">45 V</text>
+
+              <text x="6" y="83" style="fill: var(--colour-bjt)" font-size="12">I<tspan baseline-shift="sub" font-size="6.5">C</tspan>(max)</text>
+              <text x="124" y="83" style="fill: var(--colour-text)" text-anchor="end" font-size="12">100 mA</text>
+
+              <text x="6" y="100" style="fill: var(--colour-bjt)" font-size="12">P<tspan baseline-shift="sub" font-size="6.5">D</tspan>(max)</text>
+              <text x="124" y="100" style="fill: var(--colour-text)" text-anchor="end" font-size="12">500 mW</text>
+
+              <text x="6" y="117" style="fill: var(--colour-bjt)" font-size="12">h<tspan baseline-shift="sub" font-size="6.5">FE</tspan> (β)</text>
+              <text x="124" y="117" style="fill: var(--colour-text)" text-anchor="end" font-size="12">110–800</text>
+
+              <text x="6" y="134" style="fill: var(--colour-bjt)" font-size="12">I<tspan baseline-shift="sub" font-size="6.5">CBO</tspan></text>
+              <text x="124" y="134" style="fill: var(--colour-text)" text-anchor="end" font-size="12">&lt;15 nA</text>
+            </g>
+
+            <!-- ════════════════════ WIRES ════════════════════ -->
+            <!-- ── LEFT VERTICAL ── -->
+            <line x1="-70" y1="255" x2="-70" y2="520" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Base down to GND level -->
+
+            <!-- ── CENTER VERTICAL (base-bias rail, x=100) ── -->
+            <line x1="100" y1="50" x2="100" y2="80" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC rail down to R1 -->
+            <line x1="100" y1="160" x2="100" y2="255" style="stroke: var(--colour-series)" stroke-width="2" /><!-- R1 down to Base node -->
+            <line x1="100" y1="255" x2="100" y2="350" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Base node down to R2 -->
+            <line x1="100" y1="430" x2="100" y2="520" style="stroke: var(--colour-series)" stroke-width="2" /><!-- R2 down to GND rail -->
+
+            <!-- ── RIGHT VERTICAL (collector/emitter rail, x=340) ── -->
+            <line x1="340" y1="50" x2="340" y2="80" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC rail down to RC -->
+            <line x1="340" y1="160" x2="340" y2="221" style="stroke: var(--colour-series)" stroke-width="2" /><!-- RC down to Collector pin -->
+            <line x1="340" y1="289" x2="340" y2="350" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Emitter pin down to RE -->
+            <line x1="340" y1="430" x2="340" y2="520" style="stroke: var(--colour-series)" stroke-width="2" /><!-- RE down to GND rail -->
+
+            <!-- ── OUTPUT VERTICAL ── -->
+            <line x1="500" y1="225" x2="500" y2="355" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Horizontal to "output" -->
+            <polygon points="494,230 506,230 500,220" style="fill: var(--colour-series)" /><!-- Arrow pointing up -->
+            <line x1="500" y1="370" x2="500" y2="505" style="stroke: var(--colour-series)" stroke-width="2" /><!-- "output" to GND -->
+            <polygon points="494,500 506,500 500,510" style="fill: var(--colour-series)" /><!-- Arrow pointing down -->
+
+            <!-- ── INPUT VERTICAL ── -->
+            <line x1="440" y1="325" x2="440" y2="415" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Horizontal to "input" -->
+            <polygon points="434,330 446,330 440,320" style="fill: var(--colour-series)" /><!-- Arrow pointing up -->
+            <line x1="440" y1="430" x2="440" y2="505" style="stroke: var(--colour-series)" stroke-width="2" /><!-- "input" to GND -->
+            <polygon points="434,500 446,500 440,510" style="fill: var(--colour-series)" /><!-- Arrow pointing down -->
+
+            <!-- ── TOP HORIZONTAL ── -->
+            <line x1="80" y1="50" x2="360" y2="50" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC rail (R1 column to RC column) -->
+            <circle cx="100" cy="50" r="5" style="fill: var(--colour-series)" />
+            <circle cx="340" cy="50" r="5" style="fill: var(--colour-series)" />
+
+            <!-- ── BOTTOM HORIZONTAL ── -->
+            <line x1="-90" y1="520" x2="520" y2="520" style="stroke: var(--colour-series)" stroke-width="2" /><!-- GND rail (Source column to RE column) -->
+            <circle cx="-70" cy="520" r="5" style="fill: var(--colour-series)" />
+            <circle cx="100" cy="520" r="5" style="fill: var(--colour-series)" />
+            <circle cx="340" cy="520" r="5" style="fill: var(--colour-series)" />
+            <circle cx="500" cy="520" r="5" style="fill: var(--colour-series)" />
+
+            <!-- ── CENTRE HORIZONTAL ── -->
+            <line x1="100" y1="255" x2="309" y2="255" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Base node across to transistor base pin -->
+            <line x1="-70" y1="255" x2="-4" y2="255" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Base to Cin -->
+            <line x1="4" y1="255" x2="100" y2="255" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Cin to Base node -->
+
+            <!-- ── OUTPUT HORIZONTAL ── -->
+            <line x1="340" y1="210" x2="500" y2="210" style="stroke: var(--colour-series)" stroke-width="2" />
+
+            <!-- ── INPUT HORIZONTAL ── -->
+            <line x1="340" y1="310" x2="440" y2="310" style="stroke: var(--colour-series)" stroke-width="2" />
+            <circle cx="340" cy="310" r="5" style="fill: var(--colour-series)" />
+            <circle cx="440" cy="310" r="5" style="fill: var(--colour-series)" />
+
+            <!-- ════════════════════ NODES ════════════════════ -->
+
+            <!-- ── NODE B ── -->
+            <circle cx="100" cy="255" r="5" style="fill: var(--colour-series)" />
+            <g id="nodeB_lbl_cb" transform="translate(80,235)">
+              <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5" />
+              <text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14"
+                font-weight="bold">B</text>
+            </g>
+
+            <!-- ── NODE C ── -->
+            <g id="nodeC_lbl_cb" transform="translate(310,200)">
+              <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5" />
+              <text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14"
+                font-weight="bold">C</text>
+            </g>
+
+            <!-- ── NODE E ── -->
+            <g id="nodeE_lbl_cb" transform="translate(310,305)">
+              <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5" />
+              <text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14"
+                font-weight="bold">E</text>
+            </g>
+
+            <!-- ════════════════════ VCC ════════════════════ -->
+
+            <g transform="translate(180,-1)">
+              <line x1="40" y1="50" x2="40" y2="30" style="stroke: var(--colour-supply)" stroke-width="2" />
+              <line x1="0" y1="30" x2="80" y2="30" style="stroke: var(--colour-supply)" stroke-width="2" />
+              <text x="0" y="15" style="fill: var(--colour-voltage-label)" text-anchor="start" font-size="15"
+                font-weight="bold">V<tspan baseline-shift="sub" font-size="10">CC</tspan></text>
+              <line x1="50" y1="10" x2="50" y2="20" style="stroke: var(--colour-text)" stroke-width="1.0" />
+              <line x1="46" y1="15" x2="54" y2="15" style="stroke: var(--colour-text)" stroke-width="1.0" />
+              <text id="vccValue-cb" x="60" y="20" style="fill: var(--colour-text)" text-anchor="start" font-size="14"
+                font-weight="bold">12V</text>
+            </g>
+
+            <!-- ════════════════════ BASE CAPACITOR ════════════════════ -->
+
+            <g transform="translate(0,255)">
+              <use href="#cap-shape" />
+              <text x="0" y="-25" fill="var(--colour-capacitor-labels)" text-anchor="middle" font-size="13"
+                font-weight="bold">C<tspan baseline-shift="sub" font-size="9">B</tspan></text>
+              <text x="0" y="25" fill="var(--colour-text)" text-anchor="middle"
+                font-size="12"><tspan fill="var(--colour-text)">1</tspan><tspan fill="var(--colour-capacitor-labels)"> µF</tspan></text>
+            </g>
+
+            <!-- ════════════════════ AC INPUT COMPONENTS ════════════════════ -->
+
+            <g transform="translate(380,310)">
+              <use href="#cap-shape" />
+              <text x="0" y="-25" fill="var(--colour-capacitor-labels)" text-anchor="middle" font-size="13"
+                font-weight="bold">C<tspan baseline-shift="sub" font-size="9">IN</tspan></text>
+              <text x="0" y="25" fill="var(--colour-text)" text-anchor="middle"
+                font-size="12"><tspan fill="var(--colour-text)">1</tspan><tspan fill="var(--colour-capacitor-labels)"> µF</tspan></text>
+            </g>
+
+              <text x="420" y="425" style="fill: var(--colour-signal)" text-anchor="start" font-size="14"
+                font-weight="bold"><tspan fill="var(--colour-signal)"> input</tspan></text>
+
+            <!-- ════════════════════ AC OUTPUT COMPONENTS ════════════════════ -->
+
+            <g transform="translate(440,210)">
+              <use href="#cap-shape" />
+              <text x="0" y="-25" fill="var(--colour-capacitor-labels)" text-anchor="middle" font-size="13"
+                font-weight="bold">C<tspan baseline-shift="sub" font-size="9">OUT</tspan></text>
+              <text x="0" y="25" fill="var(--colour-text)" text-anchor="middle"
+                font-size="12"><tspan fill="var(--colour-text)">1</tspan><tspan fill="var(--colour-capacitor-labels)"> µF</tspan></text>
+            </g>
+            <text x="477" y="365" style="fill: var(--colour-signal)" text-anchor="start" font-size="14"
+              font-weight="bold"><tspan fill="var(--colour-signal)"> output</tspan></text>
+            <circle cx="340" cy="210" r="5" style="fill: var(--colour-series)" />
+            <circle cx="500" cy="210" r="5" style="fill: var(--colour-series)" />
+
+            <!-- ════════════════════ COMMON LABEL ════════════════════ -->
+
+            <text x="20" y="540" fill="var(--colour-gnd)" text-anchor="middle" font-size="14" font-weight="bold">Common</text>
+
+            <!-- ════════════════════ Q1 — NPN ════════════════════ -->
+
+            <g transform="translate(326,255)">
+              <use href="#bjt-npn-shape" />
+              <text x="-25" y="-15" fill="var(--colour-bjt-labels)" text-anchor="middle" font-size="14"
+                font-weight="bold">Q1</text>
+              <text x="-20" y="25" fill="var(--colour-bjt-labels)" text-anchor="end"
+                font-size="12">BC549</text>
+            </g>
+
+            <!--═══════════════════ RESISTORS ════════════════════ -->
+
+            <!-- ══ R1 ══ -->
+            <g transform="translate(85,80)">
+              <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)"
+                stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+              <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14"
+                font-weight="bold">R1</text>
+              <text id="lbl-r1-cb" x="60" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle"
+                font-size="14">120.00kΩ</text>
+            </g>
+
+            <!-- ══ R2 ══ -->
+            <g transform="translate(85,350)">
+              <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)"
+                stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+              <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14"
+                font-weight="bold">R2</text>
+              <text id="lbl-r2-cb" x="60" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle"
+                font-size="14">15.00kΩ</text>
+            </g>
+
+            <!-- ══ RC ══ -->
+            <g transform="translate(325,80)">
+              <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)"
+                stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+              <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14"
+                font-weight="bold">RC</text>
+              <text id="lbl-rc-cb" x="60" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle"
+                font-size="14">1.80kΩ</text>
+            </g>
+
+            <!-- ══ RE ══ -->
+            <g transform="translate(325,350)">
+              <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)"
+                stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+              <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14"
+                font-weight="bold">RE</text>
+              <text id="lbl-re-cb" x="60" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle"
+                font-size="14">270.00Ω</text>
+            </g>
+
+            <!-- ════════════════════ METERS — always visible; this whole group only
+                 shows for Q9, so there's nothing to progressively reveal ════════════════════ -->
+
+            <!-- ══ V_B METER ══ -->
+            <g transform="translate(30,180)">
+              <use href="#probe-wire" transform="rotate(45) translate(30,0)" />
+              <use href="#meter-shape" />
+              <text x="20" y="-35" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14"
+                font-weight="bold">V<tspan baseline-shift="sub" font-size="10">B</tspan></text>
+              <text id="meterVBValue-cb" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle"
+                font-size="15" font-weight="bold">—</text>
+              <text id="meterVBUnit-cb" style="fill: var(--colour-red)" text-anchor="middle" font-size="14" x="0" y="22">V</text>
+            </g>
+
+            <!-- ══ V_E METER ══ -->
+            <g transform="translate(250,350)">
+              <use href="#probe-wire" transform="rotate(325) translate(30,0)" />
+              <use href="#meter-shape" />
+              <text x="20" y="-35" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14"
+                font-weight="bold">V<tspan baseline-shift="sub" font-size="10">E</tspan></text>
+              <text id="meterVEValue-cb" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle"
+                font-size="15" font-weight="bold">—</text>
+              <text id="meterVEUnit-cb" style="fill: var(--colour-red)" text-anchor="middle" font-size="14" x="0" y="22">V</text>
+            </g>
+
+            <!-- ══ V_C METER ══ -->
+            <g transform="translate(250,150)">
+              <use href="#probe-wire" transform="rotate(45) translate(30,0)" />
+              <use href="#meter-shape" />
+              <text x="20" y="-35" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14"
+                font-weight="bold">V<tspan baseline-shift="sub" font-size="10">C</tspan></text>
+              <text id="meterVCValue-cb" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle"
+                font-size="15" font-weight="bold">—</text>
+              <text id="meterVCUnit-cb" style="fill: var(--colour-red)" text-anchor="middle" font-size="14" x="0" y="22">V</text>
+            </g>
+
+            <!-- ══ I_E INDICATOR ══ -->
+            <g transform="translate(340,475)">
+              <use href="#ammeter-shape" />
+              <text x="40" y="-20" style="fill: var(--colour-current)" text-anchor="middle" font-size="14"
+                font-weight="bold">I<tspan baseline-shift="sub" font-size="10">E</tspan></text>
+              <text id="ieValue-cb" x="0" y="-2" style="fill: var(--colour-text)" text-anchor="middle"
+                font-size="15" font-weight="bold">—</text>
+              <text id="ieUnit-cb" style="fill: var(--colour-current)" text-anchor="middle" font-size="12" x="0" y="15">mA</text>
+            </g>
+
+          </g><!-- /circuitGroupCB -->
 
           <!-- ══ XY RULER (dev tool, off by default) ══ -->
           <g id="xyRuler" display="none"></g>
@@ -762,6 +1066,9 @@
           <div class="progress-dot" id="dot-q6"></div>
           <div class="progress-dot" id="dot-q7"></div>
           <div class="progress-dot" id="dot-q8"></div>
+          <div class="progress-dot" id="dot-q9"></div>
+          <div class="progress-dot" id="dot-q10"></div>
+          <div class="progress-dot" id="dot-q11"></div>
           <span class="progress-label" id="progressLabel">1 / 5</span>
           <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
         </div>
@@ -1008,8 +1315,7 @@
 
         <!-- Q8 — PNP circuit: maximum peak-to-peak input before clipping,
              mirrors Q4 but chains Q6 (swing) and Q7 (emitter-follower
-             gain) instead of Q2/Q3. Last question — owns the Summary
-             button. -->
+             gain) instead of Q2/Q3. -->
         <div class="q-panel" id="q8Panel" style="display:none">
           <div class="q-header">
             <div class="q-num">Q8</div>
@@ -1027,7 +1333,90 @@
           <div class="btn-row">
             <button class="btn btn-prev" id="q8Back" onclick="backFromQ8()">← Prev</button>
             <button class="btn btn-check" id="q8Check" onclick="checkQ8()" disabled>Check</button>
-            <button class="btn btn-summary" id="q8Summary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-next" id="q8Next" onclick="showQuestion(9)" style="display:none">Next →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Q9 — Common Base: voltage gain. circuitGroupCB started as a
+             literal clone of Q1's circuit, then was hand-rewired by the
+             user into a genuine common-base stage (input coupled to the
+             emitter via CIN, base bypassed to AC ground via CB, output
+             taken from the collector via COUT). Gain here is RC/re′
+             (NOT Q3's RC/RE, NOT Q7's RE/(RE+re′) — RE plays no role in
+             the AC gain once the input is applied directly at the
+             emitter). Last question — owns the Summary button. -->
+        <div class="q-panel" id="q9Panel" style="display:none">
+          <div class="q-header">
+            <div class="q-num">Q9</div>
+            <div>
+              <div class="q-text" id="q9Text"></div>
+              <div class="q-hint" id="q9Hint"></div>
+            </div>
+          </div>
+          <div class="options" id="q9Options"></div>
+          <div class="result-banner" id="q9Banner"><span id="q9Icon"></span>&nbsp;<span id="q9BannerText"></span></div>
+          <div class="working-box" id="q9Working">
+            <div class="working-title">Worked Solution</div>
+            <div id="q9WorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="q9Back" onclick="backFromQ9()">← Prev</button>
+            <button class="btn btn-check" id="q9Check" onclick="checkQ9()" disabled>Check</button>
+            <button class="btn btn-next" id="q9Next" onclick="showQuestion(10)" style="display:none">Next →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Q10 — Common Base: gain sensitivity to a resistor-tolerance
+             shift. Doesn't touch circuitGroupCB's displayed values (still
+             the nominal R2=15k from Q9) — this is a "what if" pen-and-paper
+             scenario stated purely in the question text, redoing Q9's
+             whole VB→VE→IE→re′→Av chain with R2 at +10% tolerance. -->
+        <div class="q-panel" id="q10Panel" style="display:none">
+          <div class="q-header">
+            <div class="q-num">Q10</div>
+            <div>
+              <div class="q-text" id="q10Text"></div>
+              <div class="q-hint" id="q10Hint"></div>
+            </div>
+          </div>
+          <div class="options" id="q10Options"></div>
+          <div class="result-banner" id="q10Banner"><span id="q10Icon"></span>&nbsp;<span id="q10BannerText"></span></div>
+          <div class="working-box" id="q10Working">
+            <div class="working-title">Worked Solution</div>
+            <div id="q10WorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="q10Back" onclick="backFromQ10()">← Prev</button>
+            <button class="btn btn-check" id="q10Check" onclick="checkQ10()" disabled>Check</button>
+            <button class="btn btn-next" id="q10Next" onclick="showQuestion(11)" style="display:none">Next →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Q11 — Common Base: why this sensitivity is a real disadvantage.
+             Purely conceptual, no calculation — single-select 4-option
+             (matching this file's format throughout, not the sibling
+             file's multi-select engine). Last question — owns Summary. -->
+        <div class="q-panel" id="q11Panel" style="display:none">
+          <div class="q-header">
+            <div class="q-num">Q11</div>
+            <div>
+              <div class="q-text" id="q11Text"></div>
+              <div class="q-hint" id="q11Hint"></div>
+            </div>
+          </div>
+          <div class="options" id="q11Options"></div>
+          <div class="result-banner" id="q11Banner"><span id="q11Icon"></span>&nbsp;<span id="q11BannerText"></span></div>
+          <div class="working-box" id="q11Working">
+            <div class="working-title">Worked Solution</div>
+            <div id="q11WorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="q11Back" onclick="backFromQ11()">← Prev</button>
+            <button class="btn btn-check" id="q11Check" onclick="checkQ11()" disabled>Check</button>
+            <button class="btn btn-summary" id="q11Summary" onclick="showSummary()" style="display:none">See Summary →</button>
             <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
           </div>
         </div>
@@ -1067,7 +1456,7 @@
     const VBE = 0.6; // silicon NPN base-emitter drop, assumed constant
     let V = { vcc: 12, r1: 120000, r2: 15000, rc: 1800, re: 270 };
 
-    const QUIZ_QUESTION_COUNT = 8;
+    const QUIZ_QUESTION_COUNT = 11;
     const QIDS = Array.from({ length: QUIZ_QUESTION_COUNT }, (_, i) => 'q' + (i + 1));
 
     const LETTERS = ['A', 'B', 'C', 'D', 'E'];
@@ -1146,21 +1535,74 @@
       document.getElementById('lbl-re-pnp').innerHTML = `<tspan fill="var(--colour-text)">1.8</tspan><tspan fill="var(--colour-resistor-labels)"> kΩ</tspan>`;
       document.getElementById('lbl-rc-pnp').innerHTML = `<tspan fill="var(--colour-text)">270</tspan><tspan fill="var(--colour-resistor-labels)"> Ω</tspan>`;
       document.getElementById('vccValue-pnp').innerHTML = `<tspan fill="var(--colour-text)">${V_PNP.vcc}</tspan><tspan fill="var(--colour-supply)"> V</tspan>`;
-      document.getElementById('meterVBValue-pnp').textContent = fmtV(VB_PNP);
-      document.getElementById('meterVEValue-pnp').textContent = fmtV(VE_PNP);
-      document.getElementById('meterVCValue-pnp').textContent = fmtV(VC_PNP);
-      document.getElementById('ieValue-pnp').textContent = fmtAParts(IE_PNP).val;
+      // Split value/unit via fmtVParts()/fmtAParts() — same as Q1's own
+      // setMeter()/showIE() — NOT the combined fmtV() string, which would
+      // duplicate the unit against the meter's separate, dedicated unit
+      // line (only ever visibly wrong for readings under 1V, since fmtV's
+      // "X.XX V" then happens to match the line below it by coincidence).
+      const vbP = fmtVParts(VB_PNP), veP = fmtVParts(VE_PNP), vcP = fmtVParts(VC_PNP), ieP = fmtAParts(IE_PNP);
+      document.getElementById('meterVBValue-pnp').textContent = vbP.val;
+      document.getElementById('meterVBUnit-pnp').textContent = vbP.unit;
+      document.getElementById('meterVEValue-pnp').textContent = veP.val;
+      document.getElementById('meterVEUnit-pnp').textContent = veP.unit;
+      document.getElementById('meterVCValue-pnp').textContent = vcP.val;
+      document.getElementById('meterVCUnit-pnp').textContent = vcP.unit;
+      document.getElementById('ieValue-pnp').textContent = ieP.val;
+      document.getElementById('ieUnit-pnp').textContent = ieP.unit;
       document.getElementById('q5ChartVE').textContent = fmtV(VE_PNP);
     }
     initPNPCircuit();
 
-    // Swaps which circuit (NPN, for Q1-4, or PNP, for Q5) is visible.
-    function showCircuitVariant(isPNP) {
-      document.getElementById('circuitGroup').setAttribute('display', isPNP ? 'none' : 'inline');
-      document.getElementById('circuitGroupPNP').setAttribute('display', isPNP ? 'inline' : 'none');
-      document.getElementById('circuitTypeLabel').textContent = isPNP ? ' (PNP)' : '';
+    // ── Q9's Common Base circuit — starts as a literal copy of V/Q1's
+    // NPN values (same formulas as recompute() above) so circuitGroupCB
+    // renders identically to Q1's circuit before any hand-edits. Change
+    // V_CB directly once the circuit is rewired into a real common-base
+    // topology (input at emitter, output at collector, base at AC
+    // ground) — this object is deliberately independent of V, so editing
+    // it can't affect Q1-4's circuit. ──
+    let V_CB = { vcc: 12, r1: 120000, r2: 15000, rc: 1800, re: 270 };
+    let VB_CB, VE_CB, IE_CB, VC_CB;
+    function recomputeCB() {
+      VB_CB = V_CB.vcc * V_CB.r2 / (V_CB.r1 + V_CB.r2);
+      VE_CB = VB_CB - VBE;
+      IE_CB = VE_CB / V_CB.re;
+      VC_CB = V_CB.vcc - IE_CB * V_CB.rc;
     }
+    recomputeCB();
 
+    // One-time label/meter population — same rationale as initPNPCircuit()
+    // above (single question, no progressive reveal, so no CIRCUIT_STATES
+    // involvement needed for this group).
+    function initCBCircuit() {
+      const r1p = fmtO0Parts(V_CB.r1), r2p = fmtO0Parts(V_CB.r2), rcp = fmtO0Parts(V_CB.rc), rep = fmtO0Parts(V_CB.re);
+      document.getElementById('lbl-r1-cb').innerHTML = `<tspan fill="var(--colour-text)">${r1p.num}</tspan><tspan fill="var(--colour-resistor-labels)">${r1p.unit}</tspan>`;
+      document.getElementById('lbl-r2-cb').innerHTML = `<tspan fill="var(--colour-text)">${r2p.num}</tspan><tspan fill="var(--colour-resistor-labels)">${r2p.unit}</tspan>`;
+      document.getElementById('lbl-rc-cb').innerHTML = `<tspan fill="var(--colour-text)">${rcp.num}</tspan><tspan fill="var(--colour-resistor-labels)">${rcp.unit}</tspan>`;
+      document.getElementById('lbl-re-cb').innerHTML = `<tspan fill="var(--colour-text)">${rep.num}</tspan><tspan fill="var(--colour-resistor-labels)">${rep.unit}</tspan>`;
+      document.getElementById('vccValue-cb').innerHTML = `<tspan fill="var(--colour-text)">${V_CB.vcc}</tspan><tspan fill="var(--colour-supply)"> V</tspan>`;
+      // Split value/unit — see the matching comment in initPNPCircuit()
+      // above (this is the exact bug that made VE's "733.33 mV" show a
+      // redundant literal "V" underneath it before this fix).
+      const vbP = fmtVParts(VB_CB), veP = fmtVParts(VE_CB), vcP = fmtVParts(VC_CB), ieP = fmtAParts(IE_CB);
+      document.getElementById('meterVBValue-cb').textContent = vbP.val;
+      document.getElementById('meterVBUnit-cb').textContent = vbP.unit;
+      document.getElementById('meterVEValue-cb').textContent = veP.val;
+      document.getElementById('meterVEUnit-cb').textContent = veP.unit;
+      document.getElementById('meterVCValue-cb').textContent = vcP.val;
+      document.getElementById('meterVCUnit-cb').textContent = vcP.unit;
+      document.getElementById('ieValue-cb').textContent = ieP.val;
+      document.getElementById('ieUnit-cb').textContent = ieP.unit;
+    }
+    initCBCircuit();
+
+    // Swaps which circuit (NPN, for Q1-4; PNP, for Q5-8; Common Base
+    // (WIP), for Q9) is visible.
+    function showCircuitVariant(variant) {
+      document.getElementById('circuitGroup').setAttribute('display', variant === 'npn' ? 'inline' : 'none');
+      document.getElementById('circuitGroupPNP').setAttribute('display', variant === 'pnp' ? 'inline' : 'none');
+      document.getElementById('circuitGroupCB').setAttribute('display', variant === 'cb' ? 'inline' : 'none');
+      document.getElementById('circuitTypeLabel').textContent = variant === 'pnp' ? ' (PNP)' : variant === 'cb' ? ' (Common Base)' : '';
+    }
     // ══════════════════════════════════════════════════════════════════════
     // QUESTION TEXT
     // ══════════════════════════════════════════════════════════════════════
@@ -1207,6 +1649,18 @@
       {
         text: `Using the max output swing of <span class="colour-signal">${(() => { const { A, B } = gapsPNP(); return 2 * Math.min(A, B); })()} V p-p</span> (Q6) and the gain of <span class="colour-gain">${r3(avPNP())}</span> (Q7): what is the <span style="color:var(--colour-ui-primary)">maximum</span> peak to peak <span style="color:var(--colour-ui-primary)">INPUT</span> this circuit can accept without <span style="color:var(--colour-ui-wrong)">clipping</span>?`,
         hint: 'Same relationship as Q4 — the output swing is the input swing multiplied by the gain, so divide the max output swing by the gain to work backwards.'
+      },
+      {
+        text: 'Now for the <b>Common Base</b> stage: what is this circuit\'s <span class="colour-gain">voltage gain</span> magnitude <b class="colour-gain">|A<sub>v</sub>|</b>?',
+        hint: 'Neither Q3\'s formula nor Q7\'s applies here. The input is coupled straight into the <b>emitter</b>, and <span class="colour-resistor">R<sub>E</sub></span> plays no part in setting the gain — it only sets the DC bias current. The gain is set by <span class="colour-resistor">R<sub>C</sub></span> against the transistor\'s own internal emitter resistance, |A<sub>v</sub>| ≈ R<sub>C</sub> / r<sub>e</sub>′, where r<sub>e</sub>′ ≈ 26 mV / I<sub>E</sub> — the same r<sub>e</sub>′ concept as Q7, just on the other side of the fraction.'
+      },
+      {
+        text: `Real resistors have manufacturing tolerance — a ${fmtO0(V_CB.r2)} resistor could genuinely measure anywhere from ${fmtO0(V_CB.r2 * 0.9)} to ${fmtO0(V_CB.r2 * 1.1)} at ±10%. Suppose <span class="colour-resistor">R<sub>2</sub></span> in this circuit is actually <b>${fmtO0(V_CB.r2 * 1.1)}</b> — right at the top of its tolerance band — instead of the ${fmtO0(V_CB.r2)} shown. Recalculate this stage's <span class="colour-gain">voltage gain</span> magnitude <b class="colour-gain">|A<sub>v</sub>|</b> for the new <span class="colour-resistor">R<sub>2</sub></span>.`,
+        hint: 'Redo Q9\'s whole chain with the new R2: V<sub>B</sub> → V<sub>E</sub> → I<sub>E</sub> → r<sub>e</sub>′ → |A<sub>v</sub>|. R1, RC, RE, and VCC are unchanged — only R2 shifts.'
+      },
+      {
+        text: 'Q10 showed a completely normal <b>±10% resistor tolerance</b> swing this stage\'s gain by nearly 16%. Why is such large sensitivity to the bias point considered a genuine <span style="color:var(--colour-ui-wrong)">disadvantage</span> of the common base configuration?',
+        hint: 'Resistor tolerance is only ONE way the bias point can shift once the circuit is actually built and running — think about what else varies I<sub>E</sub> (and therefore r<sub>e</sub>′) over the life of a real, physical circuit.'
       }
     ];
     QUESTIONS.forEach((q, i) => {
@@ -1361,9 +1815,82 @@
       ]);
     }
 
+    // re′ for the Common Base stage — same concept/formula as Q7's
+    // rePrimePNP() (26mV/IE, rounded to the ammeter's displayed mA
+    // precision first — see the r2()/r3() comment near fmtV above), just
+    // a different circuit's IE. Gain here is RC/re′ (RC over re′, NOT
+    // re′ over RE+re′ like Q7 — common base's input goes straight into
+    // the emitter, so RE never enters the AC gain formula at all, unlike
+    // either Q3's or Q7's stage).
+    function rePrimeCB() { return 0.026 / (r2(IE_CB * 1000) / 1000); }
+    function avCB() { return V_CB.rc / rePrimeCB(); }
+
+    function buildQ9Options() {
+      // correct: RC/re′, the common-base gain formula
+      // distractors: RC/RE (Q3's common-emitter formula misapplied — RE
+      // is visually still right there in the circuit, an easy wrong
+      // reflex), RE/(RE+re′) (Q7's common-collector formula misapplied —
+      // right re′ concept, wrong circuit/formula), RC/(RC+re′) (a
+      // plausible-looking but structurally wrong ratio)
+      function fmtGain2(g) { return parseFloat(g.toFixed(2)).toString(); }
+      const av = avCB(), reP = rePrimeCB();
+      return shuffle([
+        { label: fmtGain2(av), type: 'correct' },
+        { label: fmtGain2(V_CB.rc / V_CB.re), type: 'wrong' },
+        { label: fmtGain2(V_CB.re / (V_CB.re + reP)), type: 'wrong' },
+        { label: fmtGain2(V_CB.rc / (V_CB.rc + reP)), type: 'wrong' },
+      ]);
+    }
+
+    // Redoes the CB stage's whole VB→VE→IE→re′→Av chain for a
+    // hypothetical R2 (Q10's resistor-tolerance scenario) — R1/RC/RE/VCC
+    // stay at V_CB's own values, only R2 is swapped out.
+    function cbGainForR2(r2val) {
+      const vb = V_CB.vcc * r2val / (V_CB.r1 + r2val);
+      const ve = vb - VBE;
+      const ie = ve / V_CB.re;
+      const reP = 0.026 / (r2(ie * 1000) / 1000);
+      return V_CB.rc / reP;
+    }
+
+    function buildQ10Options() {
+      // correct: gain recomputed with R2 at +10% tolerance
+      // distractors: Q9's original (unchanged) gain — forgot to redo the
+      // calc with the new R2; RC/RE — the ever-present CE-formula reflex;
+      // gain recomputed with R2 at -10% instead — right idea, wrong
+      // tolerance direction
+      function fmtGain2(g) { return parseFloat(g.toFixed(2)).toString(); }
+      return shuffle([
+        { label: fmtGain2(cbGainForR2(V_CB.r2 * 1.1)), type: 'correct' },
+        { label: fmtGain2(avCB()), type: 'wrong' },
+        { label: fmtGain2(V_CB.rc / V_CB.re), type: 'wrong' },
+        { label: fmtGain2(cbGainForR2(V_CB.r2 * 0.9)), type: 'wrong' },
+      ]);
+    }
+
+    function buildQ11Options() {
+      // correct: no swamping resistor in Av=RC/re′ means ANY bias drift
+      // (tolerance, temperature, supply variation) changes the gain
+      // directly — unlike CE/CC where RE dominates re′ in the formula
+      // distractors: each is a REAL fact about common base, just the
+      // wrong explanation for THIS specific disadvantage — tests whether
+      // the student is reasoning about bias sensitivity specifically, not
+      // just recalling any true-sounding CB fact
+      return shuffle([
+        {
+          label: 'Because |Av| ≈ RC/re′ has no resistor "swamping" re′ out of the formula — unlike CE/CC, where RE dominates re′ — so any bias drift (tolerance, temperature, supply variation) changes I<sub>E</sub>, r<sub>e</sub>′, and therefore the gain directly',
+          type: 'correct'
+        },
+        { label: 'Because common base has a low input impedance, which directly reduces the voltage gain', type: 'wrong' },
+        { label: 'Because the output is 180° out of phase with the input, making the gain unstable', type: 'wrong' },
+        { label: 'Because common base amplifiers are unsuitable for high-frequency circuits', type: 'wrong' },
+      ]);
+    }
+
     const QUESTION_BUILDERS = [
       buildQ1Options, buildQ2Options, buildQ3Options, buildQ4Options, buildQ5Options,
-      buildQ6Options, buildQ7Options, buildQ8Options,
+      buildQ6Options, buildQ7Options, buildQ8Options, buildQ9Options, buildQ10Options,
+      buildQ11Options,
     ];
 
     // ══════════════════════════════════════════════════════════════════════
@@ -1462,6 +1989,9 @@
       { enter: GAIN_SHOWN, reveal: GAIN_SHOWN }, // Q6 → PNP max swing (circuitGroup still hidden)
       { enter: GAIN_SHOWN, reveal: GAIN_SHOWN }, // Q7 → PNP voltage gain (emitter-follower formula, not RC/RE)
       { enter: GAIN_SHOWN, reveal: GAIN_SHOWN }, // Q8 → PNP max input p-p before clipping
+      { enter: GAIN_SHOWN, reveal: GAIN_SHOWN }, // Q9 → Common Base voltage gain (RC/re′) — circuitGroup still hidden
+      { enter: GAIN_SHOWN, reveal: GAIN_SHOWN }, // Q10 → Common Base gain, R2 tolerance scenario
+      { enter: GAIN_SHOWN, reveal: GAIN_SHOWN }, // Q11 → Common Base, why bias sensitivity is a disadvantage (conceptual)
     ];
 
     function applyCircuitState(s) {
@@ -1681,6 +2211,101 @@
     <div class="working-total">Max V<sub>in</sub>(p-p) = <span class="colour-result">${fmtV(maxSwing / av)} p-p</span></div>`;
     }
 
+    function checkQ9() {
+      const st = Q.q9; if (st.ans || st.sel === null) return; st.ans = true;
+      const ok = st.sel === st.cor;
+      markOptions('q9', st.sel, st.cor, ok);
+      const av = avCB();
+      setBanner('q9', ok, `|A<sub>v</sub>| ≈ <span class="colour-result">${av.toFixed(2)}</span>`);
+      showQ9Working();
+      applyCircuitState(CIRCUIT_STATES[8].reveal);
+      advanceQuestion(9);
+    }
+    function showQ9Working() {
+      const box = document.getElementById('q9Working');
+      box.className = 'working-box visible';
+      const reP = rePrimeCB(), av = avCB();
+      const ieParts = fmtAParts(IE_CB);
+      document.getElementById('q9WorkingContent').innerHTML = `
+    <div class="working-line">This stage's input is coupled straight into the <b>emitter</b>, and the base is tied to AC ground through <span class="colour-cap">C<sub>B</sub></span> — the defining trait of a <b>common base</b> stage. Because the input voltage is applied directly at the emitter, <span class="colour-resistor">R<sub>E</sub></span> only sets the DC bias current — it plays no part in the AC gain. The gain is set by <span class="colour-resistor">R<sub>C</sub></span> against the transistor's own internal emitter resistance, <span class="colour-current">r<sub>e</sub>′</span>, same as Q7:</div>
+
+    <div class="working-step">Internal emitter resistance:</div>
+    <div class="working-formula-row"><span class="colour-current">r<sub>e</sub>′</span> ≈ ${frac('26 mV', '<span class="colour-current">I<sub>E</sub></span>')}</div>
+    <div class="working-label">Substituting values (I<sub>E</sub> from the circuit):</div>
+    <div class="working-formula-row"><span class="colour-current">r<sub>e</sub>′</span> ≈ ${frac('26 mV', ieParts.val + ' ' + ieParts.unit)} ≈ <span class="colour-result">${fmtO0(reP)}</span></div>
+
+    <div class="working-step">Common base voltage gain:</div>
+    <div class="working-formula-row"><span class="colour-gain">|A<sub>v</sub>|</span> ≈ ${frac('<span class="colour-resistor">R<sub>C</sub></span>', '<span class="colour-current">r<sub>e</sub>′</span>')}</div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-gain">|A<sub>v</sub>|</span> ≈ ${frac(fmtO0(V_CB.rc), fmtO0(reP))}</div>
+    <div class="working-total"><span class="colour-gain">|A<sub>v</sub>|</span> ≈ <span class="colour-result">${av.toFixed(2)}</span></div>
+
+    <div class="working-line" style="margin-top:10px">Compare this to Q3's stage, where the SAME <span class="colour-resistor">R<sub>C</sub></span> and <span class="colour-resistor">R<sub>E</sub></span> values gave |A<sub>v</sub>| ≈ ${(V_CB.rc / V_CB.re).toFixed(2)} — because there, <span class="colour-resistor">R<sub>E</sub></span> IS in the AC signal path (unbypassed emitter), so it sets the gain instead of <span class="colour-current">r<sub>e</sub>′</span>. Same resistors, same transistor, wildly different gain — because it's the AC-common terminal that decides which formula applies, not the resistor values themselves.</div>`;
+    }
+
+    function checkQ10() {
+      const st = Q.q10; if (st.ans || st.sel === null) return; st.ans = true;
+      const ok = st.sel === st.cor;
+      markOptions('q10', st.sel, st.cor, ok);
+      const av = cbGainForR2(V_CB.r2 * 1.1);
+      setBanner('q10', ok, `|A<sub>v</sub>| ≈ <span class="colour-result">${av.toFixed(2)}</span>`);
+      showQ10Working();
+      applyCircuitState(CIRCUIT_STATES[9].reveal);
+      advanceQuestion(10);
+    }
+    function showQ10Working() {
+      const box = document.getElementById('q10Working');
+      box.className = 'working-box visible';
+      const r2new = V_CB.r2 * 1.1;
+      const vb = V_CB.vcc * r2new / (V_CB.r1 + r2new);
+      const ve = vb - VBE;
+      const ie = ve / V_CB.re;
+      const reP = 0.026 / (r2(ie * 1000) / 1000);
+      const av = V_CB.rc / reP;
+      const avOld = avCB();
+      const pctChange = 100 * (av - avOld) / avOld;
+      const ieParts = fmtAParts(ie);
+      document.getElementById('q10WorkingContent').innerHTML = `
+    <div class="working-line">Same chain as Q9, just starting from the new <span class="colour-resistor">R<sub>2</sub></span>:</div>
+
+    <div class="working-step">Base voltage:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>B</sub></span> = ${frac('<span class="colour-supply">V<sub>CC</sub></span> × <span class="colour-resistor">R<sub>2</sub></span>', '<span class="colour-resistor">R<sub>1</sub></span> + <span class="colour-resistor">R<sub>2</sub></span>')} = ${frac(V_CB.vcc + ' V × ' + fmtO0(r2new), fmtO0(V_CB.r1) + ' + ' + fmtO0(r2new))} ≈ <span class="colour-result">${fmtV(vb)}</span></div>
+
+    <div class="working-step">Emitter voltage and current:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-voltage">V<sub>B</sub></span> − V<sub>BE</sub> = ${fmtV(vb)} − ${VBE} V ≈ <span class="colour-result">${fmtV(ve)}</span></div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>E</sub></span> = ${frac('<span class="colour-voltage">V<sub>E</sub></span>', '<span class="colour-resistor">R<sub>E</sub></span>')} = ${frac(fmtV(ve), fmtO0(V_CB.re))} ≈ <span class="colour-result">${ieParts.val} ${ieParts.unit}</span></div>
+
+    <div class="working-step">Internal emitter resistance and gain:</div>
+    <div class="working-formula-row"><span class="colour-current">r<sub>e</sub>′</span> ≈ ${frac('26 mV', ieParts.val + ' ' + ieParts.unit)} ≈ <span class="colour-result">${fmtO0(reP)}</span></div>
+    <div class="working-formula-row"><span class="colour-gain">|A<sub>v</sub>|</span> ≈ ${frac(fmtO0(V_CB.rc), fmtO0(reP))} ≈ <span class="colour-result">${av.toFixed(2)}</span></div>
+
+    <div class="working-total"><span class="colour-gain">|A<sub>v</sub>|</span> ≈ <span class="colour-result">${av.toFixed(2)}</span></div>
+
+    <div class="working-line" style="margin-top:10px">That's a <b>${pctChange >= 0 ? '+' : ''}${pctChange.toFixed(1)}%</b> shift in gain (${avOld.toFixed(2)} → ${av.toFixed(2)}) from a completely ordinary ±10% resistor tolerance — R1, RC, RE, and VCC never moved.</div>`;
+    }
+
+    function checkQ11() {
+      const st = Q.q11; if (st.ans || st.sel === null) return; st.ans = true;
+      const ok = st.sel === st.cor;
+      markOptions('q11', st.sel, st.cor, ok);
+      setBanner('q11', ok, `Correct reasoning selected`);
+      showQ11Working();
+      applyCircuitState(CIRCUIT_STATES[10].reveal);
+      advanceQuestion(11);
+    }
+    function showQ11Working() {
+      const box = document.getElementById('q11Working');
+      box.className = 'working-box visible';
+      document.getElementById('q11WorkingContent').innerHTML = `
+    <div class="working-line">The root cause is structural, not just "resistor tolerance happened to be the example Q10 used." <span class="colour-gain">|A<sub>v</sub>|</span> ≈ R<sub>C</sub>/r<sub>e</sub>′ has NOTHING standing between r<sub>e</sub>′ and the final gain — no swamping resistor dilutes it, unlike Q3's R<sub>C</sub>/R<sub>E</sub> (R<sub>E</sub> ≫ r<sub>e</sub>′, so r<sub>e</sub>′ barely matters) or Q7's R<sub>E</sub>/(R<sub>E</sub>+r<sub>e</sub>′) (same swamping, pins the ratio near 1).</div>
+
+    <div class="working-line" style="margin-top:.6rem">Since r<sub>e</sub>′ ≈ 26mV/I<sub>E</sub>, ANYTHING that shifts I<sub>E</sub> shifts the gain directly and proportionally — not just resistor tolerance, but also:</div>
+    <div class="working-line">• <b>Temperature</b> — V<sub>BE</sub> drops by roughly 2mV per °C, shifting V<sub>E</sub>, I<sub>E</sub>, and therefore the gain as the circuit warms up during normal operation.</div>
+    <div class="working-line">• <b>Supply voltage variation</b> — V<sub>CC</sub> feeds directly into the V<sub>B</sub> divider equation, so any ripple or regulation tolerance on the rail shifts I<sub>E</sub> too.</div>
+
+    <div class="working-line" style="margin-top:.6rem">This is the real trade-off common base makes: high gain, but a gain that rides directly on the Q-point instead of being set predictably by resistor ratios — the opposite design philosophy from Q1-4's unbypassed-emitter stage, which deliberately sacrifices gain for stability.</div>`;
+    }
+
     // ── navigation ──
     function resetQuestion(qid) {
       const st = Q[qid];
@@ -1699,12 +2324,15 @@
     function backFromQ6() { resetQuestion('q5'); resetQuestion('q6'); showQuestion(5); }
     function backFromQ7() { resetQuestion('q6'); resetQuestion('q7'); showQuestion(6); }
     function backFromQ8() { resetQuestion('q7'); resetQuestion('q8'); showQuestion(7); }
+    function backFromQ9() { resetQuestion('q8'); resetQuestion('q9'); showQuestion(8); }
+    function backFromQ10() { resetQuestion('q9'); resetQuestion('q10'); showQuestion(9); }
+    function backFromQ11() { resetQuestion('q10'); resetQuestion('q11'); showQuestion(10); }
 
     function showSummary() {
       cur = 'summary';
       QIDS.forEach(q => document.getElementById(q + 'Panel').style.display = 'none');
       document.getElementById('summaryPanel').style.display = 'block';
-      showCircuitVariant(false);
+      showCircuitVariant('npn');
       applyCircuitState(CIRCUIT_STATES[CIRCUIT_STATES.length - 1].reveal);
       const vals = `<div class="summary-values">
     <span style="color:var(--colour-supply);font-weight:bold">V<sub>CC</sub></span> = <span style="color:var(--colour-supply)">${V.vcc} V</span>&nbsp;&nbsp;&nbsp;
@@ -1760,7 +2388,7 @@
       QIDS.forEach(q => document.getElementById(q + 'Panel').style.display = 'none');
       document.getElementById('summaryPanel').style.display = 'none';
       document.getElementById(qid + 'Panel').style.display = 'flex';
-      showCircuitVariant(n >= 5);
+      showCircuitVariant(n >= 9 ? 'cb' : n >= 5 ? 'pnp' : 'npn');
       const s = Q[qid].ans ? CIRCUIT_STATES[n - 1].reveal : CIRCUIT_STATES[n - 1].enter;
       applyCircuitState(s);
       updateProgress();
