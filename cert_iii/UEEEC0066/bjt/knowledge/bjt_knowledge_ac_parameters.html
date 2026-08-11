@@ -1,0 +1,750 @@
+<!--
+  Knowledge quiz for the "BJT amplifier AC parameters" lesson (4 objectives,
+  photographed lesson-note page): (1) calculate Av/Zin/Zout for common
+  emitter, (2) calculate Av/Zin/Zout for common collector, (3) measure
+  unloaded vs loaded voltage gain, (4) measure frequency response.
+
+  Objectives 3 and 4 say "measure" (bench-practical wording), but unlike
+  digital_knowledge_boolean_algebra.html's deferred DMM/logic-probe
+  objective (which genuinely needs physical hardware in hand), both of
+  these have a rich calculable/interpretable knowledge core: "why does
+  loaded gain drop, and by how much" and "what causes the low/high-
+  frequency rolloff, and how do you read bandwidth off a response curve"
+  are exactly the concepts a student needs BEFORE the bench measurement
+  makes sense — so both are covered here as knowledge questions rather
+  than deferred.
+
+  ONE worked NPN stage (BC549, β=200 assumed throughout — same transistor
+  family as the rest of UEEEC0066) is used for both configurations: Q1-5
+  wire it as common-emitter (unbypassed RE — the "swamped" amplifier
+  already familiar from bjt_knowledge_amp_config_peaks.html), then Q7-8
+  rewire the SAME transistor as common-collector (collector tied straight
+  to VCC, output taken from the emitter) — same component-value philosophy
+  as that file's own NPN/PNP mirror pair. Q6 bridges the two: the Zin
+  formula (R1∥R2∥β×RE) turns out to be structurally IDENTICAL between CE
+  and CC — it's Zout and Av that differ, driven by topology (which
+  terminal the output is taken from), not by which resistor values are
+  plugged in. That's the same "topology, not resistor values, decides the
+  formula" lesson peaks.html's Q9 (common base) already established, now
+  extended to Zin/Zout as well as Av.
+
+  Approximation formulas used (standard "beta model", ignoring ro —
+  consistent with this project's established CE/CC gain formulas from
+  bjt_knowledge_amp_config_peaks.html, extended to Zin/Zout):
+    CE (unbypassed RE): Zb ≈ β×RE, Zin = R1∥R2∥Zb, Zout ≈ RC, Av ≈ -RC/RE
+    CC (emitter follower): Zb ≈ β×RE, Zin = R1∥R2∥Zb,
+                            Zout ≈ RE∥re′ (≈re′, since RE≫re′), Av ≈ RE/(RE+re′)
+
+  Q9-10 (loaded vs unloaded gain) reuse the CE stage's own numbers and
+  introduce the voltage-divider relationship Av,loaded = Av,unloaded ×
+  RL/(RL+Zout) — deliberately tying straight back to Zout from Q4, so the
+  "why calculate Zout at all" payoff lands immediately rather than Zout
+  being calculated once and never used again.
+
+  Q11-12 (frequency response) use a NEW non-circuit reference diagram,
+  `freq-response-graph` — a simplified Bode-magnitude sketch with fL/fH
+  marked at the -3dB (0.707×Amid) points and concrete example frequencies
+  printed on it (100 Hz / 100 kHz), read directly for a bandwidth
+  calculation. Since this diagram has a different (wider) aspect ratio
+  than the tall circuit diagrams, `circuitViewBox` was added as a new
+  per-question field — showCircuitRef() now also sets circuitRefSvg's
+  viewBox attribute, defaulting to the CE/CC circuits' box when a
+  question doesn't specify one. This is a local, one-file addition to the
+  engine (each bjt_knowledge_*.html file keeps its own copy of the v2
+  engine — there's no shared/imported JS to update project-wide).
+
+  Same data-driven QUESTIONS[] engine as bjt_knowledge_basics.html — see
+  that file's header comment for the core architecture. Add/reorder
+  questions by editing the QUESTIONS array only.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../assets/theme-init.js"></script>
+  <title>BJT Knowledge Quiz — Amplifier AC Parameters</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../assets/quiz-common.css">
+  <script src="../../../assets/breadcrumb.js" defer></script>
+  <style>
+    .progress-wrap { display: flex; gap: .4rem; align-items: center; margin-bottom: 1rem; }
+  </style>
+</head>
+
+<body>
+  <!-- Hidden defs: CE and CC versions of the same NPN voltage-divider stage
+       (input Cin/output Cout added to the proven npn-divider-pos scaffold
+       from bjt_knowledge_thevenin.html, plus the cap-shape primitive from
+       bjt_knowledge_amp_config_peaks.html — both already visually proven,
+       reused here rather than deriving new coordinates from scratch), and
+       a standalone frequency-response Bode sketch for Q11-12. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <!-- ── shared primitives ── -->
+      <g id="mbjt-npn-standard">
+        <circle cx="7" cy="0" r="24" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" />
+        <line x1="-17" y1="0" x2="0" y2="0" style="stroke: var(--colour-bjt)" stroke-width="2" />
+        <line x1="0" y1="-12" x2="0" y2="12" style="stroke: var(--colour-bjt)" stroke-width="2.5" />
+        <polyline points="14,-34 14,-20 0,-8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+        <polyline points="14,34 14,20 0,8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+        <polygon points="12,18 1,14 6,8" style="fill: var(--colour-bjt)" />
+      </g>
+      <g id="mres"><rect x="-7" y="-15" width="14" height="30" rx="2" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="1.5" /></g>
+      <g id="mgnd">
+        <line x1="0" y1="0" x2="0" y2="6" style="stroke: var(--colour-gnd)" stroke-width="1.5" />
+        <line x1="-9" y1="6" x2="9" y2="6" style="stroke: var(--colour-gnd)" stroke-width="1.5" />
+        <line x1="-5.5" y1="10" x2="5.5" y2="10" style="stroke: var(--colour-gnd)" stroke-width="1.2" />
+        <line x1="-2.5" y1="14" x2="2.5" y2="14" style="stroke: var(--colour-gnd)" stroke-width="1.2" />
+      </g>
+      <!-- Horizontal series-insertion capacitor (Cin/Cout) — same def as
+           bjt_knowledge_amp_config_peaks.html's cap-shape, same absolute
+           scale as the primitives above so no rescaling is needed. -->
+      <g id="cap-shape">
+        <rect x="-4" y="-12" width="8" height="24" style="fill: var(--colour-panel)" />
+        <line x1="-4" y1="-12" x2="-4" y2="12" style="stroke: var(--colour-capacitor)" stroke-width="2.5" />
+        <line x1="4" y1="-12" x2="4" y2="12" style="stroke: var(--colour-capacitor)" stroke-width="2.5" />
+      </g>
+
+      <!-- ── Common Emitter — voltage-divider bias, RE UNBYPASSED (swamped) ──
+           Bias network (VCC rail / R1 / R2 / RE / GND / transistor position)
+           is the exact npn-divider-pos scaffold from bjt_knowledge_thevenin.
+           html, coordinate-for-coordinate — only the input (Cin) and output
+           (RC + Cout) branches are new. ── -->
+      <g id="ce-divider-ac">
+        <line x1="20" y1="15" x2="120" y2="15" style="stroke: var(--colour-series)" stroke-width="1.5" />
+        <text x="70" y="8" style="fill: var(--colour-supply)" font-size="12" text-anchor="middle" font-weight="bold">+V<tspan baseline-shift="sub" font-size="8">CC</tspan></text>
+        <line x1="20" y1="185" x2="120" y2="185" style="stroke: var(--colour-series)" stroke-width="1.5" />
+        <use href="#mgnd" transform="translate(70,185)" />
+
+        <line x1="45" y1="15" x2="45" y2="185" style="stroke: var(--colour-series)" stroke-width="1.5" />
+        <use href="#mres" transform="translate(45,58)" /><text x="29" y="62" style="fill: var(--colour-resistor-labels)" font-size="9" text-anchor="end">R1</text>
+        <use href="#mres" transform="translate(45,142)" /><text x="29" y="146" style="fill: var(--colour-resistor-labels)" font-size="9" text-anchor="end">R2</text>
+        <circle cx="45" cy="100" r="2.5" style="fill: var(--colour-series)" />
+
+        <!-- input branch: source dot → Cin → base node -->
+        <line x1="0" y1="100" x2="73" y2="100" style="stroke: var(--colour-series)" stroke-width="1.5" />
+        <circle cx="0" cy="100" r="3" style="fill: var(--colour-signal)" />
+        <text x="-4" y="94" style="fill: var(--colour-signal)" font-size="10" text-anchor="end">input</text>
+        <use href="#cap-shape" transform="translate(20,100)" />
+        <text x="20" y="82" style="fill: var(--colour-capacitor-labels)" font-size="9" text-anchor="middle" font-weight="bold">C<tspan baseline-shift="sub" font-size="6.5">IN</tspan></text>
+        <text x="59" y="92" style="fill: var(--colour-gain)" font-size="9" text-anchor="middle" font-weight="bold">Z<tspan baseline-shift="sub" font-size="6.5">in</tspan> -&gt;</text>
+
+        <!-- collector branch: VCC → RC → collector node → Cout → output -->
+        <line x1="104" y1="15" x2="104" y2="66" style="stroke: var(--colour-series)" stroke-width="1.5" />
+        <use href="#mres" transform="translate(104,40)" /><text x="95" y="44" style="fill: var(--colour-resistor-labels)" font-size="9" text-anchor="end">RC</text>
+        <line x1="104" y1="66" x2="165" y2="66" style="stroke: var(--colour-series)" stroke-width="1.5" />
+        <use href="#cap-shape" transform="translate(135,66)" />
+        <text x="135" y="48" style="fill: var(--colour-capacitor-labels)" font-size="9" text-anchor="middle" font-weight="bold">C<tspan baseline-shift="sub" font-size="6.5">OUT</tspan></text>
+        <text x="124" y="82" style="fill: var(--colour-gain)" font-size="9" text-anchor="middle" font-weight="bold">&lt;- Z<tspan baseline-shift="sub" font-size="6.5">out</tspan></text>
+        <circle cx="165" cy="66" r="3" style="fill: var(--colour-signal)" />
+        <text x="169" y="69" style="fill: var(--colour-signal)" font-size="10" text-anchor="start">output</text>
+
+        <!-- emitter branch: unbypassed RE to GND -->
+        <line x1="104" y1="134" x2="104" y2="185" style="stroke: var(--colour-series)" stroke-width="1.5" />
+        <use href="#mres" transform="translate(104,160)" /><text x="120" y="164" style="fill: var(--colour-resistor-labels)" font-size="9" text-anchor="start">RE</text>
+
+        <g transform="translate(90,100)"><use href="#mbjt-npn-standard" /></g>
+      </g>
+
+      <!-- ── Common Collector (emitter follower) — SAME transistor/bias-
+           network scaffold, collector tied straight to VCC (no RC — the
+           collector is AC-common), output taken from the emitter instead.
+           Same technique bjt_knowledge_amp_config.html's own abstract
+           amp-common-collector shape uses (plain wire, no resistor, from
+           VCC down to the collector lead). ── -->
+      <g id="cc-divider-ac">
+        <line x1="20" y1="15" x2="120" y2="15" style="stroke: var(--colour-series)" stroke-width="1.5" />
+        <text x="70" y="8" style="fill: var(--colour-supply)" font-size="12" text-anchor="middle" font-weight="bold">+V<tspan baseline-shift="sub" font-size="8">CC</tspan></text>
+        <line x1="20" y1="185" x2="120" y2="185" style="stroke: var(--colour-series)" stroke-width="1.5" />
+        <use href="#mgnd" transform="translate(70,185)" />
+
+        <line x1="45" y1="15" x2="45" y2="185" style="stroke: var(--colour-series)" stroke-width="1.5" />
+        <use href="#mres" transform="translate(45,58)" /><text x="29" y="62" style="fill: var(--colour-resistor-labels)" font-size="9" text-anchor="end">R1</text>
+        <use href="#mres" transform="translate(45,142)" /><text x="29" y="146" style="fill: var(--colour-resistor-labels)" font-size="9" text-anchor="end">R2</text>
+        <circle cx="45" cy="100" r="2.5" style="fill: var(--colour-series)" />
+
+        <line x1="0" y1="100" x2="73" y2="100" style="stroke: var(--colour-series)" stroke-width="1.5" />
+        <circle cx="0" cy="100" r="3" style="fill: var(--colour-signal)" />
+        <text x="-4" y="94" style="fill: var(--colour-signal)" font-size="10" text-anchor="end">input</text>
+        <use href="#cap-shape" transform="translate(20,100)" />
+        <text x="20" y="82" style="fill: var(--colour-capacitor-labels)" font-size="9" text-anchor="middle" font-weight="bold">C<tspan baseline-shift="sub" font-size="6.5">IN</tspan></text>
+        <text x="59" y="92" style="fill: var(--colour-gain)" font-size="9" text-anchor="middle" font-weight="bold">Z<tspan baseline-shift="sub" font-size="6.5">in</tspan> -&gt;</text>
+
+        <!-- collector: straight to VCC, no RC — AC-common terminal -->
+        <line x1="104" y1="15" x2="104" y2="66" style="stroke: var(--colour-series)" stroke-width="1.5" />
+
+        <!-- emitter branch: emitter node → Cout → output, then down through RE to GND -->
+        <line x1="104" y1="134" x2="165" y2="134" style="stroke: var(--colour-series)" stroke-width="1.5" />
+        <use href="#cap-shape" transform="translate(135,134)" />
+        <text x="135" y="116" style="fill: var(--colour-capacitor-labels)" font-size="9" text-anchor="middle" font-weight="bold">C<tspan baseline-shift="sub" font-size="6.5">OUT</tspan></text>
+        <text x="124" y="127" style="fill: var(--colour-gain)" font-size="9" text-anchor="middle" font-weight="bold">&lt;- Z<tspan baseline-shift="sub" font-size="6.5">out</tspan></text>
+        <circle cx="165" cy="134" r="3" style="fill: var(--colour-signal)" />
+        <text x="169" y="137" style="fill: var(--colour-signal)" font-size="10" text-anchor="start">output</text>
+        <line x1="104" y1="134" x2="104" y2="185" style="stroke: var(--colour-series)" stroke-width="1.5" />
+        <use href="#mres" transform="translate(104,160)" /><text x="120" y="164" style="fill: var(--colour-resistor-labels)" font-size="9" text-anchor="start">RE</text>
+
+        <g transform="translate(90,100)"><use href="#mbjt-npn-standard" /></g>
+      </g>
+
+      <!-- ── Frequency response — simplified Bode-magnitude sketch. Wider
+           than tall, so this question sets circuitViewBox explicitly. ── -->
+      <g id="freq-response-graph">
+        <line x1="30" y1="150" x2="260" y2="150" style="stroke: var(--colour-label)" stroke-width="1.5" />
+        <line x1="30" y1="10" x2="30" y2="150" style="stroke: var(--colour-label)" stroke-width="1.5" />
+        <text x="10" y="80" style="fill: var(--colour-label)" font-size="11" text-anchor="middle" transform="rotate(-90,10,80)">Gain</text>
+
+        <line x1="30" y1="40" x2="260" y2="40" style="stroke: var(--colour-voltage-label)" stroke-width="1" stroke-dasharray="3,3" />
+        <text x="264" y="43" style="fill: var(--colour-voltage-label)" font-size="10">A<tspan baseline-shift="sub" font-size="7">mid</tspan></text>
+
+        <line x1="30" y1="75" x2="260" y2="75" style="stroke: var(--colour-signal)" stroke-width="1" stroke-dasharray="3,3" />
+        <text x="264" y="72" style="fill: var(--colour-signal)" font-size="10">0.707×A<tspan baseline-shift="sub" font-size="7">mid</tspan></text>
+        <text x="264" y="85" style="fill: var(--colour-signal)" font-size="10">(−3 dB)</text>
+
+        <path d="M 33,148 C 55,148 65,80 80,75 C 95,68 100,40 115,40 L 175,40 C 190,40 195,68 205,75 C 220,80 230,148 257,148"
+          fill="none" style="stroke: var(--colour-gain)" stroke-width="2.5" />
+
+        <line x1="80" y1="75" x2="80" y2="150" style="stroke: var(--colour-gain)" stroke-width="1" stroke-dasharray="2,2" />
+        <line x1="205" y1="75" x2="205" y2="150" style="stroke: var(--colour-gain)" stroke-width="1" stroke-dasharray="2,2" />
+        <circle cx="80" cy="75" r="3" style="fill: var(--colour-gain)" />
+        <circle cx="205" cy="75" r="3" style="fill: var(--colour-gain)" />
+
+        <text x="80" y="163" style="fill: var(--colour-gain)" font-size="11" text-anchor="middle" font-weight="bold">f<tspan baseline-shift="sub" font-size="8">L</tspan></text>
+        <text x="80" y="176" style="fill: var(--colour-text)" font-size="10" text-anchor="middle">100 Hz</text>
+        <text x="205" y="163" style="fill: var(--colour-gain)" font-size="11" text-anchor="middle" font-weight="bold">f<tspan baseline-shift="sub" font-size="8">H</tspan></text>
+        <text x="205" y="176" style="fill: var(--colour-text)" font-size="10" text-anchor="middle">100 kHz</text>
+      </g>
+    </defs>
+  </svg>
+
+  <div class="crumb" id="crumb" data-current="Amplifier AC Parameters"></div>
+  <header>
+    <h1>BJT Amplifier: AC Parameters</h1>
+    <p>Voltage Gain · Input &amp; Output Resistance · Common Emitter &amp; Common Collector · Loaded vs Unloaded Gain · Frequency Response</p>
+  </header>
+
+  <div class="quiz-wrap">
+
+    <!-- LEFT: circuit diagram -->
+    <div class="circuit-col">
+      <div class="circuit-panel" style="cursor:default">
+        <div class="panel-label" id="circuitRefLabel">Reference Circuit</div>
+        <svg id="circuitRefSvg" viewBox="-40 0 260 200" xmlns="http://www.w3.org/2000/svg" style="max-width:280px;margin:0 auto">
+          <use id="circuitRefUse" href="#ce-divider-ac" />
+        </svg>
+      </div>
+    </div>
+
+    <!-- RIGHT: question -->
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <!-- Single reusable question panel — populated from QUESTIONS[cur] by renderQuestion() -->
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+          <div class="options" id="qOptions"></div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Summary -->
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
+    function frac(num, den) { return `<span class="working-frac"><span class="num">${num}</span><span class="den">${den}</span></span>`; }
+    const DEFAULT_VIEWBOX = '-40 0 260 200';
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS — see bjt_knowledge_basics.html's header comment for the
+    // full field reference. `circuitViewBox` is a new optional field (see
+    // this file's own header comment) — omit it to use DEFAULT_VIEWBOX.
+    // ══════════════════════════════════════════════════════════════════════
+
+    const QUESTIONS = [
+      {
+        circuitId: 'ce-divider-ac',
+        circuitLabel: 'Common Emitter (voltage-divider bias, RE unbypassed)',
+        text: () => 'For this <b class="colour-bjt">common-emitter</b> stage, with its emitter resistor <b class="colour-resistor">R<sub>E</sub></b> left UNBYPASSED, what is the approximate AC resistance looking directly INTO THE BASE, <b class="colour-resistor">Z<sub>b</sub></b>?',
+        hint: () => 'Every unit of base current has to supply β times as much emitter current — so from the base\'s point of view, RE looks β times BIGGER than it really is, not smaller.',
+        options: () => shuffle([
+          { label: 'Zb ≈ β × RE', type: 'correct' },
+          { label: 'Zb ≈ RE / β', type: 'wrong' },
+          { label: 'Zb ≈ β × RC', type: 'wrong' },
+          { label: 'Zb ≈ RE (β has no effect looking into the base)', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b class="colour-resistor">Z<sub>b</sub></b> ≈ <b class="colour-bjt">β</b> × <b class="colour-resistor">R<sub>E</sub></b>',
+        working: () => `
+    <div class="working-step">Full form, then the approximation:</div>
+    <div class="working-line">The exact relationship is <b class="colour-resistor">Z<sub>b</sub></b> = <b class="colour-bjt">β</b> × (r<sub>e</sub>′ + <b class="colour-resistor">R<sub>E</sub></b>), where r<sub>e</sub>′ is the transistor's own internal AC emitter resistance (≈26mV/IE). Since <b class="colour-resistor">R<sub>E</sub></b> here is hundreds of ohms and r<sub>e</sub>′ is typically only a few to a few tens of ohms, r<sub>e</sub>′ is negligible next to <b class="colour-resistor">R<sub>E</sub></b> — leaving the approximation:</div>
+    <div class="working-formula-row"><b class="colour-resistor">Z<sub>b</sub></b> ≈ <b class="colour-bjt">β</b> × <b class="colour-resistor">R<sub>E</sub></b></div>
+    <div class="working-total">This quiz uses <b class="colour-bjt">β</b> = 200 for every worked example (a reasonable mid-range value for a BC549, hFE 110–800 typ).</div>`
+      },
+      {
+        circuitId: 'ce-divider-ac',
+        circuitLabel: 'Common Emitter (voltage-divider bias, RE unbypassed)',
+        text: () => 'Using <b class="colour-bjt">β</b> = 200 and <b class="colour-resistor">R<sub>E</sub></b> = 270 Ω, what is <b class="colour-resistor">Z<sub>b</sub></b>?',
+        hint: () => 'Zb ≈ β × RE = 200 × 270 Ω.',
+        options: () => shuffle([
+          { label: 'Zb ≈ 54 kΩ', type: 'correct' },
+          { label: 'Zb ≈ 1.35 Ω (divided instead of multiplied)', type: 'wrong' },
+          { label: 'Zb ≈ 360 kΩ (used RC = 1.8 kΩ instead of RE)', type: 'wrong' },
+          { label: 'Zb ≈ 270 Ω (forgot β entirely)', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b class="colour-resistor">Z<sub>b</sub></b> ≈ 54 kΩ',
+        working: () => `
+    <div class="working-formula-row"><b class="colour-resistor">Z<sub>b</sub></b> ≈ <b class="colour-bjt">β</b> × <b class="colour-resistor">R<sub>E</sub></b> = 200 × 270 Ω</div>
+    <div class="working-total"><b class="colour-resistor">Z<sub>b</sub></b> ≈ 54,000 Ω = 54 kΩ — keep this value, it's used again in the next question.</div>`
+      },
+      {
+        circuitId: 'ce-divider-ac',
+        circuitLabel: 'Common Emitter (voltage-divider bias, RE unbypassed)',
+        text: () => '<b class="colour-resistor">R1</b> = 120 kΩ and <b class="colour-resistor">R2</b> = 15 kΩ also connect to the base. What is the TOTAL AC input resistance <b class="colour-resistor">Z<sub>in</sub></b> seen by the signal source, combining <b class="colour-resistor">R1</b>, <b class="colour-resistor">R2</b> and <b class="colour-resistor">Z<sub>b</sub></b> (≈54 kΩ, from Q2)?',
+        hint: () => 'Looking into the base node from the source\'s point of view, R1, R2 and Zb are all three connected between that same node and ground (or VCC, which is AC ground) — that\'s three resistances in PARALLEL, not in series.',
+        options: () => shuffle([
+          { label: 'Zin = R1∥R2∥Zb ≈ 10.7 kΩ', type: 'correct' },
+          { label: 'Zin = R1 + R2 + Zb = 189 kΩ (added them in series)', type: 'wrong' },
+          { label: 'Zin ≈ 13.3 kΩ (used only R1∥R2, forgot Zb entirely)', type: 'wrong' },
+          { label: 'Zin ≈ 54 kΩ (used only Zb, forgot R1/R2 entirely)', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b class="colour-resistor">Z<sub>in</sub></b> = R1∥R2∥<b class="colour-resistor">Z<sub>b</sub></b> ≈ 10.7 kΩ',
+        working: () => `
+    <div class="working-formula-row"><b class="colour-resistor">Z<sub>in</sub></b> = R1 ∥ R2 ∥ <b class="colour-resistor">Z<sub>b</sub></b></div>
+    <div class="working-line">${frac('1', '<b class="colour-resistor">Z<sub>in</sub></b>')} = ${frac('1', '120,000')} + ${frac('1', '15,000')} + ${frac('1', '54,000')} ≈ 0.0000935 Ω⁻¹</div>
+    <div class="working-total"><b class="colour-resistor">Z<sub>in</sub></b> ≈ 10,693 Ω ≈ 10.7 kΩ — notice this ends up much closer to R1∥R2 (13.3 kΩ) than to Zb (54 kΩ) alone, since the SMALLEST of three parallel resistances always dominates the combination.</div>`
+      },
+      {
+        circuitId: 'ce-divider-ac',
+        circuitLabel: 'Common Emitter (voltage-divider bias, RE unbypassed)',
+        text: () => 'Still this <b class="colour-bjt">common-emitter</b> stage: what is the approximate AC OUTPUT resistance <b class="colour-resistor">Z<sub>out</sub></b>, looking back INTO the collector terminal (with the AC source zeroed)?',
+        hint: () => 'Zero the source, then look back into the collector node. The transistor\'s own internal output resistance (ro) is assumed very high compared to RC in this approximation, so it\'s ignored — leaving only whatever is directly wired to that node.',
+        options: () => shuffle([
+          { label: 'Zout ≈ RC', type: 'correct' },
+          { label: 'Zout ≈ RE', type: 'wrong' },
+          { label: 'Zout ≈ Zin', type: 'wrong' },
+          { label: 'Zout ≈ RC ∥ RE', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b class="colour-resistor">Z<sub>out</sub></b> ≈ <b class="colour-resistor">R<sub>C</sub></b>',
+        working: () => `
+    <div class="working-line">With the source zeroed, the only thing directly wired to the collector node (besides the transistor's internal, very-high ro — ignored here) is <b class="colour-resistor">R<sub>C</sub></b> itself, running up to the AC-grounded <b class="colour-supply">V<sub>CC</sub></b> rail.</div>
+    <div class="working-formula-row"><b class="colour-resistor">Z<sub>out</sub></b> ≈ <b class="colour-resistor">R<sub>C</sub></b> = 1.8 kΩ</div>
+    <div class="working-total">This is why <b class="colour-resistor">Z<sub>out</sub></b> for a common-emitter stage is usually fairly HIGH (equal to whatever RC happens to be) — a fact that turns out to matter a lot once a load is connected (Q9-10).</div>`
+      },
+      {
+        circuitId: 'ce-divider-ac',
+        circuitLabel: 'Common Emitter (voltage-divider bias, RE unbypassed)',
+        text: () => 'Using the approximation formula (ignoring r<sub>e</sub>′), what is the magnitude of this <b class="colour-bjt">common-emitter</b> stage\'s voltage gain <b class="colour-gain">|A<sub>v</sub>|</b>? (<b class="colour-resistor">R<sub>C</sub></b> = 1.8 kΩ, <b class="colour-resistor">R<sub>E</sub></b> = 270 Ω)',
+        hint: () => '|Av| ≈ RC / RE for a common-emitter stage with an unbypassed emitter — same formula this quiz family has used before.',
+        options: () => shuffle([
+          { label: '|Av| ≈ 6.67', type: 'correct' },
+          { label: '|Av| ≈ 0.15 (inverted the ratio — RE/RC)', type: 'wrong' },
+          { label: '|Av| ≈ 1800 (forgot to divide by RE)', type: 'wrong' },
+          { label: '|Av| ≈ 1530 (subtracted RE from RC instead of dividing)', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b class="colour-gain">|A<sub>v</sub>|</b> ≈ R<sub>C</sub>/R<sub>E</sub> ≈ 6.67',
+        working: () => `
+    <div class="working-formula-row"><b class="colour-gain">|A<sub>v</sub>|</b> ≈ ${frac('<b class="colour-resistor">R<sub>C</sub></b>', '<b class="colour-resistor">R<sub>E</sub></b>')} = ${frac('1800 Ω', '270 Ω')}</div>
+    <div class="working-total"><b class="colour-gain">|A<sub>v</sub>|</b> ≈ 6.67 — keep this value, Q9-10 use it again once a load is connected.</div>`
+      },
+      {
+        circuitId: 'ce-divider-ac',
+        circuitLabel: 'Common Emitter (voltage-divider bias, RE unbypassed)',
+        text: () => 'Common-emitter and common-collector stages use the exact SAME approximation formula for one of these three AC parameters — same formula, just different numbers plugged in. Which one?',
+        hint: () => 'Zin only ever depends on R1, R2 and Zb ≈ β×RE — none of that changes meaning between configurations. Zout and Av, on the other hand, depend on exactly WHERE the output is taken from (collector vs emitter) — which is precisely what differs between the two.',
+        options: () => shuffle([
+          { label: 'Zin', type: 'correct' },
+          { label: 'Zout', type: 'wrong' },
+          { label: 'Av', type: 'wrong' },
+          { label: 'None of them — all three formulas differ', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b class="colour-resistor">Z<sub>in</sub></b> — same R1∥R2∥(β×RE) formula in both configurations',
+        working: () => `
+    <div class="working-step">Same in both — Zin:</div>
+    <div class="working-line">Zin = R1∥R2∥Zb, with Zb ≈ β×RE, applies UNCHANGED to both configurations — only the specific RE value (and R1/R2) plugged in differs.</div>
+    <div class="working-step" style="margin-top:.6rem">Different in each — Zout and Av:</div>
+    <div class="working-line">Common emitter takes its output from the COLLECTOR: Zout ≈ RC, Av ≈ -RC/RE. Common collector takes its output from the EMITTER instead: Zout ≈ RE∥re′, Av ≈ RE/(RE+re′) ≈ 1 (see Q7-8). Same transistor, same bias network — but a completely different formula for Zout and Av, because it's the TOPOLOGY (which terminal the output is taken from), not the resistor values, that decides which formula applies.</div>`
+      },
+      {
+        circuitId: 'cc-divider-ac',
+        circuitLabel: 'Common Collector (voltage-divider bias, emitter follower)',
+        text: () => 'The SAME transistor is now wired as a <b class="colour-bjt">common-collector</b> (emitter-follower) stage instead: <b class="colour-supply">V<sub>CC</sub></b> = 12 V, <b class="colour-resistor">R1</b> = 47 kΩ, <b class="colour-resistor">R2</b> = 10 kΩ, <b class="colour-resistor">R<sub>E</sub></b> = 1 kΩ, <b class="colour-bjt">β</b> = 200. What is the total AC input resistance <b class="colour-resistor">Z<sub>in</sub></b>?',
+        hint: () => 'Same procedure as Q1-3: Zb ≈ β×RE first, then Zin = R1∥R2∥Zb.',
+        options: () => shuffle([
+          { label: 'Zin ≈ 7.92 kΩ', type: 'correct' },
+          { label: 'Zin ≈ 200 kΩ (used only Zb, forgot R1/R2 entirely)', type: 'wrong' },
+          { label: 'Zin ≈ 8.25 kΩ (used only R1∥R2, forgot Zb entirely)', type: 'wrong' },
+          { label: 'Zin ≈ 257 kΩ (added R1 + R2 + Zb in series)', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b class="colour-resistor">Z<sub>in</sub></b> ≈ 7.92 kΩ',
+        working: () => `
+    <div class="working-formula-row"><b class="colour-resistor">Z<sub>b</sub></b> ≈ <b class="colour-bjt">β</b> × <b class="colour-resistor">R<sub>E</sub></b> = 200 × 1000 Ω = 200 kΩ</div>
+    <div class="working-formula-row"><b class="colour-resistor">Z<sub>in</sub></b> = R1∥R2∥<b class="colour-resistor">Z<sub>b</sub></b> = 47 kΩ ∥ 10 kΩ ∥ 200 kΩ</div>
+    <div class="working-total"><b class="colour-resistor">Z<sub>in</sub></b> ≈ 7.92 kΩ — notice it lands close to, but a little below, R1∥R2 alone (8.25 kΩ), same pattern as Q3.</div>`
+      },
+      {
+        circuitId: 'cc-divider-ac',
+        circuitLabel: 'Common Collector (voltage-divider bias, emitter follower)',
+        text: () => 'For this <b class="colour-bjt">common-collector</b> stage, DC analysis already gives <b class="colour-current">I<sub>E</sub></b> ≈ 1.505 mA, so r<sub>e</sub>′ = 26mV/IE ≈ 17.3 Ω. Using <b class="colour-resistor">R<sub>E</sub></b> = 1 kΩ, what are this stage\'s approximate <b class="colour-resistor">Z<sub>out</sub></b> and <b class="colour-gain">A<sub>v</sub></b>?',
+        hint: () => 'Zout ≈ RE∥re′ (looking back into the emitter, with the source zeroed — the base side collapses to a low impedance, leaving re′ dominating the parallel combination since RE≫re′). Av ≈ RE/(RE+re′) — always just under 1 for an emitter follower.',
+        options: () => shuffle([
+          { label: 'Zout ≈ 17 Ω, Av ≈ 0.983', type: 'correct' },
+          { label: 'Zout ≈ 1000 Ω, Av ≈ 0.983 (used RE alone for Zout, ignoring re′)', type: 'wrong' },
+          { label: 'Zout ≈ 17 Ω, Av ≈ 58 (divided RE by re′ instead of RE/(RE+re′))', type: 'wrong' },
+          { label: 'Zout ≈ 500 Ω, Av ≈ 1.5', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b class="colour-resistor">Z<sub>out</sub></b> ≈ 17 Ω, <b class="colour-gain">A<sub>v</sub></b> ≈ 0.983',
+        working: () => `
+    <div class="working-step">Zout — dominated by re′:</div>
+    <div class="working-formula-row"><b class="colour-resistor">Z<sub>out</sub></b> ≈ R<sub>E</sub>∥r<sub>e</sub>′ = ${frac('1000 × 17.3', '1000 + 17.3')} ≈ 17 Ω</div>
+    <div class="working-line">Because <b class="colour-resistor">R<sub>E</sub></b> (1000 Ω) is so much bigger than r<sub>e</sub>′ (17.3 Ω), the parallel combination lands very close to r<sub>e</sub>′ itself — this is exactly why an emitter follower is known for having a LOW output resistance, the opposite of the common-emitter stage's Zout≈RC (Q4).</div>
+    <div class="working-step" style="margin-top:.6rem">Av — always just under 1:</div>
+    <div class="working-formula-row"><b class="colour-gain">A<sub>v</sub></b> ≈ ${frac('R<sub>E</sub>', 'R<sub>E</sub> + r<sub>e</sub>′')} = ${frac('1000', '1017.3')} ≈ 0.983</div>`
+      },
+      {
+        circuitId: 'ce-divider-ac',
+        circuitLabel: 'Common Emitter — RL load added at the output',
+        text: () => 'A load resistor <b class="colour-resistor">R<sub>L</sub></b> is now connected to this <b class="colour-bjt">common-emitter</b> stage\'s output (via <b class="colour-cap">C<sub>OUT</sub></b>). Why does the LOADED voltage gain always end up LOWER than the UNLOADED gain, for any finite positive RL?',
+        hint: () => 'RL and Zout are both connected between the output node and ground — from the signal\'s point of view, that\'s a voltage divider. What fraction of a voltage divider\'s input ever reaches its output?',
+        options: () => shuffle([
+          { label: 'RL forms a voltage divider with Zout — only a fraction RL/(RL+Zout) of the unloaded signal reaches the load, and that fraction is always less than 1', type: 'correct' },
+          { label: 'Connecting RL adds extra base current, which reduces β', type: 'wrong' },
+          { label: 'RL only affects gain at high frequencies, not at midband', type: 'wrong' },
+          { label: 'Adding any resistor in parallel always INCREASES the total resistance at that node', type: 'wrong' },
+        ]),
+        correctExplain: () => 'RL and Zout form a voltage divider — RL/(RL+Zout) is always &lt; 1',
+        working: () => `
+    <div class="working-line">Looking out from the collector node, <b class="colour-resistor">Z<sub>out</sub></b> (≈RC, Q4) and the newly-connected <b class="colour-resistor">R<sub>L</sub></b> are both paths to AC ground — exactly a voltage divider, with <b class="colour-resistor">Z<sub>out</sub></b> acting as the "source" resistance and <b class="colour-resistor">R<sub>L</sub></b> as the load.</div>
+    <div class="working-formula-row"><b class="colour-gain">A<sub>v,loaded</sub></b> = <b class="colour-gain">A<sub>v,unloaded</sub></b> × ${frac('<b class="colour-resistor">R<sub>L</sub></b>', '<b class="colour-resistor">R<sub>L</sub></b> + <b class="colour-resistor">Z<sub>out</sub></b>')}</div>
+    <div class="working-total">Since RL/(RL+Zout) is always strictly less than 1 for any finite positive RL, the loaded gain can only ever be equal to or lower than the unloaded gain — never higher. The smaller RL is compared to Zout, the bigger the loss — which is exactly why a LOW Zout (like the emitter follower's, Q8) is so prized for driving real-world loads.</div>`
+      },
+      {
+        circuitId: 'ce-divider-ac',
+        circuitLabel: 'Common Emitter — RL load added at the output',
+        text: () => 'Using this stage\'s unloaded gain (<b class="colour-gain">|A<sub>v</sub>|</b> ≈ 6.67, from Q5) and <b class="colour-resistor">Z<sub>out</sub></b> ≈ <b class="colour-resistor">R<sub>C</sub></b> = 1.8 kΩ, what is the LOADED gain magnitude if <b class="colour-resistor">R<sub>L</sub></b> = 3.3 kΩ is connected?',
+        hint: () => 'Av,loaded = Av,unloaded × RL/(RL+Zout) — or equivalently, replace RC with (RC∥RL) in the original Av≈RC/RE formula. Both give the same answer.',
+        options: () => shuffle([
+          { label: '|Av,loaded| ≈ 4.31', type: 'correct' },
+          { label: '|Av,loaded| ≈ 6.67 (ignored the load entirely)', type: 'wrong' },
+          { label: '|Av,loaded| ≈ 18.9 (used RC+RL in place of RC∥RL)', type: 'wrong' },
+          { label: '|Av,loaded| ≈ 12.22 (used RL/RE instead of (RC∥RL)/RE)', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b class="colour-gain">|A<sub>v,loaded</sub>|</b> ≈ 4.31',
+        working: () => `
+    <div class="working-step">Method 1 — voltage-divider on the unloaded gain:</div>
+    <div class="working-formula-row"><b class="colour-gain">|A<sub>v,loaded</sub>|</b> = 6.67 × ${frac('3300 Ω', '3300 Ω + 1800 Ω')} = 6.67 × 0.647</div>
+    <div class="working-step" style="margin-top:.6rem">Method 2 — recompute with RC∥RL in place of RC:</div>
+    <div class="working-formula-row">RC∥RL = ${frac('1800 × 3300', '1800 + 3300')} ≈ 1165 Ω &nbsp;→&nbsp; <b class="colour-gain">|A<sub>v,loaded</sub>|</b> = ${frac('1165 Ω', '270 Ω')}</div>
+    <div class="working-total">Both methods agree: <b class="colour-gain">|A<sub>v,loaded</sub>|</b> ≈ 4.31 — noticeably lower than the unloaded 6.67, exactly as Q9 predicted.</div>`
+      },
+      {
+        circuitId: 'freq-response-graph',
+        circuitViewBox: '0 0 350 190',
+        circuitLabel: 'Frequency Response (Bode Magnitude Sketch)',
+        kind: 'multi',
+        text: () => 'A BJT amplifier\'s gain stays flat across the "midband" region, then rolls off at both ends. <b style="color:var(--colour-ui-primary)">Select</b> the two TRUE statements about what causes each rolloff.',
+        hint: () => 'Coupling/bypass capacitors (Cin, Cout, any emitter bypass cap) have reactance Xc=1/(2πfC) that gets LARGER as f falls. The transistor\'s own internal junction capacitances (plus stray wiring capacitance) have reactance that gets SMALLER as f rises.',
+        options: () => shuffle([
+          { label: 'At LOW frequencies, coupling/bypass capacitor reactance rises as f falls, so they stop acting like a short and start blocking the signal', type: 'correct' },
+          { label: 'At HIGH frequencies, the transistor\'s internal junction capacitances (plus stray wiring capacitance) start shunting the signal to ground as their reactance drops', type: 'correct' },
+          { label: 'At LOW frequencies, the internal junction capacitances block the signal', type: 'wrong' },
+          { label: 'At HIGH frequencies, the coupling capacitors\' reactance grows too large and blocks the signal', type: 'wrong' },
+        ]),
+        correctExplain: (st) => {
+          const letters = st.opts.map((o, i) => o.type === 'correct' ? LETTERS[i] : null).filter(Boolean).join(', ');
+          return `Options <b>${letters}</b> — coupling caps limit the LOW end, internal/stray capacitance limits the HIGH end`;
+        },
+        working: (st) => {
+          const correctNums = st.opts.map((o, i) => o.type === 'correct' ? LETTERS[i] : null).filter(Boolean).join(', ');
+          const wrongNums = st.opts.map((o, i) => o.type === 'wrong' ? LETTERS[i] : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-step">The two real causes — options ${correctNums}:</div>
+    <div class="working-line">LOW frequencies: coupling capacitors (Cin, Cout) and any emitter bypass capacitor are only "invisible" (near-zero reactance) once f is high enough. As f drops toward 0, Xc=1/(2πfC) grows, and they start dropping real signal voltage across themselves instead of passing it through.</div>
+    <div class="working-line">HIGH frequencies: the transistor's own internal junction capacitances (Cbe, Cbc — Cbc's effect is magnified further by the Miller effect) plus any stray wiring capacitance start to look like a short to ground as f rises and their reactance shrinks, diverting signal away instead of amplifying it.</div>
+    <div class="working-step" style="margin-top:.6rem">The two swapped (wrong) claims — options ${wrongNums}:</div>
+    <div class="working-line">These simply swap which capacitor type is responsible for which end — a common mix-up. Coupling caps are large-value, physical, deliberately-placed components that matter when their reactance is HIGH (low f). Internal junction capacitances are tiny, unavoidable, built into the transistor, and matter when their reactance is LOW (high f) — opposite behaviour, opposite end of the spectrum.</div>`;
+        }
+      },
+      {
+        circuitId: 'freq-response-graph',
+        circuitViewBox: '0 0 350 190',
+        circuitLabel: 'Frequency Response (Bode Magnitude Sketch)',
+        text: () => 'The diagram marks <b class="colour-gain">f<sub>L</sub></b> and <b class="colour-gain">f<sub>H</sub></b> — the two frequencies where gain has dropped to 0.707× (−3 dB below) its flat midband value. What is this amplifier\'s bandwidth (BW = fH − fL)?',
+        hint: () => 'Read fL and fH directly off the diagram, then subtract.',
+        options: () => shuffle([
+          { label: 'BW ≈ 99.9 kHz', type: 'correct' },
+          { label: 'BW ≈ 100 kHz (forgot to subtract fL)', type: 'wrong' },
+          { label: 'BW ≈ 200 kHz (added fL and fH instead of subtracting)', type: 'wrong' },
+          { label: 'BW = 100 Hz (used fL only)', type: 'wrong' },
+        ]),
+        correctExplain: () => 'BW = fH − fL ≈ 99.9 kHz',
+        working: () => `
+    <div class="working-formula-row">BW = <b class="colour-gain">f<sub>H</sub></b> − <b class="colour-gain">f<sub>L</sub></b> = 100,000 Hz − 100 Hz</div>
+    <div class="working-total">BW = 99,900 Hz ≈ 99.9 kHz — the range of frequencies where the amplifier delivers (at least) 0.707× its best midband gain. Below fL or above fH, gain keeps falling further the further you go.</div>`
+      },
+    ];
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUIZ ENGINE — generic; driven entirely by QUESTIONS[] via index.
+    // (Same as bjt_knowledge_basics.html's engine, plus the circuitViewBox
+    // addition described in this file's header comment.)
+    // ══════════════════════════════════════════════════════════════════════
+
+    function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+    function isMulti(data) { return data.kind === 'multi'; }
+    function isAnswerCorrect(data, st) {
+      if (!isMulti(data)) return st.sel === st.cor;
+      const a = [...st.sel].sort((x, y) => x - y), b = [...st.cor].sort((x, y) => x - y);
+      return a.length === b.length && a.every((v, i) => v === b[i]);
+    }
+    function selectedLabel(data, st) {
+      if (!isMulti(data)) return (st.sel != null && st.opts[st.sel]) ? st.opts[st.sel].label : '—';
+      return st.sel.length ? [...st.sel].sort((a, b) => a - b).map(i => LETTERS[i]).join(', ') : '—';
+    }
+
+    let Q = [];
+    let cur = 0;
+
+    function buildProgressDots() {
+      document.getElementById('progressDots').innerHTML =
+        QUESTIONS.map((_, i) => `<div class="progress-dot" id="dot-${i}"></div>`).join('');
+    }
+
+    function updateProgress() {
+      QUESTIONS.forEach((_, i) => {
+        const d = document.getElementById('dot-' + i);
+        d.className = 'progress-dot';
+        if (i === cur) d.classList.add('active'); else if (Q[i].ans) d.classList.add('done');
+      });
+      document.getElementById('progressLabel').textContent = (cur + 1) + ' / ' + QUESTIONS.length;
+    }
+
+    function renderOptions() {
+      const st = Q[cur], data = QUESTIONS[cur];
+      const multi = isMulti(data);
+      const c = document.getElementById('qOptions'); c.innerHTML = '';
+      st.opts.forEach((opt, i) => {
+        const btn = document.createElement('button'); btn.className = 'option-btn';
+        btn.innerHTML = `<span class="option-letter">${LETTERS[i]}</span><span>${opt.label}</span>`;
+        if (st.ans) {
+          btn.disabled = true;
+          if (multi) {
+            const selected = st.sel.includes(i);
+            if (opt.type === 'correct') { btn.classList.add(selected ? 'correct' : 'missed'); if (selected) btn.innerHTML += `<span class="result-icon">✓</span>`; }
+            else { btn.classList.add(selected ? 'wrong' : 'dimmed'); if (selected) btn.innerHTML += `<span class="result-icon">✗</span>`; }
+          } else {
+            if (i === st.cor) { btn.classList.add('correct'); btn.innerHTML += `<span class="result-icon">✓</span>`; }
+            else if (i === st.sel) { btn.classList.add('wrong'); btn.innerHTML += `<span class="result-icon">✗</span>`; }
+            else btn.classList.add('dimmed');
+          }
+        } else {
+          if (multi ? st.sel.includes(i) : i === st.sel) btn.classList.add('selected');
+          btn.addEventListener('click', () => selectOption(i));
+        }
+        c.appendChild(btn);
+      });
+    }
+
+    function selectOption(i) {
+      const st = Q[cur], data = QUESTIONS[cur];
+      if (st.ans) return;
+      if (isMulti(data)) {
+        const pos = st.sel.indexOf(i);
+        if (pos >= 0) st.sel.splice(pos, 1); else st.sel.push(i);
+      } else {
+        st.sel = i;
+      }
+      renderQuestion();
+    }
+
+    function showCircuitRef(id, label, viewBox) {
+      document.getElementById('circuitRefUse').setAttribute('href', '#' + id);
+      document.getElementById('circuitRefLabel').textContent = label || 'Reference Circuit';
+      document.getElementById('circuitRefSvg').setAttribute('viewBox', viewBox || DEFAULT_VIEWBOX);
+    }
+
+    function renderQuestion() {
+      const data = QUESTIONS[cur], st = Q[cur];
+      const multi = isMulti(data);
+
+      document.getElementById('qNum').textContent = 'Q' + (cur + 1);
+      document.getElementById('qText').innerHTML = data.text();
+      document.getElementById('qHint').innerHTML = data.hint();
+
+      renderOptions();
+
+      const selList = document.getElementById('qSelectedList');
+      if (multi) {
+        selList.style.display = '';
+        selList.textContent = st.sel.length
+          ? `Selected: ${[...st.sel].sort((a, b) => a - b).map(i => LETTERS[i]).join(', ')}`
+          : 'Click the options above to select your answer.';
+      } else {
+        selList.style.display = 'none';
+      }
+
+      const banner = document.getElementById('qBanner');
+      if (st.ans) {
+        const ok = isAnswerCorrect(data, st);
+        banner.className = 'result-banner ' + (ok ? 'correct' : 'wrong');
+        document.getElementById('qIcon').textContent = ok ? '✓' : '✗';
+        document.getElementById('qBannerText').innerHTML = ok ? `Correct! ${data.correctExplain(st)}` : `The correct answer is ${data.correctExplain(st)}`;
+      } else {
+        banner.className = 'result-banner';
+      }
+
+      const working = document.getElementById('qWorking');
+      working.className = 'working-box' + (st.ans ? ' visible' : '');
+      document.getElementById('qWorkingContent').innerHTML = st.ans ? data.working(st) : '';
+
+      document.getElementById('qBack').style.display = cur > 0 ? 'inline-block' : 'none';
+      const check = document.getElementById('qCheck');
+      check.style.display = st.ans ? 'none' : 'inline-block';
+      check.disabled = st.ans || (multi ? st.sel.length === 0 : st.sel === null);
+      const isLast = cur === QUESTIONS.length - 1;
+      document.getElementById('qNext').style.display = (st.ans && !isLast) ? 'inline-block' : 'none';
+      document.getElementById('qSummary').style.display = (st.ans && isLast) ? 'inline-block' : 'none';
+
+      showCircuitRef(data.circuitId, data.circuitLabel, data.circuitViewBox);
+      updateProgress();
+    }
+
+    function checkAnswer() {
+      const st = Q[cur], data = QUESTIONS[cur];
+      if (st.ans) return;
+      if (isMulti(data) ? st.sel.length === 0 : st.sel === null) return;
+      st.ans = true;
+      renderQuestion();
+      document.getElementById('qBanner').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function nextQuestion() { if (cur < QUESTIONS.length - 1) { cur++; renderQuestion(); } }
+
+    function backQuestion() {
+      if (cur <= 0) return;
+      cur--;
+      for (let i = cur; i < QUESTIONS.length; i++) {
+        Q[i].ans = false;
+        Q[i].sel = isMulti(QUESTIONS[i]) ? [] : null;
+      }
+      renderQuestion();
+    }
+
+    function goToQuestion(n) {
+      cur = Math.max(0, Math.min(QUESTIONS.length - 1, n - 1));
+      document.getElementById('summaryPanel').style.display = 'none';
+      document.getElementById('qPanel').style.display = 'flex';
+      renderQuestion();
+    }
+
+    function resetQuiz() {
+      Q = QUESTIONS.map(data => {
+        const opts = data.options();
+        if (isMulti(data)) {
+          const cor = opts.map((o, i) => o.type === 'correct' ? i : -1).filter(i => i >= 0);
+          return { sel: [], ans: false, cor, opts };
+        }
+        return { sel: null, ans: false, cor: opts.findIndex(o => o.type === 'correct'), opts };
+      });
+      cur = 0;
+      document.getElementById('summaryPanel').style.display = 'none';
+      document.getElementById('qPanel').style.display = 'flex';
+      renderQuestion();
+    }
+
+    function showSummary() {
+      document.getElementById('qPanel').style.display = 'none';
+      document.getElementById('summaryPanel').style.display = 'block';
+      showCircuitRef('ce-divider-ac', 'Common Emitter (voltage-divider bias, RE unbypassed)', DEFAULT_VIEWBOX);
+      const items = QUESTIONS.map((data, i) => {
+        const st = Q[i];
+        const ans = selectedLabel(data, st);
+        const ok = isAnswerCorrect(data, st);
+        const colour = ok ? 'var(--colour-ui-correct)' : '#ff3366';
+        const mark = ok ? '✓' : '✗';
+        return `<div class="summary-item">
+      <div class="summary-item-head"><span class="summary-qnum">Q${i + 1}</span><span class="summary-question">${data.text()}</span></div>
+      <div class="summary-answer" style="color:${colour}">You answered: ${ans} &nbsp; ${mark}</div>
+      <div class="working-box visible">${st.ans ? data.working(st) : ''}</div>
+    </div>`;
+      }).join('');
+      document.getElementById('summaryContent').innerHTML = items;
+      QUESTIONS.forEach((_, i) => { const d = document.getElementById('dot-' + i); if (d) d.className = 'progress-dot done'; });
+      document.getElementById('progressLabel').textContent = 'Complete';
+    }
+
+    buildProgressDots();
+    resetQuiz();
+
+    function goBack(e) { e.preventDefault(); history.back(); }
+    if (history.length > 1) {
+      document.getElementById('menuLink').style.display = '';
+    }
+
+    function jump(n, answered) {
+      if (n < 1 || n > QUESTIONS.length) { console.warn('jump: no question', n); return; }
+      for (let i = 0; i < n - 1; i++) {
+        Q[i].sel = Array.isArray(Q[i].cor) ? [...Q[i].cor] : Q[i].cor;
+        Q[i].ans = true;
+      }
+      goToQuestion(n);
+      if (answered) {
+        Q[cur].sel = Array.isArray(Q[cur].cor) ? [...Q[cur].cor] : Q[cur].cor;
+        checkAnswer();
+      }
+    }
+    window.jump = jump;
+
+    function jumpToSummary() {
+      QUESTIONS.forEach((_, i) => {
+        if (Q[i].ans) return;
+        Q[i].sel = Array.isArray(Q[i].cor) ? [...Q[i].cor] : Q[i].cor;
+        Q[i].ans = true;
+      });
+      showSummary();
+    }
+    window.jumpToSummary = jumpToSummary;
+
+    {
+      const p = new URLSearchParams(location.search);
+      if (p.has('q')) { if (p.get('q') === 's') jumpToSummary(); else jump(+p.get('q'), p.has('ans')); }
+    }
+  </script>
+</body>
+
+</html>
