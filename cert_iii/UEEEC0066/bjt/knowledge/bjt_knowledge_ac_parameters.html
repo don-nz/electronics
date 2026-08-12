@@ -496,6 +496,7 @@
         </div>
         <svg id="circuitRefSvg" viewBox="-10 -10 690 570" xmlns="http://www.w3.org/2000/svg">
           <use id="circuitRefUse" href="#ce-divider-ac" />
+          <g id="xyRuler" display="none"></g>
         </svg>
       </div>
     </div>
@@ -877,7 +878,44 @@
       document.getElementById('outputTerminalPlain').setAttribute('display', loadTerminal ? 'none' : 'inline');
       document.getElementById('outputTerminalLoad').setAttribute('display', loadTerminal ? 'inline' : 'none');
       document.getElementById('ieInd').setAttribute('display', ammeter ? 'inline' : 'none');
+      if (xyOn) buildXYRuler();
     }
+
+    /* ─── DEV: xy ruler overlay, for lining up SVG coordinates by eye ────────
+       Console:   setXY(1) / setXY(0)     URL: ?xy=1
+       Rebuilt on every showCircuitRef() call (not build-once-and-cache like
+       bjt_knowledge_basics.html's original) since this file's viewBox
+       changes per question via circuitViewBox — a cached ruler would drift
+       out of alignment the moment the diagram switched to a different box. */
+    let xyOn = false;
+    function buildXYRuler() {
+      const g = document.getElementById('xyRuler');
+      if (!g) return;
+      const vb = document.getElementById('circuitRefSvg').viewBox.baseVal;
+      const offX = vb.x, offY = vb.y, W = vb.width, H = vb.height;
+      const hy = offY + H - 10, vx = offX + 10, col = '#ff00ff';
+      let svg = `<line x1="${offX}" y1="${hy}" x2="${offX + W}" y2="${hy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+      for (let x = 0; x <= W; x += 10) {
+        const gx = offX + x, major = (Math.round(gx) % 50 === 0), len = major ? 10 : 5;
+        svg += `<line x1="${gx}" y1="${hy - len}" x2="${gx}" y2="${hy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+        if (major) svg += `<text x="${gx}" y="${hy - 13}" fill="${col}" font-size="8" text-anchor="middle">${Math.round(gx)}</text>`;
+      }
+      svg += `<line x1="${vx}" y1="${offY}" x2="${vx}" y2="${offY + H}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+      for (let y = 0; y <= H; y += 10) {
+        const gy = offY + y, major = (Math.round(gy) % 50 === 0), len = major ? 10 : 5;
+        svg += `<line x1="${vx}" y1="${gy}" x2="${vx + len}" y2="${gy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+        if (major) svg += `<text x="${vx + 13}" y="${gy + 3}" fill="${col}" font-size="8" text-anchor="start">${Math.round(gy)}</text>`;
+      }
+      g.innerHTML = svg;
+    }
+    function setXY(on) {
+      xyOn = on;
+      const g = document.getElementById('xyRuler');
+      if (!g) return;
+      if (on) buildXYRuler();
+      g.setAttribute('display', on ? 'inline' : 'none');
+    }
+    window.setXY = setXY;
 
     function renderQuestion() {
       const data = QUESTIONS[cur], st = Q[cur];
@@ -1040,6 +1078,7 @@
     {
       const p = new URLSearchParams(location.search);
       if (p.has('q')) { if (p.get('q') === 's') jumpToSummary(); else jump(+p.get('q'), p.has('ans')); }
+      if (p.has('xy')) setXY(+p.get('xy') === 1);
     }
   </script>
 </body>

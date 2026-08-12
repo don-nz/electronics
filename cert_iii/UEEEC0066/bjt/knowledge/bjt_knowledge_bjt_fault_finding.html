@@ -1,0 +1,861 @@
+<!--
+  Knowledge quiz for the "Fault-finding BJT amplifier circuits and testing
+  BJTs" lesson (6 objectives, photographed lesson-note page): (1) list the
+  AC-signal changes that indicate a likely fault, (2) predict the effect
+  on quiescent DC voltages for given faults, (3) use fault symptoms to
+  identify the specific problem, (4) test BJTs for faults using a DMM,
+  (5) use manufacturers' datasheets to look up DC terminal characteristics,
+  (6) choose a replacement BJT using manufacturers' data.
+
+  Objective 4 (DMM BJT testing) is deliberately DEFERRED — genuinely
+  hands-on-hardware only, matching the same split already established
+  across this project (digital_knowledge_logic_combos.html's fault-finding
+  objectives, digital_knowledge_boolean_algebra.html/digital_knowledge_
+  logic_families.html's own DMM objectives). The other 5 are all
+  knowledge/reasoning-testable, so all 5 are covered (Q1-Q14).
+
+  IMPORTANT — this quiz deliberately does NOT duplicate bjt_npn_
+  troubleshoot.html/bjt_pnp_troubleshoot.html (the existing interactive
+  DC-multimeter fault SIMULATORS with live VB/VC/VE/IE meters and
+  before/after "ghost" deltas). Those already cover hands-on DC-voltage
+  fault measurement. This quiz instead covers the REASONING layer those
+  simulators don't test directly: (a) AC-signal fault symptoms (objective
+  1 — genuinely new territory, since the simulators are DC-only), (b)
+  predicting/explaining WHY a given fault produces a given DC signature
+  rather than just reading a live meter, (c) datasheet-based replacement
+  selection (objectives 5-6, nothing to do with fault simulation at all).
+
+  ONE static reference circuit (ce-fault-circuit) — the same CE voltage-
+  divider stage as bjt_knowledge_ac_parameters.html's own ce-divider-ac
+  (component values reused verbatim for continuity: R1=120kΩ, R2=15kΩ,
+  RC=1.8kΩ, RE=270Ω, VCC=12V, β=200, BC549 — the same "swamped" unbypassed-
+  RE amplifier used throughout this BJT topic), with VB/VC/VE probe-point
+  labels added showing the HEALTHY quiescent readings (VB≈1.2V, VE≈0.5V,
+  VC≈8.6V — computed via the standard base-Thevenin method: VTH=1.33V,
+  RTH=13.3kΩ, IB≈9.4µA, IE≈IC≈1.9mA). Every fault question reasons about
+  DEVIATIONS from this one known-healthy baseline, the same way a real
+  technician compares a live reading against an expected value.
+
+  Fault DC-voltage signatures used in this quiz (derived from first
+  principles via KCL/KVL on the bias network, not guessed) — each is a
+  genuinely distinct, teachable pattern:
+    RC open:        VC crashes down close to VE (transistor "starves" —
+                     forced toward saturation since no external path can
+                     carry the collector current the base bias demands).
+    RE open:         Transistor fully cuts off (IE forced to ≈0 — no path
+                     to ground at all). VC rises to ≈VCC. VE floats/
+                     undefined (its own ground return is broken).
+    B-E junction open (inside the transistor itself): also cuts off
+                     (IB forced to ≈0 this time). VC rises to ≈VCC (same
+                     as RE-open). VE reads a CLEAN ≈0V (unlike RE-open's
+                     floating VE — RE's own ground path is still intact
+                     here, just carrying no current) — this VE floating-
+                     vs-clean-0V contrast is this quiz's key "two similar-
+                     looking faults, one differentiating reading" example
+                     (objective 3), directly paralleling the RC-open-vs-
+                     cutoff "VC direction" contrast used right before it.
+    C1 (input cap) open:  DC entirely unaffected; NO AC signal anywhere
+                     downstream of C1 (dead output despite live input).
+    C2 (output cap) open: DC entirely unaffected; AC signal present and
+                     healthy AT THE COLLECTOR, but never reaches the
+                     output terminal.
+
+  Datasheet questions (Q11-14) use a fictional "MS3904" BJT (same
+  "Meridian Semiconductor" branding as bjt_knowledge_basics.html's own
+  mock-datasheet component and digital_knowledge_logic_families.html's
+  IC datasheets) via quiz-common.css's shared .mock-datasheet classes.
+  Q13's replacement-selection question deliberately includes FOUR
+  candidates, each wrong for a different genuine reason (insufficient
+  VCEO, insufficient IC(max), wrong package/pinout) rather than one
+  obviously-correct-vs-obviously-wrong pair — mirroring digital_knowledge_
+  logic_families.html's own "choose a substitute" question design.
+
+  Same data-driven QUESTIONS[] engine as bjt_knowledge_basics.html — see
+  that file's header comment for the core architecture. Includes the
+  click-to-zoom modal and the xy=1 dev grid-ruler (see bjt_knowledge_
+  ac_parameters.html's own header/memory notes for why both were added
+  there after being found missing) from the start this time, rather than
+  needing them retrofitted later.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../assets/theme-init.js"></script>
+  <title>BJT Knowledge Quiz — Fault-Finding &amp; Testing BJTs</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../assets/quiz-common.css">
+  <script src="../../../assets/breadcrumb.js" defer></script>
+  <style>
+    .progress-wrap { display: flex; gap: .4rem; align-items: center; margin-bottom: 1rem; }
+    .ds-table { width: 100%; border-collapse: collapse; font-size: .72rem; }
+    .ds-table th { text-align: right; padding: .2rem .4rem; border-bottom: 1px solid var(--colour-border); }
+    .ds-table th:first-child { text-align: left; }
+    .ds-table td { text-align: right; padding: .2rem .4rem; }
+    .ds-table td:first-child { text-align: left; }
+    @media(min-width:900px) {
+      .quiz-wrap { display: grid;
+        grid-template-columns: minmax(340px, 760px) 1fr;
+        gap: 1.2rem;
+        align-items: start; }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Hidden defs: one static CE voltage-divider reference circuit, same
+       WIRES/NODES convention and component values as bjt_knowledge_ac_
+       parameters.html's own ce-divider-ac (see this file's header
+       comment). -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <filter id="glow">
+        <feGaussianBlur stdDeviation="2" result="b" />
+        <feMerge>
+          <feMergeNode in="b" />
+          <feMergeNode in="SourceGraphic" />
+        </feMerge>
+      </filter>
+
+      <g id="bjt-npn-shape">
+        <circle cx="7" cy="0" r="24" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+        <line x1="-17" y1="0" x2="0" y2="0" style="stroke: var(--colour-bjt)" stroke-width="2" />
+        <line x1="0" y1="-12" x2="0" y2="12" style="stroke: var(--colour-bjt)" stroke-width="2.5" />
+        <polyline points="14,-34 14,-20 0,-8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+        <polyline points="14,34 14,20 0,8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+        <polygon points="12,18 1,14 6,8" style="fill: var(--colour-bjt)" />
+      </g>
+
+      <g id="ac-source-shape">
+        <circle cx="0" cy="0" r="24" fill="none" style="stroke: var(--colour-signal)" stroke-width="2" filter="url(#glow)" />
+        <path d="M -16,0 C -11,-14 -5,-14 0,0 C 5,14 11,14 16,0" fill="none" style="stroke: var(--colour-signal)" stroke-width="2.5" stroke-linecap="round" />
+      </g>
+
+      <g id="cap-shape">
+        <rect x="-4" y="-12" width="8" height="24" style="fill: var(--colour-panel)" />
+        <line x1="-4" y1="-12" x2="-4" y2="12" style="stroke: var(--colour-capacitor)" stroke-width="2.5" />
+        <line x1="4" y1="-12" x2="4" y2="12" style="stroke: var(--colour-capacitor)" stroke-width="2.5" />
+      </g>
+
+      <!-- ══════════════════════════════════════════════════════════════════
+           CE-FAULT-CIRCUIT — same coordinates/values as bjt_knowledge_ac_
+           parameters.html's ce-divider-ac. NODE B/C/E marked with the
+           HEALTHY reference reading at each point — every fault question
+           reasons about how a given fault shifts these three numbers.
+           ══════════════════════════════════════════════════════════════ -->
+      <g id="ce-fault-circuit">
+
+        <!-- ════════════════════ WIRES ════════════════════ -->
+
+        <line x1="30" y1="279" x2="30" y2="520" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Source return down to GND level -->
+
+        <line x1="200" y1="50" x2="200" y2="80" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC rail down to R1 -->
+        <line x1="200" y1="160" x2="200" y2="255" style="stroke: var(--colour-series)" stroke-width="2" /><!-- R1 down to Base node -->
+        <line x1="200" y1="255" x2="200" y2="350" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Base node down to R2 -->
+        <line x1="200" y1="430" x2="200" y2="520" style="stroke: var(--colour-series)" stroke-width="2" /><!-- R2 down to GND rail -->
+
+        <line x1="440" y1="50" x2="440" y2="80" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC rail down to RC -->
+        <line x1="440" y1="160" x2="440" y2="210" style="stroke: var(--colour-series)" stroke-width="2" /><!-- RC down to Collector pin -->
+        <line x1="440" y1="289" x2="440" y2="350" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Emitter pin down to RE -->
+        <line x1="440" y1="430" x2="440" y2="520" style="stroke: var(--colour-series)" stroke-width="2" /><!-- RE down to GND rail -->
+
+        <line x1="180" y1="50" x2="460" y2="50" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC rail (R1 column to RC column) -->
+        <circle cx="200" cy="50" r="5" style="fill: var(--colour-series)" />
+        <circle cx="440" cy="50" r="5" style="fill: var(--colour-series)" />
+
+        <line x1="10" y1="520" x2="600" y2="520" style="stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="30" cy="520" r="5" style="fill: var(--colour-series)" />
+        <circle cx="200" cy="520" r="5" style="fill: var(--colour-series)" />
+        <circle cx="440" cy="520" r="5" style="fill: var(--colour-series)" />
+
+        <line x1="200" y1="255" x2="409" y2="255" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Base node across to transistor base pin -->
+        <line x1="54" y1="255" x2="96" y2="255" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Source to C1 -->
+        <line x1="104" y1="255" x2="200" y2="255" style="stroke: var(--colour-series)" stroke-width="2" /><!-- C1 to Base node -->
+
+        <line x1="440" y1="210" x2="600" y2="210" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Collector pin, through C2, to output -->
+
+        <!-- ════════════════════ NODES — VB/VC/VE probe points, healthy readings ════════════════════ -->
+
+        <circle cx="200" cy="255" r="5" style="fill: var(--colour-series)" />
+        <text x="175" y="238" style="fill: var(--colour-current)" font-size="14" text-anchor="middle" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">B</tspan> ≈ 1.2 V</text>
+
+        <circle cx="440" cy="210" r="5" style="fill: var(--colour-series)" />
+        <text x="480" y="238" style="fill: var(--colour-current)" font-size="14" text-anchor="middle" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">C</tspan> ≈ 8.6 V</text>
+
+        <circle cx="440" cy="289" r="5" style="fill: var(--colour-series)" />
+        <text x="490" y="310" style="fill: var(--colour-current)" font-size="14" text-anchor="middle" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">E</tspan> ≈ 0.5 V</text>
+
+        <!-- ════════════════════ AC INPUT COMPONENTS ════════════════════ -->
+
+        <g transform="translate(30,255)">
+          <use href="#ac-source-shape" />
+          <text x="0" y="-35" style="fill: var(--colour-signal)" text-anchor="middle" font-size="13" font-weight="bold">input</text>
+        </g>
+
+        <g transform="translate(100,255)">
+          <use href="#cap-shape" />
+          <text x="0" y="-25" fill="var(--colour-capacitor-labels)" text-anchor="middle" font-size="13" font-weight="bold">C1</text>
+        </g>
+
+        <!-- ════════════════════ AC OUTPUT COMPONENTS ════════════════════ -->
+
+        <g transform="translate(540,210)">
+          <use href="#cap-shape" />
+          <text x="0" y="-25" fill="var(--colour-capacitor-labels)" text-anchor="middle" font-size="13" font-weight="bold">C2</text>
+        </g>
+        <circle cx="600" cy="210" r="5" style="fill: var(--colour-signal)" />
+        <text x="614" y="215" style="fill: var(--colour-signal)" text-anchor="start" font-size="13" font-weight="bold">output</text>
+
+        <!-- ════════════════════ VCC ════════════════════ -->
+
+        <g transform="translate(280,-1)">
+          <line x1="40" y1="50" x2="40" y2="30" style="stroke: var(--colour-supply)" stroke-width="2" />
+          <line x1="0" y1="30" x2="80" y2="30" style="stroke: var(--colour-supply)" stroke-width="2" />
+          <text x="0" y="15" style="fill: var(--colour-voltage-label)" text-anchor="start" font-size="15" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">CC</tspan></text>
+          <line x1="50" y1="10" x2="50" y2="20" style="stroke: var(--colour-text)" stroke-width="1.0" />
+          <line x1="46" y1="15" x2="54" y2="15" style="stroke: var(--colour-text)" stroke-width="1.0" />
+          <text x="60" y="20" style="fill: var(--colour-text)" text-anchor="start" font-size="14" font-weight="bold">12 V</text>
+        </g>
+
+        <text x="120" y="535" fill="var(--colour-gnd)" text-anchor="middle" font-size="14" font-weight="bold">Common</text>
+
+        <!-- ════════════════════ Q1 — NPN ════════════════════ -->
+
+        <g transform="translate(426,256)">
+          <use href="#bjt-npn-shape" />
+          <text x="-15" y="-25" fill="var(--colour-bjt-labels)" text-anchor="middle" font-size="14" font-weight="bold">Q1</text>
+          <text x="0" y="40" fill="var(--colour-bjt-labels)" text-anchor="end" font-size="12">BC549</text>
+          <text x="35" y="20" fill="var(--colour-bjt-labels)" text-anchor="start" font-size="14" font-weight="bold">β = 200</text>
+        </g>
+
+        <!-- ════════════════════ RESISTORS ════════════════════ -->
+
+        <g transform="translate(185,80)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14" font-weight="bold">R1</text>
+          <text x="60" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14">120 kΩ</text>
+        </g>
+
+        <g transform="translate(185,350)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14" font-weight="bold">R2</text>
+          <text x="60" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14">15 kΩ</text>
+        </g>
+
+        <g transform="translate(425,80)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14" font-weight="bold">RC</text>
+          <text x="60" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14">1.8 kΩ</text>
+        </g>
+
+        <g transform="translate(425,350)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14" font-weight="bold">RE</text>
+          <text x="60" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14">270 Ω</text>
+        </g>
+
+      </g>
+    </defs>
+  </svg>
+
+  <div class="crumb" id="crumb" data-current="Fault-Finding &amp; Testing BJTs"></div>
+  <header>
+    <h1>BJT Amplifier: Fault-Finding &amp; Testing BJTs</h1>
+    <p>AC &amp; DC Fault Symptoms · Diagnosing Faulty Circuits · Datasheets · Choosing Replacement BJTs</p>
+  </header>
+
+  <div class="quiz-wrap">
+
+    <!-- LEFT: circuit diagram -->
+    <div class="circuit-col">
+      <div class="circuit-panel" onclick="openModal()" title="Click to zoom">
+        <div class="panel-label" id="circuitRefLabel">Reference Circuit</div>
+        <div class="zoom-hint">
+          <svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.8" fill="none" />
+            <line x1="12.5" y1="12.5" x2="17" y2="17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            <line x1="6" y1="8" x2="10" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+            <line x1="8" y1="6" x2="8" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+          </svg>
+          Zoom
+        </div>
+        <svg id="circuitRefSvg" viewBox="-10 -10 690 570" xmlns="http://www.w3.org/2000/svg">
+          <use id="circuitRefUse" href="#ce-fault-circuit" />
+          <g id="xyRuler" display="none"></g>
+        </svg>
+      </div>
+    </div>
+
+    <!-- RIGHT: question -->
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <!-- Single reusable question panel — populated from QUESTIONS[cur] by renderQuestion() -->
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+          <div class="options" id="qOptions"></div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Summary -->
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Zoom modal -->
+    <div class="diagram-modal" id="diagramModal" onclick="handleModalClick(event)">
+      <div class="modal-inner" id="modalInner">
+        <div class="modal-header">
+          <span class="modal-title" id="modalTitle">Reference Circuit</span>
+          <button class="modal-close" onclick="closeModal()">✕ Close</button>
+        </div>
+        <svg id="modalSvg" viewBox="-10 -10 690 570" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
+    const DEFAULT_VIEWBOX = '-10 -10 690 570';
+
+    function dsTable(rows, cols) {
+      return `<table class="ds-table"><thead><tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>${
+        rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')
+      }</tbody></table>`;
+    }
+    const MS3904_DATASHEET = `
+    <div class="mock-datasheet">
+      <div class="mock-datasheet-header">
+        <span class="mock-datasheet-brand">MERIDIAN SEMICONDUCTOR</span>
+        <span class="mock-datasheet-partno">MS3904 · NPN SILICON · TO-92</span>
+      </div>
+      <div class="mock-datasheet-legend">${dsTable([
+        ['V<sub>CEO</sub> (max)', '40 V'],
+        ['V<sub>CBO</sub> (max)', '60 V'],
+        ['I<sub>C</sub> (max, continuous)', '200 mA'],
+        ['h<sub>FE</sub> (at I<sub>C</sub> = 10 mA)', '100 – 300'],
+        ['V<sub>CE</sub>(sat) (max)', '0.3 V'],
+        ['P<sub>D</sub> (max, 25°C)', '350 mW'],
+      ], ['Parameter', 'Value'])}</div>
+    </div>`;
+    const REPLACEMENT_DATASHEET = `
+    <div class="mock-datasheet">
+      <div class="mock-datasheet-header">
+        <span class="mock-datasheet-brand">MERIDIAN SEMICONDUCTOR</span>
+        <span class="mock-datasheet-partno">CANDIDATE REPLACEMENTS FOR MS3904</span>
+      </div>
+      <div class="mock-datasheet-legend">${dsTable([
+        ['MS3904-R', '45 V', '200 mA', '100 – 300', 'TO-92, E-B-C'],
+        ['MS2N44', '15 V', '200 mA', '100 – 300', 'TO-92, E-B-C'],
+        ['MS8050', '45 V', '50 mA', '100 – 300', 'TO-92, E-B-C'],
+        ['MS3904-P', '45 V', '200 mA', '100 – 300', 'TO-220, C-B-E'],
+      ], ['Part', 'V<sub>CEO</sub>', 'I<sub>C</sub>(max)', 'h<sub>FE</sub>', 'Package / Pinout'])}</div>
+    </div>`;
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS — see bjt_knowledge_basics.html's header comment for the
+    // full field reference.
+    // ══════════════════════════════════════════════════════════════════════
+
+    const QUESTIONS = [
+      {
+        circuitLabel: 'Common Emitter (voltage-divider bias, RE unbypassed)',
+        text: () => 'You measure every DC bias voltage in this amplifier and they all read <b style="color:var(--colour-ui-primary)">exactly correct</b> — yet with a healthy signal applied, there is <b style="color:var(--colour-ui-primary)">NO AC signal</b> anywhere at the output. What does this pattern most strongly suggest?',
+        hint: () => 'A fault that only affects the AC signal path — not the DC bias network — leaves every DC voltage untouched.',
+        options: () => shuffle([
+          { label: 'A break somewhere in the AC signal/coupling path (e.g. an open coupling capacitor) — not a DC bias fault', type: 'correct' },
+          { label: 'The transistor\'s β has dropped significantly', type: 'wrong' },
+          { label: 'RC has increased in value', type: 'wrong' },
+          { label: 'The VCC supply voltage is too low', type: 'wrong' },
+        ]),
+        correctExplain: () => 'An open coupling/AC path — DC bias faults always disturb the DC voltages too.',
+        working: () => `
+    <div class="working-line">Every wrong option here (β dropping, RC changing, VCC sagging) would ALSO shift one or more of the DC bias voltages — that's precisely how a DC-bias-related fault shows up.</div>
+    <div class="working-total">Correct, untouched DC voltages combined with a completely dead AC output points specifically at something that only lives in the AC signal path — most commonly an open coupling capacitor (C1 or C2) or a broken signal-only connection, since capacitors have no effect on the DC operating point at all.</div>`
+      },
+      {
+        circuitLabel: 'Common Emitter (voltage-divider bias, RE unbypassed)',
+        text: () => 'Specifically: <b class="colour-cap">C1</b> (the input coupling capacitor) fails OPEN. What AC-signal symptom would you expect, and what would the DC bias voltages read?',
+        hint: () => 'C1 sits between the external input source and the base — trace what still reaches the base if C1 is broken.',
+        options: () => shuffle([
+          { label: 'No AC signal reaches the base at all (dead output); DC bias voltages remain completely normal', type: 'correct' },
+          { label: 'The AC signal is weaker but still present; DC bias voltages all shift', type: 'wrong' },
+          { label: 'DC bias voltages disappear entirely; AC signal is unaffected', type: 'wrong' },
+          { label: 'No change at all — C1 has no function in this circuit', type: 'wrong' },
+        ]),
+        correctExplain: () => 'Dead AC output; DC bias completely normal.',
+        working: () => `
+    <div class="working-total">With <b class="colour-cap">C1</b> open, the AC path from the input source to the base is completely broken — the base never sees any of the input signal, so the output is dead. But <b class="colour-cap">C1</b> plays no role in the DC bias network at all (R1/R2/RC/RE and VCC are all untouched), so VB, VC and VE all remain at their healthy values.</div>`
+      },
+      {
+        circuitLabel: 'Common Emitter (voltage-divider bias, RE unbypassed)',
+        text: () => 'Now instead <b class="colour-cap">C2</b> (the output coupling capacitor) fails OPEN. Where would you find a live AC signal, and where would it be missing?',
+        hint: () => 'C2 sits between the collector and the output terminal — the amplifying action itself happens before C2.',
+        options: () => shuffle([
+          { label: 'AC signal is present and healthy AT THE COLLECTOR itself, but never reaches the output terminal', type: 'correct' },
+          { label: 'No AC signal exists anywhere in the circuit, including at the collector', type: 'wrong' },
+          { label: 'AC signal reaches the output fine, but disappears at the collector', type: 'wrong' },
+          { label: 'The DC bias voltages all become 0 V', type: 'wrong' },
+        ]),
+        correctExplain: () => 'AC is alive at the collector; dead only at the output terminal.',
+        working: () => `
+    <div class="working-total">The transistor still amplifies normally — Q1's collector still swings a healthy AC signal, since that happens upstream of <b class="colour-cap">C2</b>. It's only the LAST leg of the journey, from collector through <b class="colour-cap">C2</b> to the output pin, that's broken. This is exactly why probing progressively along a signal path (input → base → collector → output) is such an effective fault-finding technique — it isolates which stage the fault sits in.</div>`
+      },
+      {
+        circuitLabel: 'Common Emitter (voltage-divider bias, RE unbypassed)',
+        text: () => '<b class="colour-resistor">RC</b> develops an OPEN-circuit fault (breaks completely). What happens to the collector voltage <b class="colour-current">V<sub>C</sub></b>?',
+        hint: () => 'With no external path available to carry the collector current the base bias is demanding, the transistor gets starved and pushed toward saturation.',
+        options: () => shuffle([
+          { label: 'VC crashes down, ending up close to VE (the transistor saturates, starved of collector current)', type: 'correct' },
+          { label: 'VC rises to approximately VCC', type: 'wrong' },
+          { label: 'VC stays at its normal healthy value (~8.6 V)', type: 'wrong' },
+          { label: 'VC becomes exactly 0 V', type: 'wrong' },
+        ]),
+        correctExplain: () => 'VC crashes down close to VE — the transistor saturates.',
+        working: () => `
+    <div class="working-line">The base circuit (R1, R2, the base itself) is untouched by an RC fault, so the transistor is still being driven on normally. But with RC open, there's no external path at all for the collector current the bias network is asking for — the transistor ends up pulled into saturation, where VCE collapses toward its minimum (VCE(sat), only a few tenths of a volt).</div>
+    <div class="working-total">Since VC = VE + VCE, and VCE collapses toward ~0, VC ends up close to VE — a dramatic drop from the healthy ~8.6 V. Rising to VCC (the wrong answer above) is what happens for a DIFFERENT fault family entirely — see the next two questions.</div>`
+      },
+      {
+        circuitLabel: 'Common Emitter (voltage-divider bias, RE unbypassed)',
+        text: () => '<b class="colour-resistor">RE</b> develops an OPEN-circuit fault instead. What happens to <b class="colour-current">V<sub>C</sub></b>, and why?',
+        hint: () => 'RE is the ONLY path for emitter current to reach ground in this unbypassed design — if it breaks, nothing can flow through the transistor at all.',
+        options: () => shuffle([
+          { label: 'VC rises to approximately VCC, because the transistor is completely cut off (no path exists for any emitter current at all)', type: 'correct' },
+          { label: 'VC drops close to 0 V, because the transistor saturates', type: 'wrong' },
+          { label: 'VC stays at its normal healthy value — RE has no effect on VC', type: 'wrong' },
+          { label: 'VC becomes unstable, oscillating rapidly', type: 'wrong' },
+        ]),
+        correctExplain: () => 'VC rises to ≈VCC — the transistor is cut off entirely.',
+        working: () => `
+    <div class="working-line">With RE open, there's no return path to ground for the emitter current at all — since IE = IB + IC, forcing IE to ≈0 forces BOTH IB and IC to collapse to ≈0 too. The transistor is fully cut off, not just starved.</div>
+    <div class="working-total">With IC ≈ 0, there's almost no current flowing through RC either, so almost no voltage is dropped across it — VC rises to sit very close to the full VCC (≈12 V). Meanwhile VE, with its own ground path broken, floats to an undefined/unstable reading rather than settling anywhere predictable.</div>`
+      },
+      {
+        circuitLabel: 'Common Emitter (voltage-divider bias, RE unbypassed)',
+        text: () => 'The transistor\'s own base-emitter junction fails OPEN internally (the transistor itself is faulty). Predict <b class="colour-current">V<sub>B</sub></b>, <b class="colour-current">V<sub>C</sub></b> and <b class="colour-current">V<sub>E</sub></b>.',
+        hint: () => 'No current can cross the broken junction at all — think about what each part of the bias network settles to with zero current flowing through it.',
+        options: () => shuffle([
+          { label: 'VC rises to ≈VCC (cut off); VE reads a clean ≈0 V (RE is intact, just carrying no current); VB rises slightly (no base current now loads the divider)', type: 'correct' },
+          { label: 'VC drops close to VE; VB and VE both rise well above normal', type: 'wrong' },
+          { label: 'All three voltages remain completely unchanged from healthy', type: 'wrong' },
+          { label: 'VC drops to 0 V; VB and VE both read VCC', type: 'wrong' },
+        ]),
+        correctExplain: () => 'VC ≈ VCC, VE ≈ 0 V (clean), VB slightly above its normal 1.2 V.',
+        working: () => `
+    <div class="working-line">An internally open B-E junction blocks base current completely, which — just like the RE-open fault — cuts the transistor off entirely: IB ≈ IC ≈ 0, so VC rises to ≈VCC for the same reason as the previous question.</div>
+    <div class="working-total">The key difference from RE-open: here, RE's own path to ground is still perfectly intact — it's just carrying essentially zero current, so VE settles to a clean, well-defined ≈0 V rather than floating. And since almost no base current is now being drawn out of the R1/R2 divider, VB rises slightly above its normal loaded value, settling close to the divider's unloaded (open-circuit) voltage.</div>`
+      },
+      {
+        circuitLabel: 'Common Emitter (voltage-divider bias, RE unbypassed)',
+        text: () => 'Both an open <b class="colour-resistor">RC</b> and a fully cut-off transistor (open RE, or an open B-E junction) are dramatic faults — but they push <b class="colour-current">V<sub>C</sub></b> in OPPOSITE directions. Which statement correctly captures the difference?',
+        hint: () => 'Re-read your answers to the last three questions and compare the direction VC moved in each case.',
+        options: () => shuffle([
+          { label: 'RC open pulls VC DOWN (toward VE); a cut-off transistor pushes VC UP (toward VCC)', type: 'correct' },
+          { label: 'Both faults pull VC down toward VE', type: 'wrong' },
+          { label: 'Both faults push VC up toward VCC', type: 'wrong' },
+          { label: 'RC open pushes VC up; a cut-off transistor pulls VC down', type: 'wrong' },
+        ]),
+        correctExplain: () => 'RC open → VC down (toward VE). Cut-off transistor → VC up (toward VCC).',
+        working: () => `
+    <div class="working-total">This single VC reading is a genuinely powerful first diagnostic step: a collector voltage that's crashed DOWN near VE points at the collector's own current path (RC) being broken; a collector voltage that's shot UP near VCC points at the transistor itself having stopped conducting (whether from an open RE, an open B-E junction, or the transistor being cut off for some other reason). One reading, two completely different fault families ruled in or out immediately.</div>`
+      },
+      {
+        circuitLabel: 'Common Emitter (voltage-divider bias, RE unbypassed)',
+        text: () => 'RE-open and an internally-open B-E junction BOTH cut the transistor off, giving a similar VC≈VCC symptom. Which single reading tells these two faults apart?',
+        hint: () => 'Think about whether RE\'s own connection to ground is still physically intact in each case.',
+        options: () => shuffle([
+          { label: 'VE — open RE gives a floating/unstable reading (its own ground path is broken); an open B-E junction gives a clean, steady ≈0 V (RE is intact, just unused)', type: 'correct' },
+          { label: 'VB — the two faults give clearly different VB readings', type: 'wrong' },
+          { label: 'VC — the two faults give clearly different VC readings', type: 'wrong' },
+          { label: 'There is no way to tell these two faults apart with a DMM', type: 'wrong' },
+        ]),
+        correctExplain: () => 'VE — floating/unstable (RE open) vs. a clean ≈0 V (B-E junction open).',
+        working: () => `
+    <div class="working-total">Both faults give almost identical VB and VC readings, which is exactly why this question matters — objective 3 is specifically about telling apart faults that LOOK similar at first glance. VE is the reading that separates them: RE-open leaves the emitter with no ground connection at all (floating), while an open B-E junction leaves RE's ground path perfectly intact, just with no current flowing through it (a clean, steady, low reading).</div>`
+      },
+      {
+        circuitLabel: 'Common Emitter (voltage-divider bias, RE unbypassed)',
+        text: () => 'A technician measures: <b class="colour-current">V<sub>B</sub></b> ≈ 1.3 V (close to normal), <b class="colour-current">V<sub>C</sub></b> = 12 V (pinned to VCC), <b class="colour-current">V<sub>E</sub></b> floating/drifting with no steady reading. Which fault does this point to?',
+        hint: () => 'A clean, near-normal VB combined with VC pinned at VCC and a floating (not steady-zero) VE.',
+        options: () => shuffle([
+          { label: 'RE has failed open', type: 'correct' },
+          { label: 'RC has failed open', type: 'wrong' },
+          { label: 'The B-E junction has failed open internally', type: 'wrong' },
+          { label: 'C1 has failed open', type: 'wrong' },
+        ]),
+        correctExplain: () => 'RE open — matches the floating-VE signature exactly.',
+        working: () => `
+    <div class="working-total">VC pinned at VCC rules out RC-open (that pulls VC down instead). A clean steady VE would point to the B-E junction; C1 open wouldn't move any DC voltage at all. A FLOATING, unstable VE reading is the specific signature of RE's own ground path being broken — RE open.</div>`
+      },
+      {
+        circuitLabel: 'Common Emitter (voltage-divider bias, RE unbypassed)',
+        text: () => 'Different reading this time: <b class="colour-current">V<sub>B</sub></b> ≈ 1.3 V, <b class="colour-current">V<sub>C</sub></b> = 12 V, <b class="colour-current">V<sub>E</sub></b> = 0 V exactly (steady, not drifting). Which fault does THIS point to?',
+        hint: () => 'Same VB/VC pattern as the previous question — the difference is entirely in how VE behaves.',
+        options: () => shuffle([
+          { label: 'The transistor\'s B-E junction has failed open internally', type: 'correct' },
+          { label: 'RE has failed open', type: 'wrong' },
+          { label: 'RC has failed open', type: 'wrong' },
+          { label: 'C2 has failed open', type: 'wrong' },
+        ]),
+        correctExplain: () => 'B-E junction open — a clean, steady VE is the giveaway.',
+        working: () => `
+    <div class="working-total">A steady, well-defined VE = 0 V (rather than a floating reading) means RE's ground connection is still physically intact — it's just carrying no current, exactly as reasoned through two questions ago. That specific pattern points at the transistor itself (open B-E junction), not RE.</div>`
+      },
+      {
+        circuitLabel: 'Common Emitter (voltage-divider bias, RE unbypassed)',
+        text: () => `Using the datasheet excerpt below for the original transistor, what is its maximum rated collector-emitter voltage <b class="colour-current">V<sub>CEO</sub></b>?${MS3904_DATASHEET}`,
+        hint: () => 'Read the VCEO row directly.',
+        options: () => shuffle([
+          { label: '40 V', type: 'correct' },
+          { label: '60 V (that\'s VCBO — collector-BASE, not collector-emitter)', type: 'wrong' },
+          { label: '200 mA (that\'s a current rating, not a voltage)', type: 'wrong' },
+          { label: '0.3 V (that\'s VCE(sat))', type: 'wrong' },
+        ]),
+        correctExplain: () => 'VCEO(max) = 40 V.',
+        working: () => `
+    <div class="working-total">Datasheet subscripts matter: VCEO is collector-to-emitter with the base open, VCBO is collector-to-base — a different (usually higher) rating entirely. Reading the table directly: VCEO(max) = 40 V.</div>`
+      },
+      {
+        circuitLabel: 'Common Emitter (voltage-divider bias, RE unbypassed)',
+        text: () => `Same datasheet again: what current gain (h<sub>FE</sub>) range does this device guarantee at IC = 10 mA?${MS3904_DATASHEET}`,
+        hint: () => 'Read the hFE row directly — datasheets usually give a MIN–MAX range, not a single fixed number, since it varies between individual devices.',
+        options: () => shuffle([
+          { label: '100 – 300', type: 'correct' },
+          { label: 'Exactly 200, with no variation', type: 'wrong' },
+          { label: '40 – 60', type: 'wrong' },
+          { label: '0.3 – 350', type: 'wrong' },
+        ]),
+        correctExplain: () => 'hFE = 100 – 300 (at IC = 10 mA).',
+        working: () => `
+    <div class="working-total">Real transistors of the same part number vary noticeably in hFE from unit to unit — that's exactly why datasheets always specify a range rather than a single value, and why bias circuits are usually designed (as this one is) to be reasonably tolerant of β/hFE variation across that range.</div>`
+      },
+      {
+        circuitLabel: 'Common Emitter (voltage-divider bias, RE unbypassed)',
+        text: () => `The original MS3904 in this circuit has failed and needs replacing. <b style="color:var(--colour-ui-primary)">Which</b> of these four candidates is the most appropriate drop-in replacement?${REPLACEMENT_DATASHEET}`,
+        hint: () => 'Check all three things at once: does it meet or exceed the original\'s voltage and current ratings, AND does it physically fit without rewiring?',
+        options: () => shuffle([
+          { label: 'MS3904-R — matches every rating and the same TO-92, E-B-C package/pinout', type: 'correct' },
+          { label: 'MS2N44 — cheaper, but only rated for 15 V VCEO', type: 'wrong' },
+          { label: 'MS8050 — good voltage rating, but only 50 mA IC(max)', type: 'wrong' },
+          { label: 'MS3904-P — matches every electrical rating, but is a TO-220 package with C-B-E pinout', type: 'wrong' },
+        ]),
+        correctExplain: () => 'MS3904-R — matches ratings AND package/pinout.',
+        working: () => `
+    <div class="working-line">MS2N44's 15 V VCEO rating is too close to (and in some conditions could be exceeded by) this 12 V-supply circuit's own voltage swings — too little safety margin. MS8050's 50 mA IC(max) may not comfortably cover this circuit's actual operating current plus margin.</div>
+    <div class="working-total">MS3904-P actually meets every ELECTRICAL rating — but it's the wrong physical package (TO-220 instead of TO-92) with a different pin order (C-B-E instead of E-B-C), so it can't be dropped straight into an existing TO-92 footprint without rewiring the leads entirely. MS3904-R is the only candidate that's a genuine like-for-like swap in every respect.</div>`
+      },
+    ];
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUIZ ENGINE — generic; driven entirely by QUESTIONS[] via index.
+    // ══════════════════════════════════════════════════════════════════════
+
+    function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+    function isMulti(data) { return data.kind === 'multi'; }
+    function isAnswerCorrect(data, st) {
+      if (!isMulti(data)) return st.sel === st.cor;
+      const a = [...st.sel].sort((x, y) => x - y), b = [...st.cor].sort((x, y) => x - y);
+      return a.length === b.length && a.every((v, i) => v === b[i]);
+    }
+    function selectedLabel(data, st) {
+      if (!isMulti(data)) return (st.sel != null && st.opts[st.sel]) ? st.opts[st.sel].label : '—';
+      return st.sel.length ? [...st.sel].sort((a, b) => a - b).map(i => LETTERS[i]).join(', ') : '—';
+    }
+
+    let Q = [];
+    let cur = 0;
+
+    function buildProgressDots() {
+      document.getElementById('progressDots').innerHTML =
+        QUESTIONS.map((_, i) => `<div class="progress-dot" id="dot-${i}"></div>`).join('');
+    }
+
+    function updateProgress() {
+      QUESTIONS.forEach((_, i) => {
+        const d = document.getElementById('dot-' + i);
+        d.className = 'progress-dot';
+        if (i === cur) d.classList.add('active'); else if (Q[i].ans) d.classList.add('done');
+      });
+      document.getElementById('progressLabel').textContent = (cur + 1) + ' / ' + QUESTIONS.length;
+    }
+
+    function renderOptions() {
+      const st = Q[cur], data = QUESTIONS[cur];
+      const multi = isMulti(data);
+      const c = document.getElementById('qOptions'); c.innerHTML = '';
+      st.opts.forEach((opt, i) => {
+        const btn = document.createElement('button'); btn.className = 'option-btn';
+        btn.innerHTML = `<span class="option-letter">${LETTERS[i]}</span><span>${opt.label}</span>`;
+        if (st.ans) {
+          btn.disabled = true;
+          if (multi) {
+            const selected = st.sel.includes(i);
+            if (opt.type === 'correct') { btn.classList.add(selected ? 'correct' : 'missed'); if (selected) btn.innerHTML += `<span class="result-icon">✓</span>`; }
+            else { btn.classList.add(selected ? 'wrong' : 'dimmed'); if (selected) btn.innerHTML += `<span class="result-icon">✗</span>`; }
+          } else {
+            if (i === st.cor) { btn.classList.add('correct'); btn.innerHTML += `<span class="result-icon">✓</span>`; }
+            else if (i === st.sel) { btn.classList.add('wrong'); btn.innerHTML += `<span class="result-icon">✗</span>`; }
+            else btn.classList.add('dimmed');
+          }
+        } else {
+          if (multi ? st.sel.includes(i) : i === st.sel) btn.classList.add('selected');
+          btn.addEventListener('click', () => selectOption(i));
+        }
+        c.appendChild(btn);
+      });
+    }
+
+    function selectOption(i) {
+      const st = Q[cur], data = QUESTIONS[cur];
+      if (st.ans) return;
+      if (isMulti(data)) {
+        const pos = st.sel.indexOf(i);
+        if (pos >= 0) st.sel.splice(pos, 1); else st.sel.push(i);
+      } else {
+        st.sel = i;
+      }
+      renderQuestion();
+    }
+
+    function showCircuitRef(id, label, viewBox) {
+      document.getElementById('circuitRefUse').setAttribute('href', '#' + id);
+      document.getElementById('circuitRefLabel').textContent = label || 'Reference Circuit';
+      document.getElementById('circuitRefSvg').setAttribute('viewBox', viewBox || DEFAULT_VIEWBOX);
+      if (xyOn) buildXYRuler();
+    }
+
+    /* ─── DEV: xy ruler overlay, for lining up SVG coordinates by eye ────────
+       Console:   setXY(1) / setXY(0)     URL: ?xy=1 */
+    let xyOn = false;
+    function buildXYRuler() {
+      const g = document.getElementById('xyRuler');
+      if (!g) return;
+      const vb = document.getElementById('circuitRefSvg').viewBox.baseVal;
+      const offX = vb.x, offY = vb.y, W = vb.width, H = vb.height;
+      const hy = offY + H - 10, vx = offX + 10, col = '#ff00ff';
+      let svg = `<line x1="${offX}" y1="${hy}" x2="${offX + W}" y2="${hy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+      for (let x = 0; x <= W; x += 10) {
+        const gx = offX + x, major = (Math.round(gx) % 50 === 0), len = major ? 10 : 5;
+        svg += `<line x1="${gx}" y1="${hy - len}" x2="${gx}" y2="${hy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+        if (major) svg += `<text x="${gx}" y="${hy - 13}" fill="${col}" font-size="8" text-anchor="middle">${Math.round(gx)}</text>`;
+      }
+      svg += `<line x1="${vx}" y1="${offY}" x2="${vx}" y2="${offY + H}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+      for (let y = 0; y <= H; y += 10) {
+        const gy = offY + y, major = (Math.round(gy) % 50 === 0), len = major ? 10 : 5;
+        svg += `<line x1="${vx}" y1="${gy}" x2="${vx + len}" y2="${gy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+        if (major) svg += `<text x="${vx + 13}" y="${gy + 3}" fill="${col}" font-size="8" text-anchor="start">${Math.round(gy)}</text>`;
+      }
+      g.innerHTML = svg;
+    }
+    function setXY(on) {
+      xyOn = on;
+      const g = document.getElementById('xyRuler');
+      if (!g) return;
+      if (on) buildXYRuler();
+      g.setAttribute('display', on ? 'inline' : 'none');
+    }
+    window.setXY = setXY;
+
+    function renderQuestion() {
+      const data = QUESTIONS[cur], st = Q[cur];
+      const multi = isMulti(data);
+
+      document.getElementById('qNum').textContent = 'Q' + (cur + 1);
+      document.getElementById('qText').innerHTML = data.text();
+      document.getElementById('qHint').innerHTML = data.hint();
+
+      renderOptions();
+
+      const selList = document.getElementById('qSelectedList');
+      if (multi) {
+        selList.style.display = '';
+        selList.textContent = st.sel.length
+          ? `Selected: ${[...st.sel].sort((a, b) => a - b).map(i => LETTERS[i]).join(', ')}`
+          : 'Click the options above to select your answer.';
+      } else {
+        selList.style.display = 'none';
+      }
+
+      const banner = document.getElementById('qBanner');
+      if (st.ans) {
+        const ok = isAnswerCorrect(data, st);
+        banner.className = 'result-banner ' + (ok ? 'correct' : 'wrong');
+        document.getElementById('qIcon').textContent = ok ? '✓' : '✗';
+        document.getElementById('qBannerText').innerHTML = ok ? `Correct! ${data.correctExplain(st)}` : `The correct answer is ${data.correctExplain(st)}`;
+      } else {
+        banner.className = 'result-banner';
+      }
+
+      const working = document.getElementById('qWorking');
+      working.className = 'working-box' + (st.ans ? ' visible' : '');
+      document.getElementById('qWorkingContent').innerHTML = st.ans ? data.working(st) : '';
+
+      document.getElementById('qBack').style.display = cur > 0 ? 'inline-block' : 'none';
+      const check = document.getElementById('qCheck');
+      check.style.display = st.ans ? 'none' : 'inline-block';
+      check.disabled = st.ans || (multi ? st.sel.length === 0 : st.sel === null);
+      const isLast = cur === QUESTIONS.length - 1;
+      document.getElementById('qNext').style.display = (st.ans && !isLast) ? 'inline-block' : 'none';
+      document.getElementById('qSummary').style.display = (st.ans && isLast) ? 'inline-block' : 'none';
+
+      showCircuitRef('ce-fault-circuit', data.circuitLabel);
+      updateProgress();
+    }
+
+    function checkAnswer() {
+      const st = Q[cur], data = QUESTIONS[cur];
+      if (st.ans) return;
+      if (isMulti(data) ? st.sel.length === 0 : st.sel === null) return;
+      st.ans = true;
+      renderQuestion();
+      document.getElementById('qBanner').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function nextQuestion() { if (cur < QUESTIONS.length - 1) { cur++; renderQuestion(); } }
+
+    function backQuestion() {
+      if (cur <= 0) return;
+      cur--;
+      for (let i = cur; i < QUESTIONS.length; i++) {
+        Q[i].ans = false;
+        Q[i].sel = isMulti(QUESTIONS[i]) ? [] : null;
+      }
+      renderQuestion();
+    }
+
+    function goToQuestion(n) {
+      cur = Math.max(0, Math.min(QUESTIONS.length - 1, n - 1));
+      document.getElementById('summaryPanel').style.display = 'none';
+      document.getElementById('qPanel').style.display = 'flex';
+      renderQuestion();
+    }
+
+    function resetQuiz() {
+      Q = QUESTIONS.map(data => {
+        const opts = data.options();
+        if (isMulti(data)) {
+          const cor = opts.map((o, i) => o.type === 'correct' ? i : -1).filter(i => i >= 0);
+          return { sel: [], ans: false, cor, opts };
+        }
+        return { sel: null, ans: false, cor: opts.findIndex(o => o.type === 'correct'), opts };
+      });
+      cur = 0;
+      document.getElementById('summaryPanel').style.display = 'none';
+      document.getElementById('qPanel').style.display = 'flex';
+      renderQuestion();
+    }
+
+    function showSummary() {
+      document.getElementById('qPanel').style.display = 'none';
+      document.getElementById('summaryPanel').style.display = 'block';
+      showCircuitRef('ce-fault-circuit', 'Common Emitter (voltage-divider bias, RE unbypassed)');
+      const items = QUESTIONS.map((data, i) => {
+        const st = Q[i];
+        const ans = selectedLabel(data, st);
+        const ok = isAnswerCorrect(data, st);
+        const colour = ok ? 'var(--colour-ui-correct)' : '#ff3366';
+        const mark = ok ? '✓' : '✗';
+        return `<div class="summary-item">
+      <div class="summary-item-head"><span class="summary-qnum">Q${i + 1}</span><span class="summary-question">${data.text()}</span></div>
+      <div class="summary-answer" style="color:${colour}">You answered: ${ans} &nbsp; ${mark}</div>
+      <div class="working-box visible">${st.ans ? data.working(st) : ''}</div>
+    </div>`;
+      }).join('');
+      document.getElementById('summaryContent').innerHTML = items;
+      QUESTIONS.forEach((_, i) => { const d = document.getElementById('dot-' + i); if (d) d.className = 'progress-dot done'; });
+      document.getElementById('progressLabel').textContent = 'Complete';
+    }
+
+    // ── zoom modal ──
+    function openModal() {
+      const src = document.getElementById('circuitRefSvg'), dst = document.getElementById('modalSvg');
+      dst.innerHTML = src.innerHTML; dst.setAttribute('viewBox', src.getAttribute('viewBox'));
+      document.getElementById('modalTitle').textContent = document.getElementById('circuitRefLabel').textContent;
+      document.getElementById('diagramModal').classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeModal() {
+      document.getElementById('diagramModal').classList.remove('open');
+      document.getElementById('modalSvg').innerHTML = '';
+      document.body.style.overflow = '';
+    }
+    function handleModalClick(e) { if (e.target.closest('.modal-close')) return; closeModal(); }
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+    buildProgressDots();
+    resetQuiz();
+
+    function goBack(e) { e.preventDefault(); history.back(); }
+    if (history.length > 1) {
+      document.getElementById('menuLink').style.display = '';
+    }
+
+    function jump(n, answered) {
+      if (n < 1 || n > QUESTIONS.length) { console.warn('jump: no question', n); return; }
+      for (let i = 0; i < n - 1; i++) {
+        Q[i].sel = Array.isArray(Q[i].cor) ? [...Q[i].cor] : Q[i].cor;
+        Q[i].ans = true;
+      }
+      goToQuestion(n);
+      if (answered) {
+        Q[cur].sel = Array.isArray(Q[cur].cor) ? [...Q[cur].cor] : Q[cur].cor;
+        checkAnswer();
+      }
+    }
+    window.jump = jump;
+
+    function jumpToSummary() {
+      QUESTIONS.forEach((_, i) => {
+        if (Q[i].ans) return;
+        Q[i].sel = Array.isArray(Q[i].cor) ? [...Q[i].cor] : Q[i].cor;
+        Q[i].ans = true;
+      });
+      showSummary();
+    }
+    window.jumpToSummary = jumpToSummary;
+
+    {
+      const p = new URLSearchParams(location.search);
+      if (p.has('q')) { if (p.get('q') === 's') jumpToSummary(); else jump(+p.get('q'), p.has('ans')); }
+      if (p.has('xy')) setXY(+p.get('xy') === 1);
+    }
+  </script>
+</body>
+
+</html>

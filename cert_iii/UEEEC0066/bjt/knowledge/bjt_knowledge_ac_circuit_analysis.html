@@ -1,0 +1,1038 @@
+<!--
+  Knowledge quiz for deriving the AC-EQUIVALENT circuit from a DC-biased
+  BJT amplifier — built from a conversation about how to TEACH this
+  specific transform, not from a photographed objectives page. The user's
+  own lesson notes show a standard RB1/RB2 voltage-divider CE stage (with
+  C1/C2 coupling caps) alongside its already-simplified AC-equivalent
+  redraw, and asked for a step-by-step way to bridge from one to the
+  other. The three steps landed on (and taught here in that order):
+    Step 1 — coupling capacitors (C1, C2) become AC shorts (plain wire)
+    Step 2 — VCC becomes an AC short to 0V, merging with the ground rail
+    Step 3 — redraw each component against the rail it now actually
+             connects to (RB1/RB2 end up in parallel, base-to-common;
+             RC/RE end up collector-to-common / emitter-to-common)
+
+  This quiz is deliberately DERIVATION-ONLY — no Zin/Zout/Av numbers are
+  calculated here (that's bjt_knowledge_ac_parameters.html's job). This
+  file is the missing "why" that feeds INTO that one: Q9 explicitly
+  bridges to Zin = RB1∥RB2∥Zb without computing it, since that's exactly
+  the formula ac_parameters.html's own Q3/Q7 already exercise numerically.
+  Component names (RB1/RB2 rather than R1/R2) intentionally match the
+  user's own lesson-note naming rather than this project's usual R1/R2
+  convention, since this quiz is teaching directly from that material.
+
+  FOUR circuit states, switched via the usual per-question `circuitId`
+  (same v2-engine mechanism as ce-divider-ac/cc-divider-ac/freq-response-
+  graph in bjt_knowledge_ac_parameters.html — see that file's header
+  comment for the core QUESTIONS[]-driven engine this one reuses verbatim):
+
+    dc-circuit    — the original DC bias circuit (VCC/0V rails, C1/C2
+                    caps) — coordinates reused verbatim from
+                    ac_parameters.html's own ce-divider-ac (RB1/RB2/RC/RE
+                    in the same positions as that file's R1/R2/RC/RE),
+                    with the rails widened into full-width lines (rather
+                    than that file's compact VCC/GND symbol groups) since
+                    the whole point here is to visually MERGE them later.
+    step1-circuit — identical layout to dc-circuit; C1/C2 replaced with a
+                    plain wire plus a small "→ short" annotation.
+    step2-circuit — identical to step1-circuit; VCC rail recoloured to
+                    the ground colour and its label struck through, with
+                    a dashed connector drawn to the 0V rail showing they
+                    are now the same AC node.
+    step3-circuit — a genuinely NEW layout (own `circuitViewBox`,
+                    narrower/shorter than the other three) matching the
+                    user's own redrawn AC-equivalent: three rails (base,
+                    collector, AC-common) instead of two, with RB1/RB2/
+                    RC/RE each redrawn hanging between the rail they
+                    actually connect to and the shared AC-common rail.
+
+  Same data-driven QUESTIONS[] engine as bjt_knowledge_basics.html — see
+  that file's header comment for the core architecture. Add/reorder
+  questions by editing the QUESTIONS array only.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../assets/theme-init.js"></script>
+  <title>BJT Knowledge Quiz — AC Circuit Analysis</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../assets/quiz-common.css">
+  <script src="../../../assets/breadcrumb.js" defer></script>
+  <style>
+    .progress-wrap { display: flex; gap: .4rem; align-items: center; margin-bottom: 1rem; }
+    @media(min-width:900px) {
+      /* dc-circuit/step1/step2 share a 720x570 viewBox (a widened version of
+         ac_parameters.html's 690x570 CE circuit, to fit the full-width VCC/
+         0V rails); step3 uses its own narrower circuitViewBox. Both need the
+         same wide column treatment ac_parameters.html uses, for the same
+         reason: quiz-common.css's default minmax(340px, 52%) column stays
+         too narrow for a circuit this wide on a laptop screen. */
+      .quiz-wrap { display: grid;
+        grid-template-columns: minmax(340px, 760px) 1fr;
+        gap: 1.2rem;
+        align-items: start; }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Hidden defs: four states of the same RB1/RB2 voltage-divider CE stage
+       (dc-circuit → step1-circuit → step2-circuit → step3-circuit), built
+       in bjt_npn_voltage_divider_ac.html's own large-scale WIRES/NODES
+       format (see the file header comment above). -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <filter id="glow">
+        <feGaussianBlur stdDeviation="2" result="b" />
+        <feMerge>
+          <feMergeNode in="b" />
+          <feMergeNode in="SourceGraphic" />
+        </feMerge>
+      </filter>
+
+      <!-- ══ NPN BJT SHAPE ══ -->
+      <g id="bjt-npn-shape">
+        <circle cx="7" cy="0" r="24" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+        <line x1="-17" y1="0" x2="0" y2="0" style="stroke: var(--colour-bjt)" stroke-width="2" />
+        <line x1="0" y1="-12" x2="0" y2="12" style="stroke: var(--colour-bjt)" stroke-width="2.5" />
+        <polyline points="14,-34 14,-20 0,-8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+        <polyline points="14,34 14,20 0,8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+        <polygon points="12,18 1,14 6,8" style="fill: var(--colour-bjt)" />
+      </g>
+
+      <!-- ══ AC SIGNAL SOURCE SHAPE — circle with one sine cycle ══ -->
+      <g id="ac-source-shape">
+        <circle cx="0" cy="0" r="24" fill="none" style="stroke: var(--colour-signal)" stroke-width="2" filter="url(#glow)" />
+        <path d="M -16,0 C -11,-14 -5,-14 0,0 C 5,14 11,14 16,0" fill="none" style="stroke: var(--colour-signal)" stroke-width="2.5" stroke-linecap="round" />
+      </g>
+
+      <!-- ══ COUPLING CAPACITOR SHAPE — two plates, reused for C1 and C2 ══ -->
+      <g id="cap-shape">
+        <rect x="-4" y="-12" width="8" height="24" style="fill: var(--colour-panel)" />
+        <line x1="-4" y1="-12" x2="-4" y2="12" style="stroke: var(--colour-capacitor)" stroke-width="2.5" />
+        <line x1="4" y1="-12" x2="4" y2="12" style="stroke: var(--colour-capacitor)" stroke-width="2.5" />
+      </g>
+
+      <!-- ══════════════════════════════════════════════════════════════════
+           DC-CIRCUIT — the original bias circuit, exactly as the lesson
+           notes show it. VCC/0V rails are drawn full-width on purpose (not
+           the compact symbol groups other bjt_knowledge_*.html files use)
+           so Step 2 can visually merge them later. ══════════════════════ -->
+      <g id="dc-circuit">
+
+        <!-- ════════════════════ WIRES ════════════════════ -->
+
+        <!-- ── LEFT VERTICAL (RB1/RB2 base-bias rail, x=200) ── -->
+        <line x1="200" y1="50" x2="200" y2="255" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC rail down to Base node -->
+        <line x1="200" y1="255" x2="200" y2="520" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Base node down to 0V rail -->
+
+        <!-- ── RIGHT VERTICAL (collector/emitter rail, x=440) ── -->
+        <line x1="440" y1="50" x2="440" y2="222" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC rail down to Collector pin -->
+        <line x1="440" y1="288" x2="440" y2="520" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Emitter pin down to 0V rail -->
+
+        <!-- ── VCC RAIL (full width — merges with the 0V rail in Step 2) ── -->
+        <line x1="-5" y1="50" x2="640" y2="50" style="stroke: var(--colour-supply)" stroke-width="2" />
+        <circle cx="200" cy="50" r="5" style="fill: var(--colour-series)" />
+        <circle cx="440" cy="50" r="5" style="fill: var(--colour-series)" />
+        <text x="600" y="40" style="fill: var(--colour-supply)" text-anchor="start" font-size="15" font-weight="bold">+VCC</text>
+
+        <!-- ── 0V RAIL (full width — merges with the VCC rail in Step 2) ── -->
+        <line x1="-5" y1="520" x2="640" y2="520" style="stroke: var(--colour-gnd)" stroke-width="2" />
+        <circle cx="200" cy="520" r="5" style="fill: var(--colour-series)" />
+        <circle cx="440" cy="520" r="5" style="fill: var(--colour-series)" />
+        <text x="648" y="525" style="fill: var(--colour-gnd)" text-anchor="start" font-size="15" font-weight="bold">0V</text>
+
+        <!-- ── CENTRE HORIZONTAL ── -->
+        <line x1="54" y1="255" x2="409" y2="255" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Source to transistor -->
+
+        <!-- ── OUTPUT HORIZONTAL ── -->
+        <line x1="440" y1="210" x2="600" y2="210" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Collector pin, through C2, to output -->
+
+        <!-- ════════════════════ AC INPUT COMPONENTS ════════════════════ -->
+
+        <circle cx="54" cy="255" r="5" style="fill: var(--colour-signal)" />
+        <text x="10" y="258" style="fill: var(--colour-signal)" text-anchor="start" font-size="15" font-weight="bold">input</text>
+
+        <g transform="translate(100,255)">
+          <use href="#cap-shape" />
+          <text x="0" y="-25" fill="var(--colour-capacitor-labels)" text-anchor="middle" font-size="13" font-weight="bold">C1</text>
+        </g>
+
+        <!-- ════════════════════ AC OUTPUT COMPONENTS ════════════════════ -->
+
+        <g transform="translate(540,210)">
+          <use href="#cap-shape" />
+          <text x="0" y="-25" fill="var(--colour-capacitor-labels)" text-anchor="middle" font-size="13" font-weight="bold">C2</text>
+        </g>
+        <circle cx="600" cy="210" r="5" style="fill: var(--colour-signal)" />
+        <text x="614" y="215" style="fill: var(--colour-signal)" text-anchor="start" font-size="15" font-weight="bold">output</text>
+
+        <!-- ════════════════════ Q1 — NPN ════════════════════ -->
+
+        <g transform="translate(426,256)">
+          <use href="#bjt-npn-shape" />
+          <text x="-15" y="-25" fill="var(--colour-bjt-labels)" text-anchor="middle" font-size="14" font-weight="bold">Q1</text>
+          <text x="0" y="40" fill="var(--colour-bjt-labels)" text-anchor="end" font-size="12">BC549</text>
+        </g>
+
+        <!-- ════════════════════ RESISTORS ════════════════════ -->
+
+        <!-- ── RB1 ── -->
+        <g transform="translate(185,80)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14" font-weight="bold">R<tspan baseline-shift="sub" font-size="10">B1</tspan></text>
+        </g>
+
+        <!-- ── RB2 ── -->
+        <g transform="translate(185,350)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14" font-weight="bold">R<tspan baseline-shift="sub" font-size="10">B2</tspan></text>
+        </g>
+
+        <!-- ── RC ── -->
+        <g transform="translate(425,80)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14" font-weight="bold">R<tspan baseline-shift="sub" font-size="10">C</tspan></text>
+        </g>
+
+        <!-- ── RE ── -->
+        <g transform="translate(425,350)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14" font-weight="bold">R<tspan baseline-shift="sub" font-size="10">E</tspan></text>
+        </g>
+
+      </g>
+
+      <!-- ══════════════════════════════════════════════════════════════════
+           STEP1-CIRCUIT — identical to dc-circuit; C1/C2 replaced with a
+           plain wire (still just as commented, so it's obvious nothing else
+           moved) plus a small "→ short" annotation. ══════════════════════ -->
+      <g id="step1-circuit">
+
+        <!-- ════════════════════ WIRES ════════════════════ -->
+
+        <!-- ── LEFT VERTICAL (RB1/RB2 base-bias rail, x=200) ── -->
+        <line x1="200" y1="50" x2="200" y2="255" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC rail down to Base node -->
+        <line x1="200" y1="255" x2="200" y2="520" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Base node down to 0V rail -->
+
+        <!-- ── RIGHT VERTICAL (collector/emitter rail, x=440) ── -->
+        <line x1="440" y1="50" x2="440" y2="222" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC rail down to Collector pin -->
+        <line x1="440" y1="288" x2="440" y2="520" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Emitter pin down to 0V rail -->
+
+       <!-- ── VCC RAIL (full width — merges with the 0V rail in Step 2) ── -->
+        <line x1="-5" y1="50" x2="640" y2="50" style="stroke: var(--colour-supply)" stroke-width="2" />
+        <circle cx="200" cy="50" r="5" style="fill: var(--colour-series)" />
+        <circle cx="440" cy="50" r="5" style="fill: var(--colour-series)" />
+        <text x="600" y="40" style="fill: var(--colour-supply)" text-anchor="start" font-size="15" font-weight="bold">+VCC</text>
+
+        <!-- ── 0V RAIL (full width — merges with the VCC rail in Step 2) ── -->
+        <line x1="-5" y1="520" x2="640" y2="520" style="stroke: var(--colour-gnd)" stroke-width="2" />
+        <circle cx="200" cy="520" r="5" style="fill: var(--colour-series)" />
+        <circle cx="440" cy="520" r="5" style="fill: var(--colour-series)" />
+        <text x="648" y="525" style="fill: var(--colour-gnd)" text-anchor="start" font-size="15" font-weight="bold">0V</text>
+
+        <!-- ── CENTRE HORIZONTAL ── -->
+        <line x1="54" y1="255" x2="409" y2="255" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Source to transistor -->
+
+        <!-- ── OUTPUT HORIZONTAL ── -->
+        <line x1="440" y1="210" x2="600" y2="210" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Collector pin, through C2, to output -->
+
+         <!-- ════════════════════ AC INPUT COMPONENTS ════════════════════ -->
+
+        <circle cx="54" cy="255" r="5" style="fill: var(--colour-signal)" />
+        <text x="10" y="258" style="fill: var(--colour-signal)" text-anchor="start" font-size="15" font-weight="bold">input</text>
+
+        <!-- ── C1's position — now a continuous wire, was a capacitor ── -->
+        <text x="120" y="245" style="fill: var(--colour-ui-primary)" text-anchor="middle" font-size="12" font-weight="bold">C1 &#10145; short</text>
+
+        <!-- ════════════════════ AC OUTPUT COMPONENTS ════════════════════ -->
+
+        <!-- ── C2's position — now a continuous wire, was a capacitor ── -->
+        <text x="540" y="200" style="fill: var(--colour-ui-primary)" text-anchor="middle" font-size="12" font-weight="bold">C2 &#10145; short</text>
+
+        <circle cx="600" cy="210" r="5" style="fill: var(--colour-signal)" />
+        <text x="614" y="215" style="fill: var(--colour-signal)" text-anchor="start" font-size="15" font-weight="bold">output</text>
+
+        <!-- ════════════════════ Q1 — NPN ════════════════════ -->
+
+        <g transform="translate(426,256)">
+          <use href="#bjt-npn-shape" />
+          <text x="-15" y="-25" fill="var(--colour-bjt-labels)" text-anchor="middle" font-size="14" font-weight="bold">Q1</text>
+          <text x="0" y="40" fill="var(--colour-bjt-labels)" text-anchor="end" font-size="12">BC549</text>
+        </g>
+
+        <!-- ════════════════════ RESISTORS ════════════════════ -->
+
+        <g transform="translate(185,80)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14" font-weight="bold">R<tspan baseline-shift="sub" font-size="10">B1</tspan></text>
+        </g>
+        <g transform="translate(185,350)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14" font-weight="bold">R<tspan baseline-shift="sub" font-size="10">B2</tspan></text>
+        </g>
+        <g transform="translate(425,80)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14" font-weight="bold">R<tspan baseline-shift="sub" font-size="10">C</tspan></text>
+        </g>
+        <g transform="translate(425,350)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14" font-weight="bold">R<tspan baseline-shift="sub" font-size="10">E</tspan></text>
+        </g>
+
+      </g>
+
+      <!-- ══════════════════════════════════════════════════════════════════
+           STEP2-CIRCUIT — identical to step1-circuit; VCC rail recoloured
+           to the ground colour with its label struck through, plus a
+           dashed connector to the 0V rail showing they're now one AC node.
+           ══════════════════════════════════════════════════════════════ -->
+
+
+      <g id="step2-circuit">
+
+        <!-- ════════════════════ WIRES ════════════════════ -->
+
+        <!-- ── LEFT VERTICAL (RB1/RB2 base-bias rail, x=200) ── -->
+        <line x1="200" y1="50" x2="200" y2="255" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC rail down to Base node -->
+        <line x1="200" y1="255" x2="200" y2="520" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Base node down to 0V rail -->
+
+        <!-- ── RIGHT VERTICAL (collector/emitter rail, x=440) ── -->
+        <line x1="440" y1="50" x2="440" y2="222" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC rail down to Collector pin -->
+        <line x1="440" y1="288" x2="440" y2="520" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Emitter pin down to 0V rail -->
+
+        <!-- ── FAR RIGHT DASHED VERTICAL (collector/emitter rail) ── -->
+        <line x1="700" y1="50" x2="700" y2="520" style="stroke: var(--colour-gnd)" stroke-width="2" stroke-dasharray="6,5" /><!-- Dashed connector -->
+
+
+       <!-- ── VCC RAIL  ── -->
+        <line x1="-5" y1="50" x2="700" y2="50" style="stroke: var(--colour-gnd)" stroke-width="2" />
+        <circle cx="200" cy="50" r="5" style="fill: var(--colour-series)" />
+        <circle cx="440" cy="50" r="5" style="fill: var(--colour-series)" />
+        <text x="600" y="40" style="fill: var(--colour-supply); opacity: 0.5; text-decoration: line-through;" text-anchor="start" font-size="15" font-weight="bold">+VCC</text>
+        <text x="650" y="40" style="fill: var(--colour-gnd)" text-anchor="start" font-size="15" font-weight="bold">0V</text>
+
+        <!-- ── 0V RAIL (full width — merges with the VCC rail in Step 2) ── -->
+        <line x1="-5" y1="520" x2="700" y2="520" style="stroke: var(--colour-gnd)" stroke-width="2" />
+        <circle cx="200" cy="520" r="5" style="fill: var(--colour-series)" />
+        <circle cx="440" cy="520" r="5" style="fill: var(--colour-series)" />
+        <text x="600" y="535" style="fill: var(--colour-gnd)" text-anchor="start" font-size="15" font-weight="bold">0V</text>
+
+        <!-- ── CENTRE HORIZONTAL ── -->
+        <line x1="54" y1="255" x2="409" y2="255" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Source to transistor -->
+
+        <!-- ── OUTPUT HORIZONTAL ── -->
+        <line x1="440" y1="210" x2="600" y2="210" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Collector pin, through C2, to output -->
+
+         <!-- ════════════════════ AC INPUT COMPONENTS ════════════════════ -->
+
+        <circle cx="54" cy="255" r="5" style="fill: var(--colour-signal)" />
+        <text x="10" y="258" style="fill: var(--colour-signal)" text-anchor="start" font-size="15" font-weight="bold">input</text>
+
+        <!-- ── C1's position — now a continuous wire, was a capacitor ── -->
+        <text x="120" y="245" style="fill: var(--colour-ui-primary)" text-anchor="middle" font-size="12" font-weight="bold">C1 &#10145; short</text>
+
+        <!-- ════════════════════ AC OUTPUT COMPONENTS ════════════════════ -->
+
+        <!-- ── C2's position — now a continuous wire, was a capacitor ── -->
+        <text x="540" y="200" style="fill: var(--colour-ui-primary)" text-anchor="middle" font-size="12" font-weight="bold">C2 &#10145; short</text>
+
+        <circle cx="600" cy="210" r="5" style="fill: var(--colour-signal)" />
+        <text x="614" y="215" style="fill: var(--colour-signal)" text-anchor="start" font-size="15" font-weight="bold">output</text>
+
+        <!-- ════════════════════ Q1 — NPN ════════════════════ -->
+
+        <g transform="translate(426,256)">
+          <use href="#bjt-npn-shape" />
+          <text x="-15" y="-25" fill="var(--colour-bjt-labels)" text-anchor="middle" font-size="14" font-weight="bold">Q1</text>
+          <text x="0" y="40" fill="var(--colour-bjt-labels)" text-anchor="end" font-size="12">BC549</text>
+        </g>
+
+        <!-- ════════════════════ RESISTORS ════════════════════ -->
+
+        <g transform="translate(185,80)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14" font-weight="bold">R<tspan baseline-shift="sub" font-size="10">B1</tspan></text>
+        </g>
+        <g transform="translate(185,350)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14" font-weight="bold">R<tspan baseline-shift="sub" font-size="10">B2</tspan></text>
+        </g>
+        <g transform="translate(425,80)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14" font-weight="bold">R<tspan baseline-shift="sub" font-size="10">C</tspan></text>
+        </g>
+        <g transform="translate(425,350)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14" font-weight="bold">R<tspan baseline-shift="sub" font-size="10">E</tspan></text>
+        </g>
+
+      </g>
+
+      <!-- ══════════════════════════════════════════════════════════════════
+           STEP3-CIRCUIT — the final AC-equivalent redraw, matching the
+           user's own lesson-note diagram: THREE rails now (base-rail y=150,
+           collector-rail y=40, AC-common rail y=460) instead of two. RB1/RB2
+           hang from the base-rail down to common (now visibly in parallel);
+           RC hangs from the collector-rail down to common; RE hangs from
+           the emitter down to common. Own circuitViewBox (narrower/shorter
+           than the other three states). ══════════════════════════════════ -->
+      <g id="step3-circuit">
+
+        <!-- ════════════════════ WIRES ════════════════════ -->
+
+
+        <!-- ── COLLECTOR VERTICAL ── -->
+        <line x1="394" y1="116" x2="394" y2="40" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Collector pin up to TOP rail -->
+
+        <!-- ── RB1 VERTICAL ── -->
+        <line x1="140" y1="150" x2="140" y2="460" style="stroke: var(--colour-series)" stroke-width="2" />
+
+        <!-- ── RB2 VERTICAL ── -->
+        <line x1="220" y1="150" x2="220" y2="460" style="stroke: var(--colour-series)" stroke-width="2" />
+
+        <!-- ── RC VERTICAL ── -->
+        <line x1="460" y1="40" x2="460" y2="460" style="stroke: var(--colour-series)" stroke-width="2" />
+
+        <!-- ── Emitter VERTICAL ── -->
+        <line x1="394" y1="184" x2="394" y2="460" style="stroke: var(--colour-series)" stroke-width="2" />
+
+        <!-- ── TOP HORIZONTAL ── -->
+        <line x1="394" y1="40" x2="560" y2="40" style="stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="460" cy="40" r="5" style="fill: var(--colour-series)" />
+        <circle cx="560" cy="40" r="5" style="fill: var(--colour-signal)" />
+
+        <!-- ── CENTER HORIZONTAL ── -->
+        <line x1="20" y1="150" x2="363" y2="150" style="stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="40" cy="150" r="5" style="fill: var(--colour-signal)" />
+        <circle cx="140" cy="150" r="5" style="fill: var(--colour-series)" />
+        <circle cx="220" cy="150" r="5" style="fill: var(--colour-series)" />
+
+        <!-- ── BOTTOM HORIZONTAL AC-COMMON RAIL ── -->
+        <line x1="20" y1="460" x2="580" y2="460" style="stroke: var(--colour-gnd)" stroke-width="2" />
+        <circle cx="40" cy="460" r="5" style="fill: var(--colour-signal)" />
+        <circle cx="140" cy="460" r="5" style="fill: var(--colour-series)" />
+        <circle cx="220" cy="460" r="5" style="fill: var(--colour-series)" />
+        <circle cx="394" cy="460" r="5" style="fill: var(--colour-series)" />
+        <circle cx="460" cy="460" r="5" style="fill: var(--colour-series)" />
+        <circle cx="560" cy="460" r="5" style="fill: var(--colour-signal)" />
+        <text x="20" y="483" style="fill: var(--colour-gnd)" text-anchor="start" font-size="13" font-weight="bold">AC common (0V reference)</text>
+
+        <!-- ════════════════════ INPUT VERTICAL ════════════════════ -->
+
+        <line x1="40" y1="160" x2="40" y2="296" style="stroke: var(--colour-series)" stroke-width="2" />
+        <polygon points="34,170 46,170 40,160" style="fill: var(--colour-series)" />
+        <text x="53" y="309" style="fill: var(--colour-signal)" text-anchor="end" font-size="13" font-weight="bold">Input</text>
+        <line x1="40" y1="312" x2="40" y2="450" style="stroke: var(--colour-series)" stroke-width="2" />
+        <polygon points="34,440 46,440 40,450" style="fill: var(--colour-series)" />
+
+        <!-- ════════════════════ OUTPUT VERTICAL ════════════════════ -->
+        <line x1="560" y1="50" x2="560" y2="240" style="stroke: var(--colour-series)" stroke-width="2" />
+        <polygon points="554,60 566,60 560,50" style="fill: var(--colour-series)" />
+        <text x="542" y="253" style="fill: var(--colour-signal)" text-anchor="start" font-size="13" font-weight="bold">Output</text>
+        <line x1="560" y1="256" x2="560" y2="450" style="stroke: var(--colour-series)" stroke-width="2" />
+        <polygon points="554,440 566,440 560,450" style="fill: var(--colour-series)" />
+
+        <!-- ════════════════════ Q1 — NPN ════════════════════ -->
+
+        <g transform="translate(380,150)">
+          <use href="#bjt-npn-shape" />
+          <text x="-15" y="-40" fill="var(--colour-bjt-labels)" text-anchor="middle" font-size="14" font-weight="bold">Q1</text>
+          <text x="-20" y="46" fill="var(--colour-bjt-labels)" text-anchor="middle" font-size="12">BC549</text>
+        </g>
+
+        <!-- ════════════════════ RESISTORS ════════════════════ -->
+
+        <!-- ── RB1 ── -->
+        <g transform="translate(125,270)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14" font-weight="bold">R<tspan baseline-shift="sub" font-size="10">B1</tspan></text>
+        </g>
+
+        <!-- ── RB2 ── -->
+        <g transform="translate(205,270)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14" font-weight="bold">R<tspan baseline-shift="sub" font-size="10">B2</tspan></text>
+        </g>
+
+        <!-- ── RE ── -->
+        <g transform="translate(379,270)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14" font-weight="bold">R<tspan baseline-shift="sub" font-size="10">E</tspan></text>
+        </g>
+
+        <!-- ── RC ── -->
+        <g transform="translate(445,270)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="14" font-weight="bold">R<tspan baseline-shift="sub" font-size="10">C</tspan></text>
+        </g>
+
+        <!-- ── RB1 ∥ RB2 callout ── -->
+        <text x="180" y="235" style="fill: var(--colour-ui-primary)" text-anchor="middle" font-size="13" font-weight="bold">RB1 ∥ RB2</text>
+
+      </g>
+    </defs>
+  </svg>
+
+  <div class="crumb" id="crumb" data-current="AC Circuit Analysis"></div>
+  <header>
+    <h1>BJT Amplifier: AC Circuit Analysis</h1>
+    <p>Deriving the AC-Equivalent Circuit · Capacitors as AC Shorts · VCC as AC Ground · Redrawing for Analysis</p>
+  </header>
+
+  <div class="quiz-wrap">
+
+    <!-- LEFT: circuit diagram -->
+    <div class="circuit-col">
+      <div class="circuit-panel" onclick="openModal()" title="Click to zoom">
+        <div class="panel-label" id="circuitRefLabel">Reference Circuit</div>
+        <div class="zoom-hint">
+          <svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.8" fill="none" />
+            <line x1="12.5" y1="12.5" x2="17" y2="17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            <line x1="6" y1="8" x2="10" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+            <line x1="8" y1="6" x2="8" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+          </svg>
+          Zoom
+        </div>
+        <svg id="circuitRefSvg" viewBox="-10 -10 780 570" xmlns="http://www.w3.org/2000/svg">
+          <use id="circuitRefUse" href="#dc-circuit" />
+          <g id="xyRuler" display="none"></g>
+        </svg>
+      </div>
+    </div>
+
+    <!-- RIGHT: question -->
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <!-- Single reusable question panel — populated from QUESTIONS[cur] by renderQuestion() -->
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+          <div class="options" id="qOptions"></div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Summary -->
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Zoom modal — copies circuitRefSvg's current innerHTML/viewBox in on
+         open, since the reference diagram (and its viewBox — see
+         circuitViewBox) changes per question. -->
+    <div class="diagram-modal" id="diagramModal" onclick="handleModalClick(event)">
+      <div class="modal-inner" id="modalInner">
+        <div class="modal-header">
+          <span class="modal-title" id="modalTitle">Reference Circuit</span>
+          <button class="modal-close" onclick="closeModal()">✕ Close</button>
+        </div>
+        <svg id="modalSvg" viewBox="-10 -10 780 570" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
+    function frac(num, den) { return `<span class="working-frac"><span class="num">${num}</span><span class="den">${den}</span></span>`; }
+    const DEFAULT_VIEWBOX = '-10 -10 780 570';
+    const STEP3_VIEWBOX = '-10 -10 670 520';
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS — see bjt_knowledge_basics.html's header comment for the
+    // full field reference. `circuitViewBox` omitted uses DEFAULT_VIEWBOX.
+    // ══════════════════════════════════════════════════════════════════════
+
+    const QUESTIONS = [
+      {
+        circuitId: 'dc-circuit',
+        circuitLabel: 'Original DC Bias Circuit',
+        text: () => 'Before simplifying anything, here\'s the rule this whole process rests on. A correctly-sized coupling capacitor like <b class="colour-cap">C1</b> or <b class="colour-cap">C2</b> behaves very differently for AC signals than it does for DC. What does it look like to <b style="color:var(--colour-ui-primary)">EACH</b>?',
+        hint: () => 'Capacitor reactance is Xc = 1/(2πfC). At DC, f = 0. At the signal frequencies these are chosen for, Xc is deliberately made tiny.',
+        options: () => shuffle([
+          { label: 'To DC: an OPEN circuit (blocks it). To AC: effectively a SHORT circuit (passes it).', type: 'correct' },
+          { label: 'To DC: a SHORT circuit. To AC: an OPEN circuit.', type: 'wrong' },
+          { label: 'The same both times — always a short circuit.', type: 'wrong' },
+          { label: 'The same both times — always an open circuit.', type: 'wrong' },
+        ]),
+        correctExplain: () => 'To DC: OPEN. To AC: effectively a SHORT.',
+        working: () => `
+    <div class="working-line">Capacitor reactance: <b class="colour-cap">X<sub>C</sub></b> = 1 / (2π<b class="colour-gain">f</b><b class="colour-cap">C</b>).</div>
+    <div class="working-line">At <b>DC</b>, <b class="colour-gain">f</b> = 0, so <b class="colour-cap">X<sub>C</sub></b> is infinite — an OPEN circuit. That's exactly why a coupling capacitor can block the DC bias voltage from one stage leaking into the next.</div>
+    <div class="working-total">At the <b>AC</b> signal frequencies <b class="colour-cap">C1</b>/<b class="colour-cap">C2</b> are chosen for, <b class="colour-cap">C</b> is picked large enough that <b class="colour-cap">X<sub>C</sub></b> is negligibly small — effectively a SHORT circuit (plain wire). This is the entire justification for Step 1.</div>`
+      },
+      {
+        circuitId: 'step1-circuit',
+        circuitLabel: 'Step 1 — Coupling Capacitors Removed',
+        text: () => 'Step 1 applied: with <b class="colour-cap">C1</b> and <b class="colour-cap">C2</b> now treated as AC shorts (plain wires), what does the <b style="color:var(--colour-ui-primary)">BASE</b> of <b class="colour-bjt">Q1</b> now <b style="color:var(--colour-ui-primary)">connect</b> directly to?',
+        hint: () => 'Follow the wire where C1 used to be — it now runs straight through.',
+        options: () => shuffle([
+          { label: 'The external input signal source', type: 'correct' },
+          { label: '+VCC', type: 'wrong' },
+          { label: '0V / ground', type: 'wrong' },
+          { label: 'Nothing — the base is now disconnected', type: 'wrong' },
+        ]),
+        correctExplain: () => 'The input source — <b class="colour-cap">C1</b> is now just a wire.',
+        working: () => `
+    <div class="working-line">With <b class="colour-cap">C1</b> treated as a short, the gap that used to separate the input source from the base-bias node disappears — it's now one continuous wire.</div>
+    <div class="working-total">The <b class="colour-bjt">base</b> of <b class="colour-bjt">Q1</b> is now directly connected to the external <b class="colour-signal">input</b> signal source (and, via <b class="colour-resistor">RB1</b>/<b class="colour-resistor">RB2</b>, still to the bias network too — that's Step 2 and 3's job to sort out).</div>`
+      },
+      {
+        circuitId: 'step1-circuit',
+        circuitLabel: 'Step 1 — Coupling Capacitors Removed',
+        text: () => 'Same idea, the other side: with <b class="colour-cap">C2</b> now a short, what does the <b style="color:var(--colour-ui-primary)">COLLECTOR</b> of <b class="colour-bjt">Q1</b> now <b style="color:var(--colour-ui-primary)">connect</b> directly to?',
+        hint: () => 'Follow the wire where C2 used to be.',
+        options: () => shuffle([
+          { label: 'The output', type: 'correct' },
+          { label: '+VCC', type: 'wrong' },
+          { label: '0V / ground', type: 'wrong' },
+          { label: 'RE', type: 'wrong' },
+        ]),
+        correctExplain: () => 'The output — <b class="colour-cap">C2</b> is now just a wire.',
+        working: () => `
+    <div class="working-total">Same logic as Q2, mirrored on the output side: with <b class="colour-cap">C2</b> shorted, the <b class="colour-bjt">collector</b> is now directly wired straight through to the <b class="colour-signal">output</b>.</div>`
+      },
+      {
+        circuitId: 'step1-circuit',
+        circuitLabel: 'Step 1 — Coupling Capacitors Removed',
+        text: () => 'Now the second rule. A real DC supply like <b class="colour-supply">VCC</b> has almost zero internal AC impedance — it\'s built to hold a rock-steady voltage no matter what current is drawn — and is usually decoupled further with a large capacitor right at the supply pin. What does <b class="colour-supply">VCC</b> look like to an AC signal?',
+        hint: () => 'Same logic as Q1, applied to a voltage SOURCE instead of a capacitor: something that never changes value looks like...',
+        options: () => shuffle([
+          { label: 'Effectively a SHORT to AC ground (0V for AC signals, even though it\'s well above 0V for DC)', type: 'correct' },
+          { label: 'A very large AC resistance', type: 'wrong' },
+          { label: 'An open circuit for AC', type: 'wrong' },
+          { label: 'It depends on how much current RC draws', type: 'wrong' },
+        ]),
+        correctExplain: () => 'Effectively an AC short to ground.',
+        working: () => `
+    <div class="working-line">A perfect voltage source has zero internal impedance — its voltage can't be pushed or pulled by whatever the AC signal does to it, which is exactly the definition of a short circuit for signal purposes. Real supplies get very close to this thanks to bulk decoupling capacitance.</div>
+    <div class="working-total">So while <b class="colour-supply">VCC</b> sits at, say, +12V for DC bias purposes, for the AC signal specifically it behaves exactly like 0V ground. This is the entire justification for Step 2.</div>`
+      },
+      {
+        circuitId: 'step2-circuit',
+        circuitLabel: 'Step 2 — VCC Merged with 0V',
+        kind: 'multi',
+        text: () => 'Step 2 applied — <b class="colour-supply">VCC</b> is now treated as an AC short to 0V, shown here as the dashed line merging the two rails. <b style="color:var(--colour-ui-primary)">Select</b> the terminals that are now on this same merged "AC common" rail.',
+        hint: () => 'Look at which resistor terminals were originally wired straight to +VCC or straight to 0V — not to the base node or the collector node.',
+        options: () => shuffle([
+          { label: 'RB1 (top terminal)', type: 'correct' },
+          { label: 'RC (top terminal)', type: 'correct' },
+          { label: 'RB2 (bottom terminal)', type: 'correct' },
+          { label: 'RE (bottom terminal)', type: 'correct' },
+          { label: 'The base node', type: 'wrong' },
+          { label: 'C1\'s input-side plate', type: 'wrong' },
+        ]),
+        correctExplain: (st) => {
+          const letters = st.opts.map((o, i) => o.type === 'correct' ? LETTERS[i] : null).filter(Boolean).join(', ');
+          return `Options <b>${letters}</b> — every terminal originally wired to +VCC or 0V`;
+        },
+        working: (st) => {
+          const correctNums = st.opts.map((o, i) => o.type === 'correct' ? LETTERS[i] : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-line">In the ORIGINAL DC circuit, <b class="colour-resistor">RB1</b>'s top and <b class="colour-resistor">RC</b>'s top were wired to <b class="colour-supply">+VCC</b>; <b class="colour-resistor">RB2</b>'s bottom and <b class="colour-resistor">RE</b>'s bottom were wired to 0V. Now that those two rails are the same AC node, all four of those terminals are too — options ${correctNums}.</div>
+    <div class="working-total">The base node and C1's input-side plate are untouched by this step — they were never wired to VCC or 0V in the first place, so Step 2 has no effect on them.</div>`;
+        }
+      },
+      {
+        circuitId: 'step2-circuit',
+        circuitLabel: 'Step 2 — VCC Merged with 0V',
+        text: () => 'Why is it valid to merge <b class="colour-supply">VCC</b> and 0V into ONE common AC rail, even though they\'re obviously different DC voltages?',
+        hint: () => 'Think back to the previous question\'s reasoning.',
+        options: () => shuffle([
+          { label: 'Neither rail changes value — for AC (which only cares about things that wiggle), two rails that never move are indistinguishable', type: 'correct' },
+          { label: 'Because VCC is always higher in voltage than 0V', type: 'wrong' },
+          { label: 'Because they happen to be connected by a wire in this particular diagram', type: 'wrong' },
+          { label: 'Because the coupling capacitors make them electrically equal', type: 'wrong' },
+        ]),
+        correctExplain: () => 'Neither rail changes value — AC only cares about what wiggles.',
+        working: () => `
+    <div class="working-total">AC analysis only cares about the SIGNAL — the part that changes over time. Both VCC and 0V are fixed, unmoving DC references. A signal riding on either one sees the exact same thing: nothing moving. That's what makes them interchangeable as an AC reference, regardless of how far apart their actual DC voltages are.</div>`
+      },
+      {
+        circuitId: 'step2-circuit',
+        circuitLabel: 'Step 2 — VCC Merged with 0V',
+        text: () => 'Now that <b class="colour-resistor">RB1</b>\'s top and <b class="colour-resistor">RB2</b>\'s bottom both sit on the same AC-common rail, how are <b class="colour-resistor">RB1</b> and <b class="colour-resistor">RB2</b> related to each other for AC signals?',
+        hint: () => 'Both now run directly between the SAME two points: the base node, and AC common.',
+        options: () => shuffle([
+          { label: 'They\'re now in PARALLEL — both connected directly between the base and AC common', type: 'correct' },
+          { label: 'They\'re still in series with each other', type: 'wrong' },
+          { label: 'They\'re disconnected from each other now', type: 'wrong' },
+          { label: 'They cancel out and can be removed entirely', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b class="colour-resistor">RB1</b> ∥ <b class="colour-resistor">RB2</b> — both directly between the base and AC common.',
+        working: () => `
+    <div class="working-line">Two components sharing BOTH endpoints are, by definition, in parallel — and that's exactly what's happened here once VCC and 0V became the same node.</div>
+    <div class="working-total">This is the whole reason <b class="colour-resistor">RB1</b>∥<b class="colour-resistor">RB2</b> shows up as a single combined term when calculating the AC input resistance looking into the base — it isn't a coincidence of the formula, it's a direct consequence of this step.</div>`
+      },
+      {
+        circuitId: 'step3-circuit',
+        circuitViewBox: STEP3_VIEWBOX,
+        circuitLabel: 'Step 3 — Redrawn AC-Equivalent Circuit',
+        text: () => 'Step 3 — the circuit redrawn so every component hangs off the rail it actually connects to. Comparing this to the ORIGINAL DC circuit, which two components have <b style="color:var(--colour-ui-primary)">vanished</b> entirely?',
+        hint: () => 'They didn\'t get merged into a rail like VCC did — they were replaced by a plain wire back in Step 1.',
+        options: () => shuffle([
+          { label: 'C1 and C2', type: 'correct' },
+          { label: 'RB1 and RB2', type: 'wrong' },
+          { label: 'RC and RE', type: 'wrong' },
+          { label: 'VCC and 0V', type: 'wrong' },
+        ]),
+        correctExplain: () => 'C1 and C2 — shorted out in Step 1, so there\'s nothing left to draw.',
+        working: () => `
+    <div class="working-line">C1 and C2 were replaced by plain wire in Step 1 — there's no component left to draw, so they simply don't appear in the final circuit at all.</div>
+    <div class="working-total">Contrast that with <b class="colour-supply">VCC</b> and 0V: they didn't vanish — they MERGED into the AC-common rail, and every resistor that used to connect to either one is still right here, just redrawn hanging off that shared rail instead.</div>`
+      },
+      {
+        circuitId: 'step3-circuit',
+        circuitViewBox: STEP3_VIEWBOX,
+        circuitLabel: 'Step 3 — Redrawn AC-Equivalent Circuit',
+        text: () => 'Looking at this final AC-equivalent circuit: besides the transistor\'s own base impedance, which two resistors end up in parallel with it when you go to calculate the AC input resistance looking into the base?',
+        hint: () => 'Same two resistors from a couple of questions ago — they never left, they just got redrawn.',
+        options: () => shuffle([
+          { label: '<b class="colour-resistor">RB1</b> and <b class="colour-resistor">RB2</b>', type: 'correct' },
+          { label: '<b class="colour-resistor">RC</b> and <b class="colour-resistor">RE</b>', type: 'wrong' },
+          { label: 'Just <b class="colour-resistor">RE</b>', type: 'wrong' },
+          { label: 'None — only the transistor\'s own impedance matters', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b class="colour-resistor">RB1</b> and <b class="colour-resistor">RB2</b> — both tied between the base and AC common.',
+        working: () => `
+    <div class="working-total">This is exactly the bridge into <b class="colour-resistor">Z<sub>in</sub></b> = RB1∥RB2∥<b class="colour-resistor">Z<sub>b</sub></b> — the same formula bjt_knowledge_ac_parameters.html's Zin questions already put numbers into. This quiz doesn't compute that value; it just shows where the "RB1∥RB2" part of that formula actually comes from.</div>`
+      },
+      {
+        circuitId: 'step3-circuit',
+        circuitViewBox: STEP3_VIEWBOX,
+        circuitLabel: 'Step 3 — Redrawn AC-Equivalent Circuit',
+        text: () => 'Put it all together: which statement correctly summarises the 3-step process for turning a DC bias circuit into its AC-equivalent circuit?',
+        hint: () => 'Check each step against what it actually does to the caps, to VCC, and to the layout.',
+        options: () => shuffle([
+          { label: 'Step 1: treat coupling capacitors as shorts. Step 2: treat VCC as an AC short to 0V, merging it with the ground rail. Step 3: redraw each component against the rail it now actually connects to.', type: 'correct' },
+          { label: 'Step 1: treat VCC as an open circuit. Step 2: remove all resistors. Step 3: redraw with the transistor in the centre.', type: 'wrong' },
+          { label: 'Step 1: remove the transistor. Step 2: treat capacitors as opens. Step 3: reconnect everything to 0V only.', type: 'wrong' },
+          { label: 'Step 1: treat coupling capacitors as opens. Step 2: treat VCC as an open circuit. Step 3: redraw with the capacitors still in place.', type: 'wrong' },
+        ]),
+        correctExplain: () => 'Caps → shorts, VCC → AC-common (merges with 0V), then redraw against the new common rail.',
+        working: () => `
+    <div class="working-line">Step 1 (Q1-3): coupling capacitors are AC shorts — plain wire.</div>
+    <div class="working-line">Step 2 (Q4-7): VCC is an AC short to 0V — the two rails merge into one "AC common," which is exactly why RB1 and RB2 end up in parallel (and RC/RE each end up between their transistor terminal and that same common rail).</div>
+    <div class="working-total">Step 3 (Q8-9): redraw with nothing left pointing at a now-nonexistent VCC rail — every resistor's "other" end lands on the same shared AC-common rail, which is what makes the whole circuit click into the clean shape this quiz's final diagram shows.</div>`
+      },
+    ];
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUIZ ENGINE — generic; driven entirely by QUESTIONS[] via index.
+    // (Same as bjt_knowledge_basics.html's engine.)
+    // ══════════════════════════════════════════════════════════════════════
+
+    function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+    function isMulti(data) { return data.kind === 'multi'; }
+    function isAnswerCorrect(data, st) {
+      if (!isMulti(data)) return st.sel === st.cor;
+      const a = [...st.sel].sort((x, y) => x - y), b = [...st.cor].sort((x, y) => x - y);
+      return a.length === b.length && a.every((v, i) => v === b[i]);
+    }
+    function selectedLabel(data, st) {
+      if (!isMulti(data)) return (st.sel != null && st.opts[st.sel]) ? st.opts[st.sel].label : '—';
+      return st.sel.length ? [...st.sel].sort((a, b) => a - b).map(i => LETTERS[i]).join(', ') : '—';
+    }
+
+    let Q = [];
+    let cur = 0;
+
+    function buildProgressDots() {
+      document.getElementById('progressDots').innerHTML =
+        QUESTIONS.map((_, i) => `<div class="progress-dot" id="dot-${i}"></div>`).join('');
+    }
+
+    function updateProgress() {
+      QUESTIONS.forEach((_, i) => {
+        const d = document.getElementById('dot-' + i);
+        d.className = 'progress-dot';
+        if (i === cur) d.classList.add('active'); else if (Q[i].ans) d.classList.add('done');
+      });
+      document.getElementById('progressLabel').textContent = (cur + 1) + ' / ' + QUESTIONS.length;
+    }
+
+    function renderOptions() {
+      const st = Q[cur], data = QUESTIONS[cur];
+      const multi = isMulti(data);
+      const c = document.getElementById('qOptions'); c.innerHTML = '';
+      st.opts.forEach((opt, i) => {
+        const btn = document.createElement('button'); btn.className = 'option-btn';
+        btn.innerHTML = `<span class="option-letter">${LETTERS[i]}</span><span>${opt.label}</span>`;
+        if (st.ans) {
+          btn.disabled = true;
+          if (multi) {
+            const selected = st.sel.includes(i);
+            if (opt.type === 'correct') { btn.classList.add(selected ? 'correct' : 'missed'); if (selected) btn.innerHTML += `<span class="result-icon">✓</span>`; }
+            else { btn.classList.add(selected ? 'wrong' : 'dimmed'); if (selected) btn.innerHTML += `<span class="result-icon">✗</span>`; }
+          } else {
+            if (i === st.cor) { btn.classList.add('correct'); btn.innerHTML += `<span class="result-icon">✓</span>`; }
+            else if (i === st.sel) { btn.classList.add('wrong'); btn.innerHTML += `<span class="result-icon">✗</span>`; }
+            else btn.classList.add('dimmed');
+          }
+        } else {
+          if (multi ? st.sel.includes(i) : i === st.sel) btn.classList.add('selected');
+          btn.addEventListener('click', () => selectOption(i));
+        }
+        c.appendChild(btn);
+      });
+    }
+
+    function selectOption(i) {
+      const st = Q[cur], data = QUESTIONS[cur];
+      if (st.ans) return;
+      if (isMulti(data)) {
+        const pos = st.sel.indexOf(i);
+        if (pos >= 0) st.sel.splice(pos, 1); else st.sel.push(i);
+      } else {
+        st.sel = i;
+      }
+      renderQuestion();
+    }
+
+    function showCircuitRef(id, label, viewBox) {
+      document.getElementById('circuitRefUse').setAttribute('href', '#' + id);
+      document.getElementById('circuitRefLabel').textContent = label || 'Reference Circuit';
+      document.getElementById('circuitRefSvg').setAttribute('viewBox', viewBox || DEFAULT_VIEWBOX);
+      if (xyOn) buildXYRuler();
+    }
+
+    /* ─── DEV: xy ruler overlay, for lining up SVG coordinates by eye ────────
+       Console:   setXY(1) / setXY(0)     URL: ?xy=1
+       Rebuilt on every showCircuitRef() call (not build-once-and-cache like
+       bjt_knowledge_basics.html's original) since this file's viewBox
+       changes per question (dc/step1/step2 vs. step3's own STEP3_VIEWBOX) —
+       a cached ruler would drift out of alignment the moment the diagram
+       switched to a different box. */
+    let xyOn = false;
+    function buildXYRuler() {
+      const g = document.getElementById('xyRuler');
+      if (!g) return;
+      const vb = document.getElementById('circuitRefSvg').viewBox.baseVal;
+      const offX = vb.x, offY = vb.y, W = vb.width, H = vb.height;
+      const hy = offY + H - 10, vx = offX + 10, col = '#ff00ff';
+      let svg = `<line x1="${offX}" y1="${hy}" x2="${offX + W}" y2="${hy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+      for (let x = 0; x <= W; x += 10) {
+        const gx = offX + x, major = (Math.round(gx) % 50 === 0), len = major ? 10 : 5;
+        svg += `<line x1="${gx}" y1="${hy - len}" x2="${gx}" y2="${hy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+        if (major) svg += `<text x="${gx}" y="${hy - 13}" fill="${col}" font-size="8" text-anchor="middle">${Math.round(gx)}</text>`;
+      }
+      svg += `<line x1="${vx}" y1="${offY}" x2="${vx}" y2="${offY + H}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+      for (let y = 0; y <= H; y += 10) {
+        const gy = offY + y, major = (Math.round(gy) % 50 === 0), len = major ? 10 : 5;
+        svg += `<line x1="${vx}" y1="${gy}" x2="${vx + len}" y2="${gy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+        if (major) svg += `<text x="${vx + 13}" y="${gy + 3}" fill="${col}" font-size="8" text-anchor="start">${Math.round(gy)}</text>`;
+      }
+      g.innerHTML = svg;
+    }
+    function setXY(on) {
+      xyOn = on;
+      const g = document.getElementById('xyRuler');
+      if (!g) return;
+      if (on) buildXYRuler();
+      g.setAttribute('display', on ? 'inline' : 'none');
+    }
+    window.setXY = setXY;
+
+    function renderQuestion() {
+      const data = QUESTIONS[cur], st = Q[cur];
+      const multi = isMulti(data);
+
+      document.getElementById('qNum').textContent = 'Q' + (cur + 1);
+      document.getElementById('qText').innerHTML = data.text();
+      document.getElementById('qHint').innerHTML = data.hint();
+
+      renderOptions();
+
+      const selList = document.getElementById('qSelectedList');
+      if (multi) {
+        selList.style.display = '';
+        selList.textContent = st.sel.length
+          ? `Selected: ${[...st.sel].sort((a, b) => a - b).map(i => LETTERS[i]).join(', ')}`
+          : 'Click the options above to select your answer.';
+      } else {
+        selList.style.display = 'none';
+      }
+
+      const banner = document.getElementById('qBanner');
+      if (st.ans) {
+        const ok = isAnswerCorrect(data, st);
+        banner.className = 'result-banner ' + (ok ? 'correct' : 'wrong');
+        document.getElementById('qIcon').textContent = ok ? '✓' : '✗';
+        document.getElementById('qBannerText').innerHTML = ok ? `Correct! ${data.correctExplain(st)}` : `The correct answer is ${data.correctExplain(st)}`;
+      } else {
+        banner.className = 'result-banner';
+      }
+
+      const working = document.getElementById('qWorking');
+      working.className = 'working-box' + (st.ans ? ' visible' : '');
+      document.getElementById('qWorkingContent').innerHTML = st.ans ? data.working(st) : '';
+
+      document.getElementById('qBack').style.display = cur > 0 ? 'inline-block' : 'none';
+      const check = document.getElementById('qCheck');
+      check.style.display = st.ans ? 'none' : 'inline-block';
+      check.disabled = st.ans || (multi ? st.sel.length === 0 : st.sel === null);
+      const isLast = cur === QUESTIONS.length - 1;
+      document.getElementById('qNext').style.display = (st.ans && !isLast) ? 'inline-block' : 'none';
+      document.getElementById('qSummary').style.display = (st.ans && isLast) ? 'inline-block' : 'none';
+
+      showCircuitRef(data.circuitId, data.circuitLabel, data.circuitViewBox);
+      updateProgress();
+    }
+
+    function checkAnswer() {
+      const st = Q[cur], data = QUESTIONS[cur];
+      if (st.ans) return;
+      if (isMulti(data) ? st.sel.length === 0 : st.sel === null) return;
+      st.ans = true;
+      renderQuestion();
+      document.getElementById('qBanner').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function nextQuestion() { if (cur < QUESTIONS.length - 1) { cur++; renderQuestion(); } }
+
+    function backQuestion() {
+      if (cur <= 0) return;
+      cur--;
+      for (let i = cur; i < QUESTIONS.length; i++) {
+        Q[i].ans = false;
+        Q[i].sel = isMulti(QUESTIONS[i]) ? [] : null;
+      }
+      renderQuestion();
+    }
+
+    function goToQuestion(n) {
+      cur = Math.max(0, Math.min(QUESTIONS.length - 1, n - 1));
+      document.getElementById('summaryPanel').style.display = 'none';
+      document.getElementById('qPanel').style.display = 'flex';
+      renderQuestion();
+    }
+
+    function resetQuiz() {
+      Q = QUESTIONS.map(data => {
+        const opts = data.options();
+        if (isMulti(data)) {
+          const cor = opts.map((o, i) => o.type === 'correct' ? i : -1).filter(i => i >= 0);
+          return { sel: [], ans: false, cor, opts };
+        }
+        return { sel: null, ans: false, cor: opts.findIndex(o => o.type === 'correct'), opts };
+      });
+      cur = 0;
+      document.getElementById('summaryPanel').style.display = 'none';
+      document.getElementById('qPanel').style.display = 'flex';
+      renderQuestion();
+    }
+
+    function showSummary() {
+      document.getElementById('qPanel').style.display = 'none';
+      document.getElementById('summaryPanel').style.display = 'block';
+      showCircuitRef('dc-circuit', 'Original DC Bias Circuit', DEFAULT_VIEWBOX);
+      const items = QUESTIONS.map((data, i) => {
+        const st = Q[i];
+        const ans = selectedLabel(data, st);
+        const ok = isAnswerCorrect(data, st);
+        const colour = ok ? 'var(--colour-ui-correct)' : '#ff3366';
+        const mark = ok ? '✓' : '✗';
+        return `<div class="summary-item">
+      <div class="summary-item-head"><span class="summary-qnum">Q${i + 1}</span><span class="summary-question">${data.text()}</span></div>
+      <div class="summary-answer" style="color:${colour}">You answered: ${ans} &nbsp; ${mark}</div>
+      <div class="working-box visible">${st.ans ? data.working(st) : ''}</div>
+    </div>`;
+      }).join('');
+      document.getElementById('summaryContent').innerHTML = items;
+      QUESTIONS.forEach((_, i) => { const d = document.getElementById('dot-' + i); if (d) d.className = 'progress-dot done'; });
+      document.getElementById('progressLabel').textContent = 'Complete';
+    }
+
+    // ── zoom modal ──
+    function openModal() {
+      const src = document.getElementById('circuitRefSvg'), dst = document.getElementById('modalSvg');
+      dst.innerHTML = src.innerHTML; dst.setAttribute('viewBox', src.getAttribute('viewBox'));
+      document.getElementById('modalTitle').textContent = document.getElementById('circuitRefLabel').textContent;
+      document.getElementById('diagramModal').classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeModal() {
+      document.getElementById('diagramModal').classList.remove('open');
+      document.getElementById('modalSvg').innerHTML = '';
+      document.body.style.overflow = '';
+    }
+    function handleModalClick(e) { if (e.target.closest('.modal-close')) return; closeModal(); }
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+    buildProgressDots();
+    resetQuiz();
+
+    function goBack(e) { e.preventDefault(); history.back(); }
+    if (history.length > 1) {
+      document.getElementById('menuLink').style.display = '';
+    }
+
+    function jump(n, answered) {
+      if (n < 1 || n > QUESTIONS.length) { console.warn('jump: no question', n); return; }
+      for (let i = 0; i < n - 1; i++) {
+        Q[i].sel = Array.isArray(Q[i].cor) ? [...Q[i].cor] : Q[i].cor;
+        Q[i].ans = true;
+      }
+      goToQuestion(n);
+      if (answered) {
+        Q[cur].sel = Array.isArray(Q[cur].cor) ? [...Q[cur].cor] : Q[cur].cor;
+        checkAnswer();
+      }
+    }
+    window.jump = jump;
+
+    function jumpToSummary() {
+      QUESTIONS.forEach((_, i) => {
+        if (Q[i].ans) return;
+        Q[i].sel = Array.isArray(Q[i].cor) ? [...Q[i].cor] : Q[i].cor;
+        Q[i].ans = true;
+      });
+      showSummary();
+    }
+    window.jumpToSummary = jumpToSummary;
+
+    {
+      const p = new URLSearchParams(location.search);
+      if (p.has('q')) { if (p.get('q') === 's') jumpToSummary(); else jump(+p.get('q'), p.has('ans')); }
+      if (p.has('xy')) setXY(+p.get('xy') === 1);
+    }
+  </script>
+</body>
+
+</html>
