@@ -1,0 +1,353 @@
+<!--
+  "Identify the gate from its truth table" drill — a memorisation exercise
+  for the 7 standard logic gates (AND, OR, NAND, NOR, XOR, XNOR, NOT),
+  sitting beside digital_truth_tables.html in this same exercises/ folder.
+  Genuinely different skill from that file: digital_truth_tables.html
+  BUILDS a truth table for a multi-gate combinational circuit (staged,
+  kind:'truth', interactive fill-in-the-cells); this file instead shows a
+  complete, already-filled truth table for ONE gate and asks which of the
+  7 gates it belongs to — pure recognition/recall, no construction.
+
+  Exactly 7 questions, one per gate, each question SLOT permanently tied
+  to its own gate (QUESTIONS[0]=AND, [1]=OR, [2]=NAND, [3]=NOR, [4]=XOR,
+  [5]=XNOR, [6]=NOT) — resetQuiz() shuffles the QUESTIONS array itself
+  (not each question's own random gate pick) so every playthrough shows
+  all 7 exactly once, just in a random order, guaranteeing full coverage
+  rather than risking repeats/omissions.
+
+  NOT is genuinely a 1-input gate (2-row table) unlike the other six
+  (2-input, 4-row) — shown as its own true 1-input table rather than
+  forced into a 2-input shape. Recognising "this table only has one input
+  column, so it must be NOT" is itself part of the intended drill.
+
+  Every question offers ALL 7 gate names as answer options (not a
+  curated 4) — a full discrimination drill, deliberately harder than this
+  project's usual 4-option MC. LETTERS is extended to 7 entries locally in
+  this file only (every bjt_knowledge_*.html/digital_knowledge_*.html file
+  keeps its own copy of the engine — this is the same one-file-local
+  pattern used for e.g. circuitViewBox in bjt_knowledge_ac_parameters.html).
+
+  Reuses quiz-common.css's shared .bits-table styling (originally built
+  for digital_truth_tables.html's own interactive tables) for the static,
+  non-interactive reference table embedded in each question's text() —
+  same visual language, no new CSS needed.
+
+  Otherwise the leanest possible copy of the v2 QUESTIONS[] engine: no
+  circuit diagram/leftPanel (nothing to reference — the truth table IS
+  the question), no match/multi/truth kind (single-select only), matching
+  digital_knowledge_logic_families.html's own "only carry what's used"
+  precedent.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../assets/theme-init.js"></script>
+  <title>Digital Electronics — Identify the Gate</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../assets/quiz-common.css">
+  <script src="../../assets/breadcrumb.js" defer></script>
+  <style>
+    .progress-wrap { display: flex; gap: .4rem; align-items: center; margin-bottom: 1rem; }
+    .gate-table-wrap { max-width: 220px; margin: .8rem auto; }
+    .gate-table-wrap .bits-table td.out-col { font-weight: 700; color: var(--colour-gain); }
+  </style>
+</head>
+
+<body>
+  <div class="crumb" id="crumb" data-current="Identify the Gate"></div>
+  <header>
+    <h1>Digital Electronics</h1>
+    <p>Identify the Gate · Truth Tables for the 7 Standard Logic Gates</p>
+  </header>
+
+  <div class="quiz-wrap single-col" id="quizWrap">
+
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <!-- Single reusable question panel — populated from QUESTIONS[cur] by renderQuestion() -->
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+          <div class="options" id="qOptions"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Summary -->
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
+
+    function scrollToQuestionTop() {
+      document.getElementById('qPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // GATES — the 7 standard logic gates and their truth tables. NOT is
+    // genuinely 1-input (2 rows); the other six are 2-input (4 rows).
+    // ══════════════════════════════════════════════════════════════════════
+
+    const GATES = [
+      { key: 'AND', inputs: 2, rows: [[0, 0, 0], [0, 1, 0], [1, 0, 0], [1, 1, 1]],
+        rule: 'Output is 1 ONLY when every input is 1 — the strictest gate, needs unanimous agreement.' },
+      { key: 'OR', inputs: 2, rows: [[0, 0, 0], [0, 1, 1], [1, 0, 1], [1, 1, 1]],
+        rule: 'Output is 1 if ANY input is 1 — only 0 when every input is 0.' },
+      { key: 'NAND', inputs: 2, rows: [[0, 0, 1], [0, 1, 1], [1, 0, 1], [1, 1, 0]],
+        rule: 'The exact inverse of AND — every row is flipped compared to AND\'s own table. Output is 0 only when every input is 1.' },
+      { key: 'NOR', inputs: 2, rows: [[0, 0, 1], [0, 1, 0], [1, 0, 0], [1, 1, 0]],
+        rule: 'The exact inverse of OR — every row is flipped compared to OR\'s own table. Output is 1 only when every input is 0.' },
+      { key: 'XOR', inputs: 2, rows: [[0, 0, 0], [0, 1, 1], [1, 0, 1], [1, 1, 0]],
+        rule: 'Output is 1 when the inputs DIFFER (exactly one is 1) — and 0 when they\'re the same. "Exclusive" OR: unlike plain OR, both-1 gives 0.' },
+      { key: 'XNOR', inputs: 2, rows: [[0, 0, 1], [0, 1, 0], [1, 0, 0], [1, 1, 1]],
+        rule: 'The exact inverse of XOR — output is 1 when the inputs MATCH (both the same), 0 when they differ.' },
+      { key: 'NOT', inputs: 1, rows: [[0, 1], [1, 0]],
+        rule: 'The only gate with just ONE input — simply inverts it. A 1-input table is itself the giveaway that this must be NOT.' },
+    ];
+
+    function gateTableHTML(gate) {
+      const headCells = gate.inputs === 2 ? '<th>A</th><th>B</th><th>Q</th>' : '<th>A</th><th>Q</th>';
+      const bodyRows = gate.rows.map(r => `<tr>${r.map((v, i) => `<td${i === r.length - 1 ? ' class="out-col"' : ''}>${v}</td>`).join('')}</tr>`).join('');
+      return `<div class="gate-table-wrap"><table class="bits-table"><thead><tr>${headCells}</tr></thead><tbody>${bodyRows}</tbody></table></div>`;
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS — one per gate, in a fixed default order. resetQuiz()
+    // shuffles this array's ORDER (not each question's gate) so every
+    // playthrough covers all 7 exactly once.
+    // ══════════════════════════════════════════════════════════════════════
+
+    const QUESTIONS = GATES.map(gate => ({
+      text: () => `${gateTableHTML(gate)}Which logic gate produces this truth table?`,
+      hint: () => gate.inputs === 1
+        ? 'This table only has ONE input column — only one of the 7 standard gates works that way.'
+        : 'Check exactly when Q is 1 and when it\'s 0 across all four input combinations, then compare against each gate\'s defining rule.',
+      options: () => shuffle(GATES.map(g => ({ label: g.key, type: g.key === gate.key ? 'correct' : 'wrong' }))),
+      correctExplain: () => gate.key,
+      working: () => `<div class="working-total">${gate.rule}</div>`,
+    }));
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUIZ ENGINE — generic; driven entirely by QUESTIONS[] via index.
+    // Single-select only — no match/multi/truth kind needed here.
+    // ══════════════════════════════════════════════════════════════════════
+
+    function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+    function isAnswerCorrect(data, st) { return st.sel === st.cor; }
+    function selectedLabel(data, st) { return (st.sel != null && st.opts[st.sel]) ? st.opts[st.sel].label : '—'; }
+
+    let Q = [];
+    let cur = 0;
+
+    function buildProgressDots() {
+      document.getElementById('progressDots').innerHTML =
+        QUESTIONS.map((_, i) => `<div class="progress-dot" id="dot-${i}"></div>`).join('');
+    }
+
+    function updateProgress() {
+      QUESTIONS.forEach((_, i) => {
+        const d = document.getElementById('dot-' + i);
+        d.className = 'progress-dot';
+        if (i === cur) d.classList.add('active'); else if (Q[i].ans) d.classList.add('done');
+      });
+      document.getElementById('progressLabel').textContent = (cur + 1) + ' / ' + QUESTIONS.length;
+    }
+
+    function renderOptions() {
+      const st = Q[cur];
+      const c = document.getElementById('qOptions'); c.innerHTML = '';
+      st.opts.forEach((opt, i) => {
+        const btn = document.createElement('button'); btn.className = 'option-btn';
+        btn.innerHTML = `<span class="option-letter">${LETTERS[i]}</span><span>${opt.label}</span>`;
+        if (st.ans) {
+          btn.disabled = true;
+          if (i === st.cor) { btn.classList.add('correct'); btn.innerHTML += `<span class="result-icon">✓</span>`; }
+          else if (i === st.sel) { btn.classList.add('wrong'); btn.innerHTML += `<span class="result-icon">✗</span>`; }
+          else btn.classList.add('dimmed');
+        } else {
+          if (i === st.sel) btn.classList.add('selected');
+          btn.addEventListener('click', () => selectOption(i));
+        }
+        c.appendChild(btn);
+      });
+    }
+
+    function selectOption(i) {
+      const st = Q[cur];
+      if (st.ans) return;
+      st.sel = i;
+      renderQuestion();
+    }
+
+    function renderQuestion() {
+      const data = QUESTIONS[cur], st = Q[cur];
+
+      document.getElementById('qNum').textContent = 'Q' + (cur + 1);
+      document.getElementById('qText').innerHTML = data.text();
+      document.getElementById('qHint').innerHTML = data.hint();
+
+      renderOptions();
+
+      const banner = document.getElementById('qBanner');
+      if (st.ans) {
+        const ok = isAnswerCorrect(data, st);
+        banner.className = 'result-banner ' + (ok ? 'correct' : 'wrong');
+        document.getElementById('qIcon').textContent = ok ? '✓' : '✗';
+        document.getElementById('qBannerText').innerHTML = ok ? `Correct! It's ${data.correctExplain()}` : `The correct answer is ${data.correctExplain()}`;
+      } else {
+        banner.className = 'result-banner';
+      }
+
+      const working = document.getElementById('qWorking');
+      working.className = 'working-box' + (st.ans ? ' visible' : '');
+      document.getElementById('qWorkingContent').innerHTML = st.ans ? data.working() : '';
+
+      document.getElementById('qBack').style.display = cur > 0 ? 'inline-block' : 'none';
+      const check = document.getElementById('qCheck');
+      check.style.display = st.ans ? 'none' : 'inline-block';
+      check.disabled = st.ans || st.sel === null;
+      const isLast = cur === QUESTIONS.length - 1;
+      document.getElementById('qNext').style.display = (st.ans && !isLast) ? 'inline-block' : 'none';
+      document.getElementById('qSummary').style.display = (st.ans && isLast) ? 'inline-block' : 'none';
+
+      updateProgress();
+    }
+
+    function checkAnswer() {
+      const st = Q[cur];
+      if (st.ans || st.sel === null) return;
+      st.ans = true;
+      renderQuestion();
+      document.getElementById('qBanner').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function nextQuestion() { if (cur < QUESTIONS.length - 1) { cur++; renderQuestion(); scrollToQuestionTop(); } }
+
+    function backQuestion() {
+      if (cur <= 0) return;
+      cur--;
+      for (let i = cur; i < QUESTIONS.length; i++) {
+        Q[i].ans = false;
+        Q[i].sel = null;
+      }
+      renderQuestion();
+      scrollToQuestionTop();
+    }
+
+    function goToQuestion(n) {
+      cur = Math.max(0, Math.min(QUESTIONS.length - 1, n - 1));
+      document.getElementById('summaryPanel').style.display = 'none';
+      document.getElementById('qPanel').style.display = 'flex';
+      renderQuestion();
+      scrollToQuestionTop();
+    }
+
+    function resetQuiz() {
+      shuffle(QUESTIONS);
+      Q = QUESTIONS.map(data => {
+        const opts = data.options();
+        return { sel: null, ans: false, cor: opts.findIndex(o => o.type === 'correct'), opts };
+      });
+      cur = 0;
+      document.getElementById('summaryPanel').style.display = 'none';
+      document.getElementById('qPanel').style.display = 'flex';
+      renderQuestion();
+    }
+
+    function showSummary() {
+      document.getElementById('qPanel').style.display = 'none';
+      document.getElementById('summaryPanel').style.display = 'block';
+      const items = QUESTIONS.map((data, i) => {
+        const st = Q[i];
+        const ans = selectedLabel(data, st);
+        const ok = isAnswerCorrect(data, st);
+        const colour = ok ? 'var(--colour-ui-correct)' : '#ff3366';
+        const mark = ok ? '✓' : '✗';
+        return `<div class="summary-item">
+      <div class="summary-item-head"><span class="summary-qnum">Q${i + 1}</span><span class="summary-question">${data.text()}</span></div>
+      <div class="summary-answer" style="color:${colour}">You answered: ${ans} &nbsp; ${mark}</div>
+      <div class="working-box visible">${st.ans ? data.working() : ''}</div>
+    </div>`;
+      }).join('');
+      document.getElementById('summaryContent').innerHTML = items;
+      QUESTIONS.forEach((_, i) => { const d = document.getElementById('dot-' + i); if (d) d.className = 'progress-dot done'; });
+      document.getElementById('progressLabel').textContent = 'Complete';
+    }
+
+    buildProgressDots();
+    resetQuiz();
+
+    function goBack(e) { e.preventDefault(); history.back(); }
+    if (history.length > 1) {
+      document.getElementById('menuLink').style.display = '';
+    }
+
+    function jump(n, answered) {
+      if (n < 1 || n > QUESTIONS.length) { console.warn('jump: no question', n); return; }
+      for (let i = 0; i < n - 1; i++) {
+        Q[i].sel = Q[i].cor;
+        Q[i].ans = true;
+      }
+      goToQuestion(n);
+      if (answered) {
+        Q[cur].sel = Q[cur].cor;
+        checkAnswer();
+      }
+    }
+    window.jump = jump;
+
+    function jumpToSummary() {
+      QUESTIONS.forEach((_, i) => {
+        if (Q[i].ans) return;
+        Q[i].sel = Q[i].cor;
+        Q[i].ans = true;
+      });
+      showSummary();
+    }
+    window.jumpToSummary = jumpToSummary;
+
+    {
+      const p = new URLSearchParams(location.search);
+      if (p.has('q')) { if (p.get('q') === 's') jumpToSummary(); else jump(+p.get('q'), p.has('ans')); }
+    }
+  </script>
+</body>
+
+</html>
