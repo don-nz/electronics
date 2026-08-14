@@ -272,9 +272,6 @@
        already no-ops once st.ans is true, so the pointer cursor shouldn't
        keep implying they're interactive. */
     .circuit-slot-box.correct, .circuit-slot-box.wrong { cursor: default; }
-    .circuit-slot-text { font-size: 30px; font-weight: 700; text-anchor: middle; dominant-baseline: middle; fill: var(--colour-ui-primary); pointer-events: none; }
-    .circuit-slot-text.correct { fill: var(--colour-ui-correct); }
-    .circuit-slot-text.wrong { fill: #ff3d66; }
     /* Same idea as .circuit-slot-box, just sized for a full expression
        instead of a single letter. */
     .circuit-answer-box { fill: var(--colour-panel); stroke: var(--colour-ui-primary); stroke-width: 2px; stroke-dasharray: 6,4; cursor: pointer; }
@@ -282,25 +279,30 @@
     .circuit-answer-box.correct { stroke: var(--colour-ui-correct); }
     .circuit-answer-box.wrong { stroke: #ff3d66; }
     .circuit-answer-box.correct, .circuit-answer-box.wrong { cursor: default; }
-    .circuit-answer-text { font-size: 22px; font-weight: 700; text-anchor: middle; dominant-baseline: middle; fill: var(--colour-ui-primary); pointer-events: none; }
-    .circuit-answer-text.correct { fill: var(--colour-ui-correct); }
-    .circuit-answer-text.wrong { fill: #ff3d66; }
-    /* g1AnswerBox/g2AnswerBox render via <foreignObject> + this HTML class
-       instead of native SVG <text> — their correct answer needs a NOT
-       wrapping an already-negated term (e.g. NOT(NOT A AND B)), which
-       De Morgan's teaches as a SECOND, raised bar over the whole
-       expression, distinct from the inner single-letter overline. SVG
-       text-decoration can't offset overlines to different heights, but
-       plain HTML/CSS can (border-top + padding-top on .ovl-outer /
-       .ovl-outer2, below) — foreignObject is what lets that CSS run
-       inside the SVG canvas. zAnswerBox uses it too now that its
-       options substitute G1/G2 back in as their own real (already
-       .ovl-outer-wrapped) answers, needing a third tier on top. */
+    /* Once a fill question is no longer the one being asked (answered AND
+       the quiz has moved on), its box drops the border/background and
+       leaves just the plain coloured text sitting on the wire — the box
+       chrome only matters while a question is still asking for input.
+       Declared after the .correct/.wrong stroke rules above so it wins
+       on source order despite matching specificity; only ever added by
+       updateReveal()'s past-question lock branch, never for the current
+       question. */
+    .circuit-slot-box.plain, .circuit-answer-box.plain { fill: none; stroke: none; }
+    /* EVERY fill-question box (Q1's 4 signal slots included) renders via
+       <foreignObject> + this HTML class, not native SVG <text> — Q1
+       started out on native <text>/dominant-baseline:middle, but that
+       centred negated ("NOT A"-style, with a text-decoration overline)
+       and plain letters inconsistently on iOS Safari specifically (the
+       overline sat noticeably higher than a plain letter in the same
+       size box). Flexbox align-items:center in an ordinary HTML div
+       doesn't have that baseline-metric quirk, so Q1 moved onto the same
+       mechanism the other boxes already used for their multi-tier
+       overlines. See .ovl-outer / .ovl-outer2 below for those. */
     /* width/height deliberately NOT 100% — iOS Safari doesn't reliably
        resolve percentage sizing for a foreignObject's HTML content, which
        showed up as the answer text rendering at native (unscaled) size in
        roughly the wrong place entirely, ignoring the foreignObject's own
-       box. Each box below sets its own explicit pixel width/height inline
+       box. Each box sets its own explicit pixel width/height inline
        (matching its own <foreignObject width/height>) instead. */
     .circuit-answer-html {
       display: flex; align-items: center; justify-content: center;
@@ -310,6 +312,9 @@
     }
     .circuit-answer-html.correct { color: var(--colour-ui-correct); }
     .circuit-answer-html.wrong { color: #ff3d66; }
+    /* Q1's boxes are smaller (single letter, not a full expression) —
+       tuned to its own box size separately from the shared 28px above. */
+    .circuit-slot-html { font-size: 30px; }
   </style>
 </head>
 
@@ -349,7 +354,7 @@
   <div class="crumb" id="crumb" data-current="Step Through the Circuit"></div>
   <header>
     <h1>Digital Electronics</h1>
-    <p>Step Through the Circuit · NAND/NOT Realisation of Z = A&#8242;B + AB&#8242;</p>
+    <p>Step Through the Circuit · Derive, Simplify & Verify</p>
   </header>
 
   <div class="quiz-wrap single-col" id="quizWrap">
@@ -397,14 +402,14 @@
               <svg id="circuitRefSvg" viewBox="-10 25 1120 700" xmlns="http://www.w3.org/2000/svg">
                 <g id="mainCircuit">
             <!-- ==================== INPUT WIRES ==================== -->
-            <text x="10" y="237" font-size="24" font-weight="bold" text-anchor="start" style="fill: var(--colour-signal)">A</text>
+            <text x="10" y="241" font-size="36" font-weight="bold" text-anchor="start" style="fill: var(--colour-signal)">A</text>
             <circle cx="70" cy="230" r="5" style="fill: var(--colour-series)" />
 
-            <text x="10" y="577" font-size="24" font-weight="bold" text-anchor="start" style="fill: var(--colour-signal)">B</text>
+            <text x="10" y="581" font-size="36" font-weight="bold" text-anchor="start" style="fill: var(--colour-signal)">B</text>
             <circle cx="110" cy="570" r="5" style="fill: var(--colour-series)" />
 
             <!-- A: direct to NOT-A, and down-branch to G2 top input (slot2) -->
-            <line x1="70" y1="230" x2="142" y2="230" style="stroke: var(--colour-series)" stroke-width="2.6" />
+            <line x1="40" y1="230" x2="142" y2="230" style="stroke: var(--colour-series)" stroke-width="2.6" />
             <line x1="70" y1="230" x2="70" y2="450" style="stroke: var(--colour-series)" stroke-width="2.6" />
             <line x1="70" y1="450" x2="390" y2="450" style="stroke: var(--colour-series)" stroke-width="2.6" />
 
@@ -428,21 +433,29 @@
             <line x1="358" y1="490" x2="390" y2="490" style="stroke: var(--colour-series)" stroke-width="2.6" />
 
             <!-- ==================== 4 FILL SLOTS (Q1) ==================== -->
-            <g id="slotBox0" class="circuit-slot-box" transform="translate(280,55)" onclick="slotClicked(0)">
-              <rect width="65" height="45" rx="4" />
-              <text id="slotBox0Text" class="circuit-slot-text" x="32" y="30"></text>
+            <g id="slotBox0" class="circuit-slot-box" transform="translate(280,40)" onclick="slotClicked(0)">
+              <rect width="65" height="55" rx="4" />
+              <foreignObject x="0" y="5" width="65" height="55">
+                <div xmlns="http://www.w3.org/1999/xhtml" id="slotBox0Text" class="circuit-answer-html circuit-slot-html" style="width:65px;height:50px"></div>
+              </foreignObject>
             </g>
-            <g id="slotBox1" class="circuit-slot-box" transform="translate(280,175)" onclick="slotClicked(1)">
-              <rect width="65" height="45" rx="4" />
-              <text id="slotBox1Text" class="circuit-slot-text" x="32" y="30"></text>
+            <g id="slotBox1" class="circuit-slot-box" transform="translate(280,160)" onclick="slotClicked(1)">
+              <rect width="65" height="55" rx="4" />
+              <foreignObject x="0" y="5" width="65" height="55">
+                <div xmlns="http://www.w3.org/1999/xhtml" id="slotBox1Text" class="circuit-answer-html circuit-slot-html" style="width:65px;height:50px"></div>
+              </foreignObject>
             </g>
-            <g id="slotBox2" class="circuit-slot-box" transform="translate(280,395)" onclick="slotClicked(2)">
-              <rect width="65" height="45" rx="4" />
-              <text id="slotBox2Text" class="circuit-slot-text" x="32" y="30"></text>
+            <g id="slotBox2" class="circuit-slot-box" transform="translate(280,380)" onclick="slotClicked(2)">
+              <rect width="65" height="55" rx="4" />
+              <foreignObject x="0" y="5" width="65" height="55">
+                <div xmlns="http://www.w3.org/1999/xhtml" id="slotBox2Text" class="circuit-answer-html circuit-slot-html" style="width:65px;height:50px"></div>
+              </foreignObject>
             </g>
-            <g id="slotBox3" class="circuit-slot-box" transform="translate(280,515)" onclick="slotClicked(3)">
-              <rect width="65" height="45" rx="4" />
-              <text id="slotBox3Text" class="circuit-slot-text" x="32" y="30"></text>
+            <g id="slotBox3" class="circuit-slot-box" transform="translate(280,500)" onclick="slotClicked(3)">
+              <rect width="65" height="55" rx="4" />
+              <foreignObject x="0" y="5" width="65" height="55">
+                <div xmlns="http://www.w3.org/1999/xhtml" id="slotBox3Text" class="circuit-answer-html circuit-slot-html" style="width:65px;height:50px"></div>
+              </foreignObject>
             </g>
 
             <!-- ==================== LEVEL-1 NAND GATES (G1, G2) ==================== -->
@@ -463,19 +476,19 @@
             <!-- Z output -> straight run (Q4 answer box sits on this) -> terminal -->
             <line x1="900" y1="310" x2="1070" y2="310" style="stroke: var(--colour-series)" stroke-width="2.6" />
             <circle cx="1070" cy="310" r="5" style="fill: var(--colour-signal)" />
-            <text x="1080" y="318" font-size="24" font-weight="bold" text-anchor="start" style="fill: var(--colour-signal)">Z</text>
+            <text x="1080" y="322" font-size="36" font-weight="bold" text-anchor="start" style="fill: var(--colour-signal)">Z</text>
 
             <!-- ==================== INLINE ANSWER BOXES (Q2-Q4), same mechanic as Q1 slots ==================== -->
-            <g id="g1AnswerBox" class="circuit-answer-box" transform="translate(560,35)" onclick="slotClicked(0)">
-              <rect width="120" height="85" rx="6" />
-              <foreignObject x="0" y="0" width="120" height="85">
-                <div xmlns="http://www.w3.org/1999/xhtml" id="g1AnswerBoxText" class="circuit-answer-html" style="width:120px;height:85px"></div>
+            <g id="g1AnswerBox" class="circuit-answer-box" transform="translate(560,25)" onclick="slotClicked(0)">
+              <rect width="120" height="95" rx="6" />
+              <foreignObject x="0" y="0" width="120" height="95">
+                <div xmlns="http://www.w3.org/1999/xhtml" id="g1AnswerBoxText" class="circuit-answer-html" style="width:120px;height:95px"></div>
               </foreignObject>
             </g>
-            <g id="g2AnswerBox" class="circuit-answer-box" transform="translate(560,375)" onclick="slotClicked(1)">
-              <rect width="120" height="85" rx="6" />
-              <foreignObject x="0" y="0" width="120" height="85">
-                <div xmlns="http://www.w3.org/1999/xhtml" id="g2AnswerBoxText" class="circuit-answer-html" style="width:120px;height:85px"></div>
+            <g id="g2AnswerBox" class="circuit-answer-box" transform="translate(560,365)" onclick="slotClicked(1)">
+              <rect width="120" height="95" rx="6" />
+              <foreignObject x="0" y="0" width="120" height="95">
+                <div xmlns="http://www.w3.org/1999/xhtml" id="g2AnswerBoxText" class="circuit-answer-html" style="width:120px;height:95px"></div>
               </foreignObject>
             </g>
             <g id="zAnswerBox" class="circuit-answer-box" transform="translate(880,200)" onclick="slotClicked(0)">
@@ -546,29 +559,28 @@
     const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
 
     // ══════════════════════════════════════════════════════════════════════
-    // Q1's 4 signal slots. `html` targets the SVG <text> slot (needs
-    // <tspan> — SVG's innerHTML parser doesn't recognise plain HTML
-    // elements like <span>); `poolHtml` targets the HTML pool-chip
-    // <button> (needs <span> for the same reason in reverse).
+    // Q1's 4 signal slots. Every fill-question box (Q1's included) now
+    // renders via foreignObject/HTML, so `poolHtml` (used for both the
+    // pool-chip <button> AND the circuit's own boxes) is the only markup
+    // variant needed — there's no more native-SVG <text> target anywhere
+    // in this file to build a <tspan> version for.
     // ══════════════════════════════════════════════════════════════════════
     const SLOT_POOL = () => shuffle([
-      { label: 'A', html: 'A', poolHtml: 'A', col: 2 },
-      { label: 'NOT A', html: '<tspan class="ovl">A</tspan>', poolHtml: '<span class="ovl">A</span>', col: 1 },
-      { label: 'B', html: 'B', poolHtml: 'B', col: 0 },
-      { label: 'NOT B', html: '<tspan class="ovl">B</tspan>', poolHtml: '<span class="ovl">B</span>', col: 3 },
+      { label: 'A', poolHtml: 'A', col: 2 },
+      { label: 'NOT A', poolHtml: '<span class="ovl">A</span>', col: 1 },
+      { label: 'B', poolHtml: 'B', col: 0 },
+      { label: 'NOT B', poolHtml: '<span class="ovl">B</span>', col: 3 },
     ]);
 
     // Symbolic expression builder — write `<O>X</O>` around anything that
     // should render with an overline (NOT), use "·" for AND and "+" for
-    // OR directly in the template. Produces both the SVG (<tspan>) and
-    // HTML (<span>) markup from one source string, same reasoning as
-    // SLOT_POOL's own html/poolHtml split above. An outer NOT wrapping a
-    // whole sub-expression (not a single variable) is deliberately left
-    // as the word "NOT (...)" rather than a second, raised overline —
-    // true nested overlines need real extra rendering work (a taller bar
-    // measured/positioned above the inner one, in both an SVG and an HTML
-    // context) that wasn't worth it for what's fundamentally a
-    // horizontal-space saving, not a typesetting-accuracy request.
+    // OR directly in the template. An outer NOT wrapping a whole
+    // sub-expression (not a single variable) is deliberately left as the
+    // word "NOT (...)" rather than a second, raised overline — true
+    // nested overlines need real extra rendering work (a taller bar
+    // measured/positioned above the inner one) that wasn't worth it for
+    // what's fundamentally a horizontal-space saving, not a
+    // typesetting-accuracy request.
     // `<O>X</O>` = normal overline (NOT of a single variable). `<OO>X</OO>`
     // = a SECOND, raised overline over a whole sub-expression that may
     // itself already contain `<O>` — the De Morgan's-lesson case (e.g.
@@ -576,22 +588,14 @@
     // outer NOT gets a taller one above it). `<OOO>X</OOO>` = a THIRD,
     // still-higher bar for when an expression that's already wrapped in
     // an `<OO>` bar (like G1's own answer) gets wrapped in ANOTHER NOT on
-    // top of that (Q4, once G1/G2 are substituted back in). Native SVG
-    // <text>/<tspan> can't offset overlines to different heights at all,
-    // so whenever a template uses <OO> or <OOO> the .html output falls
-    // back to the SAME HTML/span markup as .poolHtml (real multi-bar
-    // rendering only happens via the foreignObject-based HTML boxes —
-    // see .circuit-answer-html / .ovl-outer / .ovl-outer2).
+    // top of that (Q4, once G1/G2 are substituted back in) — see
+    // .circuit-answer-html / .ovl-outer / .ovl-outer2.
     function sym(template) {
-      const hasOuter = /<OO>|<OOO>/.test(template);
-      function build(tag) {
-        return template
-          .replace(/<OOO>/g, `<${tag} class="ovl-outer2">`).replace(/<\/OOO>/g, `</${tag}>`)
-          .replace(/<OO>/g, `<${tag} class="ovl-outer">`).replace(/<\/OO>/g, `</${tag}>`)
-          .replace(/<O>/g, `<${tag} class="ovl">`).replace(/<\/O>/g, `</${tag}>`);
-      }
-      const poolHtml = build('span');
-      return { poolHtml, html: hasOuter ? poolHtml : build('tspan') };
+      const poolHtml = template
+        .replace(/<OOO>/g, '<span class="ovl-outer2">').replace(/<\/OOO>/g, '</span>')
+        .replace(/<OO>/g, '<span class="ovl-outer">').replace(/<\/OO>/g, '</span>')
+        .replace(/<O>/g, '<span class="ovl">').replace(/<\/O>/g, '</span>');
+      return { poolHtml };
     }
     function exprPool(items) {
       return () => shuffle(items.map(it => ({
@@ -815,11 +819,11 @@
         const box = document.getElementById(elId);
         const txt = document.getElementById(elId + 'Text');
         const placedIdx = st.slotPlaced[slot];
-        box.classList.remove('filled', 'correct', 'wrong');
+        box.classList.remove('filled', 'correct', 'wrong', 'plain');
         if (placedIdx === null) {
           txt.innerHTML = '';
         } else {
-          txt.innerHTML = st.opts[placedIdx].html;
+          txt.innerHTML = st.opts[placedIdx].poolHtml;
           box.classList.add('filled');
           if (st.ans) box.classList.add(placedIdx === st.cor[slot] ? 'correct' : 'wrong');
         }
@@ -944,11 +948,11 @@
           const txt = document.getElementById(elId + 'Text');
           if (st.ans) {
             const correctIdx = st.cor[slot];
-            txt.innerHTML = st.opts[correctIdx].html;
-            box.classList.remove('wrong'); box.classList.add('filled', 'correct');
+            txt.innerHTML = st.opts[correctIdx].poolHtml;
+            box.classList.remove('wrong'); box.classList.add('filled', 'correct', 'plain');
             txt.classList.remove('wrong'); txt.classList.add('correct');
           } else {
-            box.classList.remove('filled', 'correct', 'wrong');
+            box.classList.remove('filled', 'correct', 'wrong', 'plain');
             txt.innerHTML = '';
             txt.classList.remove('correct', 'wrong');
           }
