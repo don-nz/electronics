@@ -96,6 +96,20 @@
   <link rel="stylesheet" href="../../assets/quiz-common.css">
   <script src="../../assets/breadcrumb.js" defer></script>
   <style>
+    /* Dedicated per-file tokens for the A/B/C input signals — their own
+       label text AND the wire segment running straight from that label
+       to the first gate it feeds. Deliberately NOT reusing
+       --colour-ideal/--colour-current (quiz-common.css's shared tokens,
+       meant for other quiz types' own unrelated ideal-vs-actual/current
+       diagrams) — --colour-current is literally identical to
+       --colour-ui-correct in light theme (#16a34a both), and
+       --colour-ideal is identical to --colour-ui-summary in both themes,
+       so either one silently doubles as an existing UI-state colour
+       instead of a signal identity of its own. Chosen to sit in the gaps
+       between every hue already claimed on this page (cyan/blue =
+       primary+wires, green = correct, red/pink = wrong, orange = restart
+       + gate symbols, amber/gold = signal/Z, purple = summary): indigo,
+       teal, and lime. */
     .progress-wrap { display: flex; gap: .4rem; align-items: center; margin-bottom: 1rem; }
     /* Standard weight — a plain single-variable NOT bar, not deliberately
        thinned. The NAND-vs-plain-NOT distinction is carried by
@@ -135,12 +149,29 @@
        tweaking the live file blind — 4px and 8px were both still
        ambiguous at this font-size, 12px was the first value that read as
        unmistakably two separate lines rather than one thick-ish one. */
-    .ovl-outer { position: relative; display: inline-block; padding-top: 12px; line-height: 1; }
-    /* Noticeably thicker than .ovl's 0.09em (roughly 1.8px at this font
-       size) — a NAND gate's own negation is a different KIND of bar from
-       a plain single-variable NOT, not just a taller copy of it, so the
-       two need to read as visually distinct categories at a glance. */
-    .ovl-outer::before { content: ''; position: absolute; top: 0; left: 0; right: 0; border-top: 3px solid currentColor; }
+    /* Real bug, iPhone Safari AND iOS Chrome (same WebKit engine under
+       the hood) — reported by the user with a screenshot: any circuit
+       answer box whose selected option used this raised bar rendered its
+       ENTIRE value giant and displaced well outside its own box, while
+       identical content in the (non-flex, not-in-a-foreignObject) pool
+       chips was always fine. This rule used to be
+       `position:relative` + a `content:''` `::before` pseudo-element with
+       `position:absolute` to draw the bar — the ONLY place in the whole
+       file combining position:relative/absolute with content living
+       inside a foreignObject AND as a direct child of a flex container
+       (.circuit-answer-html). Both are separately known categories of
+       WebKit foreignObject bug (this session already found two others:
+       percentage sizing, and dominant-baseline centring). Rather than
+       guess which exact combination triggers it, removed the whole
+       position:absolute pattern — a plain `border-top` directly on the
+       element itself draws an identical line at the very top of the
+       padding box with no `position` property involved at all. This is
+       the SAME technique the Chromium wrapping-prose phantom-underline
+       bug (see .ovl-thick's comment above) ruled out earlier in the
+       session — but that bug was specifically about wrapping multi-line
+       prose, a context .ovl-outer/.ovl-outer2 are deliberately never
+       used in, so it doesn't apply here. */
+    .ovl-outer { display: inline-block; padding-top: 12px; border-top: 3px solid currentColor; line-height: 1; }
     /* A THIRD tier, for when an expression that already carries its own
        .ovl-outer bar (e.g. G1's own answer) gets wrapped in yet another
        NOT on top of that (Q4, once G1/G2 are substituted back in as
@@ -157,8 +188,7 @@
        — both tiers are "a NAND's own bar", just at different heights
        when one wraps the other; the thickness contrast that matters is
        NAND-bar vs plain-NOT-bar, not tier vs tier. */
-    .ovl-outer2 { position: relative; display: inline-block; padding-top: 12px; line-height: 1; }
-    .ovl-outer2::before { content: ''; position: absolute; top: 0; left: 0; right: 0; border-top: 3px solid currentColor; }
+    .ovl-outer2 { display: inline-block; padding-top: 12px; border-top: 3px solid currentColor; line-height: 1; }
     /* padding-top is a fixed px value, not em-relative, so the SAME 12px
        reads as generously spaced next to the pool chips' own small
        (~12.5px) font but visibly cramped inside the circuit's own answer
@@ -426,21 +456,21 @@
               <svg id="circuitRefSvg" viewBox="-10 25 1120 700" xmlns="http://www.w3.org/2000/svg">
                 <g id="mainCircuit">
             <!-- ==================== INPUT WIRES ==================== -->
-            <text x="10" y="241" font-size="36" font-weight="bold" text-anchor="start" style="fill: var(--colour-signal)">A</text>
+            <text x="10" y="241" font-size="36" font-weight="bold" text-anchor="start" style="fill: var(--colour-input-a)">A</text>
             <circle cx="70" cy="230" r="5" style="fill: var(--colour-series)" />
 
-            <text x="10" y="581" font-size="36" font-weight="bold" text-anchor="start" style="fill: var(--colour-signal)">B</text>
+            <text x="10" y="581" font-size="36" font-weight="bold" text-anchor="start" style="fill: var(--colour-input-b)">B</text>
             <circle cx="110" cy="570" r="5" style="fill: var(--colour-series)" />
 
             <!-- A: direct to NOT-A, and down-branch to G2 top input (slot2) -->
-            <line x1="40" y1="230" x2="142" y2="230" style="stroke: var(--colour-series)" stroke-width="2.6" />
-            <line x1="70" y1="230" x2="70" y2="450" style="stroke: var(--colour-series)" stroke-width="2.6" />
-            <line x1="70" y1="450" x2="390" y2="450" style="stroke: var(--colour-series)" stroke-width="2.6" />
+            <line x1="40" y1="230" x2="142" y2="230" style="stroke: var(--colour-input-a)" stroke-width="2.6" />
+            <line x1="70" y1="230" x2="70" y2="450" style="stroke: var(--colour-input-a)" stroke-width="2.6" />
+            <line x1="70" y1="450" x2="390" y2="450" style="stroke: var(--colour-input-a)" stroke-width="2.6" />
 
             <!-- B: direct to NOT-B, and up-branch (jogged) to G1 top input (slot0) -->
-            <line x1="40" y1="570" x2="142" y2="570" style="stroke: var(--colour-series)" stroke-width="2.6" />
-            <line x1="110" y1="570" x2="110" y2="110" style="stroke: var(--colour-series)" stroke-width="2.6" />
-            <line x1="110" y1="110" x2="390" y2="110" style="stroke: var(--colour-series)" stroke-width="2.6" />
+            <line x1="40" y1="570" x2="142" y2="570" style="stroke: var(--colour-input-b)" stroke-width="2.6" />
+            <line x1="110" y1="570" x2="110" y2="110" style="stroke: var(--colour-input-b)" stroke-width="2.6" />
+            <line x1="110" y1="110" x2="390" y2="110" style="stroke: var(--colour-input-b)" stroke-width="2.6" />
 
             <!-- ==================== NOT GATES ==================== -->
             <g transform="translate(190,230) scale(2)"><use href="#gate-not-trad" /></g>
