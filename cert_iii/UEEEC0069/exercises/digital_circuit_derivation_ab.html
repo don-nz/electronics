@@ -1,0 +1,1139 @@
+<!--
+  "Step through the circuit" derivation exercise — built from a photographed
+  worked example (Figure 24: a 2-input NAND/NOT circuit realising Z =
+  A'B + AB', i.e. XOR(A,B), via the standard "NAND-NAND realises SOP"
+  technique) plus its own handwritten working and truth table. A second,
+  3-input version (from the same source's Figure 26) is a likely future
+  companion — this file is deliberately named _ab to leave room for an
+  _abc sibling later, matching the digital_gate_identification.html /
+  digital_gate_identification_3input.html naming precedent.
+
+  Genuinely new architecture for this project: a SINGLE PERSISTENT circuit
+  diagram (not swapped per question via circuitId — there's only ever one
+  circuit here) that gets progressively revealed as the student answers
+  each question, rather than each question showing an independent static
+  state. Q[0..3]'s own .ans flag (not `cur`) drives what's currently
+  revealed, so navigating Prev correctly un-reveals later stages while
+  Next/re-checking always keeps earlier confirmed stages visible.
+
+  Circuit topology (verified against the source photo's own worked
+  answer and truth table before building anything): A and B each split
+  two ways — once straight through, once via a NOT gate — then cross-feed
+  the two first-level NAND gates: G1 = NAND(B, A'), G2 = NAND(A, B').
+  Final gate Z = NAND(G1, G2) = A'B + AB' (double negation + De Morgan).
+  Confirmed via an independent Python truth-table computation before
+  trusting any of it — all 4 rows matched the source photo's own table
+  exactly (A=0,B=0→0; A=1,B=0→1; A=0,B=1→1; A=1,B=1→0).
+
+  Q1-Q5 ALL use kind:'fill' — a single generalised mechanic, not five
+  different UIs. Each fill question has its own `slotIds` (DOM ids of the
+  highlighted box(es) it targets on the persistent circuit) plus an
+  `options()` pool shown ABOVE the circuit — click a pool chip, then click
+  a highlighted box to place it, exactly like Q1's original 4-signal
+  placement. Q1 has 4 slotIds (the 4 signal positions); Q2 has TWO
+  (g1AnswerBox/g2AnswerBox together, one question deriving both first-level
+  NAND outputs at once — mirroring Q1's own multi-slot pattern rather than
+  asking G1 and G2 as two separate questions); Q3/Q4/Q5 each have exactly
+  ONE (zAnswerBox/step1AnswerBox/step2AnswerBox — inline on the circuit's
+  own output wires, not a separate text legend below it), so every derived
+  value literally lands at its own gate, the same way Q1's signals land on
+  their own wires. State is fully slot-indexed and the pool never consumes
+  its items (a chip can be reused, or replaced by clicking the box again)
+  — see resetQuiz()/renderFill()/updateReveal() for the shared engine.
+  Once a fill question is answered, its box(es) lock to the CORRECT value
+  and stay visible on the circuit through every later question (same
+  "always reveal the truth" convention used throughout this project's
+  working panels) — handled centrally in updateReveal(), not per-question.
+
+  Q4, Q5  the De Morgan's simplification of Z's raw expression, split into
+      its own two-step derivation (mirroring how Q2/Q3 already break the
+      circuit down gate by gate) rather than one combined "simplify this"
+      MC question. Each step gets its own box on the circuit
+      (step1AnswerBox/step2AnswerBox, positioned below zAnswerBox) even
+      though neither corresponds to an actual gate — the boxes exist
+      purely to give the ALGEBRAIC steps the same "your answer lands on
+      the diagram" treatment as the circuit-derived ones, not because
+      there's a physical component there. Q4 applies De Morgan's ONLY
+      (NOT(X AND Y) → NOT X OR NOT Y, i.e. G1/G2 each get their own
+      separate 3rd-tier bar, joined by OR instead of AND — the double
+      negation this creates is deliberately left uncancelled). Q5 then
+      cancels that double negation (NOT(NOT(G1)) = G1's own AND-term,
+      dropping the NAND-negation entirely) to reach the final
+      sum-of-products form.
+  Q6  kind:'truth' — single-pass 2-input table (unchanged).
+
+  Circuit geometry: every answer box sits directly on the wire it answers
+  (G1/G2's boxes on the straight run between their gate's output and the
+  bend toward Z; Z's box on the run between Z's output and the final
+  terminal), matching Q1's own slot-on-wire convention rather than a
+  floating callout off to the side. Originally generated via a small
+  Python scale/layout script (kept in session scratchpad, not shipped)
+  to guarantee every wire junction stayed exactly connected across a much
+  wider first-draft layout — since hand-rearranged afterward (by the
+  user, directly, coordinate by coordinate) into the current, more
+  compact arrangement. The viewBox is now cropped tightly to the actual
+  drawn content (measured via mainCircuit.getBBox(), not eyeballed) rather
+  than carrying a lot of unused canvas around a smaller drawing, which is
+  what let .circuit-panel drop the fixed-900px-width + horizontal-scroll
+  workaround from the earlier, much wider version — the tight viewBox
+  scales up cleanly under the shared width:100% on its own.
+
+  Reuses gate-nand-trad/gate-not-trad primitives (copied from ../../assets/
+  shapes/logic-gates.svg and re-themed, same as every other digital_*.html
+  file). Includes the xy=1 dev grid-ruler from the start.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../assets/theme-init.js"></script>
+  <title>Digital Electronics — Step Through the Circuit (A, B)</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../assets/quiz-common.css">
+  <script src="../../assets/breadcrumb.js" defer></script>
+  <style>
+    .progress-wrap { display: flex; gap: .4rem; align-items: center; margin-bottom: 1rem; }
+    /* Standard weight — a plain single-variable NOT bar, not deliberately
+       thinned. The NAND-vs-plain-NOT distinction is carried by
+       .ovl-outer/.ovl-outer2 being thicker than this (below), not by
+       this being thinner than normal. */
+    .ovl { text-decoration: overline; text-decoration-thickness: .09em; }
+    /* A raised, second overline over an already-negated sub-expression —
+       used in pool chips, the correctExplain banner, and the
+       foreignObject answer boxes on the circuit, ALL confirmed clean.
+       Deliberately NOT used in any wrapping/multi-line prose (working
+       panels, question prompts) — isolated with a standalone test page
+       (kept in scratchpad) that ANY box-generating inline element here
+       (border-top, box-shadow, background-image, even bare
+       display:inline-block with no visible styling at all) causes a real
+       Chromium rendering bug: an unrelated word earlier in the SAME
+       wrapping paragraph — nowhere near the span itself — picks up a
+       phantom underline, specifically right at that line's wrap point.
+       ::before + position:absolute (this rule) doesn't dodge it either;
+       every technique tried produced the same artifact. Prose that needs
+       to show this double-negation instead uses the word "NOT (...)" and
+       points at "the box above" rather than re-rendering the bar inline —
+       see Q2/Q3/Q4's working text and Q5's question prompt. */
+    /* padding-top:4px LOOKED separated in isolated testing earlier this
+       session but turned out to visually merge into one bar on the real
+       page — measured via getBoundingClientRect() that the outer bar and
+       the inner .ovl text sat only ~1.7px apart despite the 4px padding
+       being correctly applied (confirmed via getComputedStyle, not
+       assumed). Re-isolated with a dedicated padding-top comparison test
+       (4px/8px/12px side by side, kept in scratchpad) rather than
+       tweaking the live file blind — 4px and 8px were both still
+       ambiguous at this font-size, 12px was the first value that read as
+       unmistakably two separate lines rather than one thick-ish one. */
+    .ovl-outer { position: relative; display: inline-block; padding-top: 12px; line-height: 1; }
+    /* Noticeably thicker than .ovl's 0.09em (roughly 1.8px at this font
+       size) — a NAND gate's own negation is a different KIND of bar from
+       a plain single-variable NOT, not just a taller copy of it, so the
+       two need to read as visually distinct categories at a glance. */
+    .ovl-outer::before { content: ''; position: absolute; top: 0; left: 0; right: 0; border-top: 3px solid currentColor; }
+    /* A THIRD tier, for when an expression that already carries its own
+       .ovl-outer bar (e.g. G1's own answer) gets wrapped in yet another
+       NOT on top of that (Q4, once G1/G2 are substituted back in as
+       their real answers rather than shown as bare symbols). SAME
+       padding-top as .ovl-outer (not more) — each tier's bar sits at the
+       very top of its OWN box, so the gap to the tier immediately below
+       is just that tier's own padding-top, full stop; it doesn't need to
+       additionally account for how tall the nested tier below it turns
+       out to be (that box starts fresh right where this padding ends,
+       and ITS bar is drawn at ITS OWN top). Matching the two values is
+       what keeps the 3rd-to-2nd gap the same size as the 2nd-to-1st gap
+       — deliberately equal spacing, not "however much clearance the
+       inner stack happens to need". Same 3px thickness as .ovl-outer too
+       — both tiers are "a NAND's own bar", just at different heights
+       when one wraps the other; the thickness contrast that matters is
+       NAND-bar vs plain-NOT-bar, not tier vs tier. */
+    .ovl-outer2 { position: relative; display: inline-block; padding-top: 12px; line-height: 1; }
+    .ovl-outer2::before { content: ''; position: absolute; top: 0; left: 0; right: 0; border-top: 3px solid currentColor; }
+    /* Single-column throughout — the circuit lives inside the question
+       card itself (see body markup), not a separate side panel. */
+    .circuit-row { display: flex; align-items: center; gap: .5rem; }
+    .circuit-panel {
+      flex: 1;
+      max-width: 660px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      border: 2px solid var(--colour-ui-primary);
+      cursor: default;
+    }
+    /* quiz-common.css's own light-theme override
+       (:root[data-theme="light"] .circuit-panel { border-color: #e2e8f0; })
+       has higher specificity than a plain .circuit-panel rule and silently
+       wins in light theme otherwise — matching specificity here, later in
+       the cascade, wins it back so the border is the real
+       --colour-ui-primary blue, not a pale wash. */
+    :root[data-theme="light"] .circuit-panel { border-color: var(--colour-ui-primary); }
+    /* Back to the shared width:100% (no fixed pixel width, no
+       overflow-x:auto) now that the circuit's own viewBox is cropped
+       tightly to its actual content (getBBox() measured, not guessed) —
+       the earlier fixed-900px-+ horizontal-scroll approach existed only
+       to compensate for a viewBox with a lot of unused canvas around a
+       small drawing; a tight viewBox scales up cleanly on its own. */
+    .circuit-panel svg { margin: 0 auto; }
+    /* No static box-shadow on the base rule — options-box has none in its
+       own idle state either. The glow exists only inside the pulse
+       animation below, matching options-box's "no shadow until active"
+       pattern. NOT reusing matchPoolPulse itself — its
+       --glow-match-pool-weak/strong variables are deliberately "none" in
+       light theme (options-box's own light-theme cue is its dashed→solid
+       border switch instead), but this panel's border is already
+       always-solid-blue with no such switch to fall back on, so building
+       the pulse straight from --colour-ui-primary-rgb (a real value in
+       both themes) keeps it visible in both. */
+    @keyframes circuitPanelPulse {
+      0%, 100% { box-shadow: 0 0 0 3px rgba(var(--colour-ui-primary-rgb), .12); }
+      50% { box-shadow: 0 0 0 7px rgba(var(--colour-ui-primary-rgb), .35); }
+    }
+    .circuit-panel.needs-pick { animation: circuitPanelPulse 1.1s ease-in-out infinite; }
+    /* Left of the box, same side as .fill-pool-arrow, so the flashing cue
+       always appears in the same place regardless of which box (pool or
+       circuit) it's currently pointing at. */
+    .circuit-arrow {
+      flex: 0 0 auto;
+      font-size: 1rem;
+      color: var(--colour-ui-primary);
+      opacity: 0;
+      transition: opacity .15s;
+    }
+    .circuit-arrow.needs-pick {
+      opacity: 1;
+      animation: fillArrowBounce .8s ease-in-out infinite;
+    }
+    /* Highlighted box around the MC options (Q5 only now) — plain/dashed
+       normally, solid blue + pulsing while no option is picked yet. The
+       .fill-pool box below reuses this exact same treatment for the
+       Q1-Q4 chip pool. */
+    .options-box {
+      padding: .8rem;
+      border: 2px dashed var(--colour-border);
+      border-radius: var(--radius-lg);
+      background: rgba(var(--colour-label-rgb), .05);
+      transition: border-color .15s, background .15s;
+    }
+    .options-box.needs-pick {
+      border-color: var(--colour-ui-primary);
+      border-style: solid;
+      background: rgba(var(--colour-ui-primary-rgb), .06);
+      animation: matchPoolPulse 1.1s ease-in-out infinite;
+    }
+    .fill-pool-wrap { margin-top: .8rem; }
+    .fill-pool-row { display: flex; align-items: center; gap: .5rem; }
+    .fill-pool-arrow { font-size: 1rem; color: var(--colour-ui-primary); opacity: 0; transition: opacity .15s; }
+    .fill-pool-row.needs-pick .fill-pool-arrow { opacity: 1; animation: fillArrowBounce .8s ease-in-out infinite; }
+    @keyframes fillArrowBounce { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(3px); } }
+    .fill-pool {
+      flex: 1;
+      display: flex;
+      flex-wrap: wrap;
+      align-content: flex-start;
+      justify-content: center;
+      gap: .5rem;
+      padding: .8rem;
+      border: 2px dashed var(--colour-border);
+      border-radius: var(--radius-lg);
+      background: rgba(var(--colour-label-rgb), .05);
+      min-height: 3rem;
+      transition: border-color .15s, background .15s;
+    }
+    .fill-pool.needs-pick {
+      border-color: var(--colour-ui-primary);
+      border-style: solid;
+      background: rgba(var(--colour-ui-primary-rgb), .06);
+      animation: matchPoolPulse 1.1s ease-in-out infinite;
+    }
+    /* Pool chips are often single letters (A/B, negated via overline, not
+       extra characters) so they'd otherwise all size to the same cramped
+       ~36px — double that and centre the label in the extra space. Long
+       expression chips (Q2-Q4) simply exceed this min-width naturally. */
+    .fill-pool .match-chip { min-width: 72px; text-align: center; }
+    /* Solid (not translucent) fill is deliberate: these boxes sit directly
+       on top of a wire, and a see-through fill let the wire visually cross
+       right through the text sitting on top of it. An opaque panel-
+       coloured patch cleanly masks the wire behind the label. */
+    .circuit-slot-box { fill: var(--colour-panel); stroke: var(--colour-ui-primary); stroke-width: 1.5px; stroke-dasharray: 4,3; cursor: pointer; }
+    .circuit-slot-box.filled { stroke-dasharray: none; }
+    /* Fill stays the same opaque --colour-panel for .correct/.wrong too —
+       a translucent tint let the wire underneath show straight through
+       the box as a strikethrough line across the text. Correctness is
+       carried entirely by the (now solid, undashed) stroke colour and the
+       text colour instead. */
+    .circuit-slot-box.correct { stroke: var(--colour-ui-correct); }
+    .circuit-slot-box.wrong { stroke: #ff3d66; }
+    /* Locked-in (checked) boxes are no longer clickable — slotClicked()
+       already no-ops once st.ans is true, so the pointer cursor shouldn't
+       keep implying they're interactive. */
+    .circuit-slot-box.correct, .circuit-slot-box.wrong { cursor: default; }
+    .circuit-slot-text { font-size: 22px; font-weight: 700; text-anchor: middle; dominant-baseline: middle; fill: var(--colour-ui-primary); pointer-events: none; }
+    .circuit-slot-text.correct { fill: var(--colour-ui-correct); }
+    .circuit-slot-text.wrong { fill: #ff3d66; }
+    /* Same idea as .circuit-slot-box, just sized for a full expression
+       instead of a single letter. */
+    .circuit-answer-box { fill: var(--colour-panel); stroke: var(--colour-ui-primary); stroke-width: 2px; stroke-dasharray: 6,4; cursor: pointer; }
+    .circuit-answer-box.filled { stroke-dasharray: none; }
+    .circuit-answer-box.correct { stroke: var(--colour-ui-correct); }
+    .circuit-answer-box.wrong { stroke: #ff3d66; }
+    .circuit-answer-box.correct, .circuit-answer-box.wrong { cursor: default; }
+    .circuit-answer-text { font-size: 22px; font-weight: 700; text-anchor: middle; dominant-baseline: middle; fill: var(--colour-ui-primary); pointer-events: none; }
+    .circuit-answer-text.correct { fill: var(--colour-ui-correct); }
+    .circuit-answer-text.wrong { fill: #ff3d66; }
+    /* g1AnswerBox/g2AnswerBox render via <foreignObject> + this HTML class
+       instead of native SVG <text> — their correct answer needs a NOT
+       wrapping an already-negated term (e.g. NOT(NOT A AND B)), which
+       De Morgan's teaches as a SECOND, raised bar over the whole
+       expression, distinct from the inner single-letter overline. SVG
+       text-decoration can't offset overlines to different heights, but
+       plain HTML/CSS can (border-top + padding-top on .ovl-outer /
+       .ovl-outer2, below) — foreignObject is what lets that CSS run
+       inside the SVG canvas. zAnswerBox uses it too now that its
+       options substitute G1/G2 back in as their own real (already
+       .ovl-outer-wrapped) answers, needing a third tier on top. */
+    .circuit-answer-html {
+      width: 100%; height: 100%;
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-body); font-size: 22px; font-weight: 700;
+      color: var(--colour-ui-primary); text-align: center; line-height: 1;
+      pointer-events: none;
+    }
+    .circuit-answer-html.correct { color: var(--colour-ui-correct); }
+    .circuit-answer-html.wrong { color: #ff3d66; }
+  </style>
+</head>
+
+<body>
+  <!-- Hidden defs: only the gate primitives (no swappable circuit — the
+       one circuit lives directly in the visible circuit-panel below,
+       since it's never replaced with a different one). -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" font-family="'Share Tech Mono', monospace">
+    <defs>
+      <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur stdDeviation="2" result="b" />
+        <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+      </filter>
+      <g id="gate-lead-in2">
+        <line x1="-24" y1="-8" x2="-8" y2="-8" style="stroke: var(--colour-bjt)" stroke-width="2" />
+        <line x1="-24" y1="8" x2="-8" y2="8" style="stroke: var(--colour-bjt)" stroke-width="2" />
+      </g>
+      <g id="gate-lead-in1">
+        <line x1="-24" y1="0" x2="-8" y2="0" style="stroke: var(--colour-bjt)" stroke-width="2" />
+      </g>
+      <g id="gate-lead-out">
+        <line x1="24" y1="0" x2="44" y2="0" style="stroke: var(--colour-bjt)" stroke-width="2" />
+      </g>
+      <g id="gate-lead-out-inv">
+        <circle cx="28" cy="0" r="4" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+        <line x1="32" y1="0" x2="44" y2="0" style="stroke: var(--colour-bjt)" stroke-width="2" />
+      </g>
+      <path id="gate-and-body" d="M -8,-16 L 8,-16 A 16,16 0 0 1 8,16 L -8,16 Z"
+        fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+      <path id="gate-tri-body" d="M -8,-16 L -8,16 L 24,0 Z"
+        fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+      <g id="gate-nand-trad"><use href="#gate-lead-in2" /><use href="#gate-and-body" /><use href="#gate-lead-out-inv" /></g>
+      <g id="gate-not-trad"><use href="#gate-lead-in1" /><use href="#gate-tri-body" /><use href="#gate-lead-out-inv" /></g>
+    </defs>
+  </svg>
+
+  <div class="crumb" id="crumb" data-current="Step Through the Circuit"></div>
+  <header>
+    <h1>Digital Electronics</h1>
+    <p>Step Through the Circuit · NAND/NOT Realisation of Z = A&#8242;B + AB&#8242;</p>
+  </header>
+
+  <div class="quiz-wrap single-col" id="quizWrap">
+
+    <!-- RIGHT (now the only column): question, with the persistent circuit
+         embedded directly inside the question card — see file header
+         comment for why the circuit needs to stay visible/revealed across
+         every question rather than living in a separate side panel. -->
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <!-- Single reusable question panel — populated from QUESTIONS[cur] by renderQuestion() -->
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+
+          <!-- Fill-in pool — shown for every kind:'fill' question (Q1-Q4),
+               sits ABOVE the circuit (matching digital_knowledge_logic_
+               gates.html's own Q2 pool-above-targets layout). -->
+          <div class="fill-pool-wrap" id="fillPoolWrap" style="display:none">
+            <div class="fill-pool-row" id="fillPoolRow">
+              <div class="fill-pool-arrow">▶</div>
+              <div class="fill-pool" id="fillPool"></div>
+            </div>
+          </div>
+
+          <!-- Points at the circuit instead of the pool once a chip is
+               picked and awaiting a slot click. Same side (left) and same
+               ▶ glyph as .fill-pool-arrow, so the cue always appears in
+               the same place regardless of which box it's pointing at. -->
+          <div class="circuit-row" id="circuitRow">
+            <div class="circuit-arrow" id="circuitArrow" style="display:none">▶</div>
+            <div class="circuit-panel" id="circuitPanel">
+              <div class="panel-label">Reference Circuit</div>
+              <svg id="circuitRefSvg" viewBox="-10 25 1120 495" xmlns="http://www.w3.org/2000/svg">
+                <g id="mainCircuit">
+            <!-- ==================== INPUT WIRES ==================== -->
+            <text x="10" y="187" font-size="24" font-weight="bold" text-anchor="start" style="fill: var(--colour-signal)">A</text>
+            <line x1="40" y1="180" x2="90" y2="180" style="stroke: var(--colour-series)" stroke-width="2.6" />
+            <circle cx="70" cy="180" r="5" style="fill: var(--colour-series)" />
+
+            <text x="10" y="477" font-size="24" font-weight="bold" text-anchor="start" style="fill: var(--colour-signal)">B</text>
+            <line x1="40" y1="470" x2="142" y2="470" style="stroke: var(--colour-series)" stroke-width="2.6" />
+            <circle cx="110" cy="470" r="5" style="fill: var(--colour-series)" />
+
+            <!-- A: direct to NOT-A, and down-branch to G2 top input (slot2) -->
+            <line x1="70" y1="180" x2="142" y2="180" style="stroke: var(--colour-series)" stroke-width="2.6" />
+            <line x1="70" y1="180" x2="70" y2="400" style="stroke: var(--colour-series)" stroke-width="2.6" />
+            <line x1="70" y1="400" x2="390" y2="400" style="stroke: var(--colour-series)" stroke-width="2.6" />
+
+            <!-- B: direct to NOT-B, and up-branch (jogged) to G1 top input (slot0) -->
+            <line x1="110" y1="470" x2="110" y2="110" style="stroke: var(--colour-series)" stroke-width="2.6" />
+            <line x1="110" y1="110" x2="390" y2="110" style="stroke: var(--colour-series)" stroke-width="2.6" />
+
+            <!-- ==================== NOT GATES ==================== -->
+            <g transform="translate(190,180) scale(2)"><use href="#gate-not-trad" /></g>
+            <g transform="translate(190,470) scale(2)"><use href="#gate-not-trad" /></g>
+
+            <!-- NOT-A output -> G1 bottom input (slot1) -->
+            <line x1="278" y1="180" x2="358" y2="180" style="stroke: var(--colour-series)" stroke-width="2.6" />
+            <line x1="358" y1="180" x2="358" y2="150" style="stroke: var(--colour-series)" stroke-width="2.6" />
+            <line x1="358" y1="150" x2="390" y2="150" style="stroke: var(--colour-series)" stroke-width="2.6" />
+
+            <!-- NOT-B output -> G2 bottom input (slot3) -->
+            <line x1="278" y1="470" x2="358" y2="470" style="stroke: var(--colour-series)" stroke-width="2.6" />
+            <line x1="358" y1="470" x2="358" y2="440" style="stroke: var(--colour-series)" stroke-width="2.6" />
+            <line x1="358" y1="440" x2="390" y2="440" style="stroke: var(--colour-series)" stroke-width="2.6" />
+
+            <!-- ==================== 4 FILL SLOTS (Q1) ==================== -->
+            <g id="slotBox0" class="circuit-slot-box" transform="translate(280,60)" onclick="slotClicked(0)">
+              <rect width="58" height="40" rx="4" />
+              <text id="slotBox0Text" class="circuit-slot-text" x="29" y="22"></text>
+            </g>
+            <g id="slotBox1" class="circuit-slot-box" transform="translate(280,130)" onclick="slotClicked(1)">
+              <rect width="58" height="40" rx="4" />
+              <text id="slotBox1Text" class="circuit-slot-text" x="29" y="22"></text>
+            </g>
+            <g id="slotBox2" class="circuit-slot-box" transform="translate(280,350)" onclick="slotClicked(2)">
+              <rect width="58" height="40" rx="4" />
+              <text id="slotBox2Text" class="circuit-slot-text" x="29" y="22"></text>
+            </g>
+            <g id="slotBox3" class="circuit-slot-box" transform="translate(280,420)" onclick="slotClicked(3)">
+              <rect width="58" height="40" rx="4" />
+              <text id="slotBox3Text" class="circuit-slot-text" x="29" y="22"></text>
+            </g>
+
+            <!-- ==================== LEVEL-1 NAND GATES (G1, G2) ==================== -->
+            <g transform="translate(450,130) scale(2.5)"><use href="#gate-nand-trad" /></g>
+            <g transform="translate(450,420) scale(2.5)"><use href="#gate-nand-trad" /></g>
+
+            <!-- G1 output -> straight run (answer box sits on this) -> bend -> Z top input -->
+            <line x1="560" y1="130" x2="710" y2="130" style="stroke: var(--colour-series)" stroke-width="2.6" />
+            <line x1="710" y1="130" x2="710" y2="240" style="stroke: var(--colour-series)" stroke-width="2.6" />
+            <line x1="710" y1="240" x2="730" y2="240" style="stroke: var(--colour-series)" stroke-width="2.6" />
+            <!-- G2 output -> straight run (answer box sits on this) -> bend -> Z bottom input -->
+            <line x1="560" y1="420" x2="710" y2="420" style="stroke: var(--colour-series)" stroke-width="2.6" />
+            <line x1="710" y1="420" x2="710" y2="280" style="stroke: var(--colour-series)" stroke-width="2.6" />
+            <line x1="710" y1="280" x2="730" y2="280" style="stroke: var(--colour-series)" stroke-width="2.6" />
+            <!-- ==================== FINAL NAND GATE (Z) ==================== -->
+            <g transform="translate(790,260) scale(2.5)"><use href="#gate-nand-trad" /></g>
+            <!-- Z output -> straight run (Q4 answer box sits on this) -> terminal -->
+            <line x1="900" y1="260" x2="1070" y2="260" style="stroke: var(--colour-series)" stroke-width="2.6" />
+            <circle cx="1070" cy="260" r="5" style="fill: var(--colour-signal)" />
+            <text x="1080" y="268" font-size="24" font-weight="bold" text-anchor="start" style="fill: var(--colour-signal)">Z</text>
+            <!-- ==================== INLINE ANSWER BOXES (Q2-Q4), same mechanic as Q1 slots ==================== -->
+            <g id="g1AnswerBox" class="circuit-answer-box" transform="translate(560,45)" onclick="slotClicked(0)">
+              <rect width="120" height="74" rx="6" />
+              <foreignObject x="0" y="0" width="120" height="74">
+                <div xmlns="http://www.w3.org/1999/xhtml" id="g1AnswerBoxText" class="circuit-answer-html"></div>
+              </foreignObject>
+            </g>
+            <g id="g2AnswerBox" class="circuit-answer-box" transform="translate(560,335)" onclick="slotClicked(1)">
+              <rect width="120" height="74" rx="6" />
+              <foreignObject x="0" y="0" width="120" height="74">
+                <div xmlns="http://www.w3.org/1999/xhtml" id="g2AnswerBoxText" class="circuit-answer-html"></div>
+              </foreignObject>
+            </g>
+            <g id="zAnswerBox" class="circuit-answer-box" transform="translate(880,158)" onclick="slotClicked(0)">
+              <rect width="180" height="85" rx="6" />
+              <foreignObject x="0" y="0" width="180" height="85">
+                <div xmlns="http://www.w3.org/1999/xhtml" id="zAnswerBoxText" class="circuit-answer-html"></div>
+              </foreignObject>
+            </g>
+            <!-- ==================== 2-STEP SIMPLIFICATION (Q5, Q6) ==================== -->
+            <g id="step1AnswerBox" class="circuit-answer-box" transform="translate(880,275)" onclick="slotClicked(0)">
+              <rect width="180" height="85" rx="6" />
+              <foreignObject x="0" y="0" width="180" height="85">
+                <div xmlns="http://www.w3.org/1999/xhtml" id="step1AnswerBoxText" class="circuit-answer-html"></div>
+              </foreignObject>
+            </g>
+            <g id="step2AnswerBox" class="circuit-answer-box" transform="translate(880,375)" onclick="slotClicked(0)">
+              <rect width="180" height="85" rx="6" />
+              <foreignObject x="0" y="0" width="180" height="85">
+                <div xmlns="http://www.w3.org/1999/xhtml" id="step2AnswerBoxText" class="circuit-answer-html"></div>
+              </foreignObject>
+            </g>
+                </g>
+                <g id="xyRuler" display="none"></g>
+              </svg>
+            </div>
+          </div>
+
+          <div class="options-box" id="qOptionsBox">
+            <div class="options" id="qOptions"></div>
+          </div>
+          <div class="bits-wrap" id="qTruth" style="display:none">
+            <table class="bits-table">
+              <thead>
+                <tr id="truthGroupHeads"></tr>
+                <tr id="truthColLabels"></tr>
+              </thead>
+              <tbody id="truthBody"></tbody>
+            </table>
+          </div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Summary -->
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
+
+    // ══════════════════════════════════════════════════════════════════════
+    // Q1's 4 signal slots. `html` targets the SVG <text> slot (needs
+    // <tspan> — SVG's innerHTML parser doesn't recognise plain HTML
+    // elements like <span>); `poolHtml` targets the HTML pool-chip
+    // <button> (needs <span> for the same reason in reverse).
+    // ══════════════════════════════════════════════════════════════════════
+    const SLOT_POOL = () => shuffle([
+      { label: 'A', html: 'A', poolHtml: 'A', col: 2 },
+      { label: 'NOT A', html: '<tspan class="ovl">A</tspan>', poolHtml: '<span class="ovl">A</span>', col: 1 },
+      { label: 'B', html: 'B', poolHtml: 'B', col: 0 },
+      { label: 'NOT B', html: '<tspan class="ovl">B</tspan>', poolHtml: '<span class="ovl">B</span>', col: 3 },
+    ]);
+
+    // Symbolic expression builder — write `<O>X</O>` around anything that
+    // should render with an overline (NOT), use "·" for AND and "+" for
+    // OR directly in the template. Produces both the SVG (<tspan>) and
+    // HTML (<span>) markup from one source string, same reasoning as
+    // SLOT_POOL's own html/poolHtml split above. An outer NOT wrapping a
+    // whole sub-expression (not a single variable) is deliberately left
+    // as the word "NOT (...)" rather than a second, raised overline —
+    // true nested overlines need real extra rendering work (a taller bar
+    // measured/positioned above the inner one, in both an SVG and an HTML
+    // context) that wasn't worth it for what's fundamentally a
+    // horizontal-space saving, not a typesetting-accuracy request.
+    // `<O>X</O>` = normal overline (NOT of a single variable). `<OO>X</OO>`
+    // = a SECOND, raised overline over a whole sub-expression that may
+    // itself already contain `<O>` — the De Morgan's-lesson case (e.g.
+    // NOT(NOT A AND B), where the inner NOT-A keeps its own bar and the
+    // outer NOT gets a taller one above it). `<OOO>X</OOO>` = a THIRD,
+    // still-higher bar for when an expression that's already wrapped in
+    // an `<OO>` bar (like G1's own answer) gets wrapped in ANOTHER NOT on
+    // top of that (Q4, once G1/G2 are substituted back in). Native SVG
+    // <text>/<tspan> can't offset overlines to different heights at all,
+    // so whenever a template uses <OO> or <OOO> the .html output falls
+    // back to the SAME HTML/span markup as .poolHtml (real multi-bar
+    // rendering only happens via the foreignObject-based HTML boxes —
+    // see .circuit-answer-html / .ovl-outer / .ovl-outer2).
+    function sym(template) {
+      const hasOuter = /<OO>|<OOO>/.test(template);
+      function build(tag) {
+        return template
+          .replace(/<OOO>/g, `<${tag} class="ovl-outer2">`).replace(/<\/OOO>/g, `</${tag}>`)
+          .replace(/<OO>/g, `<${tag} class="ovl-outer">`).replace(/<\/OO>/g, `</${tag}>`)
+          .replace(/<O>/g, `<${tag} class="ovl">`).replace(/<\/O>/g, `</${tag}>`);
+      }
+      const poolHtml = build('span');
+      return { poolHtml, html: hasOuter ? poolHtml : build('tspan') };
+    }
+    function exprPool(items) {
+      return () => shuffle(items.map(it => ({
+        ...it,
+        ...(it.correct ? { col: 0 } : {}),
+      })));
+    }
+    // G1/G2's own correct-answer templates — reused directly (not
+    // retyped) in Q4's options once "G1"/"G2" get substituted back in as
+    // their real derived values instead of shown as bare symbols.
+    const G1_TPL = '<OO><O>A</O>·B</OO>';
+    const G2_TPL = '<OO>A·<O>B</O></OO>';
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS
+    // ══════════════════════════════════════════════════════════════════════
+
+    const QUESTIONS = [
+      {
+        kind: 'fill',
+        slotIds: ['slotBox0', 'slotBox1', 'slotBox2', 'slotBox3'],
+        text: () => 'This circuit uses only NAND and NOT gates to build up <b>Z</b>. Before working out any gate outputs, <b style="color:var(--colour-ui-primary)">label</b> the 4 highlighted positions on the circuit with the correct signal.',
+        hint: () => 'Trace each highlighted wire back to its source — does it come from A or B directly, or has it passed through a NOT gate first?',
+        options: SLOT_POOL,
+        correctExplain: (st) => {
+          const wrongCount = st.slotPlaced.filter((p, slot) => p !== st.cor[slot]).length;
+          return wrongCount === 0 ? 'All 4 positions labelled correctly' : `${st.slotPlaced.length - wrongCount} of ${st.slotPlaced.length} labelled correctly`;
+        },
+        working: () => `
+    <div class="working-line">The TOP input of each NAND gate comes from the OTHER variable, direct — G1's top input is <b>B</b>, G2's top input is <b>A</b>.</div>
+    <div class="working-line" style="margin-top:.4rem">The BOTTOM input of each NAND gate comes from THIS gate's own variable, but through a NOT gate first — G1's bottom input is <b><tspan class="ovl" style="text-decoration:overline">A</tspan></b> (NOT A), G2's bottom input is <b style="text-decoration:overline">B</b> (NOT B).</div>`,
+      },
+      {
+        kind: 'fill',
+        slotIds: ['g1AnswerBox', 'g2AnswerBox'],
+        text: () => 'With those signals confirmed, what is the output of each NAND gate — the <b>top</b> gate <b>G1</b> (inputs <b>B</b> and <b>NOT A</b>) and the <b>bottom</b> gate <b>G2</b> (inputs <b>A</b> and <b>NOT B</b>)? <b style="color:var(--colour-ui-primary)">Place</b> each answer directly on the circuit.',
+        hint: () => 'A NAND gate\'s output is the AND of its inputs, then inverted — don\'t forget that final inversion on either gate.',
+        options: () => shuffle([
+          { ...sym(G1_TPL), col: 0 },
+          { ...sym(G2_TPL), col: 1 },
+          sym('<O>A</O>·B'),
+          sym('A·<O>B</O>'),
+          sym('<OO>A·B</OO>'),
+          sym('<O>A</O>+B'),
+        ]),
+        correctExplain: (st) => {
+          const wrongCount = st.slotPlaced.filter((p, slot) => p !== st.cor[slot]).length;
+          return wrongCount === 0 ? 'G1 = ' + sym(G1_TPL).poolHtml + ',  G2 = ' + sym(G2_TPL).poolHtml : `${st.slotPlaced.length - wrongCount} of ${st.slotPlaced.length} correct`;
+        },
+        working: () => `
+    <div class="working-line">G1's inputs are AND'ed together first (${sym('<O>A</O>·B').poolHtml}), then the whole thing is inverted by the NAND's own output bubble — that's the raised second bar you can see in the box above (the same rule your teacher's De Morgan's lesson uses). G1 = ${sym(G1_TPL).poolHtml}.</div>
+    <div class="working-line" style="margin-top:.4rem">Exactly the same pattern for G2, mirrored: AND the two inputs (${sym('A·<O>B</O>').poolHtml}), then invert. G2 = ${sym(G2_TPL).poolHtml}.</div>
+    <div class="working-line" style="margin-top:.4rem">Leaving off that final invert bar, or negating the wrong input before ANDing, are the two most common mistakes with NAND gates.</div>`,
+      },
+      {
+        kind: 'fill',
+        slotIds: ['zAnswerBox'],
+        text: () => 'Both first-level outputs are now confirmed on the diagram. Substituting G1 and G2\'s own answers back in, what is <b>Z</b>, the output of the FINAL NAND gate, BEFORE any simplification?',
+        hint: () => 'The final gate is a NAND too — its two inputs are simply G1 and G2\'s own answers from the last two questions.',
+        options: exprPool([
+          { ...sym(`<OOO>(${G1_TPL})·(${G2_TPL})</OOO>`), correct: true },
+          sym(`(${G1_TPL})·(${G2_TPL})`),
+          sym(`<OOO>(${G1_TPL})</OOO>·<OOO>(${G2_TPL})</OOO>`),
+          sym(`(${G1_TPL}) + (${G2_TPL})`),
+        ]),
+        correctExplain: () => 'Z = ' + sym(`<OOO>(${G1_TPL})·(${G2_TPL})</OOO>`).poolHtml,
+        working: () => `
+    <div class="working-total">Same NAND rule one more time, now with G1 and G2's own answers substituted in as the two inputs: AND them together, then invert — that's the THIRD, highest overline you can see in the box above, sitting above the bars G1 and G2 already carried. This is the RAW, un-simplified expression, which the next question simplifies.</div>`,
+      },
+      {
+        kind: 'fill',
+        slotIds: ['step1AnswerBox'],
+        text: () => 'Z = NOT ( [' + sym(G1_TPL).poolHtml + '] · [' + sym(G2_TPL).poolHtml + '] ). Apply De Morgan\'s law to that outer NOT — what do you get? <b style="color:var(--colour-ui-primary)">Place</b> your answer directly on the circuit.',
+        hint: () => 'NOT (X AND Y) = NOT X OR NOT Y — the AND flips to OR, and each side gets its own separate NOT instead of one NOT covering both together. Don\'t worry about cancelling any double negation yet, that\'s the next step.',
+        options: exprPool([
+          { ...sym(`<OOO>(${G1_TPL})</OOO> + <OOO>(${G2_TPL})</OOO>`), correct: true },
+          sym(`<OOO>(${G1_TPL})</OOO>·<OOO>(${G2_TPL})</OOO>`),
+          sym(`(${G1_TPL}) + (${G2_TPL})`),
+          sym(`(${G1_TPL})·(${G2_TPL})`),
+        ]),
+        correctExplain: () => 'Z = ' + sym(`<OOO>(${G1_TPL})</OOO> + <OOO>(${G2_TPL})</OOO>`).poolHtml,
+        working: () => `
+    <div class="working-total">De Morgan's law: NOT (X AND Y) = NOT X OR NOT Y. The AND between G1 and G2 flips to OR, and each one gets its own separate NOT — a third, even higher bar over each — instead of one NOT covering both together, which is the two separate raised bars joined by + you can see in the box above. Keeping AND instead of flipping to OR (one option) or forgetting to negate each side at all (the other two) are the common mistakes at this step. The double negation this creates isn't cancelled yet — that's the next question.</div>`,
+      },
+      {
+        kind: 'fill',
+        slotIds: ['step2AnswerBox'],
+        text: () => 'Each term is now a double negation — NOT applied to something that\'s already NOT\'d (G1 and G2 are themselves NAND outputs). Cancelling that out, what does Z finally simplify to?',
+        hint: () => 'NOT(NOT(anything)) just cancels straight back to that original thing.',
+        options: exprPool([
+          { ...sym('(<O>A</O>·B) + (A·<O>B</O>)'), correct: true },
+          sym('(<O>A</O>·<O>B</O>) + (A·B)'),
+          sym('(<O>A</O>+B)·(A+<O>B</O>)'),
+          sym('<O>A</O>·B·A·<O>B</O>'),
+        ]),
+        correctExplain: () => 'Z = ' + sym('(<O>A</O>·B) + (A·<O>B</O>)').poolHtml,
+        working: () => `
+    <div class="working-step">Each piece double-negates back to what it started as:</div>
+    <div class="working-line">NOT(G1) = NOT(NOT(${sym('<O>A</O>·B').poolHtml})) = ${sym('<O>A</O>·B').poolHtml} — the two NOTs cancel, dropping G1's own NAND-negation entirely. Same for NOT(G2) = ${sym('A·<O>B</O>').poolHtml}.</div>
+    <div class="working-total">Z = ${sym('(<O>A</O>·B) + (A·<O>B</O>)').poolHtml} — keeping the AND/OR unchanged (option C) or leaving it as one big AND (option D) both skip the operator-flip De Morgan's already gave us last question; swapping which variable is negated (option B) gives XNOR instead of this circuit's actual XOR behaviour.</div>`,
+      },
+      {
+        kind: 'truth',
+        inputLabels: () => ['B', 'A'],
+        headerGroups: () => [{ label: 'Inputs', span: 2 }, { label: 'Output', span: 1 }],
+        outputLabel: () => 'Z',
+        text: () => 'Complete the truth table for <b>Z = NOT A AND B, OR A AND NOT B</b>.',
+        hint: () => 'Z is 1 whenever exactly ONE of A, B is 1 — check each row against the simplified expression from the last question.',
+        options: () => buildTableRows2((b, a) => ((a === 0 && b === 1) || (a === 1 && b === 0)) ? 1 : 0),
+        correctExplain: truthCorrectExplain,
+        working: (st) => `
+    <div class="working-line">Z = <span class="ovl">A</span>B + A<span class="ovl">B</span> — the two SOP terms cover exactly the two rows where A and B DIFFER (01 and 10), giving Z = 1. When A and B agree (00 or 11), both terms are 0, so Z = 0.</div>
+    ${truthMistakeLine('B A', st)}`,
+      },
+    ];
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUIZ ENGINE
+    // ══════════════════════════════════════════════════════════════════════
+
+    function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+    function isFill(data) { return data.kind === 'fill'; }
+    function isTruth(data) { return data.kind === 'truth'; }
+
+    // ── kind:'truth' — single-pass, 2 inputs (B, A) — see file header
+    // comment for why this is a local 2-input variant rather than reusing
+    // digital_knowledge_boolean_algebra.html's 3-input buildTableRows. ──
+    function zFromClicks(n) { const m = n % 3; return m === 0 ? null : m - 1; }
+    function buildTableRows2(zFn) {
+      const rows = [];
+      for (let v = 0; v < 4; v++) {
+        const b = (v >> 1) & 1, a = v & 1;
+        rows.push({ inputs: [b, a], z: zFn(b, a) });
+      }
+      return rows;
+    }
+    function truthCorrectExplain(st) {
+      const wrongCount = st.opts.filter((o, i) => zFromClicks(st.clicks[i]) !== st.cor[i]).length;
+      return wrongCount === 0 ? `All ${st.opts.length} rows correct` : `${st.opts.length - wrongCount} of ${st.opts.length} rows correct`;
+    }
+    function truthMistakeLine(labels, st) {
+      const mistakes = st.opts
+        .map((o, i) => ({ o, i }))
+        .filter(({ i }) => zFromClicks(st.clicks[i]) !== st.cor[i])
+        .map(({ o }) => `${labels} = ${o.inputs.join(' ')}`);
+      return mistakes.length
+        ? `<div class="working-step" style="margin-top:.6rem">Incorrect rows:</div><div class="working-line">${mistakes.join(', ')}</div>`
+        : '';
+    }
+    function renderTruth() {
+      const st = Q[cur], data = QUESTIONS[cur];
+      const inputLabels = data.inputLabels();
+      document.getElementById('truthGroupHeads').innerHTML =
+        data.headerGroups().map(g => `<th colspan="${g.span}">${g.label}</th>`).join('');
+      document.getElementById('truthColLabels').innerHTML =
+        inputLabels.map(l => `<th>${l}</th>`).join('') + `<th>${data.outputLabel()}</th>`;
+
+      const body = document.getElementById('truthBody');
+      body.innerHTML = '';
+      st.opts.forEach((row, r) => {
+        const tr = document.createElement('tr');
+        row.inputs.forEach(v => {
+          const td = document.createElement('td');
+          td.textContent = String(v);
+          td.className = 'truth-input-cell';
+          tr.appendChild(td);
+        });
+        const zTd = document.createElement('td');
+        const z = zFromClicks(st.clicks[r]);
+        zTd.textContent = z === null ? '' : String(z);
+        if (st.ans) {
+          zTd.className = 'bits-cell' + (z === st.cor[r] ? ' correct' : ' wrong');
+        } else {
+          zTd.className = 'bits-cell';
+          zTd.addEventListener('click', () => clickTruthZ(r));
+        }
+        tr.appendChild(zTd);
+        body.appendChild(tr);
+      });
+    }
+    function clickTruthZ(r) {
+      const st = Q[cur];
+      if (st.ans) return;
+      st.clicks[r]++;
+      renderQuestion();
+    }
+
+    // ── kind:'fill' (Q1-Q4) ──────────────────────────────────────────────
+    // Shared by all four: a non-consuming pool above the circuit (a chip
+    // stays pickable after being placed) and one-or-more highlighted boxes
+    // ON the circuit itself (data.slotIds), addressed by SLOT index, not
+    // by pool-item index — so a slot's correctness is independent of
+    // which/how-many pool items exist, and the same pool item can be
+    // placed into more than one slot if the question ever needs that
+    // (Q1's 4 signals currently don't, but the model doesn't assume they
+    // won't).
+    function renderFill() {
+      const st = Q[cur], data = QUESTIONS[cur];
+      const picking = st.sel !== null;
+      const needsPick = !st.ans && !picking && st.slotPlaced.some(p => p === null);
+      const circuitNeedsPick = !st.ans && picking;
+      document.getElementById('fillPoolRow').classList.toggle('needs-pick', needsPick);
+      document.getElementById('fillPool').classList.toggle('needs-pick', needsPick);
+      document.getElementById('circuitPanel').classList.toggle('needs-pick', circuitNeedsPick);
+      document.getElementById('circuitArrow').classList.toggle('needs-pick', circuitNeedsPick);
+
+      const pool = document.getElementById('fillPool');
+      pool.innerHTML = '';
+      st.opts.forEach((opt, i) => {
+        const chip = document.createElement('button');
+        const isPicked = st.sel === i;
+        chip.className = 'match-chip' + (isPicked ? ' picked' : '');
+        chip.innerHTML = opt.poolHtml;
+        chip.disabled = st.ans || (picking && !isPicked);
+        if (!chip.disabled) chip.addEventListener('click', (e) => { e.stopPropagation(); selectFillItem(i); });
+        pool.appendChild(chip);
+      });
+
+      data.slotIds.forEach((elId, slot) => {
+        const box = document.getElementById(elId);
+        const txt = document.getElementById(elId + 'Text');
+        const placedIdx = st.slotPlaced[slot];
+        box.classList.remove('filled', 'correct', 'wrong');
+        if (placedIdx === null) {
+          txt.innerHTML = '';
+        } else {
+          txt.innerHTML = st.opts[placedIdx].html;
+          box.classList.add('filled');
+          if (st.ans) box.classList.add(placedIdx === st.cor[slot] ? 'correct' : 'wrong');
+        }
+        txt.classList.toggle('correct', st.ans && placedIdx !== null && placedIdx === st.cor[slot]);
+        txt.classList.toggle('wrong', st.ans && placedIdx !== null && placedIdx !== st.cor[slot]);
+      });
+    }
+    function selectFillItem(i) {
+      const st = Q[cur];
+      if (st.ans) return;
+      st.sel = (st.sel === i) ? null : i;
+      renderQuestion();
+    }
+    function slotClicked(slot) {
+      const st = Q[cur], data = QUESTIONS[cur];
+      if (!isFill(data) || st.ans) return;
+      if (st.sel === null) {
+        if (st.slotPlaced[slot] !== null) { st.slotPlaced[slot] = null; renderQuestion(); }
+        return;
+      }
+      st.slotPlaced[slot] = st.sel;
+      st.sel = null;
+      renderQuestion();
+    }
+    window.slotClicked = slotClicked;
+
+    function isAnswerCorrect(data, st) {
+      if (isFill(data)) return st.slotPlaced.every((p, slot) => p === st.cor[slot]);
+      if (isTruth(data)) return st.clicks.every((n, r) => zFromClicks(n) === st.cor[r]);
+      return st.sel === st.cor;
+    }
+    function selectedLabel(data, st) {
+      if (isFill(data)) {
+        const correctCount = st.slotPlaced.filter((p, slot) => p === st.cor[slot]).length;
+        return `${correctCount} / ${st.slotPlaced.length} correctly placed`;
+      }
+      if (isTruth(data)) {
+        const correct = st.clicks.filter((n, r) => zFromClicks(n) === st.cor[r]).length;
+        return `${correct} / ${st.opts.length} rows correct`;
+      }
+      return (st.sel != null && st.opts[st.sel]) ? st.opts[st.sel].label : '—';
+    }
+    function fillCorrectSelection(i) {
+      const data = QUESTIONS[i], st = Q[i];
+      if (isFill(data)) st.slotPlaced = st.cor.slice();
+      else if (isTruth(data)) st.clicks = st.cor.map(z => z + 1);
+      else st.sel = st.cor;
+    }
+
+    let Q = [];
+    let cur = 0;
+
+    function buildProgressDots() {
+      document.getElementById('progressDots').innerHTML =
+        QUESTIONS.map((_, i) => `<div class="progress-dot" id="dot-${i}"></div>`).join('');
+    }
+
+    function updateProgress() {
+      QUESTIONS.forEach((_, i) => {
+        const d = document.getElementById('dot-' + i);
+        d.className = 'progress-dot';
+        if (i === cur) d.classList.add('active'); else if (Q[i].ans) d.classList.add('done');
+      });
+      document.getElementById('progressLabel').textContent = (cur + 1) + ' / ' + QUESTIONS.length;
+    }
+
+    function renderOptions() {
+      const st = Q[cur];
+      document.getElementById('qOptionsBox').classList.toggle('needs-pick', !st.ans && st.sel === null);
+      const c = document.getElementById('qOptions'); c.innerHTML = '';
+      st.opts.forEach((opt, i) => {
+        const btn = document.createElement('button'); btn.className = 'option-btn';
+        btn.innerHTML = `<span class="option-letter">${LETTERS[i]}</span><span>${opt.label}</span>`;
+        if (st.ans) {
+          btn.disabled = true;
+          if (i === st.cor) { btn.classList.add('correct'); btn.innerHTML += `<span class="result-icon">✓</span>`; }
+          else if (i === st.sel) { btn.classList.add('wrong'); btn.innerHTML += `<span class="result-icon">✗</span>`; }
+          else btn.classList.add('dimmed');
+        } else {
+          if (i === st.sel) btn.classList.add('selected');
+          btn.addEventListener('click', () => selectOption(i));
+        }
+        c.appendChild(btn);
+      });
+    }
+
+    function selectOption(i) {
+      const st = Q[cur];
+      if (st.ans) return;
+      st.sel = i;
+      renderQuestion();
+    }
+
+    // Diagram reveal — driven by each fill question's own .ans flag, NOT
+    // by `cur`, so Prev correctly un-reveals later stages (backQuestion()
+    // clears Q[cur..end].ans) while Next/re-checking keeps earlier
+    // confirmed stages visible regardless of which question is on screen.
+    // Also drives per-question box VISIBILITY: a fill question's box(es)
+    // are only shown once that question is actually being asked (i===cur)
+    // or has already been answered — a question further ahead that hasn't
+    // been reached yet stays hidden rather than sitting on the circuit as
+    // an empty placeholder. The CURRENT fill question's content (as
+    // opposed to visibility) is skipped here — renderFill() above already
+    // renders it live, including in-progress (unanswered) placements this
+    // loop would otherwise wipe.
+    function updateReveal() {
+      const data = QUESTIONS[cur];
+      document.getElementById('fillPoolWrap').style.display = isFill(data) ? '' : 'none';
+      document.getElementById('circuitArrow').style.display = isFill(data) ? '' : 'none';
+      if (!isFill(data)) document.getElementById('circuitPanel').classList.remove('needs-pick');
+
+      QUESTIONS.forEach((qData, i) => {
+        if (!isFill(qData)) return;
+        const st = Q[i];
+        const visible = (i === cur) || st.ans;
+        qData.slotIds.forEach((elId) => {
+          document.getElementById(elId).setAttribute('display', visible ? 'inline' : 'none');
+        });
+        if (i === cur) return;
+        qData.slotIds.forEach((elId, slot) => {
+          const box = document.getElementById(elId);
+          const txt = document.getElementById(elId + 'Text');
+          if (st.ans) {
+            const correctIdx = st.cor[slot];
+            txt.innerHTML = st.opts[correctIdx].html;
+            box.classList.remove('wrong'); box.classList.add('filled', 'correct');
+            txt.classList.remove('wrong'); txt.classList.add('correct');
+          } else {
+            box.classList.remove('filled', 'correct', 'wrong');
+            txt.innerHTML = '';
+            txt.classList.remove('correct', 'wrong');
+          }
+        });
+      });
+
+      if (xyOn) buildXYRuler();
+    }
+
+    /* ─── DEV: xy ruler overlay ─── Console: setXY(1) / setXY(0)  URL: ?xy=1 */
+    let xyOn = false;
+    function buildXYRuler() {
+      const g = document.getElementById('xyRuler');
+      if (!g) return;
+      const vb = document.getElementById('circuitRefSvg').viewBox.baseVal;
+      const offX = vb.x, offY = vb.y, W = vb.width, H = vb.height;
+      const hy = offY + H - 10, vx = offX + 10, col = '#ff00ff';
+      let svg = `<line x1="${offX}" y1="${hy}" x2="${offX + W}" y2="${hy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+      for (let x = 0; x <= W; x += 20) {
+        const gx = offX + x, major = (Math.round(gx) % 100 === 0), len = major ? 10 : 5;
+        svg += `<line x1="${gx}" y1="${hy - len}" x2="${gx}" y2="${hy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+        if (major) svg += `<text x="${gx}" y="${hy - 13}" fill="${col}" font-size="10" text-anchor="middle">${Math.round(gx)}</text>`;
+      }
+      svg += `<line x1="${vx}" y1="${offY}" x2="${vx}" y2="${offY + H}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+      for (let y = 0; y <= H; y += 20) {
+        const gy = offY + y, major = (Math.round(gy) % 100 === 0), len = major ? 10 : 5;
+        svg += `<line x1="${vx}" y1="${gy}" x2="${vx + len}" y2="${gy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+        if (major) svg += `<text x="${vx + 13}" y="${gy + 3}" fill="${col}" font-size="10" text-anchor="start">${Math.round(gy)}</text>`;
+      }
+      g.innerHTML = svg;
+    }
+    function setXY(on) {
+      xyOn = on;
+      const g = document.getElementById('xyRuler');
+      if (!g) return;
+      if (on) buildXYRuler();
+      g.setAttribute('display', on ? 'inline' : 'none');
+    }
+    window.setXY = setXY;
+
+    function renderQuestion() {
+      const data = QUESTIONS[cur], st = Q[cur];
+
+      document.getElementById('qNum').textContent = 'Q' + (cur + 1);
+      document.getElementById('qText').innerHTML = data.text();
+      document.getElementById('qHint').innerHTML = data.hint();
+
+      document.getElementById('qOptionsBox').style.display = (isFill(data) || isTruth(data)) ? 'none' : '';
+      document.getElementById('qTruth').style.display = isTruth(data) ? 'block' : 'none';
+      if (isFill(data)) { renderFill(); }
+      else if (isTruth(data)) { renderTruth(); }
+      else { renderOptions(); }
+
+      const banner = document.getElementById('qBanner');
+      if (st.ans) {
+        const ok = isAnswerCorrect(data, st);
+        banner.className = 'result-banner ' + (ok ? 'correct' : 'wrong');
+        document.getElementById('qIcon').textContent = ok ? '✓' : '✗';
+        document.getElementById('qBannerText').innerHTML = ok ? `Correct! ${data.correctExplain(st)}` : `The correct answer is ${data.correctExplain(st)}`;
+      } else {
+        banner.className = 'result-banner';
+      }
+
+      const working = document.getElementById('qWorking');
+      working.className = 'working-box' + (st.ans ? ' visible' : '');
+      document.getElementById('qWorkingContent').innerHTML = st.ans ? data.working(st) : '';
+
+      document.getElementById('qBack').style.display = cur > 0 ? 'inline-block' : 'none';
+      const check = document.getElementById('qCheck');
+      check.style.display = st.ans ? 'none' : 'inline-block';
+      check.disabled = st.ans || (
+        isFill(data) ? !st.slotPlaced.every(p => p !== null) :
+        isTruth(data) ? !st.clicks.every(n => zFromClicks(n) !== null) :
+        st.sel === null
+      );
+      const isLast = cur === QUESTIONS.length - 1;
+      document.getElementById('qNext').style.display = (st.ans && !isLast) ? 'inline-block' : 'none';
+      document.getElementById('qSummary').style.display = (st.ans && isLast) ? 'inline-block' : 'none';
+
+      updateReveal();
+      updateProgress();
+    }
+
+    function checkAnswer() {
+      const st = Q[cur], data = QUESTIONS[cur];
+      if (st.ans) return;
+      if (isFill(data) ? !st.slotPlaced.every(p => p !== null) : isTruth(data) ? !st.clicks.every(n => zFromClicks(n) !== null) : st.sel === null) return;
+      st.ans = true;
+      renderQuestion();
+      document.getElementById('qBanner').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function scrollToQuestionTop() {
+      document.getElementById('qPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function nextQuestion() { if (cur < QUESTIONS.length - 1) { cur++; renderQuestion(); scrollToQuestionTop(); } }
+
+    function backQuestion() {
+      if (cur <= 0) return;
+      cur--;
+      for (let i = cur; i < QUESTIONS.length; i++) {
+        const data = QUESTIONS[i];
+        Q[i].ans = false;
+        if (isFill(data)) { Q[i].slotPlaced = Q[i].cor.map(() => null); Q[i].sel = null; }
+        else if (isTruth(data)) { Q[i].clicks = Q[i].opts.map(() => 0); }
+        else Q[i].sel = null;
+      }
+      renderQuestion();
+      scrollToQuestionTop();
+    }
+
+    function goToQuestion(n) {
+      cur = Math.max(0, Math.min(QUESTIONS.length - 1, n - 1));
+      document.getElementById('summaryPanel').style.display = 'none';
+      document.getElementById('qPanel').style.display = 'flex';
+      renderQuestion();
+      scrollToQuestionTop();
+    }
+
+    function resetQuiz() {
+      Q = QUESTIONS.map(data => {
+        const opts = data.options();
+        if (isFill(data)) {
+          const cor = data.slotIds.map((_, slotIdx) => opts.findIndex(o => o.col === slotIdx));
+          return { sel: null, ans: false, cor, opts, slotPlaced: cor.map(() => null) };
+        }
+        if (isTruth(data)) {
+          const cor = opts.map(row => row.z);
+          return { ans: false, cor, opts, clicks: opts.map(() => 0) };
+        }
+        return { sel: null, ans: false, cor: opts.findIndex(o => o.type === 'correct'), opts };
+      });
+      cur = 0;
+      document.getElementById('summaryPanel').style.display = 'none';
+      document.getElementById('qPanel').style.display = 'flex';
+      renderQuestion();
+    }
+
+    function showSummary() {
+      document.getElementById('qPanel').style.display = 'none';
+      document.getElementById('summaryPanel').style.display = 'block';
+      const items = QUESTIONS.map((data, i) => {
+        const st = Q[i];
+        const ans = selectedLabel(data, st);
+        const ok = isAnswerCorrect(data, st);
+        const colour = ok ? 'var(--colour-ui-correct)' : '#ff3366';
+        const mark = ok ? '✓' : '✗';
+        return `<div class="summary-item">
+      <div class="summary-item-head"><span class="summary-qnum">Q${i + 1}</span><span class="summary-question">${data.text()}</span></div>
+      <div class="summary-answer" style="color:${colour}">You answered: ${ans} &nbsp; ${mark}</div>
+      <div class="working-box visible">${st.ans ? data.working(st) : ''}</div>
+    </div>`;
+      }).join('');
+      document.getElementById('summaryContent').innerHTML = items;
+      QUESTIONS.forEach((_, i) => { const d = document.getElementById('dot-' + i); if (d) d.className = 'progress-dot done'; });
+      document.getElementById('progressLabel').textContent = 'Complete';
+    }
+
+    buildProgressDots();
+    resetQuiz();
+
+    function goBack(e) { e.preventDefault(); history.back(); }
+    if (history.length > 1) {
+      document.getElementById('menuLink').style.display = '';
+    }
+
+    function jump(n, answered) {
+      if (n < 1 || n > QUESTIONS.length) { console.warn('jump: no question', n); return; }
+      for (let i = 0; i < n - 1; i++) { fillCorrectSelection(i); Q[i].ans = true; }
+      goToQuestion(n);
+      if (answered) { fillCorrectSelection(cur); checkAnswer(); }
+    }
+    window.jump = jump;
+
+    function jumpToSummary() {
+      QUESTIONS.forEach((_, i) => {
+        if (Q[i].ans) return;
+        fillCorrectSelection(i);
+        Q[i].ans = true;
+      });
+      showSummary();
+    }
+    window.jumpToSummary = jumpToSummary;
+
+    {
+      const p = new URLSearchParams(location.search);
+      if (p.has('q')) { if (p.get('q') === 's') jumpToSummary(); else jump(+p.get('q'), p.has('ans')); }
+      if (p.has('xy')) setXY(+p.get('xy') === 1);
+    }
+  </script>
+</body>
+
+</html>
