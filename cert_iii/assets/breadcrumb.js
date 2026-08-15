@@ -21,9 +21,7 @@
         cert_iii: 'Cert III',
         UEEEC0066: 'UEEEC0066',
         UEEEC0069: 'UEEEC0069',
-        bjt: 'BJT',
-        npn: 'NPN',
-        pnp: 'PNP'
+        bjt: 'BJT'
     };
 
     function titleCase(s) {
