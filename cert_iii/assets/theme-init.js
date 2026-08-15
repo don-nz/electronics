@@ -5,12 +5,16 @@
    part below reads the saved preference and sets data-theme on <html>
    before the page paints, so there is no flash of the wrong theme.
 
-   The toggle button itself is injected at runtime (as a fixed-position
-   element, not tied to any per-page markup) so adding the toggle to a page
-   is just one <script src="…/assets/theme-init.js"></script> tag — no HTML
-   changes needed. Every page already loads quiz-common.css or
-   nav-common.css, both of which define the .theme-toggle/.theme-toggle-icon-*
-   rules this button uses.
+   The toggle button itself is injected at runtime — normally inline at
+   the end of the page's own #crumb row (right next to the breadcrumb
+   text, so it sits near the actual content instead of drifting off to
+   the edge of a much wider row/viewport); .theme-toggle-fixed is only a
+   fallback for pages with no #crumb at all. Adding the toggle to a page
+   is just one <script src="…/assets/theme-init.js"></script> tag — no
+   HTML changes needed. Every page already loads quiz-common.css or
+   nav-common.css, both of which define the .theme-toggle/.theme-toggle-state-*
+   rules this button uses — it shows the mode you'd SWITCH TO (sun +
+   "Light Mode" while in dark theme, moon + "Dark Mode" while in light).
    ══════════════════════════════════════════════════════════════════════ */
 
 (function () {
@@ -52,7 +56,9 @@
         btn.title = 'Toggle light/dark theme';
         btn.setAttribute('aria-label', 'Toggle light/dark theme');
         btn.onclick = window.toggleTheme;
-        btn.innerHTML = '<span class="theme-toggle-icon-sun">☀</span><span class="theme-toggle-icon-moon">☾</span>';
+        btn.innerHTML =
+            '<span class="theme-toggle-state theme-toggle-state-sun"><span class="theme-toggle-icon">☀️</span>Light Mode</span>' +
+            '<span class="theme-toggle-state theme-toggle-state-moon"><span class="theme-toggle-icon">🌙</span>Dark Mode</span>';
 
         // Sit inline at the end of the breadcrumb row, matching the page's own
         // content width — not pinned to the viewport corner, which drifts far
