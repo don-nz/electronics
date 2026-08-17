@@ -66,17 +66,73 @@
   Common Collector.
 
   "Colour coded and using numerator over denominator format" (the user's
-  own formatting instruction) — the formula itself has no division in it
-  (∥ and + only), so nothing needs frac()'s stacked layout here; colour-
-  coding applied per the project's established tokens (Zin→colour-gain,
-  RB1/RB2/RE→colour-resistor, β/re′→colour-bjt). Read as a standing
-  convention for this quiz going forward — frac() is already wired in and
-  ready for the first future question that DOES involve an actual division
-  (e.g. an Av formula). Shown in a new `.formula-card` block (styled inline
-  in this file's own <head>, matching quiz-common.css's existing card/
-  border tokens) rather than folded into the question text, since it's
-  meant to read as a standalone formula the reader evaluates against, not a
-  clause in a sentence.
+  own formatting instruction) went through a few rounds before landing on
+  its final form. First pass left the ∥ terms inline (no literal division).
+  User then asked for "3 layers" — tried stacking RB1/RB2/β×(RE+re′) as 3
+  rows with divider lines, but that's mathematically wrong (reads as nested
+  DIVISION, not parallel combination) — user caught this mid-turn ("isn't
+  it: 1"). Fixed to the actual textbook identity: Zin = 1/(1/RB1 + 1/RB2 +
+  1/[...]), via `frac('1', denominatorString)`. Final refinement, matching
+  a hand-drawn class-notes sketch: each reciprocal term ALSO renders as its
+  own small stacked fraction (frac() nested two levels deep), not inline
+  "1/RB1" text — `.working-frac`'s existing CSS (inline-flex column,
+  vertical-align:middle) handles the nesting with zero new CSS. Applies to
+  every question below.
+
+  Question-pool randomization added: `resetQuiz()` calls `shuffle(QUESTIONS)`
+  before mapping to `Q[]` state, same convention as digital_gate_
+  identification.html — every question in the pool appears, just reordered
+  fresh on every page load and every "↺ Restart" click.
+
+  Q2 and Q3 added same session, immediate follow-up. User: *"Can you add the
+  same question but for the 2 other circuits? ie partially bypassed and
+  fully bypassed? The same mini circuit selections are perfect."* Same 4
+  circuits, same shapeGrid, same question SHAPE as Q1 — only the formula
+  shown and which circuit(s) count as correct change. Refactored `options`
+  into a shared `gridOptions(correctIds)` builder (`GRID_CIRCUIT_IDS` is now
+  just a flat 4-id array, no per-question `matches` flag baked in) so all
+  three questions reuse one small helper instead of three separate shuffle/
+  map blocks. Q2: Zin using β×re′ (fully-bypassed Zb, no RE term at all) —
+  matches ONLY mini-ce-bypassed, the other 3 circuits all keep at least a
+  partial RE term in their own Zb. Q3: Zin using β×(RE1+re′) (partially-
+  bypassed Zb) — matches ONLY mini-ce-part-bypassed; CE/CC use the full RE
+  (not RE1) and the fully-bypassed circuit has no resistor term at all, so
+  neither is a valid near-miss here despite superficial shape similarity.
+
+  Q4 added same session, immediate follow-up — a `kind:'match'` question,
+  the FIRST in this file to actually use it (kept wired in since Q1's own
+  build but unused until now). User: *"I'd like to add a question based on:
+  UEEEC0069 -> digital_knowledge_logic_gates.html -> Q2. The 4 mini circuits
+  will be below and the names of each in the select box. The idea is match
+  the name to the circuit."* Ported that file's own Q2 pattern exactly:
+  `columns()` returns the 4 mini circuits as `{ shapeId }` (rendered as SVG
+  thumbnails instead of text column headers), `options()` is the POOL — 4
+  plain-text circuit names the student drags/clicks into the column they
+  belong under. `col` index for each pool option is looked up via
+  `GRID_CIRCUIT_IDS.indexOf(id)` rather than hardcoded 0-3, so the match
+  stays correct even if that array's order ever changes.
+
+  Upgrading `matchChipContent()`/`renderMatch()` to support `{shapeId}`
+  columns required porting logic_gates.html's more capable version wholesale
+  (the version copied in earlier only handled plain-string columns, since no
+  question needed shapes-as-columns until now) — column titles now render
+  via `<svg viewBox="0 0 140 200"><use href="#id"/></svg>`, this file's own
+  mini-circuit viewBox convention (logic_gates.html's own version uses ITS
+  gate shapes' 96-unit viewBox instead — swapped for the correct one here,
+  not copied verbatim). Also ported a `.match-chip-shape` CSS override into
+  this file's own `<head>` (logic_gates.html defines it locally too, not in
+  quiz-common.css) — unused by Q4 itself (the pool holds text, not shapes)
+  but kept for parity/future use.
+
+  `leftPanel` gained a third value, `'none'` (Q4 uses it) — collapses the
+  layout to a single centred column via `.quiz-wrap.single-col` (already
+  defined in quiz-common.css, added when logic_gates.html was built) rather
+  than showing an empty/irrelevant circuit-panel. Replaced the old inline
+  circuit-panel-visibility lines in `renderQuestion()` with a dedicated
+  `swapLeftPanel(mode)` function (ported from logic_gates.html's own,
+  extended with the 3rd default/circuitId-reference mode this file still
+  needs for parity with its siblings, even though no question here uses it
+  yet).
 
   Same data-driven QUESTIONS[] engine as bjt_knowledge_basics.html — see
   that file's header comment for the core architecture. Add/reorder
@@ -107,6 +163,10 @@
       text-align: center;
       letter-spacing: .02em;
     }
+    /* Shape-valued match chips (none yet in this file, kept for parity
+       with digital_knowledge_logic_gates.html's own match engine) */
+    .match-chip-shape { padding: .15rem .3rem; }
+    .match-col-items .match-chip-shape { width: auto; margin: 0 auto; }
   </style>
 </head>
 
@@ -129,8 +189,9 @@
       <g id="mres"><rect x="-7" y="-15" width="14" height="30" rx="2" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="1.5" /></g>
       <g id="mres-small"><rect x="-6" y="-10" width="12" height="20" rx="2" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="1.5" /></g>
       <g id="mcap">
-        <line x1="-7" y1="-4" x2="7" y2="-4" style="stroke: var(--colour-capacitor)" stroke-width="2" />
-        <line x1="-7" y1="4" x2="7" y2="4" style="stroke: var(--colour-capacitor)" stroke-width="2" />
+        <line x1="-7" y1="-3" x2="7" y2="-3" style="stroke: var(--colour-capacitor)" stroke-width="2" />
+        <rect x="-7" y="-2" width="14" height="6" style="fill: var(--colour-panel)" />
+        <line x1="-7" y1="3" x2="7" y2="3" style="stroke: var(--colour-capacitor)" stroke-width="2" />
       </g>
       <g id="mgnd">
         <line x1="0" y1="0" x2="0" y2="6" style="stroke: var(--colour-gnd)" stroke-width="1.5" />
@@ -178,7 +239,7 @@
       <g id="mini-ce-bypassed">
         <line x1="20" y1="15" x2="120" y2="15" style="stroke: var(--colour-series)" stroke-width="1.5" />
         <text x="70" y="8" style="fill: var(--colour-supply)" font-size="12" text-anchor="middle" font-weight="bold">+V<tspan baseline-shift="sub" font-size="8">CC</tspan></text>
-        <line x1="20" y1="185" x2="120" y2="185" style="stroke: var(--colour-series)" stroke-width="1.5" />
+        <line x1="20" y1="185" x2="135" y2="185" style="stroke: var(--colour-series)" stroke-width="1.5" />
         <use href="#mgnd" transform="translate(70,185)" />
         <line x1="45" y1="15" x2="45" y2="185" style="stroke: var(--colour-series)" stroke-width="1.5" />
         <use href="#mres" transform="translate(45,58)" />
@@ -188,9 +249,9 @@
         <use href="#mres" transform="translate(104,40)" />
         <line x1="104" y1="134" x2="104" y2="185" style="stroke: var(--colour-series)" stroke-width="1.5" />
         <use href="#mres" transform="translate(104,160)" />
-        <line x1="104" y1="134" x2="118" y2="134" style="stroke: var(--colour-series)" stroke-width="1.5" />
-        <line x1="118" y1="134" x2="118" y2="185" style="stroke: var(--colour-series)" stroke-width="1.5" />
-        <use href="#mcap" transform="translate(118,160)" />
+        <line x1="104" y1="134" x2="128" y2="134" style="stroke: var(--colour-series)" stroke-width="1.5" />
+        <line x1="128" y1="134" x2="128" y2="185" style="stroke: var(--colour-series)" stroke-width="1.5" />
+        <use href="#mcap" transform="translate(128,160)" />
         <g transform="translate(90,100)"><use href="#mbjt-npn-standard" /></g>
       </g>
 
@@ -199,7 +260,7 @@
       <g id="mini-ce-part-bypassed">
         <line x1="20" y1="15" x2="120" y2="15" style="stroke: var(--colour-series)" stroke-width="1.5" />
         <text x="70" y="8" style="fill: var(--colour-supply)" font-size="12" text-anchor="middle" font-weight="bold">+V<tspan baseline-shift="sub" font-size="8">CC</tspan></text>
-        <line x1="20" y1="185" x2="120" y2="185" style="stroke: var(--colour-series)" stroke-width="1.5" />
+        <line x1="20" y1="185" x2="135" y2="185" style="stroke: var(--colour-series)" stroke-width="1.5" />
         <use href="#mgnd" transform="translate(70,185)" />
         <line x1="45" y1="15" x2="45" y2="185" style="stroke: var(--colour-series)" stroke-width="1.5" />
         <use href="#mres" transform="translate(45,58)" />
@@ -208,11 +269,11 @@
         <line x1="104" y1="15" x2="104" y2="66" style="stroke: var(--colour-series)" stroke-width="1.5" />
         <use href="#mres" transform="translate(104,40)" />
         <line x1="104" y1="134" x2="104" y2="185" style="stroke: var(--colour-series)" stroke-width="1.5" />
-        <use href="#mres-small" transform="translate(104,148)" />
+        <use href="#mres-small" transform="translate(104,146)" />
         <use href="#mres-small" transform="translate(104,172)" />
-        <line x1="104" y1="160" x2="118" y2="160" style="stroke: var(--colour-series)" stroke-width="1.5" />
-        <line x1="118" y1="160" x2="118" y2="185" style="stroke: var(--colour-series)" stroke-width="1.5" />
-        <use href="#mcap" transform="translate(118,172)" />
+        <line x1="104" y1="159" x2="128" y2="159" style="stroke: var(--colour-series)" stroke-width="1.5" />
+        <line x1="128" y1="159" x2="128" y2="185" style="stroke: var(--colour-series)" stroke-width="1.5" />
+        <use href="#mcap" transform="translate(128,172)" />
         <g transform="translate(90,100)"><use href="#mbjt-npn-standard" /></g>
       </g>
     </defs>
@@ -302,25 +363,34 @@
     // QUESTIONS — see bjt_knowledge_basics.html's header comment for the
     // full field reference. This file also uses leftPanel 'shapeGrid' (see
     // bjt_knowledge_biasing.html's own header comment for that mechanic).
-    // Currently Q1.
+    // resetQuiz() shuffles this array's ORDER on every load/restart (same
+    // convention as digital_gate_identification.html) — every question in
+    // the pool still appears, just in a random order each time, not a
+    // fixed Q1/Q2/Q3 sequence.
+    // Currently Q1-3 — same 4-circuit shapeGrid reused by all three, each
+    // asking which circuit(s) a different Zb variant's Zin formula applies
+    // to (unbypassed CE+CC / fully bypassed / partially bypassed).
     // ══════════════════════════════════════════════════════════════════════
 
-    const GRID_CIRCUITS = [
-      { id: 'mini-ce', matches: true },
-      { id: 'mini-cc', matches: true },
-      { id: 'mini-ce-bypassed', matches: false },
-      { id: 'mini-ce-part-bypassed', matches: false },
-    ];
+    const GRID_CIRCUIT_IDS = ['mini-ce', 'mini-cc', 'mini-ce-bypassed', 'mini-ce-part-bypassed'];
+    // Shared options()-builder for every question in this quiz — same 4
+    // circuits every time, only WHICH id(s) count as correct changes.
+    function gridOptions(correctIds) {
+      return () => shuffle(GRID_CIRCUIT_IDS.map(id => ({ label: id, type: correctIds.includes(id) ? 'correct' : 'wrong', shapeId: id })));
+    }
 
     const QUESTIONS = [
       {
         leftPanel: 'shapeGrid',
         kind: 'multi',
         text: () => `
-    <div class="formula-card"><b class="colour-gain">Z<sub>in</sub></b> = <b class="colour-resistor">R<sub>B1</sub></b>∥<b class="colour-resistor">R<sub>B2</sub></b>∥<b class="colour-bjt">β</b>×(<b class="colour-resistor">R<sub>E</sub></b>+<b class="colour-bjt">r<sub>e</sub>′</b>)</div>
+    <div class="formula-card"><b class="colour-gain">Z<sub>in</sub></b> = ${frac(
+      '1',
+      `${frac('1', '<b class="colour-resistor">R<sub>B1</sub></b>')} + ${frac('1', '<b class="colour-resistor">R<sub>B2</sub></b>')} + ${frac('1', '<b class="colour-bjt">β</b>×(<b class="colour-resistor">R<sub>E</sub></b>+<b class="colour-bjt">r<sub>e</sub>′</b>)')}`
+    )}</div>
     This formula is used to calculate the AC input resistance for a circuit. <b style="color:var(--colour-ui-primary)">Click</b> every circuit below that it applies to.`,
         hint: () => 'Ask: does this circuit\'s FULL emitter resistor sit in the AC signal path, with no capacitor bypassing any part of it? A bypass capacitor — full or partial — changes what "RE" means in the formula, even if the rest of the shape still looks familiar.',
-        options: () => shuffle(GRID_CIRCUITS.map(c => ({ label: c.id, type: c.matches ? 'correct' : 'wrong', shapeId: c.id }))),
+        options: gridOptions(['mini-ce', 'mini-cc']),
         correctExplain: (st) => {
           const nums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join(' & ');
           return `Circuits <b>${nums}</b> — Common Emitter and Common Collector`;
@@ -336,6 +406,84 @@
     <div class="working-total">The partially-bypassed CE circuit only bypasses PART of the emitter resistance — its own Zb formula uses <b class="colour-resistor">RE1</b> (the still-unbypassed portion) in place of the full <b class="colour-resistor">RE</b>. It LOOKS similar to this formula's shape, but a genuinely different resistor is being substituted in — a common trap if you're pattern-matching on shape alone rather than checking exactly which resistor sits in the AC path.</div>`;
         }
       },
+      {
+        leftPanel: 'shapeGrid',
+        kind: 'multi',
+        text: () => `
+    <div class="formula-card"><b class="colour-gain">Z<sub>in</sub></b> = ${frac(
+      '1',
+      `${frac('1', '<b class="colour-resistor">R<sub>B1</sub></b>')} + ${frac('1', '<b class="colour-resistor">R<sub>B2</sub></b>')} + ${frac('1', '<b class="colour-bjt">β</b>×<b class="colour-bjt">r<sub>e</sub>′</b>')}`
+    )}</div>
+    This formula is used to calculate the AC input resistance for a circuit. <b style="color:var(--colour-ui-primary)">Click</b> every circuit below that it applies to.`,
+        hint: () => 'Ask: is the emitter resistor shorted completely out of the AC path by a bypass capacitor, leaving NOTHING but re′ in the base-impedance term?',
+        options: gridOptions(['mini-ce-bypassed']),
+        correctExplain: (st) => {
+          const num = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join('');
+          return `Circuit <b>${num}</b> — CE with the emitter fully bypassed`;
+        },
+        working: (st) => {
+          const correctNum = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join('');
+          const wrongNums = st.opts.map((o, i) => o.type === 'wrong' ? i + 1 : null).filter(Boolean).join(' & ');
+          return `
+    <div class="working-step">Circuit ${correctNum} — CE, fully bypassed:</div>
+    <div class="working-line">A bypass capacitor shorts the ENTIRE <b class="colour-resistor">RE</b> to AC ground — from the base's point of view, the emitter leg contains nothing but the transistor's own <b class="colour-bjt">re′</b>. No resistor term survives in <b class="colour-gain">Zb</b> at all.</div>
+    <div class="working-step" style="margin-top:.6rem">Circuits ${wrongNums} — don't match:</div>
+    <div class="working-line">Common Emitter and Common Collector both keep the FULL <b class="colour-resistor">RE</b> in the AC path — their own Zb is β×(RE+re′), a genuinely bigger formula than this one. The partially-bypassed circuit keeps its unbypassed portion (<b class="colour-resistor">RE1</b>) in the formula too — β×(RE1+re′) — close in shape, but still has a resistor term this fully-bypassed formula simply doesn't have.</div>`;
+        }
+      },
+      {
+        leftPanel: 'shapeGrid',
+        kind: 'multi',
+        text: () => `
+    <div class="formula-card"><b class="colour-gain">Z<sub>in</sub></b> = ${frac(
+      '1',
+      `${frac('1', '<b class="colour-resistor">R<sub>B1</sub></b>')} + ${frac('1', '<b class="colour-resistor">R<sub>B2</sub></b>')} + ${frac('1', '<b class="colour-bjt">β</b>×(<b class="colour-resistor">R<sub>E1</sub></b>+<b class="colour-bjt">r<sub>e</sub>′</b>)')}`
+    )}</div>
+    This formula is used to calculate the AC input resistance for a circuit. <b style="color:var(--colour-ui-primary)">Click</b> every circuit below that it applies to.`,
+        hint: () => 'Ask: is the emitter resistance split into two separate resistors, with only ONE of them (RE1) still sitting in the AC path — the other shorted out by its own bypass capacitor?',
+        options: gridOptions(['mini-ce-part-bypassed']),
+        correctExplain: (st) => {
+          const num = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join('');
+          return `Circuit <b>${num}</b> — CE with the emitter partially bypassed`;
+        },
+        working: (st) => {
+          const correctNum = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join('');
+          const wrongNums = st.opts.map((o, i) => o.type === 'wrong' ? i + 1 : null).filter(Boolean).join(' & ');
+          return `
+    <div class="working-step">Circuit ${correctNum} — CE, partially bypassed:</div>
+    <div class="working-line">Only the LOWER portion of the split emitter resistance (<b class="colour-resistor">RE2</b>) is shorted to AC ground by its own bypass capacitor — <b class="colour-resistor">RE1</b>, the still-unbypassed portion, remains in the AC path and keeps its own place in <b class="colour-gain">Zb</b>'s formula.</div>
+    <div class="working-step" style="margin-top:.6rem">Circuits ${wrongNums} — don't match:</div>
+    <div class="working-line">Common Emitter and Common Collector both use the FULL <b class="colour-resistor">RE</b> (not just a portion of it) — β×(RE+re′), a genuinely different resistor. The fully-bypassed circuit has no resistor term left at all — β×re′ — since its entire RE is bypassed, not just part of it.</div>`;
+        }
+      },
+      {
+        leftPanel: 'none',
+        kind: 'match',
+        columns: () => GRID_CIRCUIT_IDS.map(id => ({ shapeId: id })),
+        text: () => 'Match each circuit below to its correct name.',
+        hint: () => 'Check three things: is there a resistor at the top (RC)? Is there a bypass capacitor at all? If there is one, does it sit beside the WHOLE emitter resistor, or just part of a SPLIT one?',
+        options: () => shuffle([
+          { label: 'Common Emitter', col: GRID_CIRCUIT_IDS.indexOf('mini-ce') },
+          { label: 'Common Collector', col: GRID_CIRCUIT_IDS.indexOf('mini-cc') },
+          { label: 'CE — Fully Bypassed', col: GRID_CIRCUIT_IDS.indexOf('mini-ce-bypassed') },
+          { label: 'CE — Partially Bypassed', col: GRID_CIRCUIT_IDS.indexOf('mini-ce-part-bypassed') },
+        ]),
+        correctExplain: (st) => {
+          const wrongCount = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).length;
+          return wrongCount === 0 ? 'All 4 circuits named correctly' : `${st.opts.length - wrongCount} of ${st.opts.length} circuits named correctly`;
+        },
+        working: (st) => {
+          const mistakes = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).map(o => o.label);
+          const mistakeLine = mistakes.length
+            ? `<div class="working-step" style="margin-top:.6rem">Misplaced:</div><div class="working-line">${mistakes.join(', ')}</div>`
+            : '';
+          return `
+    <div class="working-step">Reading each circuit:</div>
+    <div class="working-line"><b class="colour-gain">Common Emitter</b> — a resistor at the top (RC), a single resistor at the bottom (RE), no bypass capacitor anywhere. <b class="colour-gain">Common Collector</b> — same base-divider, but NO resistor at the top at all — a straight wire to +VCC — the giveaway that this stage has no RC and the output must come from the emitter instead.</div>
+    <div class="working-line" style="margin-top:.4rem"><b class="colour-gain">CE — Fully Bypassed</b> — RC present, plus a bypass capacitor sitting alongside the WHOLE emitter resistor. <b class="colour-gain">CE — Partially Bypassed</b> — RC present, the emitter resistor split into two stacked resistors, with the bypass capacitor only alongside the LOWER one.</div>
+    ${mistakeLine}`;
+        }
+      },
     ];
 
     // ══════════════════════════════════════════════════════════════════════
@@ -349,9 +497,16 @@
     function isMulti(data) { return data.kind === 'multi'; }
     function isMatch(data) { return data.kind === 'match'; }
 
-    // ── kind:'match' — ported from digital_knowledge_logic_families.html.
-    // Not used by any question yet, kept ready for a future one.
-    function matchChipContent(opt) { return opt.label; }
+    // ── kind:'match' — columns() may return plain strings OR `{ shapeId }`
+    // (rendered as one of this file's own mini circuit thumbnails instead
+    // of text — see digital_knowledge_logic_gates.html's own Q2 for the
+    // pattern this was ported from). Pool/placed chips work the same way
+    // via opt.shapeId, though no question here uses that side of it yet.
+    function matchChipContent(opt, constrained) {
+      if (!opt.shapeId) return opt.label;
+      const svgStyle = constrained ? 'width:100%;max-width:92px;height:auto;display:block' : 'width:92px;height:auto;display:block';
+      return `<svg viewBox="0 0 140 200" style="${svgStyle}"><use href="#${opt.shapeId}"/></svg>`;
+    }
     function renderMatch() {
       const st = Q[cur], data = QUESTIONS[cur];
       const cols = data.columns();
@@ -368,7 +523,7 @@
         if (st.place[i] !== null) return;
         const chip = document.createElement('button');
         const isPicked = st.sel === i;
-        chip.className = 'match-chip' + (isPicked ? ' picked' : '');
+        chip.className = 'match-chip' + (isPicked ? ' picked' : '') + (opt.shapeId ? ' match-chip-shape' : '');
         chip.innerHTML = matchChipContent(opt);
         chip.disabled = st.ans || (picking && !isPicked);
         if (!chip.disabled) chip.addEventListener('click', (e) => { e.stopPropagation(); selectPoolItem(i); });
@@ -386,14 +541,14 @@
 
         const arrow = document.createElement('div'); arrow.className = 'match-col-arrow'; arrow.textContent = '▼';
         const title = document.createElement('div'); title.className = 'match-col-title';
-        title.innerHTML = col;
+        title.innerHTML = (typeof col === 'string') ? col : `<svg viewBox="0 0 140 200" style="width:100%;max-width:110px;display:block;margin:0 auto"><use href="#${col.shapeId}"/></svg>`;
         const items = document.createElement('div'); items.className = 'match-col-items';
 
         st.opts.forEach((opt, i) => {
           if (st.place[i] !== colIdx) return;
           const chip = document.createElement('button');
-          chip.className = 'match-chip';
-          chip.innerHTML = matchChipContent(opt);
+          chip.className = 'match-chip' + (opt.shapeId ? ' match-chip-shape' : '');
+          chip.innerHTML = matchChipContent(opt, true);
           if (st.ans) {
             chip.disabled = true;
             chip.classList.add(st.place[i] === st.cor[i] ? 'correct' : 'wrong');
@@ -451,6 +606,17 @@
     function showCircuitRef(id, label) {
       document.getElementById('circuitRefUse').setAttribute('href', '#' + id);
       document.getElementById('circuitRefLabel').textContent = label || 'Reference Circuit';
+    }
+
+    // leftPanel: 'shapeGrid' (the 4-circuit grid) | 'none' (no left column
+    // at all — collapses to single-col, for match questions with their own
+    // full-width columns) | unset (a single circuitId reference diagram,
+    // unused so far in this file but kept for parity with its siblings).
+    function swapLeftPanel(mode) {
+      document.getElementById('qShapeGridPanel').style.display = mode === 'shapeGrid' ? 'block' : 'none';
+      document.querySelector('.circuit-panel').style.display = (mode === 'shapeGrid' || mode === 'none') ? 'none' : '';
+      document.querySelector('.circuit-col').style.display = mode === 'none' ? 'none' : '';
+      document.getElementById('quizWrap').classList.toggle('single-col', mode === 'none');
     }
 
     function isAnswerCorrect(data, st) {
@@ -535,9 +701,8 @@
       document.getElementById('qText').innerHTML = data.text(st);
       document.getElementById('qHint').innerHTML = data.hint(st);
 
-      document.querySelector('.circuit-panel').style.display = data.leftPanel === 'shapeGrid' ? 'none' : '';
-      document.getElementById('qShapeGridPanel').style.display = data.leftPanel === 'shapeGrid' ? 'block' : 'none';
-      if (data.leftPanel !== 'shapeGrid') showCircuitRef(data.circuitId, data.circuitLabel);
+      swapLeftPanel(data.leftPanel);
+      if (data.leftPanel !== 'shapeGrid' && data.leftPanel !== 'none') showCircuitRef(data.circuitId, data.circuitLabel);
 
       document.getElementById('qMatch').style.display = isMatch(data) ? 'flex' : 'none';
       document.getElementById('qOptions').style.display = (isMatch(data) || data.leftPanel === 'shapeGrid') ? 'none' : '';
@@ -626,6 +791,7 @@
     }
 
     function resetQuiz() {
+      shuffle(QUESTIONS);
       Q = QUESTIONS.map(data => {
         const opts = data.options();
         if (isMatch(data)) {
