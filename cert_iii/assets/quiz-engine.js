@@ -30,7 +30,7 @@
   Phase 2: the two `*_basics.html` templates; Phase 3 so far:
   bjt_knowledge_ac_params_formulas.html):
   `kind`: unset (single-select) | 'multi' | 'match' (plain, `matchByLabel`,
-  or `reusablePool` — see below) | 'bits'.
+  or `reusablePool` — see below) | 'bits' | 'truth' (see below).
   `leftPanel`: unset/'circuit' (a static circuit-panel div, optionally swapped
   per-question via showCircuitRef(data.circuitId, data.circuitLabel,
   data.circuitViewBox, data.circuitLoad, data.circuitAmmeter) if the page has
@@ -121,9 +121,24 @@
   fall back to the SHAPE_VIEWBOX global, so only questions that need a
   different scale from the file's own default have to say so.
 
-  NOT YET included (exists in exactly one page, not needed by any file
-  migrated so far — add when a truth-table file gets migrated):
-  `kind:'truth'`.
+  `kind:'truth'` — an interactive truth table: read-only input columns in
+  natural binary-counting row order, plus one click-cyclable output column
+  (blank -> 0 -> 1 -> blank per cell, via zFromClicks()/clickTruthZ() — the
+  same click-cycle shape as `kind:'bits'`'s own bitFromClicks(), kept as its
+  own separately-named function since the two kinds are conceptually
+  different tables). `st.opts` is an array of `{ inputs: [...], z }` rows,
+  built by `data.options()`. See renderTruth()'s own header comment for the
+  two header shapes it supports (`data.headerGroups()` fixed grouped header
+  vs `data.inputsHeading()`/`outputHeading()` plus an optional
+  `data.inputCounts()` 2-or-3-input toggle) and which project files use
+  which. `truthCorrectExplain(st)`/`truthMistakeLine(labels, st)` are
+  shared, gate-agnostic helpers every 'truth' question's own
+  correctExplain()/working() can call directly — the actual gate-logic
+  data (which rows produce which Z, e.g. GATE_FN/buildTruthRows in
+  digital_knowledge_logic_gates.html) stays page-local, same as
+  AMP_CIRCUITS/GRID_CIRCUITS for shapeGrid — every file's own truth-table
+  CONTENT is different enough (single gate vs multi-gate staged network)
+  that centralising it wouldn't fit every file.
 
   Every function that runs on EVERY render regardless of the current
   question's own kind (the qMatch/qBits/qOptions display toggles inside
@@ -164,10 +179,35 @@ function frac(num, den) { return `<span class="working-frac"><span class="num">$
 function isMulti(data) { return data.kind === 'multi'; }
 function isMatch(data) { return data.kind === 'match'; }
 function isBits(data) { return data.kind === 'bits'; }
+function isTruth(data) { return data.kind === 'truth'; }
 function bitFromClicks(n) { const m = n % 3; return m === 0 ? null : m - 1; }
+// 'truth' cells cycle the same blank→0→1→blank way as 'bits' cells — kept as
+// its own identically-implemented function (not an alias) since the two
+// kinds' semantics are conceptually different (a truth table's Z column vs
+// a fixed bit pattern) and every prior kind in this engine gets its own
+// same-shaped helper, even when the logic happens to match.
+function zFromClicks(n) { const m = n % 3; return m === 0 ? null : m - 1; }
+// Shared, gate-agnostic correctExplain() for any 'truth' question.
+function truthCorrectExplain(st) {
+  const wrongCount = st.opts.filter((o, i) => zFromClicks(st.clicks[i]) !== st.cor[i]).length;
+  return wrongCount === 0 ? `All ${st.opts.length} rows correct` : `${st.opts.length - wrongCount} of ${st.opts.length} rows correct`;
+}
+// Shared "list the wrong rows" working() fragment — `labels` is the
+// space-joined input column labels (e.g. "C B A" or "A"), supplied by the
+// question since column labels/order are genuinely per-question.
+function truthMistakeLine(labels, st) {
+  const mistakes = st.opts
+    .map((o, i) => ({ o, i }))
+    .filter(({ i }) => zFromClicks(st.clicks[i]) !== st.cor[i])
+    .map(({ o }) => `${labels} = ${o.inputs.join(' ')}`);
+  return mistakes.length
+    ? `<div class="working-step" style="margin-top:.6rem">Incorrect rows:</div><div class="working-line">${mistakes.join(', ')}</div>`
+    : '';
+}
 
 function isAnswerCorrect(data, st) {
   if (isBits(data)) return st.clicks.every((row, r) => row.every((n, c) => bitFromClicks(n) === st.cor[r][c]));
+  if (isTruth(data)) return st.clicks.every((n, r) => zFromClicks(n) === st.cor[r]);
   if (isMatch(data)) {
     if (data.reusablePool) return st.assign.every((_, c) => isColumnCorrectReusable(st, c));
     if (data.matchByLabel) return st.corLabel.every((_, c) => matchColumnCorrect(st, c));
@@ -183,6 +223,10 @@ function selectedLabel(data, st) {
     let correct = 0, total = 0;
     st.clicks.forEach((row, r) => row.forEach((n, c) => { total++; if (bitFromClicks(n) === st.cor[r][c]) correct++; }));
     return `${correct} / ${total} bits correct`;
+  }
+  if (isTruth(data)) {
+    const correct = st.clicks.filter((n, r) => zFromClicks(n) === st.cor[r]).length;
+    return `${correct} / ${st.opts.length} rows correct`;
   }
   if (isMatch(data)) {
     if (data.reusablePool) {
@@ -210,6 +254,7 @@ function selectedLabel(data, st) {
 function fillCorrectSelection(i) {
   const data = QUESTIONS[i], st = Q[i];
   if (isBits(data)) st.clicks = st.cor.map(row => row.map(bit => bit + 1)); // clicks bit+1 -> bitFromClicks() lands on 0/1 (0 would land on blank)
+  else if (isTruth(data)) st.clicks = st.cor.map(z => z + 1); // same +1 trick as bits: zFromClicks(z+1) lands back on z
   else if (isMatch(data)) {
     if (data.reusablePool) st.assign = st.assign.map((_, c) => st.opts.findIndex(o => o.cols.includes(c)));
     else st.place = st.cor.slice();
@@ -255,7 +300,10 @@ function renderShapeGrid() {
       if (selected) cell.classList.add('selected');
       cell.addEventListener('click', () => selectOption(i));
     }
-    cell.innerHTML = `<span class="shape-num">${i + 1}</span><svg viewBox="${data.shapeViewBox || SHAPE_VIEWBOX}"><use href="#${opt.shapeId}"/></svg>`;
+    const content = opt.shapeId
+      ? `<svg viewBox="${data.shapeViewBox || SHAPE_VIEWBOX}"><use href="#${opt.shapeId}"/></svg>`
+      : `<div class="shape-cell-text">${opt.label}</div>`;
+    cell.innerHTML = `<span class="shape-num">${i + 1}</span>${content}`;
     c.appendChild(cell);
   });
 }
@@ -530,6 +578,134 @@ function clickBit(r, c) {
   renderQuestion();
 }
 
+// ── kind:'truth' — a staged/interactive truth table: read-only input
+// columns (natural binary-counting row order — a truth table shouldn't
+// shuffle) plus one click-cyclable output column (blank -> 0 -> 1 -> blank
+// per cell, via zFromClicks/clickTruthZ). st.opts is an array of
+// { inputs: [...], z } rows; data.options() (or data.options(n) — see
+// below) builds them.
+//
+// Two header shapes exist across the project's truth-table files, and this
+// function supports BOTH, branching on which fields a question provides:
+//   - data.headerGroups() -> [{label, span}, ...] fixed grouped header row
+//     (targets #truthGroupHeads) — the more common shape (boolean_algebra/
+//     logic_combos/truth_tables.html), for staged/multi-gate build-ups
+//     where the columns naturally fall into named groups ("Inputs",
+//     "Stage 1", "Output", etc).
+//   - data.inputsHeading()/data.outputHeading() -> single "Inputs"/"Output"
+//     header cells (targets #truthInputHead/#truthOutputHead), optionally
+//     paired with data.inputCounts()/data.defaultInputCount()/a 2-or-3-input
+//     TOGGLE (targets #truthToggle) — digital_knowledge_logic_gates.html's
+//     own single-gate-at-a-time shape, where inputLabels()/options() take
+//     the current input count `n` as an argument instead of being called
+//     plain (every other 'truth' field is called the same way as other
+//     kinds' fields; only these two differ, and only for this shape).
+// Either way, data.inputLabels() (or data.inputLabels(n)) and
+// data.outputLabel() feed the shared #truthColLabels row, and the row body
+// itself (targets #truthBody) is rendered identically regardless of shape.
+function renderTruth() {
+  const st = Q[cur], data = QUESTIONS[cur];
+  const inputLabels = data.inputCounts ? data.inputLabels(st.n) : data.inputLabels();
+
+  // Staged/multi-gate build-ups (digital_knowledge_logic_combos.html,
+  // digital_truth_tables.html) optionally dim already-irrelevant columns
+  // and draw a double-line divider between column groups (raw inputs |
+  // staged outputs | final output), and/or show extra read-only reference
+  // columns AFTER the fillable Z column (e.g. previewing a later stage's
+  // own output ahead of time). All three are optional per question — a
+  // single-pass 'truth' question (no staging) simply omits them and
+  // nothing is highlighted/dimmed/trailing.
+  const highlight = data.highlightLabels ? data.highlightLabels() : [];
+  const breaks = data.groupBreakAfter ? data.groupBreakAfter() : [];
+  const trailingLabels = data.trailingLabels ? data.trailingLabels() : [];
+  const colClass = i => (highlight.length && !highlight.includes(inputLabels[i]) ? ' truth-dim' : '') + (breaks.includes(i) ? ' truth-group-end' : '');
+  const trailingClass = highlight.length ? ' truth-dim' : '';
+
+  if (data.headerGroups) {
+    const groupHeadsEl = document.getElementById('truthGroupHeads');
+    if (groupHeadsEl) groupHeadsEl.innerHTML = data.headerGroups().map(g => `<th colspan="${g.span}">${g.label}</th>`).join('');
+  } else {
+    const inputHeadEl = document.getElementById('truthInputHead');
+    if (inputHeadEl) { inputHeadEl.colSpan = inputLabels.length; inputHeadEl.innerHTML = data.inputsHeading(); }
+    const outputHeadEl = document.getElementById('truthOutputHead');
+    if (outputHeadEl) outputHeadEl.textContent = data.outputHeading();
+    const toggle = document.getElementById('truthToggle');
+    if (toggle) {
+      if (data.inputCounts) {
+        toggle.style.display = 'flex';
+        toggle.innerHTML = '';
+        data.inputCounts().forEach(n => {
+          const btn = document.createElement('button');
+          btn.className = 'truth-toggle-btn' + (st.n === n ? ' active' : '');
+          btn.textContent = n + '-input';
+          btn.addEventListener('click', () => setTruthInputCount(n));
+          toggle.appendChild(btn);
+        });
+      } else {
+        toggle.style.display = 'none';
+      }
+    }
+  }
+
+  const colLabelsEl = document.getElementById('truthColLabels');
+  if (colLabelsEl) {
+    colLabelsEl.innerHTML = inputLabels.map((l, i) => `<th class="${colClass(i)}">${l}</th>`).join('') +
+      `<th>${data.outputLabel()}</th>` +
+      trailingLabels.map(l => `<th class="${trailingClass}">${l}</th>`).join('');
+  }
+
+  const body = document.getElementById('truthBody');
+  body.innerHTML = '';
+  st.opts.forEach((row, r) => {
+    const tr = document.createElement('tr');
+    row.inputs.forEach((v, i) => {
+      const td = document.createElement('td');
+      td.textContent = String(v);
+      td.className = 'truth-input-cell' + colClass(i);
+      tr.appendChild(td);
+    });
+    const zTd = document.createElement('td');
+    const z = zFromClicks(st.clicks[r]);
+    zTd.textContent = z === null ? '' : String(z);
+    if (st.ans) {
+      zTd.className = 'bits-cell' + (z === st.cor[r] ? ' correct' : ' wrong');
+    } else {
+      zTd.className = 'bits-cell';
+      zTd.addEventListener('click', () => clickTruthZ(r));
+    }
+    tr.appendChild(zTd);
+    (row.trailing || []).forEach(v => {
+      const td = document.createElement('td');
+      td.textContent = v === null ? '' : String(v);
+      td.className = 'truth-input-cell' + trailingClass;
+      tr.appendChild(td);
+    });
+    body.appendChild(tr);
+  });
+}
+
+function clickTruthZ(r) {
+  const st = Q[cur];
+  if (st.ans) return;
+  st.clicks[r]++;
+  renderQuestion();
+}
+
+// Only relevant for questions with data.inputCounts (the 2/3-input toggle
+// shape) — switching input count rebuilds the table from scratch for the
+// new n and clears any existing answer, since the previous table's clicks
+// don't mean anything once the row count itself has changed.
+function setTruthInputCount(n) {
+  const st = Q[cur], data = QUESTIONS[cur];
+  if (st.n === n) return;
+  st.n = n;
+  st.opts = data.options(n);
+  st.cor = st.opts.map(row => row.z);
+  st.clicks = st.opts.map(() => 0);
+  st.ans = false;
+  renderQuestion();
+}
+
 function renderQuestion() {
   const data = QUESTIONS[cur], st = Q[cur];
   const multi = isMulti(data);
@@ -542,13 +718,17 @@ function renderQuestion() {
   if (qMatchEl) qMatchEl.style.display = isMatch(data) ? 'flex' : 'none';
   const qBitsEl = document.getElementById('qBits');
   if (qBitsEl) qBitsEl.style.display = isBits(data) ? 'block' : 'none';
+  const qTruthEl = document.getElementById('qTruth');
+  if (qTruthEl) qTruthEl.style.display = isTruth(data) ? 'block' : 'none';
   const qOptionsEl = document.getElementById('qOptions');
-  if (qOptionsEl) qOptionsEl.style.display = (isMatch(data) || isBits(data) || data.leftPanel === 'shapeGrid') ? 'none' : '';
+  if (qOptionsEl) qOptionsEl.style.display = (isMatch(data) || isBits(data) || isTruth(data) || data.leftPanel === 'shapeGrid') ? 'none' : '';
 
   if (isMatch(data)) {
     if (data.reusablePool) renderMatchReusable(); else renderMatch();
   } else if (isBits(data)) {
     renderBits();
+  } else if (isTruth(data)) {
+    renderTruth();
   } else if (data.leftPanel === 'shapeGrid') {
     renderShapeGrid();
   } else {
@@ -588,14 +768,23 @@ function renderQuestion() {
   check.disabled = st.ans || (
     isMatch(data) ? (data.reusablePool ? !st.assign.every(a => a !== null) : !st.opts.every((o, i) => o.col === null || st.place[i] !== null)) :
     isBits(data) ? !st.clicks.every(row => row.every(n => bitFromClicks(n) !== null)) :
+    isTruth(data) ? !st.clicks.every(n => zFromClicks(n) !== null) :
     (multi ? st.sel.length === 0 : st.sel === null)
   );
   const isLast = cur === QUESTIONS.length - 1;
   document.getElementById('qNext').style.display = (st.ans && !isLast) ? 'inline-block' : 'none';
   document.getElementById('qSummary').style.display = (st.ans && isLast) ? 'inline-block' : 'none';
 
-  swapLeftPanel(data.leftPanel || 'circuit');
-  if ((data.leftPanel || 'circuit') === 'circuit') showCircuitRef(data.circuitId, data.circuitLabel, data.circuitViewBox, data.circuitLoad, data.circuitAmmeter);
+  // Default to 'circuit' only when the question actually carries a
+  // circuitId — most files always set leftPanel explicitly whenever a
+  // circuit shows (so this never mattered before), but some files (e.g.
+  // digital_knowledge_boolean_algebra.html) mix circuit and non-circuit
+  // questions and only set circuitId, never leftPanel, on the ones that
+  // need it — defaulting bare to 'circuit' would show an empty circuit
+  // panel on every OTHER question in that file.
+  const panelMode = data.leftPanel || (data.circuitId ? 'circuit' : 'none');
+  swapLeftPanel(panelMode);
+  if (panelMode === 'circuit') showCircuitRef(data.circuitId, data.circuitLabel, data.circuitViewBox, data.circuitLoad, data.circuitAmmeter);
   if (RENDER_EXTRA) RENDER_EXTRA();
   updateProgress();
 }
@@ -608,6 +797,7 @@ function checkAnswer() {
     else if (!st.opts.every((o, i) => o.col === null || st.place[i] !== null)) return;
   }
   else if (isBits(data)) { if (!st.clicks.every(row => row.every(n => bitFromClicks(n) !== null))) return; }
+  else if (isTruth(data)) { if (!st.clicks.every(n => zFromClicks(n) !== null)) return; }
   else if (isMulti(data) ? st.sel.length === 0 : st.sel === null) return;
   st.ans = true;
   renderQuestion();
@@ -635,6 +825,7 @@ function backQuestion() {
       Q[i].sel = null;
     }
     else if (isBits(data)) { Q[i].clicks = Q[i].opts.map(() => [0, 0, 0, 0]); }
+    else if (isTruth(data)) { Q[i].clicks = Q[i].opts.map(() => 0); }
     else Q[i].sel = isMulti(data) ? [] : null;
   }
   renderQuestion();
@@ -700,6 +891,17 @@ function goToQuestion(n) { // 1-based, for URL/jump compatibility
 function resetQuiz() {
   if (RESET_EXTRA) RESET_EXTRA();
   Q = QUESTIONS.map(data => {
+    if (isTruth(data)) {
+      // 'truth' questions may offer an input-count toggle (see
+      // data.inputCounts) — if so, options() takes the current count as an
+      // argument instead of being called plain, since the rows themselves
+      // depend on it. Checked BEFORE the generic `data.options()` call
+      // below, since calling it plain here would pass undefined as `n`.
+      const n = data.inputCounts ? data.defaultInputCount() : undefined;
+      const opts = data.inputCounts ? data.options(n) : data.options();
+      const cor = opts.map(row => row.z);
+      return { ans: false, cor, opts, clicks: opts.map(() => 0), n };
+    }
     const opts = data.options();
     if (isBits(data)) {
       const cor = opts.map(row => [3, 2, 1, 0].map(shift => (row.value >> shift) & 1));

@@ -23,6 +23,21 @@
   questions and the staged truth-table build-ups. See
   digital_knowledge_logic_gates.html's header comment for the fuller field
   reference this file's engine still follows.
+
+  Migrated to the shared cert_iii/assets/quiz-engine.js engine. This file's
+  own staged-build-up truth questions (data.highlightLabels()/
+  groupBreakAfter()/trailingLabels()) prompted generalising the shared
+  renderTruth() beyond what digital_knowledge_boolean_algebra.html's
+  single-pass truth question needed — all three are optional per question,
+  so boolean_algebra.html's own migration (done earlier this session) needed
+  no changes. This file's own `buildStagedRows()` (row builder taking
+  extraFn/zFn/trailingFn — different shape from boolean_algebra.html's
+  simpler buildTableRows(fn), and from logic_gates.html's array-based
+  buildTruthRows(n,fn)) stays page-local, same reasoning as every other
+  file's own gate-logic content. Needs CIRCUIT_SVG_ID='circuitRefSvg' —
+  no other globals (SHAPE_VIEWBOX/MATCH_COL_TITLE_MAX_WIDTH defaults
+  already match this file's own shapeGrid viewBox and match column max
+  width; no SUMMARY_CIRCUIT_REF, summary always shows swapLeftPanel('none')).
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -31,6 +46,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="../../assets/theme-init.js"></script>
+  <script src="../../assets/quiz-engine.js"></script>
   <title>Digital Electronics Knowledge Quiz 3</title>
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
     rel="stylesheet">
@@ -365,7 +381,8 @@
   </div>
 
   <script>
-    const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
+    CIRCUIT_SVG_ID = 'circuitRefSvg';
+
     // Fixed top header-row groups for the staged build-up questions
     // (Q6-Q8) — the same four labels stay put across all three, whichever
     // column is the fillable one for that particular question.
@@ -612,24 +629,6 @@
       },
     ];
 
-    // ══════════════════════════════════════════════════════════════════════
-    // QUIZ ENGINE — generic; driven entirely by QUESTIONS[] via index.
-    // Trimmed from digital_knowledge_logic_gates.html's engine: no 'match'
-    // or 'bits' kinds (unused here), plus one addition — leftPanel:'circuit'.
-    // ══════════════════════════════════════════════════════════════════════
-
-    function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
-
-    function isMulti(data) { return data.kind === 'multi'; }
-    function isTruth(data) { return data.kind === 'truth'; }
-
-    // ── kind:'truth' shared helpers (see digital_knowledge_logic_gates.html
-    // for the fuller version this is adapted from — this file has no
-    // input-count toggle, since every 'truth' question here is fixed at 3
-    // raw inputs, matching the lesson's own "up to three inputs" spec
-    // exactly; all of them are staged build-ups now, built via
-    // buildStagedRows below). ──
-    function zFromClicks(n) { const m = n % 3; return m === 0 ? null : m - 1; }
     // Builds the staged build-up-the-truth-table rows (Q6–Q8) — always the
     // same 8 rows in C,B,A counting order, with any extra reference
     // columns DERIVED from c,b,a — e.g. X = B AND A — so they must stay
@@ -651,361 +650,10 @@
       }
       return rows;
     }
-    function truthCorrectExplain(st) {
-      const wrongCount = st.opts.filter((o, i) => zFromClicks(st.clicks[i]) !== st.cor[i]).length;
-      return wrongCount === 0 ? `All ${st.opts.length} rows correct` : `${st.opts.length - wrongCount} of ${st.opts.length} rows correct`;
-    }
-    function truthMistakeLine(labels, st) {
-      const mistakes = st.opts
-        .map((o, i) => ({ o, i }))
-        .filter(({ i }) => zFromClicks(st.clicks[i]) !== st.cor[i])
-        .map(({ o }) => `${labels} = ${o.inputs.join(' ')}`);
-      return mistakes.length
-        ? `<div class="working-step" style="margin-top:.6rem">Incorrect rows:</div><div class="working-line">${mistakes.join(', ')}</div>`
-        : '';
-    }
 
-    function isAnswerCorrect(data, st) {
-      if (isTruth(data)) return st.clicks.every((n, r) => zFromClicks(n) === st.cor[r]);
-      if (!isMulti(data)) return st.sel === st.cor;
-      const a = [...st.sel].sort((x, y) => x - y), b = [...st.cor].sort((x, y) => x - y);
-      return a.length === b.length && a.every((v, i) => v === b[i]);
-    }
-    function selectedLabel(data, st) {
-      if (isTruth(data)) {
-        const correct = st.clicks.filter((n, r) => zFromClicks(n) === st.cor[r]).length;
-        return `${correct} / ${st.opts.length} rows correct`;
-      }
-      if (!isMulti(data)) return (st.sel != null && st.opts[st.sel]) ? st.opts[st.sel].label : '—';
-      const asLabel = i => data.leftPanel === 'shapeGrid' ? (i + 1) : LETTERS[i];
-      return st.sel.length ? [...st.sel].sort((a, b) => a - b).map(asLabel).join(', ') : '—';
-    }
-    function fillCorrectSelection(i) {
-      const data = QUESTIONS[i], st = Q[i];
-      if (isTruth(data)) st.clicks = st.cor.map(z => z + 1);
-      else if (isMulti(data)) st.sel = [...st.cor];
-      else st.sel = st.cor;
-    }
-
-    let Q = [];
-    let cur = 0;
-
-    function buildProgressDots() {
-      document.getElementById('progressDots').innerHTML =
-        QUESTIONS.map((_, i) => `<div class="progress-dot" id="dot-${i}"></div>`).join('');
-    }
-
-    function updateProgress() {
-      QUESTIONS.forEach((_, i) => {
-        const d = document.getElementById('dot-' + i);
-        d.className = 'progress-dot';
-        if (i === cur) d.classList.add('active'); else if (Q[i].ans) d.classList.add('done');
-      });
-      document.getElementById('progressLabel').textContent = (cur + 1) + ' / ' + QUESTIONS.length;
-    }
-
-    function renderShapeGrid() {
-      const st = Q[cur];
-      const c = document.getElementById('shapeGridCells'); c.innerHTML = '';
-      st.opts.forEach((opt, i) => {
-        const cell = document.createElement('div'); cell.className = 'shape-cell';
-        const selected = st.sel.includes(i);
-        if (st.ans) {
-          if (opt.type === 'correct') cell.classList.add(selected ? 'correct' : 'missed');
-          else cell.classList.add(selected ? 'wrong' : 'dimmed');
-        } else {
-          if (selected) cell.classList.add('selected');
-          cell.addEventListener('click', () => selectOption(i));
-        }
-        const content = opt.shapeId
-          ? `<svg viewBox="-32 -36 96 76"><use href="#${opt.shapeId}"/></svg>`
-          : `<div class="shape-cell-text">${opt.label}</div>`;
-        cell.innerHTML = `<span class="shape-num">${i + 1}</span>${content}`;
-        c.appendChild(cell);
-      });
-    }
-
-    function renderOptions() {
-      const st = Q[cur], data = QUESTIONS[cur], multi = isMulti(data);
-      const c = document.getElementById('qOptions'); c.innerHTML = '';
-      st.opts.forEach((opt, i) => {
-        const btn = document.createElement('button'); btn.className = 'option-btn';
-        const selected = multi ? st.sel.includes(i) : i === st.sel;
-        btn.innerHTML = `<span class="option-letter">${LETTERS[i]}</span><span>${opt.label}</span>`;
-        if (st.ans) {
-          btn.disabled = true;
-          if (opt.type === 'correct') {
-            const missed = multi && !selected;
-            btn.classList.add(missed ? 'missed' : 'correct');
-            btn.innerHTML += `<span class="result-icon">${missed ? '○' : '✓'}</span>`;
-          } else if (selected) { btn.classList.add('wrong'); btn.innerHTML += `<span class="result-icon">✗</span>`; }
-          else btn.classList.add('dimmed');
-        } else {
-          if (selected) btn.classList.add('selected');
-          btn.addEventListener('click', () => selectOption(i));
-        }
-        c.appendChild(btn);
-      });
-    }
-
-    function renderTruth() {
-      const st = Q[cur], data = QUESTIONS[cur];
-      const inputLabels = data.inputLabels();
-      // highlightLabels() names the already-known column(s) actually needed
-      // to derive this question's fillable column; groupBreakAfter() gives
-      // 0-based column indices to draw a double-line divider after (raw
-      // inputs | staged outputs | final output). Both optional — every
-      // 'truth' question in this file is a staged build-up and defines
-      // them (Q6-Q8), but the guard is kept so a future single-pass truth
-      // question (no staging) would still render correctly with nothing
-      // highlighted or dimmed.
-      const highlight = data.highlightLabels ? data.highlightLabels() : [];
-      const breaks = data.groupBreakAfter ? data.groupBreakAfter() : [];
-      // trailingLabels() names optional read-only reference columns shown
-      // AFTER the fillable column (e.g. Q6 previewing Y/Z) — plain, not
-      // highlighted, not interactive, exactly like a given input column.
-      const trailingLabels = data.trailingLabels ? data.trailingLabels() : [];
-      // Only dim once a question actually declares highlightLabels() — see
-      // the note above; currently always true, kept as a defensive guard.
-      const colClass = i => (highlight.length && !highlight.includes(inputLabels[i]) ? ' truth-dim' : '') + (breaks.includes(i) ? ' truth-group-end' : '');
-      const trailingClass = highlight.length ? ' truth-dim' : '';
-      // headerGroups() gives the top header row as fixed {label, span}
-      // groups (e.g. Inputs/Stage 1/Stage 2/Stage 3) — same set of labels
-      // for every staged question, regardless of which column is
-      // currently the fillable one.
-      document.getElementById('truthGroupHeads').innerHTML =
-        data.headerGroups().map(g => `<th colspan="${g.span}">${g.label}</th>`).join('');
-      document.getElementById('truthColLabels').innerHTML =
-        inputLabels.map((l, i) => `<th class="${colClass(i)}">${l}</th>`).join('') +
-        `<th>${data.outputLabel()}</th>` +
-        trailingLabels.map(l => `<th class="${trailingClass}">${l}</th>`).join('');
-
-      const body = document.getElementById('truthBody');
-      body.innerHTML = '';
-      st.opts.forEach((row, r) => {
-        const tr = document.createElement('tr');
-        row.inputs.forEach((v, i) => {
-          const td = document.createElement('td');
-          td.textContent = String(v);
-          td.className = 'truth-input-cell' + colClass(i);
-          tr.appendChild(td);
-        });
-        const zTd = document.createElement('td');
-        const z = zFromClicks(st.clicks[r]);
-        zTd.textContent = z === null ? '' : String(z);
-        if (st.ans) {
-          zTd.className = 'bits-cell' + (z === st.cor[r] ? ' correct' : ' wrong');
-        } else {
-          zTd.className = 'bits-cell';
-          zTd.addEventListener('click', () => clickTruthZ(r));
-        }
-        tr.appendChild(zTd);
-        (row.trailing || []).forEach(v => {
-          const td = document.createElement('td');
-          td.textContent = v === null ? '' : String(v);
-          td.className = 'truth-input-cell' + trailingClass;
-          tr.appendChild(td);
-        });
-        body.appendChild(tr);
-      });
-    }
-
-    function clickTruthZ(r) {
-      const st = Q[cur];
-      if (st.ans) return;
-      st.clicks[r]++;
-      renderQuestion();
-    }
-
-    function selectOption(i) {
-      const st = Q[cur], data = QUESTIONS[cur];
-      if (st.ans) return;
-      if (isMulti(data)) {
-        const pos = st.sel.indexOf(i);
-        if (pos >= 0) st.sel.splice(pos, 1); else st.sel.push(i);
-      } else {
-        st.sel = i;
-      }
-      renderQuestion();
-    }
-
-    function renderQuestion() {
-      const data = QUESTIONS[cur], st = Q[cur];
-      const multi = isMulti(data);
-
-      document.getElementById('qNum').textContent = 'Q' + (cur + 1);
-      document.getElementById('qText').innerHTML = data.text(st);
-      document.getElementById('qHint').innerHTML = data.hint(st);
-
-      document.getElementById('qTruth').style.display = isTruth(data) ? 'block' : 'none';
-      document.getElementById('qOptions').style.display = isTruth(data) ? 'none' : '';
-      if (isTruth(data)) {
-        renderTruth();
-      } else if (data.leftPanel === 'shapeGrid') {
-        document.getElementById('qOptions').innerHTML = '';
-        renderShapeGrid();
-      } else {
-        renderOptions();
-      }
-
-      if (data.circuitId) {
-        document.getElementById('circuitRefUse').setAttribute('href', '#' + data.circuitId);
-        document.getElementById('circuitRefLabel').textContent = data.circuitLabel || 'Reference Circuit';
-      }
-
-      const selList = document.getElementById('qSelectedList');
-      if (multi) {
-        selList.style.display = '';
-        selList.textContent = st.sel.length
-          ? `Selected: ${[...st.sel].sort((a, b) => a - b).map(i => data.leftPanel === 'shapeGrid' ? i + 1 : LETTERS[i]).join(', ')}`
-          : (data.leftPanel === 'shapeGrid' ? 'Click the boxes above to select your answer.' : 'Click every option that applies.');
-      } else {
-        selList.style.display = 'none';
-      }
-
-      const banner = document.getElementById('qBanner');
-      if (st.ans) {
-        const ok = isAnswerCorrect(data, st);
-        banner.className = 'result-banner ' + (ok ? 'correct' : 'wrong');
-        document.getElementById('qIcon').textContent = ok ? '✓' : '✗';
-        document.getElementById('qBannerText').innerHTML = ok ? `Correct! ${data.correctExplain(st)}` : `The correct answer is ${data.correctExplain(st)}`;
-      } else {
-        banner.className = 'result-banner';
-      }
-
-      const working = document.getElementById('qWorking');
-      working.className = 'working-box' + (st.ans ? ' visible' : '');
-      document.getElementById('qWorkingContent').innerHTML = st.ans ? data.working(st) : '';
-
-      document.getElementById('qBack').style.display = cur > 0 ? 'inline-block' : 'none';
-      const check = document.getElementById('qCheck');
-      check.style.display = st.ans ? 'none' : 'inline-block';
-      check.disabled = st.ans || (
-        isTruth(data) ? !st.clicks.every(n => zFromClicks(n) !== null) :
-        (multi ? st.sel.length === 0 : st.sel === null)
-      );
-      const isLast = cur === QUESTIONS.length - 1;
-      document.getElementById('qNext').style.display = (st.ans && !isLast) ? 'inline-block' : 'none';
-      document.getElementById('qSummary').style.display = (st.ans && isLast) ? 'inline-block' : 'none';
-
-      swapLeftPanel(data.leftPanel === 'shapeGrid' ? 'shapeGrid' : (data.circuitId ? 'circuit' : 'none'));
-      updateProgress();
-    }
-
-    function checkAnswer() {
-      const st = Q[cur], data = QUESTIONS[cur];
-      if (st.ans) return;
-      if (isTruth(data)) { if (!st.clicks.every(n => zFromClicks(n) !== null)) return; }
-      else if (isMulti(data) ? st.sel.length === 0 : st.sel === null) return;
-      st.ans = true;
-      renderQuestion();
-      document.getElementById('qBanner').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-
-    function scrollToQuestionTop() {
-      document.getElementById('qPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-
-    function nextQuestion() { if (cur < QUESTIONS.length - 1) { cur++; renderQuestion(); scrollToQuestionTop(); } }
-
-    function backQuestion() {
-      if (cur <= 0) return;
-      cur--;
-      for (let i = cur; i < QUESTIONS.length; i++) {
-        const data = QUESTIONS[i];
-        Q[i].ans = false;
-        if (isTruth(data)) { Q[i].clicks = Q[i].opts.map(() => 0); }
-        else Q[i].sel = isMulti(data) ? [] : null;
-      }
-      renderQuestion();
-      scrollToQuestionTop();
-    }
-
-    function swapLeftPanel(mode) {
-      document.getElementById('circuitPanelDiv').style.display = mode === 'circuit' ? '' : 'none';
-      document.getElementById('qShapeGridPanel').style.display = mode === 'shapeGrid' ? 'block' : 'none';
-      document.getElementById('quizWrap').classList.toggle('single-col', mode === 'none');
-    }
-
-    function goToQuestion(n) {
-      cur = Math.max(0, Math.min(QUESTIONS.length - 1, n - 1));
-      document.getElementById('summaryPanel').style.display = 'none';
-      document.getElementById('qPanel').style.display = 'flex';
-      renderQuestion();
-      scrollToQuestionTop();
-    }
-
-    function resetQuiz() {
-      Q = QUESTIONS.map(data => {
-        if (isTruth(data)) {
-          const opts = data.options();
-          const cor = opts.map(row => row.z);
-          return { ans: false, cor, opts, clicks: opts.map(() => 0) };
-        }
-        const opts = data.options();
-        if (isMulti(data)) {
-          const cor = opts.map((o, i) => o.type === 'correct' ? i : -1).filter(i => i >= 0);
-          return { sel: [], ans: false, cor, opts };
-        }
-        return { sel: null, ans: false, cor: opts.findIndex(o => o.type === 'correct'), opts };
-      });
-      cur = 0;
-      document.getElementById('summaryPanel').style.display = 'none';
-      document.getElementById('qPanel').style.display = 'flex';
-      renderQuestion();
-    }
-
-    function showSummary() {
-      document.getElementById('qPanel').style.display = 'none';
-      document.getElementById('summaryPanel').style.display = 'block';
-      swapLeftPanel('none');
-      const items = QUESTIONS.map((data, i) => {
-        const st = Q[i];
-        const ans = selectedLabel(data, st);
-        const ok = isAnswerCorrect(data, st);
-        const colour = ok ? 'var(--colour-ui-correct)' : '#ff3366';
-        const mark = ok ? '✓' : '✗';
-        return `<div class="summary-item">
-      <div class="summary-item-head"><span class="summary-qnum">Q${i + 1}</span><span class="summary-question">${data.text(st)}</span></div>
-      <div class="summary-answer" style="color:${colour}">You answered: ${ans} &nbsp; ${mark}</div>
-      <div class="working-box visible">${st.ans ? data.working(st) : ''}</div>
-    </div>`;
-      }).join('');
-      document.getElementById('summaryContent').innerHTML = items;
-      QUESTIONS.forEach((_, i) => { const d = document.getElementById('dot-' + i); if (d) d.className = 'progress-dot done'; });
-      document.getElementById('progressLabel').textContent = 'Complete';
-    }
-
-    buildProgressDots();
+    initQuizNav();
     resetQuiz();
-
-    function goBack(e) { e.preventDefault(); history.back(); }
-    if (history.length > 1) {
-      document.getElementById('menuLink').style.display = '';
-    }
-
-    function jump(n, answered) {
-      if (n < 1 || n > QUESTIONS.length) { console.warn('jump: no question', n); return; }
-      for (let i = 0; i < n - 1; i++) { fillCorrectSelection(i); Q[i].ans = true; }
-      goToQuestion(n);
-      if (answered) { fillCorrectSelection(cur); checkAnswer(); }
-    }
-    window.jump = jump;
-
-    function jumpToSummary() {
-      QUESTIONS.forEach((_, i) => {
-        if (Q[i].ans) return;
-        fillCorrectSelection(i);
-        Q[i].ans = true;
-      });
-      showSummary();
-    }
-    window.jumpToSummary = jumpToSummary;
-
-    {
-      const p = new URLSearchParams(location.search);
-      if (p.has('q')) { if (p.get('q') === 's') jumpToSummary(); else jump(+p.get('q'), p.has('ans')); }
-    }
+    initQuizFromURL();
   </script>
 </body>
 
