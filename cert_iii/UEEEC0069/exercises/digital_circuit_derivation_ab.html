@@ -81,6 +81,21 @@
   Reuses gate-nand-trad/gate-not-trad primitives (copied from ../../assets/
   shapes/logic-gates.svg and re-themed, same as every other digital_*.html
   file). Includes the xy=1 dev grid-ruler from the start.
+
+  Migrated to the shared cert_iii/assets/quiz-engine.js engine — the first
+  file to need a new kind:'fill' (added this same session, generalized
+  from this file's own original renderFill()/selectFillItem()/
+  slotClicked()). This file's own updateReveal() — which drives the
+  persistent single-circuit's per-slot visibility across EVERY question,
+  not just the current one — stays page-local (called via RENDER_EXTRA),
+  since no other file shares this "one diagram spans every question"
+  architecture yet. Also declares its own no-op swapLeftPanel() override:
+  the shared renderQuestion() would otherwise call swapLeftPanel('none')
+  on every render (no question here ever sets leftPanel/circuitId, since
+  there's only ever one always-visible circuit, never swapped), which
+  would incorrectly hide the circuit panel entirely. CIRCUIT_SVG_ID=
+  'circuitRefSvg' is still set, purely so the shared buildXYRuler()/setXY()
+  target the right SVG for the dev grid-ruler.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -89,6 +104,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="../../assets/theme-init.js"></script>
+  <script src="../../assets/quiz-engine.js"></script>
   <title>Digital Electronics — Step Through the Circuit (A, B)</title>
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
     rel="stylesheet">
@@ -633,7 +649,7 @@
   </div>
 
   <script>
-    const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
+    CIRCUIT_SVG_ID = 'circuitRefSvg';
 
     // ══════════════════════════════════════════════════════════════════════
     // Q1's 4 signal slots. Every fill-question box (Q1's included) now
@@ -790,15 +806,6 @@
       },
     ];
 
-    // ══════════════════════════════════════════════════════════════════════
-    // QUIZ ENGINE
-    // ══════════════════════════════════════════════════════════════════════
-
-    function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
-
-    function isFill(data) { return data.kind === 'fill'; }
-    function isTruth(data) { return data.kind === 'truth'; }
-
     // ── kind:'truth' — single-pass, 2 inputs (B, A) — see file header
     // comment for why this is a local 2-input variant rather than reusing
     // digital_knowledge_boolean_algebra.html's 3-input buildTableRows. ──
@@ -810,198 +817,6 @@
         rows.push({ inputs: [b, a], z: zFn(b, a) });
       }
       return rows;
-    }
-    function truthCorrectExplain(st) {
-      const wrongCount = st.opts.filter((o, i) => zFromClicks(st.clicks[i]) !== st.cor[i]).length;
-      return wrongCount === 0 ? `All ${st.opts.length} rows correct` : `${st.opts.length - wrongCount} of ${st.opts.length} rows correct`;
-    }
-    function truthMistakeLine(labels, st) {
-      const mistakes = st.opts
-        .map((o, i) => ({ o, i }))
-        .filter(({ i }) => zFromClicks(st.clicks[i]) !== st.cor[i])
-        .map(({ o }) => `${labels} = ${o.inputs.join(' ')}`);
-      return mistakes.length
-        ? `<div class="working-step" style="margin-top:.6rem">Incorrect rows:</div><div class="working-line">${mistakes.join(', ')}</div>`
-        : '';
-    }
-    function renderTruth() {
-      const st = Q[cur], data = QUESTIONS[cur];
-      const inputLabels = data.inputLabels();
-      const formulaRow = document.getElementById('truthFormulaRow');
-      if (data.formula) {
-        const cell = document.getElementById('truthFormulaCell');
-        cell.innerHTML = data.formula();
-        cell.colSpan = inputLabels.length + 1;
-        formulaRow.style.display = '';
-      } else {
-        formulaRow.style.display = 'none';
-      }
-      document.getElementById('truthGroupHeads').innerHTML =
-        data.headerGroups().map(g => `<th colspan="${g.span}">${g.label}</th>`).join('');
-      document.getElementById('truthColLabels').innerHTML =
-        inputLabels.map(l => `<th>${l}</th>`).join('') + `<th>${data.outputLabel()}</th>`;
-
-      const body = document.getElementById('truthBody');
-      body.innerHTML = '';
-      st.opts.forEach((row, r) => {
-        const tr = document.createElement('tr');
-        row.inputs.forEach(v => {
-          const td = document.createElement('td');
-          td.textContent = String(v);
-          td.className = 'truth-input-cell';
-          tr.appendChild(td);
-        });
-        const zTd = document.createElement('td');
-        const z = zFromClicks(st.clicks[r]);
-        zTd.textContent = z === null ? '' : String(z);
-        if (st.ans) {
-          zTd.className = 'bits-cell' + (z === st.cor[r] ? ' correct' : ' wrong');
-        } else {
-          zTd.className = 'bits-cell';
-          zTd.addEventListener('click', () => clickTruthZ(r));
-        }
-        tr.appendChild(zTd);
-        body.appendChild(tr);
-      });
-    }
-    function clickTruthZ(r) {
-      const st = Q[cur];
-      if (st.ans) return;
-      st.clicks[r]++;
-      renderQuestion();
-    }
-
-    // ── kind:'fill' (Q1-Q4) ──────────────────────────────────────────────
-    // Shared by all four: a non-consuming pool above the circuit (a chip
-    // stays pickable after being placed) and one-or-more highlighted boxes
-    // ON the circuit itself (data.slotIds), addressed by SLOT index, not
-    // by pool-item index — so a slot's correctness is independent of
-    // which/how-many pool items exist, and the same pool item can be
-    // placed into more than one slot if the question ever needs that
-    // (Q1's 4 signals currently don't, but the model doesn't assume they
-    // won't).
-    function renderFill() {
-      const st = Q[cur], data = QUESTIONS[cur];
-      const picking = st.sel !== null;
-      const needsPick = !st.ans && !picking && st.slotPlaced.some(p => p === null);
-      const circuitNeedsPick = !st.ans && picking;
-      document.getElementById('fillPoolRow').classList.toggle('needs-pick', needsPick);
-      document.getElementById('fillPool').classList.toggle('needs-pick', needsPick);
-      document.getElementById('circuitPanel').classList.toggle('needs-pick', circuitNeedsPick);
-      document.getElementById('circuitArrow').classList.toggle('needs-pick', circuitNeedsPick);
-
-      const pool = document.getElementById('fillPool');
-      pool.innerHTML = '';
-      st.opts.forEach((opt, i) => {
-        const chip = document.createElement('button');
-        const isPicked = st.sel === i;
-        chip.className = 'match-chip' + (isPicked ? ' picked' : '');
-        chip.innerHTML = opt.poolHtml;
-        chip.disabled = st.ans || (picking && !isPicked);
-        if (!chip.disabled) chip.addEventListener('click', (e) => { e.stopPropagation(); selectFillItem(i); });
-        pool.appendChild(chip);
-      });
-
-      data.slotIds.forEach((elId, slot) => {
-        const box = document.getElementById(elId);
-        const txt = document.getElementById(elId + 'Text');
-        const placedIdx = st.slotPlaced[slot];
-        box.classList.remove('filled', 'correct', 'wrong', 'plain');
-        if (placedIdx === null) {
-          txt.innerHTML = '';
-        } else {
-          txt.innerHTML = st.opts[placedIdx].poolHtml;
-          box.classList.add('filled');
-          if (st.ans) box.classList.add(placedIdx === st.cor[slot] ? 'correct' : 'wrong');
-        }
-        txt.classList.toggle('correct', st.ans && placedIdx !== null && placedIdx === st.cor[slot]);
-        txt.classList.toggle('wrong', st.ans && placedIdx !== null && placedIdx !== st.cor[slot]);
-      });
-    }
-    function selectFillItem(i) {
-      const st = Q[cur];
-      if (st.ans) return;
-      st.sel = (st.sel === i) ? null : i;
-      renderQuestion();
-    }
-    function slotClicked(slot) {
-      const st = Q[cur], data = QUESTIONS[cur];
-      if (!isFill(data) || st.ans) return;
-      if (st.sel === null) {
-        if (st.slotPlaced[slot] !== null) { st.slotPlaced[slot] = null; renderQuestion(); }
-        return;
-      }
-      st.slotPlaced[slot] = st.sel;
-      st.sel = null;
-      renderQuestion();
-    }
-    window.slotClicked = slotClicked;
-
-    function isAnswerCorrect(data, st) {
-      if (isFill(data)) return st.slotPlaced.every((p, slot) => p === st.cor[slot]);
-      if (isTruth(data)) return st.clicks.every((n, r) => zFromClicks(n) === st.cor[r]);
-      return st.sel === st.cor;
-    }
-    function selectedLabel(data, st) {
-      if (isFill(data)) {
-        const correctCount = st.slotPlaced.filter((p, slot) => p === st.cor[slot]).length;
-        return `${correctCount} / ${st.slotPlaced.length} correctly placed`;
-      }
-      if (isTruth(data)) {
-        const correct = st.clicks.filter((n, r) => zFromClicks(n) === st.cor[r]).length;
-        return `${correct} / ${st.opts.length} rows correct`;
-      }
-      return (st.sel != null && st.opts[st.sel]) ? st.opts[st.sel].label : '—';
-    }
-    function fillCorrectSelection(i) {
-      const data = QUESTIONS[i], st = Q[i];
-      if (isFill(data)) st.slotPlaced = st.cor.slice();
-      else if (isTruth(data)) st.clicks = st.cor.map(z => z + 1);
-      else st.sel = st.cor;
-    }
-
-    let Q = [];
-    let cur = 0;
-
-    function buildProgressDots() {
-      document.getElementById('progressDots').innerHTML =
-        QUESTIONS.map((_, i) => `<div class="progress-dot" id="dot-${i}"></div>`).join('');
-    }
-
-    function updateProgress() {
-      QUESTIONS.forEach((_, i) => {
-        const d = document.getElementById('dot-' + i);
-        d.className = 'progress-dot';
-        if (i === cur) d.classList.add('active'); else if (Q[i].ans) d.classList.add('done');
-      });
-      document.getElementById('progressLabel').textContent = (cur + 1) + ' / ' + QUESTIONS.length;
-    }
-
-    function renderOptions() {
-      const st = Q[cur];
-      document.getElementById('qOptionsBox').classList.toggle('needs-pick', !st.ans && st.sel === null);
-      const c = document.getElementById('qOptions'); c.innerHTML = '';
-      st.opts.forEach((opt, i) => {
-        const btn = document.createElement('button'); btn.className = 'option-btn';
-        btn.innerHTML = `<span class="option-letter">${LETTERS[i]}</span><span>${opt.label}</span>`;
-        if (st.ans) {
-          btn.disabled = true;
-          if (i === st.cor) { btn.classList.add('correct'); btn.innerHTML += `<span class="result-icon">✓</span>`; }
-          else if (i === st.sel) { btn.classList.add('wrong'); btn.innerHTML += `<span class="result-icon">✗</span>`; }
-          else btn.classList.add('dimmed');
-        } else {
-          if (i === st.sel) btn.classList.add('selected');
-          btn.addEventListener('click', () => selectOption(i));
-        }
-        c.appendChild(btn);
-      });
-    }
-
-    function selectOption(i) {
-      const st = Q[cur];
-      if (st.ans) return;
-      st.sel = i;
-      renderQuestion();
     }
 
     // Diagram reveal — driven by each fill question's own .ans flag, NOT
@@ -1049,187 +864,19 @@
       if (xyOn) buildXYRuler();
     }
 
-    /* ─── DEV: xy ruler overlay ─── Console: setXY(1) / setXY(0)  URL: ?xy=1 */
-    let xyOn = false;
-    function buildXYRuler() {
-      const g = document.getElementById('xyRuler');
-      if (!g) return;
-      const vb = document.getElementById('circuitRefSvg').viewBox.baseVal;
-      const offX = vb.x, offY = vb.y, W = vb.width, H = vb.height;
-      const hy = offY + H - 10, vx = offX + 10, col = '#ff00ff';
-      let svg = `<line x1="${offX}" y1="${hy}" x2="${offX + W}" y2="${hy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
-      for (let x = 0; x <= W; x += 20) {
-        const gx = offX + x, major = (Math.round(gx) % 100 === 0), len = major ? 10 : 5;
-        svg += `<line x1="${gx}" y1="${hy - len}" x2="${gx}" y2="${hy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
-        if (major) svg += `<text x="${gx}" y="${hy - 13}" fill="${col}" font-size="10" text-anchor="middle">${Math.round(gx)}</text>`;
-      }
-      svg += `<line x1="${vx}" y1="${offY}" x2="${vx}" y2="${offY + H}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
-      for (let y = 0; y <= H; y += 20) {
-        const gy = offY + y, major = (Math.round(gy) % 100 === 0), len = major ? 10 : 5;
-        svg += `<line x1="${vx}" y1="${gy}" x2="${vx + len}" y2="${gy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
-        if (major) svg += `<text x="${vx + 13}" y="${gy + 3}" fill="${col}" font-size="10" text-anchor="start">${Math.round(gy)}</text>`;
-      }
-      g.innerHTML = svg;
-    }
-    function setXY(on) {
-      xyOn = on;
-      const g = document.getElementById('xyRuler');
-      if (!g) return;
-      if (on) buildXYRuler();
-      g.setAttribute('display', on ? 'inline' : 'none');
-    }
-    window.setXY = setXY;
+    // No-op override: this file's single circuit is ALWAYS visible (no
+    // leftPanel/circuitId is ever set on any question, since there's
+    // nothing to swap), so the shared engine's own swapLeftPanel('none')
+    // default must not run here — it would hide the circuit panel on
+    // every render. updateReveal() above (via RENDER_EXTRA) handles all
+    // of this file's own per-slot visibility instead.
+    function swapLeftPanel() {}
 
-    function renderQuestion() {
-      const data = QUESTIONS[cur], st = Q[cur];
+    RENDER_EXTRA = () => updateReveal();
 
-      document.getElementById('qNum').textContent = 'Q' + (cur + 1);
-      document.getElementById('qText').innerHTML = data.text();
-      document.getElementById('qHint').innerHTML = data.hint();
-
-      document.getElementById('qOptionsBox').style.display = (isFill(data) || isTruth(data)) ? 'none' : '';
-      document.getElementById('qTruth').style.display = isTruth(data) ? 'block' : 'none';
-      if (isFill(data)) { renderFill(); }
-      else if (isTruth(data)) { renderTruth(); }
-      else { renderOptions(); }
-
-      const banner = document.getElementById('qBanner');
-      if (st.ans) {
-        const ok = isAnswerCorrect(data, st);
-        banner.className = 'result-banner ' + (ok ? 'correct' : 'wrong');
-        document.getElementById('qIcon').textContent = ok ? '✓' : '✗';
-        document.getElementById('qBannerText').innerHTML = ok ? `Correct! ${data.correctExplain(st)}` : `The correct answer is ${data.correctExplain(st)}`;
-      } else {
-        banner.className = 'result-banner';
-      }
-
-      const working = document.getElementById('qWorking');
-      working.className = 'working-box' + (st.ans ? ' visible' : '');
-      document.getElementById('qWorkingContent').innerHTML = st.ans ? data.working(st) : '';
-
-      document.getElementById('qBack').style.display = cur > 0 ? 'inline-block' : 'none';
-      const check = document.getElementById('qCheck');
-      check.style.display = st.ans ? 'none' : 'inline-block';
-      check.disabled = st.ans || (
-        isFill(data) ? !st.slotPlaced.every(p => p !== null) :
-        isTruth(data) ? !st.clicks.every(n => zFromClicks(n) !== null) :
-        st.sel === null
-      );
-      const isLast = cur === QUESTIONS.length - 1;
-      document.getElementById('qNext').style.display = (st.ans && !isLast) ? 'inline-block' : 'none';
-      document.getElementById('qSummary').style.display = (st.ans && isLast) ? 'inline-block' : 'none';
-
-      updateReveal();
-      updateProgress();
-    }
-
-    function checkAnswer() {
-      const st = Q[cur], data = QUESTIONS[cur];
-      if (st.ans) return;
-      if (isFill(data) ? !st.slotPlaced.every(p => p !== null) : isTruth(data) ? !st.clicks.every(n => zFromClicks(n) !== null) : st.sel === null) return;
-      st.ans = true;
-      renderQuestion();
-      document.getElementById('qBanner').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-
-    function scrollToQuestionTop() {
-      document.getElementById('qPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-
-    function nextQuestion() { if (cur < QUESTIONS.length - 1) { cur++; renderQuestion(); scrollToQuestionTop(); } }
-
-    function backQuestion() {
-      if (cur <= 0) return;
-      cur--;
-      for (let i = cur; i < QUESTIONS.length; i++) {
-        const data = QUESTIONS[i];
-        Q[i].ans = false;
-        if (isFill(data)) { Q[i].slotPlaced = Q[i].cor.map(() => null); Q[i].sel = null; }
-        else if (isTruth(data)) { Q[i].clicks = Q[i].opts.map(() => 0); }
-        else Q[i].sel = null;
-      }
-      renderQuestion();
-      scrollToQuestionTop();
-    }
-
-    function goToQuestion(n) {
-      cur = Math.max(0, Math.min(QUESTIONS.length - 1, n - 1));
-      document.getElementById('summaryPanel').style.display = 'none';
-      document.getElementById('qPanel').style.display = 'flex';
-      renderQuestion();
-      scrollToQuestionTop();
-    }
-
-    function resetQuiz() {
-      Q = QUESTIONS.map(data => {
-        const opts = data.options();
-        if (isFill(data)) {
-          const cor = data.slotIds.map((_, slotIdx) => opts.findIndex(o => o.col === slotIdx));
-          return { sel: null, ans: false, cor, opts, slotPlaced: cor.map(() => null) };
-        }
-        if (isTruth(data)) {
-          const cor = opts.map(row => row.z);
-          return { ans: false, cor, opts, clicks: opts.map(() => 0) };
-        }
-        return { sel: null, ans: false, cor: opts.findIndex(o => o.type === 'correct'), opts };
-      });
-      cur = 0;
-      document.getElementById('summaryPanel').style.display = 'none';
-      document.getElementById('qPanel').style.display = 'flex';
-      renderQuestion();
-    }
-
-    function showSummary() {
-      document.getElementById('qPanel').style.display = 'none';
-      document.getElementById('summaryPanel').style.display = 'block';
-      const items = QUESTIONS.map((data, i) => {
-        const st = Q[i];
-        const ans = selectedLabel(data, st);
-        const ok = isAnswerCorrect(data, st);
-        const colour = ok ? 'var(--colour-ui-correct)' : '#ff3366';
-        const mark = ok ? '✓' : '✗';
-        return `<div class="summary-item">
-      <div class="summary-item-head"><span class="summary-qnum">Q${i + 1}</span><span class="summary-question">${data.text()}</span></div>
-      <div class="summary-answer" style="color:${colour}">You answered: ${ans} &nbsp; ${mark}</div>
-      <div class="working-box visible">${st.ans ? data.working(st) : ''}</div>
-    </div>`;
-      }).join('');
-      document.getElementById('summaryContent').innerHTML = items;
-      QUESTIONS.forEach((_, i) => { const d = document.getElementById('dot-' + i); if (d) d.className = 'progress-dot done'; });
-      document.getElementById('progressLabel').textContent = 'Complete';
-    }
-
-    buildProgressDots();
+    initQuizNav();
     resetQuiz();
-
-    function goBack(e) { e.preventDefault(); history.back(); }
-    if (history.length > 1) {
-      document.getElementById('menuLink').style.display = '';
-    }
-
-    function jump(n, answered) {
-      if (n < 1 || n > QUESTIONS.length) { console.warn('jump: no question', n); return; }
-      for (let i = 0; i < n - 1; i++) { fillCorrectSelection(i); Q[i].ans = true; }
-      goToQuestion(n);
-      if (answered) { fillCorrectSelection(cur); checkAnswer(); }
-    }
-    window.jump = jump;
-
-    function jumpToSummary() {
-      QUESTIONS.forEach((_, i) => {
-        if (Q[i].ans) return;
-        fillCorrectSelection(i);
-        Q[i].ans = true;
-      });
-      showSummary();
-    }
-    window.jumpToSummary = jumpToSummary;
-
-    {
-      const p = new URLSearchParams(location.search);
-      if (p.has('q')) { if (p.get('q') === 's') jumpToSummary(); else jump(+p.get('q'), p.has('ans')); }
-      if (p.has('xy')) setXY(+p.get('xy') === 1);
-    }
+    initQuizFromURL();
   </script>
 </body>
 

@@ -30,7 +30,8 @@
   Phase 2: the two `*_basics.html` templates; Phase 3 so far:
   bjt_knowledge_ac_params_formulas.html):
   `kind`: unset (single-select) | 'multi' | 'match' (plain, `matchByLabel`,
-  or `reusablePool` — see below) | 'bits' | 'truth' (see below).
+  or `reusablePool` — see below) | 'bits' | 'truth' (see below) | 'fill'
+  (see below).
   `leftPanel`: unset/'circuit' (a static circuit-panel div, optionally swapped
   per-question via showCircuitRef(data.circuitId, data.circuitLabel,
   data.circuitViewBox, data.circuitLoad, data.circuitAmmeter) if the page has
@@ -140,6 +141,26 @@
   CONTENT is different enough (single gate vs multi-gate staged network)
   that centralising it wouldn't fit every file.
 
+  `kind:'fill'` — a non-consuming pool of items (a chip stays pickable
+  after being placed, never removed from the pool) placed onto one-or-more
+  slot(s) elsewhere on the page, addressed by `data.slotIds` (an array of
+  DOM element ids) and SLOT index — not by pool-item index, so a slot's
+  correctness is independent of which/how-many pool items exist, and the
+  same pool item can be placed into more than one slot if a question ever
+  needs that. Each slot element `elId` needs a sibling text target
+  `elId + 'Text'` for its rendered content, and `onclick="slotClicked(N)"`
+  wired directly in the page's own markup (N = the slot's 0-based index
+  within THAT question's own `slotIds` array, not a global index).
+  `st.slotPlaced` is an array (one per slot) of the placed pool-item index
+  or null. First (and so far only) used by
+  digital_circuit_derivation_ab.html for a single persistent circuit
+  diagram spanning every question, progressively revealed as fill
+  questions are answered — that reveal/visibility logic
+  (updateReveal()/RENDER_EXTRA) and the "always show this one circuit,
+  never swapLeftPanel('none') it away" behaviour (a page-local no-op
+  swapLeftPanel() override) are both page-local, since no other file
+  shares that architecture yet.
+
   Every function that runs on EVERY render regardless of the current
   question's own kind (the qMatch/qBits/qOptions display toggles inside
   renderQuestion(), and swapLeftPanel()'s per-mode panel toggles) null-checks
@@ -180,6 +201,7 @@ function isMulti(data) { return data.kind === 'multi'; }
 function isMatch(data) { return data.kind === 'match'; }
 function isBits(data) { return data.kind === 'bits'; }
 function isTruth(data) { return data.kind === 'truth'; }
+function isFill(data) { return data.kind === 'fill'; }
 function bitFromClicks(n) { const m = n % 3; return m === 0 ? null : m - 1; }
 // 'truth' cells cycle the same blank→0→1→blank way as 'bits' cells — kept as
 // its own identically-implemented function (not an alias) since the two
@@ -208,6 +230,7 @@ function truthMistakeLine(labels, st) {
 function isAnswerCorrect(data, st) {
   if (isBits(data)) return st.clicks.every((row, r) => row.every((n, c) => bitFromClicks(n) === st.cor[r][c]));
   if (isTruth(data)) return st.clicks.every((n, r) => zFromClicks(n) === st.cor[r]);
+  if (isFill(data)) return st.slotPlaced.every((p, slot) => p === st.cor[slot]);
   if (isMatch(data)) {
     if (data.reusablePool) return st.assign.every((_, c) => isColumnCorrectReusable(st, c));
     if (data.matchByLabel) return st.corLabel.every((_, c) => matchColumnCorrect(st, c));
@@ -227,6 +250,10 @@ function selectedLabel(data, st) {
   if (isTruth(data)) {
     const correct = st.clicks.filter((n, r) => zFromClicks(n) === st.cor[r]).length;
     return `${correct} / ${st.opts.length} rows correct`;
+  }
+  if (isFill(data)) {
+    const correctCount = st.slotPlaced.filter((p, slot) => p === st.cor[slot]).length;
+    return `${correctCount} / ${st.slotPlaced.length} correctly placed`;
   }
   if (isMatch(data)) {
     if (data.reusablePool) {
@@ -255,6 +282,7 @@ function fillCorrectSelection(i) {
   const data = QUESTIONS[i], st = Q[i];
   if (isBits(data)) st.clicks = st.cor.map(row => row.map(bit => bit + 1)); // clicks bit+1 -> bitFromClicks() lands on 0/1 (0 would land on blank)
   else if (isTruth(data)) st.clicks = st.cor.map(z => z + 1); // same +1 trick as bits: zFromClicks(z+1) lands back on z
+  else if (isFill(data)) st.slotPlaced = st.cor.slice();
   else if (isMatch(data)) {
     if (data.reusablePool) st.assign = st.assign.map((_, c) => st.opts.findIndex(o => o.cols.includes(c)));
     else st.place = st.cor.slice();
@@ -706,6 +734,83 @@ function setTruthInputCount(n) {
   renderQuestion();
 }
 
+// ── kind:'fill' — a non-consuming pool of items (a chip stays pickable
+// after being placed) placed onto one-or-more slot(s) elsewhere on the
+// page, addressed by `data.slotIds` (an array of DOM element ids) and SLOT
+// index — not by pool-item index, so a slot's correctness is independent
+// of which/how-many pool items exist, and the same pool item can be
+// placed into more than one slot if a question ever needs that. Each slot
+// element `elId` needs a sibling text target `elId + 'Text'` for its
+// rendered content. `st.slotPlaced` is an array (one per slot) of the
+// placed pool-item index or null. First (and so far only) used by
+// digital_circuit_derivation_ab.html — a single persistent circuit
+// diagram, progressively revealed as fill questions are answered; that
+// reveal logic is entirely page-local (see its own updateReveal(), called
+// via RENDER_EXTRA) since no other file shares this "one diagram spans
+// every question" architecture yet. The needs-pick pulse styling targets
+// (`circuitPanel`/`circuitArrow`) are page-specific-sounding ids, kept
+// null-checked/defensive; `fillPool`/`fillPoolRow` are core to the
+// mechanic itself, same non-defensive convention as `matchPool`.
+function renderFill() {
+  const st = Q[cur], data = QUESTIONS[cur];
+  const picking = st.sel !== null;
+  const needsPick = !st.ans && !picking && st.slotPlaced.some(p => p === null);
+  const circuitNeedsPick = !st.ans && picking;
+  const poolRowEl = document.getElementById('fillPoolRow');
+  if (poolRowEl) poolRowEl.classList.toggle('needs-pick', needsPick);
+  const circuitPanelEl = document.getElementById('circuitPanel');
+  if (circuitPanelEl) circuitPanelEl.classList.toggle('needs-pick', circuitNeedsPick);
+  const circuitArrowEl = document.getElementById('circuitArrow');
+  if (circuitArrowEl) circuitArrowEl.classList.toggle('needs-pick', circuitNeedsPick);
+
+  const pool = document.getElementById('fillPool');
+  pool.classList.toggle('needs-pick', needsPick);
+  pool.innerHTML = '';
+  st.opts.forEach((opt, i) => {
+    const chip = document.createElement('button');
+    const isPicked = st.sel === i;
+    chip.className = 'match-chip' + (isPicked ? ' picked' : '');
+    chip.innerHTML = opt.poolHtml;
+    chip.disabled = st.ans || (picking && !isPicked);
+    if (!chip.disabled) chip.addEventListener('click', (e) => { e.stopPropagation(); selectFillItem(i); });
+    pool.appendChild(chip);
+  });
+
+  data.slotIds.forEach((elId, slot) => {
+    const box = document.getElementById(elId);
+    const txt = document.getElementById(elId + 'Text');
+    const placedIdx = st.slotPlaced[slot];
+    box.classList.remove('filled', 'correct', 'wrong', 'plain');
+    if (placedIdx === null) {
+      txt.innerHTML = '';
+    } else {
+      txt.innerHTML = st.opts[placedIdx].poolHtml;
+      box.classList.add('filled');
+      if (st.ans) box.classList.add(placedIdx === st.cor[slot] ? 'correct' : 'wrong');
+    }
+    txt.classList.toggle('correct', st.ans && placedIdx !== null && placedIdx === st.cor[slot]);
+    txt.classList.toggle('wrong', st.ans && placedIdx !== null && placedIdx !== st.cor[slot]);
+  });
+}
+function selectFillItem(i) {
+  const st = Q[cur];
+  if (st.ans) return;
+  st.sel = (st.sel === i) ? null : i;
+  renderQuestion();
+}
+function slotClicked(slot) {
+  const st = Q[cur], data = QUESTIONS[cur];
+  if (!isFill(data) || st.ans) return;
+  if (st.sel === null) {
+    if (st.slotPlaced[slot] !== null) { st.slotPlaced[slot] = null; renderQuestion(); }
+    return;
+  }
+  st.slotPlaced[slot] = st.sel;
+  st.sel = null;
+  renderQuestion();
+}
+window.slotClicked = slotClicked;
+
 function renderQuestion() {
   const data = QUESTIONS[cur], st = Q[cur];
   const multi = isMulti(data);
@@ -721,7 +826,9 @@ function renderQuestion() {
   const qTruthEl = document.getElementById('qTruth');
   if (qTruthEl) qTruthEl.style.display = isTruth(data) ? 'block' : 'none';
   const qOptionsEl = document.getElementById('qOptions');
-  if (qOptionsEl) qOptionsEl.style.display = (isMatch(data) || isBits(data) || isTruth(data) || data.leftPanel === 'shapeGrid') ? 'none' : '';
+  if (qOptionsEl) qOptionsEl.style.display = (isMatch(data) || isBits(data) || isTruth(data) || isFill(data) || data.leftPanel === 'shapeGrid') ? 'none' : '';
+  const qOptionsBoxEl = document.getElementById('qOptionsBox');
+  if (qOptionsBoxEl) qOptionsBoxEl.style.display = (isFill(data) || isTruth(data)) ? 'none' : '';
 
   if (isMatch(data)) {
     if (data.reusablePool) renderMatchReusable(); else renderMatch();
@@ -729,6 +836,8 @@ function renderQuestion() {
     renderBits();
   } else if (isTruth(data)) {
     renderTruth();
+  } else if (isFill(data)) {
+    renderFill();
   } else if (data.leftPanel === 'shapeGrid') {
     renderShapeGrid();
   } else {
@@ -769,6 +878,7 @@ function renderQuestion() {
     isMatch(data) ? (data.reusablePool ? !st.assign.every(a => a !== null) : !st.opts.every((o, i) => o.col === null || st.place[i] !== null)) :
     isBits(data) ? !st.clicks.every(row => row.every(n => bitFromClicks(n) !== null)) :
     isTruth(data) ? !st.clicks.every(n => zFromClicks(n) !== null) :
+    isFill(data) ? !st.slotPlaced.every(p => p !== null) :
     (multi ? st.sel.length === 0 : st.sel === null)
   );
   const isLast = cur === QUESTIONS.length - 1;
@@ -798,6 +908,7 @@ function checkAnswer() {
   }
   else if (isBits(data)) { if (!st.clicks.every(row => row.every(n => bitFromClicks(n) !== null))) return; }
   else if (isTruth(data)) { if (!st.clicks.every(n => zFromClicks(n) !== null)) return; }
+  else if (isFill(data)) { if (!st.slotPlaced.every(p => p !== null)) return; }
   else if (isMulti(data) ? st.sel.length === 0 : st.sel === null) return;
   st.ans = true;
   renderQuestion();
@@ -826,6 +937,7 @@ function backQuestion() {
     }
     else if (isBits(data)) { Q[i].clicks = Q[i].opts.map(() => [0, 0, 0, 0]); }
     else if (isTruth(data)) { Q[i].clicks = Q[i].opts.map(() => 0); }
+    else if (isFill(data)) { Q[i].slotPlaced = Q[i].cor.map(() => null); Q[i].sel = null; }
     else Q[i].sel = isMulti(data) ? [] : null;
   }
   renderQuestion();
@@ -906,6 +1018,10 @@ function resetQuiz() {
     if (isBits(data)) {
       const cor = opts.map(row => [3, 2, 1, 0].map(shift => (row.value >> shift) & 1));
       return { ans: false, cor, opts, clicks: opts.map(() => [0, 0, 0, 0]) };
+    }
+    if (isFill(data)) {
+      const cor = data.slotIds.map((_, slotIdx) => opts.findIndex(o => o.col === slotIdx));
+      return { sel: null, ans: false, cor, opts, slotPlaced: cor.map(() => null) };
     }
     if (isMatch(data)) {
       if (data.reusablePool) {
