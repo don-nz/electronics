@@ -59,10 +59,13 @@
     `loadTerminal` param in some files and a live one in others) — kept as a
     per-page hook rather than forced into one generic shape.
   - `SUMMARY_CIRCUIT_REF` — optional `{id, label, viewBox}`. If set,
-    showSummary() shows this specific circuit instead of hiding the panel
-    via `swapLeftPanel('none')` — for pages where each question shows a
-    different circuit and there's a natural "default" one to settle the
-    review page on.
+    showSummary() calls `swapLeftPanel('circuit')` then shows this specific
+    circuit instead of hiding the panel via `swapLeftPanel('none')` — for
+    pages where each question shows a different circuit and there's a
+    natural "default" one to settle the review page on. The explicit
+    swapLeftPanel('circuit') call matters for any page that ALSO uses
+    leftPanel:'shapeGrid' on some questions — otherwise the shapeGrid panel
+    from the last-viewed question would stay visible on the summary page.
   - `RENDER_EXTRA` — optional `() => void`, called at the end of every
     renderQuestion(). For per-file logic that needs to run on EVERY render
     regardless of the current question — e.g. bjt_knowledge_ac_params_
@@ -101,7 +104,14 @@
   small BJT symbols / digital_knowledge_basics.html's waveforms & DIP
   packages, both on a `-32 -36 96 76` viewBox — bjt_knowledge_ac_params_
   formulas.html's own mini circuit thumbnails need `0 0 140 200` instead,
-  and set both globals accordingly).
+  and set both globals accordingly). For a file that mixes MULTIPLE shape
+  families at once (e.g. bjt_knowledge_amp_config.html's tall circuit
+  schematics alongside its own separate wide/short waveform shapes), set
+  a per-question `shapeViewBox` field on the QUESTIONS[] entry instead —
+  all three shape-rendering call sites (renderShapeGrid, the match
+  column-title SVG, matchChipContent) check `data.shapeViewBox` first and
+  fall back to the SHAPE_VIEWBOX global, so only questions that need a
+  different scale from the file's own default have to say so.
 
   NOT YET included (exists in exactly one page, not needed by any file
   migrated so far — add when a truth-table file gets migrated):
@@ -178,8 +188,11 @@ function selectedLabel(data, st) {
     const correctCount = st.place.filter((p, i) => p === st.cor[i]).length;
     return `${correctCount} / ${st.opts.length} correctly sorted`;
   }
-  if (!isMulti(data)) return (st.sel != null && st.opts[st.sel]) ? st.opts[st.sel].label : '—';
   const asLabel = i => data.leftPanel === 'shapeGrid' ? (i + 1) : LETTERS[i];
+  if (!isMulti(data)) {
+    if (st.sel == null || !st.opts[st.sel]) return '—';
+    return data.leftPanel === 'shapeGrid' ? `Circuit ${asLabel(st.sel)}` : st.opts[st.sel].label;
+  }
   return st.sel.length ? [...st.sel].sort((a, b) => a - b).map(asLabel).join(', ') : '—';
 }
 
@@ -216,19 +229,25 @@ function updateProgress() {
 
 // ── leftPanel:'shapeGrid' ──
 function renderShapeGrid() {
-  const st = Q[cur];
+  const st = Q[cur], data = QUESTIONS[cur], multi = isMulti(data);
   const c = document.getElementById('shapeGridCells'); c.innerHTML = '';
   st.opts.forEach((opt, i) => {
     const cell = document.createElement('div'); cell.className = 'shape-cell';
-    const selected = st.sel.includes(i);
+    const selected = multi ? st.sel.includes(i) : i === st.sel;
     if (st.ans) {
-      if (opt.type === 'correct') cell.classList.add(selected ? 'correct' : 'missed');
+      if (opt.type === 'correct') {
+        // Single-select: the correct circuit is always shown correct/green
+        // regardless of pick, matching renderOptions()'s convention. Multi:
+        // a correct one the student didn't pick is "missed" (amber).
+        const missed = multi && !selected;
+        cell.classList.add(missed ? 'missed' : 'correct');
+      }
       else cell.classList.add(selected ? 'wrong' : 'dimmed');
     } else {
       if (selected) cell.classList.add('selected');
       cell.addEventListener('click', () => selectOption(i));
     }
-    cell.innerHTML = `<span class="shape-num">${i + 1}</span><svg viewBox="${SHAPE_VIEWBOX}"><use href="#${opt.shapeId}"/></svg>`;
+    cell.innerHTML = `<span class="shape-num">${i + 1}</span><svg viewBox="${data.shapeViewBox || SHAPE_VIEWBOX}"><use href="#${opt.shapeId}"/></svg>`;
     c.appendChild(cell);
   });
 }
@@ -279,10 +298,10 @@ function selectOption(i) {
 // either a plain string (a text pill) or `{ shapeId }` (rendered as an SVG
 // shape via matchChipContent() instead). Pool/placed chips work the same
 // way via opt.shapeId.
-function matchChipContent(opt, constrained) {
+function matchChipContent(opt, constrained, viewBox) {
   if (!opt.shapeId) return opt.label;
   const svgStyle = constrained ? 'width:100%;max-width:92px;height:auto;display:block' : 'width:92px;height:auto;display:block';
-  return `<svg viewBox="${SHAPE_VIEWBOX}" style="${svgStyle}"><use href="#${opt.shapeId}"/></svg>`;
+  return `<svg viewBox="${viewBox || SHAPE_VIEWBOX}" style="${svgStyle}"><use href="#${opt.shapeId}"/></svg>`;
 }
 
 function renderMatch() {
@@ -305,7 +324,7 @@ function renderMatch() {
     const chip = document.createElement('button');
     const isPicked = st.sel === i;
     chip.className = 'match-chip' + (isPicked ? ' picked' : '') + (opt.shapeId ? ' match-chip-shape' : '');
-    chip.innerHTML = matchChipContent(opt);
+    chip.innerHTML = matchChipContent(opt, false, data.shapeViewBox);
     chip.disabled = st.ans || (picking && !isPicked);
     if (!chip.disabled) chip.addEventListener('click', (e) => { e.stopPropagation(); selectPoolItem(i); });
     pool.appendChild(chip);
@@ -322,14 +341,14 @@ function renderMatch() {
 
     const arrow = document.createElement('div'); arrow.className = 'match-col-arrow'; arrow.textContent = '▼';
     const title = document.createElement('div'); title.className = 'match-col-title';
-    title.innerHTML = (typeof col === 'string') ? col : `<svg viewBox="${SHAPE_VIEWBOX}" style="width:100%;max-width:${MATCH_COL_TITLE_MAX_WIDTH}px;display:block;margin:0 auto"><use href="#${col.shapeId}"/></svg>`;
+    title.innerHTML = (typeof col === 'string') ? col : `<svg viewBox="${data.shapeViewBox || SHAPE_VIEWBOX}" style="width:100%;max-width:${MATCH_COL_TITLE_MAX_WIDTH}px;display:block;margin:0 auto"><use href="#${col.shapeId}"/></svg>`;
     const items = document.createElement('div'); items.className = 'match-col-items';
 
     st.opts.forEach((opt, i) => {
       if (st.place[i] !== colIdx) return;
       const chip = document.createElement('button');
       chip.className = 'match-chip' + (opt.shapeId ? ' match-chip-shape' : '');
-      chip.innerHTML = matchChipContent(opt, true);
+      chip.innerHTML = matchChipContent(opt, true, data.shapeViewBox);
       if (st.ans) {
         chip.disabled = true;
         chip.classList.add(st.place[i] === st.cor[i] ? 'correct' : 'wrong');
@@ -407,7 +426,7 @@ function renderMatchReusable() {
     const chip = document.createElement('button');
     const isPicked = st.sel === i;
     chip.className = 'match-chip' + (isPicked ? ' picked' : '') + (opt.shapeId ? ' match-chip-shape' : '');
-    chip.innerHTML = matchChipContent(opt);
+    chip.innerHTML = matchChipContent(opt, false, data.shapeViewBox);
     chip.disabled = st.ans || (picking && !isPicked);
     if (!chip.disabled) chip.addEventListener('click', (e) => { e.stopPropagation(); selectPoolItemReusable(i); });
     pool.appendChild(chip);
@@ -424,7 +443,7 @@ function renderMatchReusable() {
 
     const arrow = document.createElement('div'); arrow.className = 'match-col-arrow'; arrow.textContent = '▼';
     const title = document.createElement('div'); title.className = 'match-col-title';
-    title.innerHTML = (typeof col === 'string') ? col : `<svg viewBox="${SHAPE_VIEWBOX}" style="width:100%;max-width:${MATCH_COL_TITLE_MAX_WIDTH}px;display:block;margin:0 auto"><use href="#${col.shapeId}"/></svg>`;
+    title.innerHTML = (typeof col === 'string') ? col : `<svg viewBox="${data.shapeViewBox || SHAPE_VIEWBOX}" style="width:100%;max-width:${MATCH_COL_TITLE_MAX_WIDTH}px;display:block;margin:0 auto"><use href="#${col.shapeId}"/></svg>`;
     const items = document.createElement('div'); items.className = 'match-col-items';
 
     const assignedIdx = st.assign[colIdx];
@@ -432,7 +451,7 @@ function renderMatchReusable() {
       const opt = st.opts[assignedIdx];
       const chip = document.createElement('button');
       chip.className = 'match-chip' + (opt.shapeId ? ' match-chip-shape' : '');
-      chip.innerHTML = matchChipContent(opt, true);
+      chip.innerHTML = matchChipContent(opt, true, data.shapeViewBox);
       if (st.ans) {
         chip.disabled = true;
         chip.classList.add(opt.cols.includes(colIdx) ? 'correct' : 'wrong');
@@ -557,7 +576,7 @@ function renderQuestion() {
   const check = document.getElementById('qCheck');
   check.style.display = st.ans ? 'none' : 'inline-block';
   check.disabled = st.ans || (
-    isMatch(data) ? (data.reusablePool ? !st.assign.every(a => a !== null) : !st.place.every(p => p !== null)) :
+    isMatch(data) ? (data.reusablePool ? !st.assign.every(a => a !== null) : !st.opts.every((o, i) => o.col === null || st.place[i] !== null)) :
     isBits(data) ? !st.clicks.every(row => row.every(n => bitFromClicks(n) !== null)) :
     (multi ? st.sel.length === 0 : st.sel === null)
   );
@@ -576,7 +595,7 @@ function checkAnswer() {
   if (st.ans) return;
   if (isMatch(data)) {
     if (data.reusablePool) { if (!st.assign.every(a => a !== null)) return; }
-    else if (!st.place.every(p => p !== null)) return;
+    else if (!st.opts.every((o, i) => o.col === null || st.place[i] !== null)) return;
   }
   else if (isBits(data)) { if (!st.clicks.every(row => row.every(n => bitFromClicks(n) !== null))) return; }
   else if (isMulti(data) ? st.sel.length === 0 : st.sel === null) return;
@@ -699,7 +718,7 @@ function resetQuiz() {
 function showSummary() {
   document.getElementById('qPanel').style.display = 'none';
   document.getElementById('summaryPanel').style.display = 'block';
-  if (SUMMARY_CIRCUIT_REF) showCircuitRef(SUMMARY_CIRCUIT_REF.id, SUMMARY_CIRCUIT_REF.label, SUMMARY_CIRCUIT_REF.viewBox);
+  if (SUMMARY_CIRCUIT_REF) { swapLeftPanel('circuit'); showCircuitRef(SUMMARY_CIRCUIT_REF.id, SUMMARY_CIRCUIT_REF.label, SUMMARY_CIRCUIT_REF.viewBox); }
   else swapLeftPanel('none');
   const items = QUESTIONS.map((data, i) => {
     const st = Q[i];
