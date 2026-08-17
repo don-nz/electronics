@@ -6,6 +6,22 @@
   set of engine functions (renderQuestion, checkAnswer, nextQuestion, etc).
   There is deliberately NO per-question HTML or per-question JS function.
 
+  MIGRATED to the shared engine, `assets/quiz-engine.js` (loaded via a plain
+  <script src> in <head>, BEFORE this file's own inline <script> — see that
+  file's own header comment for the load-order reasoning and the exact
+  bootstrap call shape). This was Phase 2 of a wider cert_iii-quiz migration
+  (see the project's own "assets/quiz-engine.js migration assessment"),
+  synthesized as the union of this file's own engine and digital_knowledge_
+  basics.html's — the two had independently drifted apart (this file never
+  gained kind:'match'/'bits'; the digital one never gained leftPanel:'viz',
+  the zoom modal, or the xy-ruler dev overlay) despite being cloned from the
+  same original template. Only this file's own circuit-simulation setup
+  (EXAMPLE_SETS/recompute/refreshLabels/setMode) and its Q5 interactive
+  visualizer IIFE remain inline — genuinely page-specific, not shared engine.
+  When cloning this file for a new quiz, keep the two-script-tag structure
+  (quiz-engine.js, then your own inline QUESTIONS[] + bootstrap calls) —
+  do NOT copy the old inline engine functions back in.
+
   When cloning this file for a new quiz — even one that starts with just ONE
   image and ONE question — KEEP THIS STRUCTURE. Do not revert to a hardcoded
   per-question panel just because there's only one entry. The whole point of
@@ -19,7 +35,8 @@
   (see the Q5 IIFE), or a grid of clickable shapes (see Q8) — a clone with
   only one static image can omit `leftPanel` (defaults to 'circuit') without
   losing the array-driven engine. Add new left-panel modes the same way: a new
-  string value, a new container div, one more branch in swapLeftPanel().
+  string value, a new container div, one more branch in swapLeftPanel()
+  (now in quiz-engine.js — keep it defensive/null-checked when you do).
 
   A `kind:'multi'` field per question switches it from single-select
   (A/B/C/D, one correct answer) to multi-select (any number of options can be
@@ -39,6 +56,7 @@
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="../../../assets/quiz-common.css">
   <script src="../../../assets/breadcrumb.js" defer></script>
+  <script src="../../../assets/quiz-engine.js"></script>
     <style>
         .progress-wrap { display: flex; gap: .4rem; align-items: center; margin-bottom: 1rem; }
     </style>
@@ -234,7 +252,7 @@
     <p>Conceptual Questions · NPN Transistor · BC549</p>
   </header>
 
-  <div class="quiz-wrap">
+  <div class="quiz-wrap" id="quizWrap">
 
     <!-- LEFT: circuit diagram -->
     <div class="circuit-col">
@@ -625,11 +643,10 @@
       return { vcc: pick(VCC_POOL), rb: pick(RB_POOL), rc: pick(RC_POOL), beta: 200 };
     }
 
-    const LETTERS = ['A', 'B', 'C', 'D'];
+    // LETTERS and frac() now come from the shared assets/quiz-engine.js.
     function fmtO0(v) { return v >= 1000 ? parseFloat((v / 1000).toFixed(2)) + 'kΩ' : parseFloat(v.toFixed(2)) + 'Ω'; }
     function fmtO0Parts(v) { if (v >= 1000) return { num: String(parseFloat((v / 1000).toFixed(2))), unit: ' kΩ' }; return { num: String(parseFloat(v.toFixed(2))), unit: ' Ω' }; }
     function fmtA(a) { const x = Math.abs(a); if (x >= 1) return parseFloat(a.toFixed(3)) + ' A'; if (x >= 0.001) return parseFloat((a * 1000).toFixed(2)) + ' mA'; return parseFloat((a * 1e6).toFixed(1)) + ' µA'; }
-    function frac(num, den) { return `<span class="working-frac"><span class="num">${num}</span><span class="den">${den}</span></span>`; }
 
     let IB, IC;
     function recompute() {
@@ -661,6 +678,38 @@
         if (b) b.classList.toggle('active', m === mode);
       });
       resetQuiz();
+    }
+
+    // Overrides quiz-engine.js's own generic showSummary() — this page's
+    // summary panel additionally shows which VCC/RB/RC values the quiz was
+    // run with (V.vcc/rb/rc, from setMode() above), which no other quiz
+    // page has a use for, so it isn't part of the shared version. A plain
+    // `function` declaration here simply shadows the shared one for this
+    // page only — no shared-engine change needed for a single-page extra.
+    function showSummary() {
+      document.getElementById('qPanel').style.display = 'none';
+      document.getElementById('summaryPanel').style.display = 'block';
+      swapLeftPanel('circuit');
+      const vals = `<div class="summary-values">
+    <span style="color:var(--colour-supply);font-weight:bold">V<sub>CC</sub></span> = <span style="color:var(--colour-supply)">${V.vcc} V</span>&nbsp;&nbsp;&nbsp;
+    <span style="color:var(--colour-resistor-labels);font-weight:bold">R<sub>B</sub></span> = <span style="color:var(--colour-resistor-labels)">${fmtO0(V.rb)}</span>&nbsp;&nbsp;
+    <span style="color:var(--colour-resistor-labels);font-weight:bold">R<sub>C</sub></span> = <span style="color:var(--colour-resistor-labels)">${fmtO0(V.rc)}</span>
+  </div>`;
+      const items = QUESTIONS.map((data, i) => {
+        const st = Q[i];
+        const ans = selectedLabel(data, st);
+        const ok = isAnswerCorrect(data, st);
+        const colour = ok ? 'var(--colour-ui-correct)' : '#ff3366';
+        const mark = ok ? '✓' : '✗';
+        return `<div class="summary-item">
+      <div class="summary-item-head"><span class="summary-qnum">Q${i + 1}</span><span class="summary-question">${data.text()}</span></div>
+      <div class="summary-answer" style="color:${colour}">You answered: ${ans} &nbsp; ${mark}</div>
+      <div class="working-box visible">${st.ans ? data.working(st) : ''}</div>
+    </div>`;
+      }).join('');
+      document.getElementById('summaryContent').innerHTML = vals + items;
+      QUESTIONS.forEach((_, i) => { const d = document.getElementById('dot-' + i); if (d) d.className = 'progress-dot done'; });
+      document.getElementById('progressLabel').textContent = 'Complete';
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -1049,307 +1098,21 @@
       }
     ];
 
+
     // ══════════════════════════════════════════════════════════════════════
-    // QUIZ ENGINE — generic; driven entirely by QUESTIONS[] via index.
-    // Nothing here should need to change when questions are added/reordered.
+    // QUIZ ENGINE — now shared: assets/quiz-engine.js (loaded in <head>)
+    // provides shuffle/frac/isMulti/isAnswerCorrect/selectedLabel/
+    // buildProgressDots/renderOptions/renderShapeGrid/selectOption/
+    // renderQuestion/checkAnswer/nextQuestion/backQuestion/swapLeftPanel/
+    // goToQuestion/resetQuiz/showSummary/openModal/closeModal/goBack/
+    // buildXYRuler/setXY/jump/jumpToSummary — nothing here should need to
+    // change when questions are added/reordered. Only this page's own
+    // circuit-simulation setup and Q5 visualizer widget remain below.
     // ══════════════════════════════════════════════════════════════════════
 
-    function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+    initQuizNav();
+    setMode('example1'); // calls resetQuiz() internally, after applying V
 
-    // kind:'multi' questions (e.g. leftPanel:'shapeGrid') allow any number of
-    // selections; everything else is single-select (A/B/C/D). `sel`/`cor` are
-    // a single index for single-select, or an array of indices for multi.
-    function isMulti(data) { return data.kind === 'multi'; }
-    function isAnswerCorrect(data, st) {
-      if (!isMulti(data)) return st.sel === st.cor;
-      const a = [...st.sel].sort((x, y) => x - y), b = [...st.cor].sort((x, y) => x - y);
-      return a.length === b.length && a.every((v, i) => v === b[i]);
-    }
-    function selectedLabel(data, st) {
-      if (!isMulti(data)) return (st.sel != null && st.opts[st.sel]) ? st.opts[st.sel].label : '—';
-      return st.sel.length ? [...st.sel].sort((a, b) => a - b).map(i => i + 1).join(', ') : '—';
-    }
-
-    let Q = [];   // per-question live state: { sel, ans, cor, opts }
-    let cur = 0;  // 0-based index into QUESTIONS
-
-    function buildProgressDots() {
-      document.getElementById('progressDots').innerHTML =
-        QUESTIONS.map((_, i) => `<div class="progress-dot" id="dot-${i}"></div>`).join('');
-    }
-
-    function updateProgress() {
-      QUESTIONS.forEach((_, i) => {
-        const d = document.getElementById('dot-' + i);
-        d.className = 'progress-dot';
-        if (i === cur) d.classList.add('active'); else if (Q[i].ans) d.classList.add('done');
-      });
-      document.getElementById('progressLabel').textContent = (cur + 1) + ' / ' + QUESTIONS.length;
-    }
-
-    function renderOptions() {
-      const st = Q[cur];
-      const c = document.getElementById('qOptions'); c.innerHTML = '';
-      st.opts.forEach((opt, i) => {
-        const btn = document.createElement('button'); btn.className = 'option-btn';
-        btn.innerHTML = `<span class="option-letter">${LETTERS[i]}</span><span>${opt.label}</span>`;
-        if (st.ans) {
-          btn.disabled = true;
-          if (i === st.cor) { btn.classList.add('correct'); btn.innerHTML += `<span class="result-icon">✓</span>`; }
-          else if (i === st.sel) { btn.classList.add('wrong'); btn.innerHTML += `<span class="result-icon">✗</span>`; }
-          else btn.classList.add('dimmed');
-        } else {
-          if (i === st.sel) btn.classList.add('selected');
-          btn.addEventListener('click', () => selectOption(i));
-        }
-        c.appendChild(btn);
-      });
-    }
-
-    function renderShapeGrid() {
-      const st = Q[cur];
-      const c = document.getElementById('shapeGridCells'); c.innerHTML = '';
-      st.opts.forEach((opt, i) => {
-        const cell = document.createElement('div'); cell.className = 'shape-cell';
-        const selected = st.sel.includes(i);
-        if (st.ans) {
-          if (opt.type === 'correct') cell.classList.add(selected ? 'correct' : 'missed');
-          else cell.classList.add(selected ? 'wrong' : 'dimmed');
-        } else {
-          if (selected) cell.classList.add('selected');
-          cell.addEventListener('click', () => selectOption(i));
-        }
-        cell.innerHTML = `<span class="shape-num">${i + 1}</span><svg viewBox="-32 -36 96 76"><use href="#${opt.shapeId}"/></svg>`;
-        c.appendChild(cell);
-      });
-    }
-
-    function selectOption(i) {
-      const st = Q[cur], data = QUESTIONS[cur];
-      if (st.ans) return;
-      if (isMulti(data)) {
-        const pos = st.sel.indexOf(i);
-        if (pos >= 0) st.sel.splice(pos, 1); else st.sel.push(i);
-      } else {
-        st.sel = i;
-      }
-      renderQuestion();
-    }
-
-    function renderQuestion() {
-      const data = QUESTIONS[cur], st = Q[cur];
-      const multi = isMulti(data);
-
-      document.getElementById('qNum').textContent = 'Q' + (cur + 1);
-      document.getElementById('qText').innerHTML = data.text();
-      document.getElementById('qHint').innerHTML = data.hint();
-
-      if (data.leftPanel === 'shapeGrid') {
-        document.getElementById('qOptions').innerHTML = '';
-        renderShapeGrid();
-      } else {
-        renderOptions();
-      }
-
-      const selList = document.getElementById('qSelectedList');
-      if (multi) {
-        selList.style.display = '';
-        selList.textContent = st.sel.length
-          ? `Selected: ${[...st.sel].sort((a, b) => a - b).map(i => i + 1).join(', ')}`
-          : 'Click the shapes above to select your answer.';
-      } else {
-        selList.style.display = 'none';
-      }
-
-      const banner = document.getElementById('qBanner');
-      if (st.ans) {
-        const ok = isAnswerCorrect(data, st);
-        banner.className = 'result-banner ' + (ok ? 'correct' : 'wrong');
-        document.getElementById('qIcon').textContent = ok ? '✓' : '✗';
-        document.getElementById('qBannerText').innerHTML = ok ? `Correct! ${data.correctExplain(st)}` : `The correct answer is ${data.correctExplain(st)}`;
-      } else {
-        banner.className = 'result-banner';
-      }
-
-      const working = document.getElementById('qWorking');
-      working.className = 'working-box' + (st.ans ? ' visible' : '');
-      document.getElementById('qWorkingContent').innerHTML = st.ans ? data.working(st) : '';
-
-      document.getElementById('qBack').style.display = cur > 0 ? 'inline-block' : 'none';
-      const check = document.getElementById('qCheck');
-      check.style.display = st.ans ? 'none' : 'inline-block';
-      check.disabled = st.ans || (multi ? st.sel.length === 0 : st.sel === null);
-      const isLast = cur === QUESTIONS.length - 1;
-      document.getElementById('qNext').style.display = (st.ans && !isLast) ? 'inline-block' : 'none';
-      document.getElementById('qSummary').style.display = (st.ans && isLast) ? 'inline-block' : 'none';
-
-      swapLeftPanel(data.leftPanel || 'circuit');
-      updateProgress();
-    }
-
-    function checkAnswer() {
-      const st = Q[cur], data = QUESTIONS[cur];
-      if (st.ans) return;
-      if (isMulti(data) ? st.sel.length === 0 : st.sel === null) return;
-      st.ans = true;
-      renderQuestion();
-      document.getElementById('qBanner').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-
-    function scrollToQuestionTop() {
-      document.getElementById('qPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-
-    function nextQuestion() { if (cur < QUESTIONS.length - 1) { cur++; renderQuestion(); scrollToQuestionTop(); } }
-
-    // Going back re-opens the previous question for a fresh answer — so it and
-    // every question after it (all now "ahead" of where the student is) are
-    // cleared back to unanswered, rather than staying locked from before.
-    function backQuestion() {
-      if (cur <= 0) return;
-      cur--;
-      for (let i = cur; i < QUESTIONS.length; i++) {
-        Q[i].ans = false;
-        Q[i].sel = isMulti(QUESTIONS[i]) ? [] : null;
-      }
-      renderQuestion();
-      scrollToQuestionTop();
-    }
-
-    function swapLeftPanel(mode) {
-      document.querySelector('.circuit-panel').style.display = mode === 'circuit' ? '' : 'none';
-      document.getElementById('q5VizPanel').style.display = mode === 'viz' ? 'block' : 'none';
-      document.getElementById('qShapeGridPanel').style.display = mode === 'shapeGrid' ? 'block' : 'none';
-    }
-
-    function goToQuestion(n) { // 1-based, for URL/jump compatibility
-      cur = Math.max(0, Math.min(QUESTIONS.length - 1, n - 1));
-      document.getElementById('summaryPanel').style.display = 'none';
-      document.getElementById('qPanel').style.display = 'flex';
-      renderQuestion();
-      scrollToQuestionTop();
-    }
-
-    function resetQuiz() {
-      Q = QUESTIONS.map(data => {
-        const opts = data.options();
-        if (isMulti(data)) {
-          const cor = opts.map((o, i) => o.type === 'correct' ? i : -1).filter(i => i >= 0);
-          return { sel: [], ans: false, cor, opts };
-        }
-        return { sel: null, ans: false, cor: opts.findIndex(o => o.type === 'correct'), opts };
-      });
-      cur = 0;
-      document.getElementById('summaryPanel').style.display = 'none';
-      document.getElementById('qPanel').style.display = 'flex';
-      renderQuestion();
-    }
-
-    function showSummary() {
-      document.getElementById('qPanel').style.display = 'none';
-      document.getElementById('summaryPanel').style.display = 'block';
-      swapLeftPanel('circuit');
-      const vals = `<div class="summary-values">
-    <span style="color:var(--colour-supply);font-weight:bold">V<sub>CC</sub></span> = <span style="color:var(--colour-supply)">${V.vcc} V</span>&nbsp;&nbsp;&nbsp;
-    <span style="color:var(--colour-resistor-labels);font-weight:bold">R<sub>B</sub></span> = <span style="color:var(--colour-resistor-labels)">${fmtO0(V.rb)}</span>&nbsp;&nbsp;
-    <span style="color:var(--colour-resistor-labels);font-weight:bold">R<sub>C</sub></span> = <span style="color:var(--colour-resistor-labels)">${fmtO0(V.rc)}</span>
-  </div>`;
-      const items = QUESTIONS.map((data, i) => {
-        const st = Q[i];
-        const ans = selectedLabel(data, st);
-        const ok = isAnswerCorrect(data, st);
-        const colour = ok ? 'var(--colour-ui-correct)' : '#ff3366';
-        const mark = ok ? '✓' : '✗';
-        return `<div class="summary-item">
-      <div class="summary-item-head"><span class="summary-qnum">Q${i + 1}</span><span class="summary-question">${data.text()}</span></div>
-      <div class="summary-answer" style="color:${colour}">You answered: ${ans} &nbsp; ${mark}</div>
-      <div class="working-box visible">${st.ans ? data.working(st) : ''}</div>
-    </div>`;
-      }).join('');
-      document.getElementById('summaryContent').innerHTML = vals + items;
-      QUESTIONS.forEach((_, i) => { const d = document.getElementById('dot-' + i); if (d) d.className = 'progress-dot done'; });
-      document.getElementById('progressLabel').textContent = 'Complete';
-    }
-
-    // ── zoom modal ──
-    function openModal() {
-      const src = document.getElementById('circuitSvg'), dst = document.getElementById('modalSvg');
-      dst.innerHTML = src.innerHTML; dst.setAttribute('viewBox', src.getAttribute('viewBox'));
-      document.getElementById('diagramModal').classList.add('open');
-      document.body.style.overflow = 'hidden';
-    }
-    function closeModal() {
-      document.getElementById('diagramModal').classList.remove('open');
-      document.getElementById('modalSvg').innerHTML = '';
-      document.body.style.overflow = '';
-    }
-    function handleModalClick(e) { if (e.target.closest('.modal-close')) return; closeModal(); }
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
-
-    buildProgressDots();
-    setMode('example1');
-
-    function goBack(e) { e.preventDefault(); history.back(); }
-    // Only show the back link if there's actually somewhere to go back to —
-    // history.length is 1 when this page was opened directly (new tab, bookmark,
-    // double-click) rather than reached by clicking a link from a menu page.
-    if (history.length > 1) {
-      document.getElementById('menuLink').style.display = '';
-    }
-
-    /* ─── DEV: xy ruler overlay ──────────────────────────────────────────── */
-    function buildXYRuler() {
-      const g = document.getElementById('xyRuler');
-      if (g.dataset.built) return;
-      g.dataset.built = '1';
-      const vb = document.getElementById('circuitSvg').viewBox.baseVal;
-      const W = vb.width, H = vb.height;
-      const hy = H - 10, vx = 10, col = '#ff00ff';
-      let svg = `<line x1="0" y1="${hy}" x2="${W}" y2="${hy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
-      for (let x = 0; x <= W; x += 10) {
-        const major = (x % 50 === 0), len = major ? 10 : 5;
-        svg += `<line x1="${x}" y1="${hy - len}" x2="${x}" y2="${hy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
-        if (major) svg += `<text x="${x}" y="${hy - 13}" fill="${col}" font-size="8" text-anchor="middle">${x}</text>`;
-      }
-      svg += `<line x1="${vx}" y1="0" x2="${vx}" y2="${H}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
-      for (let y = 0; y <= H; y += 10) {
-        const major = (y % 50 === 0), len = major ? 10 : 5;
-        svg += `<line x1="${vx}" y1="${y}" x2="${vx + len}" y2="${y}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
-        if (major) svg += `<text x="${vx + 13}" y="${y + 3}" fill="${col}" font-size="8" text-anchor="start">${y}</text>`;
-      }
-      g.innerHTML = svg;
-    }
-    function setXY(on) {
-      if (on) buildXYRuler();
-      document.getElementById('xyRuler').setAttribute('display', on ? 'inline' : 'none');
-    }
-    window.setXY = setXY;
-
-    function jump(n, answered) {
-      if (n < 1 || n > QUESTIONS.length) { console.warn('jump: no question', n); return; }
-      // Default every question before the target to correctly-answered, so
-      // progress dots and back-navigation see a consistent, completed history.
-      for (let i = 0; i < n - 1; i++) {
-        Q[i].sel = Array.isArray(Q[i].cor) ? [...Q[i].cor] : Q[i].cor;
-        Q[i].ans = true;
-      }
-      goToQuestion(n);
-      if (answered) {
-        Q[cur].sel = Array.isArray(Q[cur].cor) ? [...Q[cur].cor] : Q[cur].cor;
-        checkAnswer();
-      }
-    }
-    window.jump = jump;
-
-    function jumpToSummary() {
-      QUESTIONS.forEach((_, i) => {
-        if (Q[i].ans) return;
-        Q[i].sel = Array.isArray(Q[i].cor) ? [...Q[i].cor] : Q[i].cor;
-        Q[i].ans = true;
-      });
-      showSummary();
-    }
-    window.jumpToSummary = jumpToSummary;
 
     // ── Q5 interactive biasing visualizer ──
     (function () {
@@ -1481,11 +1244,7 @@
       update();
     })();
 
-    {
-      const p = new URLSearchParams(location.search);
-      if (p.has('q')) { if (p.get('q') === 's') jumpToSummary(); else jump(+p.get('q'), p.has('ans')); }
-      if (p.has('xy')) setXY(+p.get('xy') === 1);
-    }
+    initQuizFromURL();
   </script>
 </body>
 </html>

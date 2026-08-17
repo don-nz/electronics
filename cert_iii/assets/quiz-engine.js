@@ -32,13 +32,44 @@
   `kind`: unset (single-select) | 'multi' | 'match' (plain, `matchByLabel`,
   or `reusablePool` — see below) | 'bits'.
   `leftPanel`: unset/'circuit' (a static circuit-panel div, optionally swapped
-  per-question via showCircuitRef(data.circuitId, data.circuitLabel) if the
-  page has a #circuitRefUse/#circuitRefLabel to target) | 'viz' (a named
-  file-specific panel div — see swapLeftPanel(), still requires the page to
-  define its own #q5VizPanel-equivalent and drive it) | 'shapeGrid' | 'none'.
-  Zoom modal (openModal/closeModal) and the dev xy-ruler overlay
-  (buildXYRuler/setXY) are both included, both fully defensive — pages
-  without a #diagramModal/#circuitSvg simply never trigger them.
+  per-question via showCircuitRef(data.circuitId, data.circuitLabel,
+  data.circuitViewBox, data.circuitLoad, data.circuitAmmeter) if the page has
+  a #circuitRefUse/#circuitRefLabel to target — see the CIRCUIT_SVG_ID/
+  DEFAULT_CIRCUIT_VIEWBOX/CIRCUIT_REF_EXTRA/SUMMARY_CIRCUIT_REF globals below
+  for pages whose reference circuit swaps per question rather than staying
+  static) | 'viz' (a named file-specific panel div — see swapLeftPanel(),
+  still requires the page to define its own #q5VizPanel-equivalent and drive
+  it) | 'shapeGrid' | 'none'. Zoom modal (openModal/closeModal) and the dev
+  xy-ruler overlay (buildXYRuler/setXY) are both included, both fully
+  defensive — pages without a #diagramModal/CIRCUIT_SVG_ID element simply
+  never trigger them.
+
+  Per-question circuit swapping (bjt_knowledge_ac_params_ce.html and its
+  whole sibling family) uses four more configurable globals, all optional:
+  - `CIRCUIT_SVG_ID` (default `'circuitSvg'`) — the reference `<svg>`'s own
+    id. bjt_knowledge_basics.html's single always-static circuit uses the
+    default; the ac_parameters family's swappable one uses `'circuitRefSvg'`
+    instead — set this before resetQuiz() if your page matches that family.
+  - `DEFAULT_CIRCUIT_VIEWBOX` — fallback viewBox when a question's own
+    `circuitViewBox` is unset.
+  - `CIRCUIT_REF_EXTRA` — optional `(id, loadTerminal, ammeter) => void`,
+    called after every circuit/viewBox swap. Each ac_parameters file's own
+    ammeter-badge/load-terminal-toggle dispatch is genuinely different (one
+    ammeter id vs two, gated by which circuit id is showing, a dead
+    `loadTerminal` param in some files and a live one in others) — kept as a
+    per-page hook rather than forced into one generic shape.
+  - `SUMMARY_CIRCUIT_REF` — optional `{id, label, viewBox}`. If set,
+    showSummary() shows this specific circuit instead of hiding the panel
+    via `swapLeftPanel('none')` — for pages where each question shows a
+    different circuit and there's a natural "default" one to settle the
+    review page on.
+  - `RENDER_EXTRA` — optional `() => void`, called at the end of every
+    renderQuestion(). For per-file logic that needs to run on EVERY render
+    regardless of the current question — e.g. bjt_knowledge_ac_params_
+    ce.html's own re′/Zb/Zin/Zout progressive-reveal badges, which persist
+    once their own question is answered independent of which question is
+    currently showing (a genuinely different lifecycle than
+    CIRCUIT_REF_EXTRA, which only fires when the circuit itself swaps).
 
   `kind:'match'` has two duplicate-value-aware sub-modes, both opt-in per
   question (plain match — exact one-option-per-column — is still the
@@ -535,7 +566,8 @@ function renderQuestion() {
   document.getElementById('qSummary').style.display = (st.ans && isLast) ? 'inline-block' : 'none';
 
   swapLeftPanel(data.leftPanel || 'circuit');
-  if ((data.leftPanel || 'circuit') === 'circuit') showCircuitRef(data.circuitId, data.circuitLabel);
+  if ((data.leftPanel || 'circuit') === 'circuit') showCircuitRef(data.circuitId, data.circuitLabel, data.circuitViewBox, data.circuitLoad, data.circuitAmmeter);
+  if (RENDER_EXTRA) RENDER_EXTRA();
   updateProgress();
 }
 
@@ -598,17 +630,33 @@ function swapLeftPanel(mode) {
   if (quizWrap) quizWrap.classList.toggle('single-col', mode === 'none');
 }
 
+// Circuit-reference config for pages whose reference SVG swaps to a
+// different viewBox per question (rather than a single always-the-same
+// static one) and/or reveals extra per-question badges (ammeter/load-
+// terminal toggles) alongside the circuit swap — override before calling
+// resetQuiz() if your page needs them.
+let CIRCUIT_SVG_ID = 'circuitSvg';    // the reference <svg>'s own id — bjt_knowledge_basics.html's default; the ac_parameters family uses 'circuitRefSvg' instead
+let DEFAULT_CIRCUIT_VIEWBOX = null;   // fallback viewBox when a question doesn't specify its own
+let CIRCUIT_REF_EXTRA = null;         // optional (id, loadTerminal, ammeter) => void, called after the base circuit/viewBox swap — for pages with their own ammeter/load-terminal badges (each file's own dispatch is genuinely different, so this stays a per-page hook rather than a generic config shape)
+let SUMMARY_CIRCUIT_REF = null;       // optional { id, label, viewBox } — if set, showSummary() shows this specific circuit instead of hiding the panel via swapLeftPanel('none')
+let RENDER_EXTRA = null;              // optional () => void, called at the end of every renderQuestion() — for per-file "runs on every render" logic quiz-engine.js can't know about, e.g. progressive-reveal value badges (re′/Zb/Zin/Zout) that persist once their own question is answered, independent of which question is currently on screen
+
 // For leftPanel:'circuit' questions that reference a DIFFERENT circuit per
 // question (rather than always the same static one) — swaps which <use>
-// target the reference SVG points at. Defensive: pages with only one
+// target the reference SVG points at, and its viewBox if the page uses
+// CIRCUIT_SVG_ID/DEFAULT_CIRCUIT_VIEWBOX. Defensive: pages with only one
 // static circuit (no per-question circuitId) simply never have anything
 // call this.
-function showCircuitRef(id, label) {
+function showCircuitRef(id, label, viewBox, loadTerminal, ammeter) {
   const use = document.getElementById('circuitRefUse');
   if (!use) return;
   use.setAttribute('href', '#' + id);
   const labelEl = document.getElementById('circuitRefLabel');
   if (labelEl) labelEl.textContent = label || 'Reference Circuit';
+  const svgEl = document.getElementById(CIRCUIT_SVG_ID);
+  if (svgEl) svgEl.setAttribute('viewBox', viewBox || DEFAULT_CIRCUIT_VIEWBOX || svgEl.getAttribute('viewBox'));
+  if (CIRCUIT_REF_EXTRA) CIRCUIT_REF_EXTRA(id, loadTerminal, ammeter);
+  if (xyOn) buildXYRuler();
 }
 
 function goToQuestion(n) { // 1-based, for URL/jump compatibility
@@ -651,7 +699,8 @@ function resetQuiz() {
 function showSummary() {
   document.getElementById('qPanel').style.display = 'none';
   document.getElementById('summaryPanel').style.display = 'block';
-  swapLeftPanel('none');
+  if (SUMMARY_CIRCUIT_REF) showCircuitRef(SUMMARY_CIRCUIT_REF.id, SUMMARY_CIRCUIT_REF.label, SUMMARY_CIRCUIT_REF.viewBox);
+  else swapLeftPanel('none');
   const items = QUESTIONS.map((data, i) => {
     const st = Q[i];
     const ans = selectedLabel(data, st);
@@ -672,9 +721,15 @@ function showSummary() {
 // ── zoom modal — fully defensive; pages without a #diagramModal simply
 // never have anything call these (no onclick="openModal()" exists there).
 function openModal() {
-  const src = document.getElementById('circuitSvg'), dst = document.getElementById('modalSvg');
+  const src = document.getElementById(CIRCUIT_SVG_ID), dst = document.getElementById('modalSvg');
   if (!src || !dst) return;
   dst.innerHTML = src.innerHTML; dst.setAttribute('viewBox', src.getAttribute('viewBox'));
+  // Pages whose reference circuit swaps per question (CIRCUIT_SVG_ID ===
+  // 'circuitRefSvg') also sync the modal's own title from circuitRefLabel;
+  // pages with a single static circuit (and their own #modalVoltLabel-style
+  // title, updated elsewhere) simply don't have a #modalTitle to find.
+  const modalTitle = document.getElementById('modalTitle'), refLabel = document.getElementById('circuitRefLabel');
+  if (modalTitle && refLabel) modalTitle.textContent = refLabel.textContent;
   document.getElementById('diagramModal').classList.add('open');
   document.body.style.overflow = 'hidden';
 }
@@ -711,31 +766,39 @@ function jumpToSummary() {
 }
 window.jumpToSummary = jumpToSummary;
 
-/* ─── DEV: xy ruler overlay — defensive; pages without #circuitSvg/#xyRuler
-   simply never call setXY(1) themselves (nothing wires it to a control). ── */
+/* ─── DEV: xy ruler overlay — defensive; pages without #xyRuler/CIRCUIT_SVG_ID
+   simply never call setXY(1) themselves (nothing wires it to a control).
+   Rebuilt on every call (no build-once cache) rather than cached after the
+   first build — pages whose reference circuit swaps viewBox per question
+   (see showCircuitRef's own `if (xyOn) buildXYRuler()`) need a fresh ruler
+   each time or it drifts out of alignment; a cache would only ever be a
+   micro-optimisation for a rarely-used dev-only overlay, not worth the
+   staleness risk. Offset-aware (vb.x/vb.y) so it works identically whether
+   CIRCUIT_SVG_ID's viewBox starts at 0,0 or not. ── */
+let xyOn = false;
 function buildXYRuler() {
   const g = document.getElementById('xyRuler');
-  const circuitSvg = document.getElementById('circuitSvg');
-  if (!g || !circuitSvg || g.dataset.built) return;
-  g.dataset.built = '1';
-  const vb = circuitSvg.viewBox.baseVal;
-  const W = vb.width, H = vb.height;
-  const hy = H - 10, vx = 10, col = '#ff00ff';
-  let svg = `<line x1="0" y1="${hy}" x2="${W}" y2="${hy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+  const svgEl = document.getElementById(CIRCUIT_SVG_ID);
+  if (!g || !svgEl) return;
+  const vb = svgEl.viewBox.baseVal;
+  const offX = vb.x, offY = vb.y, W = vb.width, H = vb.height;
+  const hy = offY + H - 10, vx = offX + 10, col = '#ff00ff';
+  let svg = `<line x1="${offX}" y1="${hy}" x2="${offX + W}" y2="${hy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
   for (let x = 0; x <= W; x += 10) {
-    const major = (x % 50 === 0), len = major ? 10 : 5;
-    svg += `<line x1="${x}" y1="${hy - len}" x2="${x}" y2="${hy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
-    if (major) svg += `<text x="${x}" y="${hy - 13}" fill="${col}" font-size="8" text-anchor="middle">${x}</text>`;
+    const gx = offX + x, major = (Math.round(gx) % 50 === 0), len = major ? 10 : 5;
+    svg += `<line x1="${gx}" y1="${hy - len}" x2="${gx}" y2="${hy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+    if (major) svg += `<text x="${gx}" y="${hy - 13}" fill="${col}" font-size="8" text-anchor="middle">${Math.round(gx)}</text>`;
   }
-  svg += `<line x1="${vx}" y1="0" x2="${vx}" y2="${H}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+  svg += `<line x1="${vx}" y1="${offY}" x2="${vx}" y2="${offY + H}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
   for (let y = 0; y <= H; y += 10) {
-    const major = (y % 50 === 0), len = major ? 10 : 5;
-    svg += `<line x1="${vx}" y1="${y}" x2="${vx + len}" y2="${y}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
-    if (major) svg += `<text x="${vx + 13}" y="${y + 3}" fill="${col}" font-size="8" text-anchor="start">${y}</text>`;
+    const gy = offY + y, major = (Math.round(gy) % 50 === 0), len = major ? 10 : 5;
+    svg += `<line x1="${vx}" y1="${gy}" x2="${vx + len}" y2="${gy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+    if (major) svg += `<text x="${vx + 13}" y="${gy + 3}" fill="${col}" font-size="8" text-anchor="start">${Math.round(gy)}</text>`;
   }
   g.innerHTML = svg;
 }
 function setXY(on) {
+  xyOn = on;
   const g = document.getElementById('xyRuler');
   if (!g) return;
   if (on) buildXYRuler();

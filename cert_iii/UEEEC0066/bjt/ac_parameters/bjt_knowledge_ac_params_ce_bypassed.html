@@ -52,6 +52,12 @@
   Same data-driven QUESTIONS[] engine as bjt_knowledge_basics.html — see
   that file's header comment for the core architecture. Add/reorder
   questions by editing the QUESTIONS array only.
+
+  Migrated to the shared cert_iii/assets/quiz-engine.js engine, same
+  recipe as bjt_knowledge_ac_params_ce.html: CIRCUIT_SVG_ID='circuitRefSvg',
+  DEFAULT_CIRCUIT_VIEWBOX=DEFAULT_VIEWBOX, CIRCUIT_REF_EXTRA toggles the
+  ieIndCe ammeter, SUMMARY_CIRCUIT_REF points at ce-divider-ac-bypassed,
+  RENDER_EXTRA re-runs updateReReveal/updateZReveal every render.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -60,6 +66,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="../../../assets/theme-init.js"></script>
+  <script src="../../../assets/quiz-engine.js"></script>
   <title>BJT Knowledge Quiz — AC Parameters (Common Emitter, Bypassed RE)</title>
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
     rel="stylesheet">
@@ -422,9 +429,13 @@
   </div>
 
   <script>
-    const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
-    function frac(num, den) { return `<span class="working-frac"><span class="num">${num}</span><span class="den">${den}</span></span>`; }
     const DEFAULT_VIEWBOX = '-10 -10 690 570';
+    CIRCUIT_SVG_ID = 'circuitRefSvg';
+    DEFAULT_CIRCUIT_VIEWBOX = DEFAULT_VIEWBOX;
+    CIRCUIT_REF_EXTRA = (id, loadTerminal, ammeter) => {
+      document.getElementById('ieIndCe').setAttribute('display', ammeter ? 'inline' : 'none');
+    };
+    SUMMARY_CIRCUIT_REF = { id: 'ce-divider-ac-bypassed', label: 'Common Emitter (voltage-divider bias, RE bypassed)', viewBox: DEFAULT_VIEWBOX };
 
     // ══════════════════════════════════════════════════════════════════════
     // QUESTIONS — Q1-5, cloned from bjt_knowledge_ac_params_ce.html's own
@@ -522,87 +533,6 @@
       },
     ];
 
-    // ══════════════════════════════════════════════════════════════════════
-    // QUIZ ENGINE — generic; driven entirely by QUESTIONS[] via index.
-    // (Same as bjt_knowledge_basics.html's engine.)
-    // ══════════════════════════════════════════════════════════════════════
-
-    function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
-
-    function isMulti(data) { return data.kind === 'multi'; }
-    function isAnswerCorrect(data, st) {
-      if (!isMulti(data)) return st.sel === st.cor;
-      const a = [...st.sel].sort((x, y) => x - y), b = [...st.cor].sort((x, y) => x - y);
-      return a.length === b.length && a.every((v, i) => v === b[i]);
-    }
-    function selectedLabel(data, st) {
-      if (!isMulti(data)) return (st.sel != null && st.opts[st.sel]) ? st.opts[st.sel].label : '—';
-      return st.sel.length ? [...st.sel].sort((a, b) => a - b).map(i => LETTERS[i]).join(', ') : '—';
-    }
-
-    let Q = [];
-    let cur = 0;
-
-    function buildProgressDots() {
-      document.getElementById('progressDots').innerHTML =
-        QUESTIONS.map((_, i) => `<div class="progress-dot" id="dot-${i}"></div>`).join('');
-    }
-
-    function updateProgress() {
-      QUESTIONS.forEach((_, i) => {
-        const d = document.getElementById('dot-' + i);
-        d.className = 'progress-dot';
-        if (i === cur) d.classList.add('active'); else if (Q[i].ans) d.classList.add('done');
-      });
-      document.getElementById('progressLabel').textContent = (cur + 1) + ' / ' + QUESTIONS.length;
-    }
-
-    function renderOptions() {
-      const st = Q[cur], data = QUESTIONS[cur];
-      const multi = isMulti(data);
-      const c = document.getElementById('qOptions'); c.innerHTML = '';
-      st.opts.forEach((opt, i) => {
-        const btn = document.createElement('button'); btn.className = 'option-btn';
-        btn.innerHTML = `<span class="option-letter">${LETTERS[i]}</span><span>${opt.label}</span>`;
-        if (st.ans) {
-          btn.disabled = true;
-          if (multi) {
-            const selected = st.sel.includes(i);
-            if (opt.type === 'correct') { btn.classList.add(selected ? 'correct' : 'missed'); if (selected) btn.innerHTML += `<span class="result-icon">✓</span>`; }
-            else { btn.classList.add(selected ? 'wrong' : 'dimmed'); if (selected) btn.innerHTML += `<span class="result-icon">✗</span>`; }
-          } else {
-            if (i === st.cor) { btn.classList.add('correct'); btn.innerHTML += `<span class="result-icon">✓</span>`; }
-            else if (i === st.sel) { btn.classList.add('wrong'); btn.innerHTML += `<span class="result-icon">✗</span>`; }
-            else btn.classList.add('dimmed');
-          }
-        } else {
-          if (multi ? st.sel.includes(i) : i === st.sel) btn.classList.add('selected');
-          btn.addEventListener('click', () => selectOption(i));
-        }
-        c.appendChild(btn);
-      });
-    }
-
-    function selectOption(i) {
-      const st = Q[cur], data = QUESTIONS[cur];
-      if (st.ans) return;
-      if (isMulti(data)) {
-        const pos = st.sel.indexOf(i);
-        if (pos >= 0) st.sel.splice(pos, 1); else st.sel.push(i);
-      } else {
-        st.sel = i;
-      }
-      renderQuestion();
-    }
-
-    function showCircuitRef(id, label, viewBox, loadTerminal, ammeter) {
-      document.getElementById('circuitRefUse').setAttribute('href', '#' + id);
-      document.getElementById('circuitRefLabel').textContent = label || 'Reference Circuit';
-      document.getElementById('circuitRefSvg').setAttribute('viewBox', viewBox || DEFAULT_VIEWBOX);
-      document.getElementById('ieIndCe').setAttribute('display', ammeter ? 'inline' : 'none');
-      if (xyOn) buildXYRuler();
-    }
-
     /* re' reveal on the diagram itself, once Q1 has been answered. Persists
        regardless of which question is currently on screen (unlike the
        ammeter badge, which only shows for its own question) — this is
@@ -621,209 +551,11 @@
       document.getElementById('zoutBadgeCe').setAttribute('display', Q[3].ans ? 'inline' : 'none');
     }
 
-    /* ─── DEV: xy ruler overlay, for lining up SVG coordinates by eye ────────
-       Console:   setXY(1) / setXY(0)     URL: ?xy=1 */
-    let xyOn = false;
-    function buildXYRuler() {
-      const g = document.getElementById('xyRuler');
-      if (!g) return;
-      const vb = document.getElementById('circuitRefSvg').viewBox.baseVal;
-      const offX = vb.x, offY = vb.y, W = vb.width, H = vb.height;
-      const hy = offY + H - 10, vx = offX + 10, col = '#ff00ff';
-      let svg = `<line x1="${offX}" y1="${hy}" x2="${offX + W}" y2="${hy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
-      for (let x = 0; x <= W; x += 10) {
-        const gx = offX + x, major = (Math.round(gx) % 50 === 0), len = major ? 10 : 5;
-        svg += `<line x1="${gx}" y1="${hy - len}" x2="${gx}" y2="${hy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
-        if (major) svg += `<text x="${gx}" y="${hy - 13}" fill="${col}" font-size="8" text-anchor="middle">${Math.round(gx)}</text>`;
-      }
-      svg += `<line x1="${vx}" y1="${offY}" x2="${vx}" y2="${offY + H}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
-      for (let y = 0; y <= H; y += 10) {
-        const gy = offY + y, major = (Math.round(gy) % 50 === 0), len = major ? 10 : 5;
-        svg += `<line x1="${vx}" y1="${gy}" x2="${vx + len}" y2="${gy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
-        if (major) svg += `<text x="${vx + 13}" y="${gy + 3}" fill="${col}" font-size="8" text-anchor="start">${Math.round(gy)}</text>`;
-      }
-      g.innerHTML = svg;
-    }
-    function setXY(on) {
-      xyOn = on;
-      const g = document.getElementById('xyRuler');
-      if (!g) return;
-      if (on) buildXYRuler();
-      g.setAttribute('display', on ? 'inline' : 'none');
-    }
-    window.setXY = setXY;
+    RENDER_EXTRA = () => { updateReReveal(); updateZReveal(); };
 
-    function renderQuestion() {
-      const data = QUESTIONS[cur], st = Q[cur];
-      const multi = isMulti(data);
-
-      document.getElementById('qNum').textContent = 'Q' + (cur + 1);
-      document.getElementById('qText').innerHTML = data.text();
-      document.getElementById('qHint').innerHTML = data.hint();
-
-      renderOptions();
-
-      const selList = document.getElementById('qSelectedList');
-      if (multi) {
-        selList.style.display = '';
-        selList.textContent = st.sel.length
-          ? `Selected: ${[...st.sel].sort((a, b) => a - b).map(i => LETTERS[i]).join(', ')}`
-          : 'Click the options above to select your answer.';
-      } else {
-        selList.style.display = 'none';
-      }
-
-      const banner = document.getElementById('qBanner');
-      if (st.ans) {
-        const ok = isAnswerCorrect(data, st);
-        banner.className = 'result-banner ' + (ok ? 'correct' : 'wrong');
-        document.getElementById('qIcon').textContent = ok ? '✓' : '✗';
-        document.getElementById('qBannerText').innerHTML = ok ? `Correct! ${data.correctExplain(st)}` : `The correct answer is ${data.correctExplain(st)}`;
-      } else {
-        banner.className = 'result-banner';
-      }
-
-      const working = document.getElementById('qWorking');
-      working.className = 'working-box' + (st.ans ? ' visible' : '');
-      document.getElementById('qWorkingContent').innerHTML = st.ans ? data.working(st) : '';
-
-      document.getElementById('qBack').style.display = cur > 0 ? 'inline-block' : 'none';
-      const check = document.getElementById('qCheck');
-      check.style.display = st.ans ? 'none' : 'inline-block';
-      check.disabled = st.ans || (multi ? st.sel.length === 0 : st.sel === null);
-      const isLast = cur === QUESTIONS.length - 1;
-      document.getElementById('qNext').style.display = (st.ans && !isLast) ? 'inline-block' : 'none';
-      document.getElementById('qSummary').style.display = (st.ans && isLast) ? 'inline-block' : 'none';
-
-      showCircuitRef(data.circuitId, data.circuitLabel, data.circuitViewBox, data.circuitLoad, data.circuitAmmeter);
-      updateReReveal();
-      updateZReveal();
-      updateProgress();
-    }
-
-    function checkAnswer() {
-      const st = Q[cur], data = QUESTIONS[cur];
-      if (st.ans) return;
-      if (isMulti(data) ? st.sel.length === 0 : st.sel === null) return;
-      st.ans = true;
-      renderQuestion();
-      document.getElementById('qBanner').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-
-    function scrollToQuestionTop() {
-      document.getElementById('qPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-
-    function nextQuestion() { if (cur < QUESTIONS.length - 1) { cur++; renderQuestion(); scrollToQuestionTop(); } }
-
-    function backQuestion() {
-      if (cur <= 0) return;
-      cur--;
-      for (let i = cur; i < QUESTIONS.length; i++) {
-        Q[i].ans = false;
-        Q[i].sel = isMulti(QUESTIONS[i]) ? [] : null;
-      }
-      renderQuestion();
-      scrollToQuestionTop();
-    }
-
-    function goToQuestion(n) {
-      cur = Math.max(0, Math.min(QUESTIONS.length - 1, n - 1));
-      document.getElementById('summaryPanel').style.display = 'none';
-      document.getElementById('qPanel').style.display = 'flex';
-      renderQuestion();
-      scrollToQuestionTop();
-    }
-
-    function resetQuiz() {
-      Q = QUESTIONS.map(data => {
-        const opts = data.options();
-        if (isMulti(data)) {
-          const cor = opts.map((o, i) => o.type === 'correct' ? i : -1).filter(i => i >= 0);
-          return { sel: [], ans: false, cor, opts };
-        }
-        return { sel: null, ans: false, cor: opts.findIndex(o => o.type === 'correct'), opts };
-      });
-      cur = 0;
-      document.getElementById('summaryPanel').style.display = 'none';
-      document.getElementById('qPanel').style.display = 'flex';
-      renderQuestion();
-    }
-
-    function showSummary() {
-      document.getElementById('qPanel').style.display = 'none';
-      document.getElementById('summaryPanel').style.display = 'block';
-      showCircuitRef('ce-divider-ac-bypassed', 'Common Emitter (voltage-divider bias, RE bypassed)', DEFAULT_VIEWBOX);
-      const items = QUESTIONS.map((data, i) => {
-        const st = Q[i];
-        const ans = selectedLabel(data, st);
-        const ok = isAnswerCorrect(data, st);
-        const colour = ok ? 'var(--colour-ui-correct)' : '#ff3366';
-        const mark = ok ? '✓' : '✗';
-        return `<div class="summary-item">
-      <div class="summary-item-head"><span class="summary-qnum">Q${i + 1}</span><span class="summary-question">${data.text()}</span></div>
-      <div class="summary-answer" style="color:${colour}">You answered: ${ans} &nbsp; ${mark}</div>
-      <div class="working-box visible">${st.ans ? data.working(st) : ''}</div>
-    </div>`;
-      }).join('');
-      document.getElementById('summaryContent').innerHTML = items;
-      QUESTIONS.forEach((_, i) => { const d = document.getElementById('dot-' + i); if (d) d.className = 'progress-dot done'; });
-      document.getElementById('progressLabel').textContent = 'Complete';
-    }
-
-    // ── zoom modal ──
-    function openModal() {
-      const src = document.getElementById('circuitRefSvg'), dst = document.getElementById('modalSvg');
-      dst.innerHTML = src.innerHTML; dst.setAttribute('viewBox', src.getAttribute('viewBox'));
-      document.getElementById('modalTitle').textContent = document.getElementById('circuitRefLabel').textContent;
-      document.getElementById('diagramModal').classList.add('open');
-      document.body.style.overflow = 'hidden';
-    }
-    function closeModal() {
-      document.getElementById('diagramModal').classList.remove('open');
-      document.getElementById('modalSvg').innerHTML = '';
-      document.body.style.overflow = '';
-    }
-    function handleModalClick(e) { if (e.target.closest('.modal-close')) return; closeModal(); }
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
-
-    buildProgressDots();
+    initQuizNav();
     resetQuiz();
-
-    function goBack(e) { e.preventDefault(); history.back(); }
-    if (history.length > 1) {
-      document.getElementById('menuLink').style.display = '';
-    }
-
-    function jump(n, answered) {
-      if (n < 1 || n > QUESTIONS.length) { console.warn('jump: no question', n); return; }
-      for (let i = 0; i < n - 1; i++) {
-        Q[i].sel = Array.isArray(Q[i].cor) ? [...Q[i].cor] : Q[i].cor;
-        Q[i].ans = true;
-      }
-      goToQuestion(n);
-      if (answered) {
-        Q[cur].sel = Array.isArray(Q[cur].cor) ? [...Q[cur].cor] : Q[cur].cor;
-        checkAnswer();
-      }
-    }
-    window.jump = jump;
-
-    function jumpToSummary() {
-      QUESTIONS.forEach((_, i) => {
-        if (Q[i].ans) return;
-        Q[i].sel = Array.isArray(Q[i].cor) ? [...Q[i].cor] : Q[i].cor;
-        Q[i].ans = true;
-      });
-      showSummary();
-    }
-    window.jumpToSummary = jumpToSummary;
-
-    {
-      const p = new URLSearchParams(location.search);
-      if (p.has('q')) { if (p.get('q') === 's') jumpToSummary(); else jump(+p.get('q'), p.has('ans')); }
-      if (p.has('xy')) setXY(+p.get('xy') === 1);
-    }
+    initQuizFromURL();
   </script>
 </body>
 
