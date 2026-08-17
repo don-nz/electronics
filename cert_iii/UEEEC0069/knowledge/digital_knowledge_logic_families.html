@@ -60,6 +60,12 @@
   families (the same numbers found in Floyd's Digital Fundamentals and
   equivalent texts) — presented as "typical/standard" values for teaching
   purposes, not a specific manufacturer's exact datasheet decimals.
+
+  Migrated to the shared cert_iii/assets/quiz-engine.js engine. Simplest
+  migration in the project so far — no circuit panel, no shapeGrid, no
+  configurable globals needed at all; just the standard multi/match
+  QUESTIONS[] data and the trailing initQuizNav()/resetQuiz()/
+  initQuizFromURL() bootstrap.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -68,6 +74,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="../../assets/theme-init.js"></script>
+  <script src="../../assets/quiz-engine.js"></script>
   <title>Digital Electronics Knowledge Quiz 5</title>
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
     rel="stylesheet">
@@ -147,8 +154,6 @@
   </div>
 
   <script>
-    const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
-
     function dsTable(rows, cols) {
       return `<table class="ds-table"><thead><tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>${
         rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')
@@ -442,334 +447,9 @@
       },
     ];
 
-    // ══════════════════════════════════════════════════════════════════════
-    // QUIZ ENGINE — generic; driven entirely by QUESTIONS[] via index.
-    // ══════════════════════════════════════════════════════════════════════
-
-    function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
-
-    function isMulti(data) { return data.kind === 'multi'; }
-    function isMatch(data) { return data.kind === 'match'; }
-
-    // ── kind:'match' — ported from digital_knowledge_logic_gates.html.
-    // columns() gives plain strings here (no {shapeId} — nothing to draw in
-    // this file); options() gives {label, col} pool items the student
-    // drags/clicks into place. ──
-    function matchChipContent(opt) { return opt.label; }
-    function renderMatch() {
-      const st = Q[cur], data = QUESTIONS[cur];
-      const cols = data.columns();
-
-      const picking = st.sel !== null;
-      const poolHasItems = st.opts.some((_, i) => st.place[i] === null);
-      const needsPick = !st.ans && !picking && poolHasItems;
-      document.getElementById('matchPoolRow').classList.toggle('needs-pick', needsPick);
-      document.getElementById('matchPool').classList.toggle('needs-pick', needsPick);
-
-      const pool = document.getElementById('matchPool');
-      pool.innerHTML = '';
-      st.opts.forEach((opt, i) => {
-        if (st.place[i] !== null) return;
-        const chip = document.createElement('button');
-        const isPicked = st.sel === i;
-        chip.className = 'match-chip' + (isPicked ? ' picked' : '');
-        chip.innerHTML = matchChipContent(opt);
-        chip.disabled = st.ans || (picking && !isPicked);
-        if (!chip.disabled) chip.addEventListener('click', (e) => { e.stopPropagation(); selectPoolItem(i); });
-        pool.appendChild(chip);
-      });
-
-      const colsEl = document.getElementById('matchColumns');
-      colsEl.innerHTML = '';
-      // Text-only column titles (unlike every other match question in this
-      // project, which uses compact fixed-width shapeId icons) can overflow
-      // a narrow phone screen if forced into 4 columns — cap at 2 below
-      // 500px so long titles like "Power Dissipation" have room to wrap.
-      const maxCols = window.innerWidth < 500 ? 2 : 4;
-      colsEl.style.gridTemplateColumns = `repeat(${Math.min(cols.length, maxCols)}, 1fr)`;
-      cols.forEach((col, colIdx) => {
-        const colDiv = document.createElement('div');
-        colDiv.className = 'match-column';
-        colDiv.addEventListener('click', () => assignToColumn(colIdx));
-
-        const arrow = document.createElement('div'); arrow.className = 'match-col-arrow'; arrow.textContent = '▼';
-        const title = document.createElement('div'); title.className = 'match-col-title';
-        title.innerHTML = col;
-        const items = document.createElement('div'); items.className = 'match-col-items';
-
-        st.opts.forEach((opt, i) => {
-          if (st.place[i] !== colIdx) return;
-          const chip = document.createElement('button');
-          chip.className = 'match-chip';
-          chip.innerHTML = matchChipContent(opt);
-          if (st.ans) {
-            chip.disabled = true;
-            chip.classList.add(st.place[i] === st.cor[i] ? 'correct' : 'wrong');
-          } else {
-            chip.disabled = picking;
-            if (!chip.disabled) chip.addEventListener('click', (e) => { e.stopPropagation(); unassignItem(i); });
-          }
-          items.appendChild(chip);
-        });
-
-        colDiv.append(arrow, title, items);
-        colDiv.classList.toggle('droppable', !st.ans && picking);
-        colsEl.appendChild(colDiv);
-      });
-    }
-    function selectPoolItem(i) {
-      const st = Q[cur];
-      if (st.ans) return;
-      st.sel = (st.sel === i) ? null : i;
-      renderQuestion();
-    }
-    function assignToColumn(colIdx) {
-      const st = Q[cur];
-      if (st.ans || st.sel === null) return;
-      st.place[st.sel] = colIdx;
-      st.sel = null;
-      renderQuestion();
-    }
-    function unassignItem(i) {
-      const st = Q[cur];
-      if (st.ans) return;
-      st.place[i] = null;
-      renderQuestion();
-    }
-
-    function isAnswerCorrect(data, st) {
-      if (isMatch(data)) return st.place.every((p, i) => p === st.cor[i]);
-      if (!isMulti(data)) return st.sel === st.cor;
-      const a = [...st.sel].sort((x, y) => x - y), b = [...st.cor].sort((x, y) => x - y);
-      return a.length === b.length && a.every((v, i) => v === b[i]);
-    }
-    function selectedLabel(data, st) {
-      if (isMatch(data)) {
-        const correctCount = st.place.filter((p, i) => p === st.cor[i]).length;
-        return `${correctCount} / ${st.opts.length} correctly placed`;
-      }
-      if (!isMulti(data)) return (st.sel != null && st.opts[st.sel]) ? st.opts[st.sel].label : '—';
-      return st.sel.length ? [...st.sel].sort((a, b) => a - b).map(i => LETTERS[i]).join(', ') : '—';
-    }
-    function fillCorrectSelection(i) {
-      const data = QUESTIONS[i], st = Q[i];
-      if (isMatch(data)) st.place = st.cor.slice();
-      else if (isMulti(data)) st.sel = [...st.cor];
-      else st.sel = st.cor;
-    }
-
-    let Q = [];
-    let cur = 0;
-
-    function buildProgressDots() {
-      document.getElementById('progressDots').innerHTML =
-        QUESTIONS.map((_, i) => `<div class="progress-dot" id="dot-${i}"></div>`).join('');
-    }
-
-    function updateProgress() {
-      QUESTIONS.forEach((_, i) => {
-        const d = document.getElementById('dot-' + i);
-        d.className = 'progress-dot';
-        if (i === cur) d.classList.add('active'); else if (Q[i].ans) d.classList.add('done');
-      });
-      document.getElementById('progressLabel').textContent = (cur + 1) + ' / ' + QUESTIONS.length;
-    }
-
-    function renderOptions() {
-      const st = Q[cur], data = QUESTIONS[cur], multi = isMulti(data);
-      const c = document.getElementById('qOptions'); c.innerHTML = '';
-      st.opts.forEach((opt, i) => {
-        const btn = document.createElement('button'); btn.className = 'option-btn';
-        const selected = multi ? st.sel.includes(i) : i === st.sel;
-        btn.innerHTML = `<span class="option-letter">${LETTERS[i]}</span><span>${opt.label}</span>`;
-        if (st.ans) {
-          btn.disabled = true;
-          if (opt.type === 'correct') {
-            const missed = multi && !selected;
-            btn.classList.add(missed ? 'missed' : 'correct');
-            btn.innerHTML += `<span class="result-icon">${missed ? '○' : '✓'}</span>`;
-          } else if (selected) { btn.classList.add('wrong'); btn.innerHTML += `<span class="result-icon">✗</span>`; }
-          else btn.classList.add('dimmed');
-        } else {
-          if (selected) btn.classList.add('selected');
-          btn.addEventListener('click', () => selectOption(i));
-        }
-        c.appendChild(btn);
-      });
-    }
-
-    function selectOption(i) {
-      const st = Q[cur], data = QUESTIONS[cur];
-      if (st.ans) return;
-      if (isMulti(data)) {
-        const pos = st.sel.indexOf(i);
-        if (pos >= 0) st.sel.splice(pos, 1); else st.sel.push(i);
-      } else {
-        st.sel = i;
-      }
-      renderQuestion();
-    }
-
-    function renderQuestion() {
-      const data = QUESTIONS[cur], st = Q[cur];
-      const multi = isMulti(data);
-
-      document.getElementById('qNum').textContent = 'Q' + (cur + 1);
-      document.getElementById('qText').innerHTML = data.text(st);
-      document.getElementById('qHint').innerHTML = data.hint(st);
-
-      document.getElementById('qMatch').style.display = isMatch(data) ? 'flex' : 'none';
-      document.getElementById('qOptions').style.display = isMatch(data) ? 'none' : '';
-      if (isMatch(data)) {
-        renderMatch();
-      } else {
-        renderOptions();
-      }
-
-      const selList = document.getElementById('qSelectedList');
-      if (multi) {
-        selList.style.display = '';
-        selList.textContent = st.sel.length
-          ? `Selected: ${[...st.sel].sort((a, b) => a - b).map(i => LETTERS[i]).join(', ')}`
-          : 'Click every option that applies.';
-      } else {
-        selList.style.display = 'none';
-      }
-
-      const banner = document.getElementById('qBanner');
-      if (st.ans) {
-        const ok = isAnswerCorrect(data, st);
-        banner.className = 'result-banner ' + (ok ? 'correct' : 'wrong');
-        document.getElementById('qIcon').textContent = ok ? '✓' : '✗';
-        document.getElementById('qBannerText').innerHTML = ok ? `Correct! ${data.correctExplain(st)}` : `The correct answer is ${data.correctExplain(st)}`;
-      } else {
-        banner.className = 'result-banner';
-      }
-
-      const working = document.getElementById('qWorking');
-      working.className = 'working-box' + (st.ans ? ' visible' : '');
-      document.getElementById('qWorkingContent').innerHTML = st.ans ? data.working(st) : '';
-
-      document.getElementById('qBack').style.display = cur > 0 ? 'inline-block' : 'none';
-      const check = document.getElementById('qCheck');
-      check.style.display = st.ans ? 'none' : 'inline-block';
-      check.disabled = st.ans || (
-        isMatch(data) ? !st.place.every(p => p !== null) :
-        (multi ? st.sel.length === 0 : st.sel === null)
-      );
-      const isLast = cur === QUESTIONS.length - 1;
-      document.getElementById('qNext').style.display = (st.ans && !isLast) ? 'inline-block' : 'none';
-      document.getElementById('qSummary').style.display = (st.ans && isLast) ? 'inline-block' : 'none';
-
-      updateProgress();
-    }
-
-    function checkAnswer() {
-      const st = Q[cur], data = QUESTIONS[cur];
-      if (st.ans) return;
-      if (isMatch(data)) { if (!st.place.every(p => p !== null)) return; }
-      else if (isMulti(data) ? st.sel.length === 0 : st.sel === null) return;
-      st.ans = true;
-      renderQuestion();
-      document.getElementById('qBanner').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-
-    function scrollToQuestionTop() {
-      document.getElementById('qPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-
-    function nextQuestion() { if (cur < QUESTIONS.length - 1) { cur++; renderQuestion(); scrollToQuestionTop(); } }
-
-    function backQuestion() {
-      if (cur <= 0) return;
-      cur--;
-      for (let i = cur; i < QUESTIONS.length; i++) {
-        const data = QUESTIONS[i];
-        Q[i].ans = false;
-        if (isMatch(data)) { Q[i].place = Q[i].opts.map(() => null); Q[i].sel = null; }
-        else Q[i].sel = isMulti(data) ? [] : null;
-      }
-      renderQuestion();
-      scrollToQuestionTop();
-    }
-
-    function goToQuestion(n) {
-      cur = Math.max(0, Math.min(QUESTIONS.length - 1, n - 1));
-      document.getElementById('summaryPanel').style.display = 'none';
-      document.getElementById('qPanel').style.display = 'flex';
-      renderQuestion();
-      scrollToQuestionTop();
-    }
-
-    function resetQuiz() {
-      Q = QUESTIONS.map(data => {
-        const opts = data.options();
-        if (isMatch(data)) {
-          const cor = opts.map(o => o.col);
-          return { sel: null, ans: false, cor, opts, place: opts.map(() => null) };
-        }
-        if (isMulti(data)) {
-          const cor = opts.map((o, i) => o.type === 'correct' ? i : -1).filter(i => i >= 0);
-          return { sel: [], ans: false, cor, opts };
-        }
-        return { sel: null, ans: false, cor: opts.findIndex(o => o.type === 'correct'), opts };
-      });
-      cur = 0;
-      document.getElementById('summaryPanel').style.display = 'none';
-      document.getElementById('qPanel').style.display = 'flex';
-      renderQuestion();
-    }
-
-    function showSummary() {
-      document.getElementById('qPanel').style.display = 'none';
-      document.getElementById('summaryPanel').style.display = 'block';
-      const items = QUESTIONS.map((data, i) => {
-        const st = Q[i];
-        const ans = selectedLabel(data, st);
-        const ok = isAnswerCorrect(data, st);
-        const colour = ok ? 'var(--colour-ui-correct)' : '#ff3366';
-        const mark = ok ? '✓' : '✗';
-        return `<div class="summary-item">
-      <div class="summary-item-head"><span class="summary-qnum">Q${i + 1}</span><span class="summary-question">${data.text(st)}</span></div>
-      <div class="summary-answer" style="color:${colour}">You answered: ${ans} &nbsp; ${mark}</div>
-      <div class="working-box visible">${st.ans ? data.working(st) : ''}</div>
-    </div>`;
-      }).join('');
-      document.getElementById('summaryContent').innerHTML = items;
-      QUESTIONS.forEach((_, i) => { const d = document.getElementById('dot-' + i); if (d) d.className = 'progress-dot done'; });
-      document.getElementById('progressLabel').textContent = 'Complete';
-    }
-
-    buildProgressDots();
+    initQuizNav();
     resetQuiz();
-
-    function goBack(e) { e.preventDefault(); history.back(); }
-    if (history.length > 1) {
-      document.getElementById('menuLink').style.display = '';
-    }
-
-    function jump(n, answered) {
-      if (n < 1 || n > QUESTIONS.length) { console.warn('jump: no question', n); return; }
-      for (let i = 0; i < n - 1; i++) { fillCorrectSelection(i); Q[i].ans = true; }
-      goToQuestion(n);
-      if (answered) { fillCorrectSelection(cur); checkAnswer(); }
-    }
-    window.jump = jump;
-
-    function jumpToSummary() {
-      QUESTIONS.forEach((_, i) => {
-        if (Q[i].ans) return;
-        fillCorrectSelection(i);
-        Q[i].ans = true;
-      });
-      showSummary();
-    }
-    window.jumpToSummary = jumpToSummary;
-
-    {
-      const p = new URLSearchParams(location.search);
-      if (p.has('q')) { if (p.get('q') === 's') jumpToSummary(); else jump(+p.get('q'), p.has('ans')); }
-    }
+    initQuizFromURL();
   </script>
 </body>
 

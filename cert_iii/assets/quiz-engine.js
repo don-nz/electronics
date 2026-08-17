@@ -73,6 +73,14 @@
     once their own question is answered independent of which question is
     currently showing (a genuinely different lifecycle than
     CIRCUIT_REF_EXTRA, which only fires when the circuit itself swaps).
+  - `RESET_EXTRA` — optional `() => void`, called at the very START of
+    every resetQuiz() call, including "Restart" clicks, not just the first
+    load. For per-file setup that must happen before the Q[] array is
+    (re)built — e.g. digital_gate_identification.html's own
+    `shuffle(QUESTIONS)`, which reorders the QUESTIONS array itself (each
+    of the 7 gates lives in a fixed slot) rather than shuffling each
+    question's own options, so every playthrough covers all 7 gates
+    exactly once in a random order.
 
   `kind:'match'` has two duplicate-value-aware sub-modes, both opt-in per
   question (plain match — exact one-option-per-column — is still the
@@ -548,14 +556,16 @@ function renderQuestion() {
   }
 
   const selList = document.getElementById('qSelectedList');
-  if (multi) {
-    selList.style.display = '';
-    const asLabel = i => data.leftPanel === 'shapeGrid' ? (i + 1) : LETTERS[i];
-    selList.textContent = st.sel.length
-      ? `Selected: ${[...st.sel].sort((a, b) => a - b).map(asLabel).join(', ')}`
-      : (data.leftPanel === 'shapeGrid' ? 'Click the shapes above to select your answer.' : 'Click every option that applies.');
-  } else {
-    selList.style.display = 'none';
+  if (selList) {
+    if (multi) {
+      selList.style.display = '';
+      const asLabel = i => data.leftPanel === 'shapeGrid' ? (i + 1) : LETTERS[i];
+      selList.textContent = st.sel.length
+        ? `Selected: ${[...st.sel].sort((a, b) => a - b).map(asLabel).join(', ')}`
+        : (data.leftPanel === 'shapeGrid' ? 'Click the shapes above to select your answer.' : 'Click every option that applies.');
+    } else {
+      selList.style.display = 'none';
+    }
   }
 
   const banner = document.getElementById('qBanner');
@@ -659,6 +669,7 @@ let DEFAULT_CIRCUIT_VIEWBOX = null;   // fallback viewBox when a question doesn'
 let CIRCUIT_REF_EXTRA = null;         // optional (id, loadTerminal, ammeter) => void, called after the base circuit/viewBox swap — for pages with their own ammeter/load-terminal badges (each file's own dispatch is genuinely different, so this stays a per-page hook rather than a generic config shape)
 let SUMMARY_CIRCUIT_REF = null;       // optional { id, label, viewBox } — if set, showSummary() shows this specific circuit instead of hiding the panel via swapLeftPanel('none')
 let RENDER_EXTRA = null;              // optional () => void, called at the end of every renderQuestion() — for per-file "runs on every render" logic quiz-engine.js can't know about, e.g. progressive-reveal value badges (re′/Zb/Zin/Zout) that persist once their own question is answered, independent of which question is currently on screen
+let RESET_EXTRA = null;               // optional () => void, called at the very START of every resetQuiz() (including on "Restart" clicks, not just the first load) — e.g. digital_gate_identification.html's own `shuffle(QUESTIONS)`, which shuffles the QUESTIONS array's ORDER itself (each of the 7 gates appears in a fixed slot, one per gate) rather than each question's own options, so every playthrough covers all 7 exactly once in a random order
 
 // For leftPanel:'circuit' questions that reference a DIFFERENT circuit per
 // question (rather than always the same static one) — swaps which <use>
@@ -687,6 +698,7 @@ function goToQuestion(n) { // 1-based, for URL/jump compatibility
 }
 
 function resetQuiz() {
+  if (RESET_EXTRA) RESET_EXTRA();
   Q = QUESTIONS.map(data => {
     const opts = data.options();
     if (isBits(data)) {

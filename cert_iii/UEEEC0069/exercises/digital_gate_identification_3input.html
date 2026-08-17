@@ -29,6 +29,11 @@
   QUESTIONS itself gets shuffled rather than each question's own gate;
   why this is the leanest possible v2-engine copy in the project, no
   circuit/leftPanel, single-select only).
+
+  Migrated to the shared cert_iii/assets/quiz-engine.js engine, same
+  recipe as digital_gate_identification.html: local `const LETTERS`
+  removed (shared engine's own already goes to 8), RESET_EXTRA =
+  () => shuffle(QUESTIONS) supplies the per-restart reshuffle.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -37,6 +42,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="../../assets/theme-init.js"></script>
+  <script src="../../assets/quiz-engine.js"></script>
   <title>Digital Electronics — Identify the Gate (3-Input)</title>
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
     rel="stylesheet">
@@ -105,12 +111,6 @@
   </div>
 
   <script>
-    const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
-
-    function scrollToQuestionTop() {
-      document.getElementById('qPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-
     // ══════════════════════════════════════════════════════════════════════
     // GATES — the 6 gates that generalise to 3 inputs (NOT skipped — it's
     // structurally 1-input, nothing to test here; see digital_gate_
@@ -152,190 +152,11 @@
       working: () => `<div class="working-total">${gate.rule}</div>`,
     }));
 
-    // ══════════════════════════════════════════════════════════════════════
-    // QUIZ ENGINE — generic; driven entirely by QUESTIONS[] via index.
-    // Single-select only — no match/multi/truth kind needed here.
-    // ══════════════════════════════════════════════════════════════════════
+    RESET_EXTRA = () => shuffle(QUESTIONS);
 
-    function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
-
-    function isAnswerCorrect(data, st) { return st.sel === st.cor; }
-    function selectedLabel(data, st) { return (st.sel != null && st.opts[st.sel]) ? st.opts[st.sel].label : '—'; }
-
-    let Q = [];
-    let cur = 0;
-
-    function buildProgressDots() {
-      document.getElementById('progressDots').innerHTML =
-        QUESTIONS.map((_, i) => `<div class="progress-dot" id="dot-${i}"></div>`).join('');
-    }
-
-    function updateProgress() {
-      QUESTIONS.forEach((_, i) => {
-        const d = document.getElementById('dot-' + i);
-        d.className = 'progress-dot';
-        if (i === cur) d.classList.add('active'); else if (Q[i].ans) d.classList.add('done');
-      });
-      document.getElementById('progressLabel').textContent = (cur + 1) + ' / ' + QUESTIONS.length;
-    }
-
-    function renderOptions() {
-      const st = Q[cur];
-      const c = document.getElementById('qOptions'); c.innerHTML = '';
-      st.opts.forEach((opt, i) => {
-        const btn = document.createElement('button'); btn.className = 'option-btn';
-        btn.innerHTML = `<span class="option-letter">${LETTERS[i]}</span><span>${opt.label}</span>`;
-        if (st.ans) {
-          btn.disabled = true;
-          if (i === st.cor) { btn.classList.add('correct'); btn.innerHTML += `<span class="result-icon">✓</span>`; }
-          else if (i === st.sel) { btn.classList.add('wrong'); btn.innerHTML += `<span class="result-icon">✗</span>`; }
-          else btn.classList.add('dimmed');
-        } else {
-          if (i === st.sel) btn.classList.add('selected');
-          btn.addEventListener('click', () => selectOption(i));
-        }
-        c.appendChild(btn);
-      });
-    }
-
-    function selectOption(i) {
-      const st = Q[cur];
-      if (st.ans) return;
-      st.sel = i;
-      renderQuestion();
-    }
-
-    function renderQuestion() {
-      const data = QUESTIONS[cur], st = Q[cur];
-
-      document.getElementById('qNum').textContent = 'Q' + (cur + 1);
-      document.getElementById('qText').innerHTML = data.text();
-      document.getElementById('qHint').innerHTML = data.hint();
-
-      renderOptions();
-
-      const banner = document.getElementById('qBanner');
-      if (st.ans) {
-        const ok = isAnswerCorrect(data, st);
-        banner.className = 'result-banner ' + (ok ? 'correct' : 'wrong');
-        document.getElementById('qIcon').textContent = ok ? '✓' : '✗';
-        document.getElementById('qBannerText').innerHTML = ok ? `Correct! It's ${data.correctExplain()}` : `The correct answer is ${data.correctExplain()}`;
-      } else {
-        banner.className = 'result-banner';
-      }
-
-      const working = document.getElementById('qWorking');
-      working.className = 'working-box' + (st.ans ? ' visible' : '');
-      document.getElementById('qWorkingContent').innerHTML = st.ans ? data.working() : '';
-
-      document.getElementById('qBack').style.display = cur > 0 ? 'inline-block' : 'none';
-      const check = document.getElementById('qCheck');
-      check.style.display = st.ans ? 'none' : 'inline-block';
-      check.disabled = st.ans || st.sel === null;
-      const isLast = cur === QUESTIONS.length - 1;
-      document.getElementById('qNext').style.display = (st.ans && !isLast) ? 'inline-block' : 'none';
-      document.getElementById('qSummary').style.display = (st.ans && isLast) ? 'inline-block' : 'none';
-
-      updateProgress();
-    }
-
-    function checkAnswer() {
-      const st = Q[cur];
-      if (st.ans || st.sel === null) return;
-      st.ans = true;
-      renderQuestion();
-      document.getElementById('qBanner').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-
-    function nextQuestion() { if (cur < QUESTIONS.length - 1) { cur++; renderQuestion(); scrollToQuestionTop(); } }
-
-    function backQuestion() {
-      if (cur <= 0) return;
-      cur--;
-      for (let i = cur; i < QUESTIONS.length; i++) {
-        Q[i].ans = false;
-        Q[i].sel = null;
-      }
-      renderQuestion();
-      scrollToQuestionTop();
-    }
-
-    function goToQuestion(n) {
-      cur = Math.max(0, Math.min(QUESTIONS.length - 1, n - 1));
-      document.getElementById('summaryPanel').style.display = 'none';
-      document.getElementById('qPanel').style.display = 'flex';
-      renderQuestion();
-      scrollToQuestionTop();
-    }
-
-    function resetQuiz() {
-      shuffle(QUESTIONS);
-      Q = QUESTIONS.map(data => {
-        const opts = data.options();
-        return { sel: null, ans: false, cor: opts.findIndex(o => o.type === 'correct'), opts };
-      });
-      cur = 0;
-      document.getElementById('summaryPanel').style.display = 'none';
-      document.getElementById('qPanel').style.display = 'flex';
-      renderQuestion();
-    }
-
-    function showSummary() {
-      document.getElementById('qPanel').style.display = 'none';
-      document.getElementById('summaryPanel').style.display = 'block';
-      const items = QUESTIONS.map((data, i) => {
-        const st = Q[i];
-        const ans = selectedLabel(data, st);
-        const ok = isAnswerCorrect(data, st);
-        const colour = ok ? 'var(--colour-ui-correct)' : '#ff3366';
-        const mark = ok ? '✓' : '✗';
-        return `<div class="summary-item">
-      <div class="summary-item-head"><span class="summary-qnum">Q${i + 1}</span><span class="summary-question">${data.text()}</span></div>
-      <div class="summary-answer" style="color:${colour}">You answered: ${ans} &nbsp; ${mark}</div>
-      <div class="working-box visible">${st.ans ? data.working() : ''}</div>
-    </div>`;
-      }).join('');
-      document.getElementById('summaryContent').innerHTML = items;
-      QUESTIONS.forEach((_, i) => { const d = document.getElementById('dot-' + i); if (d) d.className = 'progress-dot done'; });
-      document.getElementById('progressLabel').textContent = 'Complete';
-    }
-
-    buildProgressDots();
+    initQuizNav();
     resetQuiz();
-
-    function goBack(e) { e.preventDefault(); history.back(); }
-    if (history.length > 1) {
-      document.getElementById('menuLink').style.display = '';
-    }
-
-    function jump(n, answered) {
-      if (n < 1 || n > QUESTIONS.length) { console.warn('jump: no question', n); return; }
-      for (let i = 0; i < n - 1; i++) {
-        Q[i].sel = Q[i].cor;
-        Q[i].ans = true;
-      }
-      goToQuestion(n);
-      if (answered) {
-        Q[cur].sel = Q[cur].cor;
-        checkAnswer();
-      }
-    }
-    window.jump = jump;
-
-    function jumpToSummary() {
-      QUESTIONS.forEach((_, i) => {
-        if (Q[i].ans) return;
-        Q[i].sel = Q[i].cor;
-        Q[i].ans = true;
-      });
-      showSummary();
-    }
-    window.jumpToSummary = jumpToSummary;
-
-    {
-      const p = new URLSearchParams(location.search);
-      if (p.has('q')) { if (p.get('q') === 's') jumpToSummary(); else jump(+p.get('q'), p.has('ans')); }
-    }
+    initQuizFromURL();
   </script>
 </body>
 
