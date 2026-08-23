@@ -15,12 +15,42 @@
   BESPOKE WIDGET, not the standard QUESTIONS[]/quiz-engine.js sequential
   format — doesn't fit any existing kind:'multi'/'match'/'truth'/'bits'.
   Two-step interaction, confirmed with the user before building:
-  Step 1 — click one of 5 target transistors needing replacement (BC548,
-  BC549, MJE3055, 2N3055, BF180). Step 2 — click a candidate row in the
-  full datasheet table below. Feedback appears immediately; either step
-  can be changed at any time (an open-ended practice tool, not a locked
-  one-shot quiz question — the user explicitly chose this "flexible
-  widget" model over 5 sequential Check/Next questions).
+  Step 1 — click one of 5 target transistors needing replacing (BC548,
+  BC549, MJE3055, 2N3055, BF180) — its own row turns solid red/white,
+  and stays unclickable (can't "substitute" a part with itself). Step 2
+  — click ANY NUMBER of candidate rows in the table below to build a
+  shortlist (each toggles solid green/white on click, click again to
+  remove), then press Check. Either step can be freely changed at any
+  time, even after Check — nothing locks (an open-ended practice tool,
+  not a locked one-shot quiz question).
+
+  Originally single-select with instant feedback on click; changed to
+  this multi-select-then-Check model on request, splitting the pass/fail
+  logic into two tiers: checkValidity() is a HARD gate (polarity + specs
+  only — does this candidate work AT ALL), while CORRECT/WHY_CORRECT (the
+  full case/use/beta/FT priority chain) only decides which valid pick is
+  the SINGLE most suitable one, surfaced as commentary rather than a
+  second pass/fail gate — a shortlist can legitimately contain more than
+  one genuinely-working part.
+
+  checkAnswer() has FOUR verdict tiers (confirmed with the user, who
+  proposed the 3-way correct/correct/wrong split and then asked about the
+  one gap in it — a 4th tier was the agreed answer):
+    1. Shortlist = ONLY the best pick(s), nothing else → correct (green),
+       "X is the most suitable substitute."
+    2. Shortlist = best pick(s) PLUS other valid-but-suboptimal parts →
+       still correct (green), "X is the most suitable, but the other
+       part(s) would also work."
+    3. Shortlist is all-valid but MISSES the best pick entirely → NEW
+       amber "close" verdict (own .result-banner.close style, reusing
+       --colour-ui-restart — the same token shapeGrid's own "missed"
+       state uses), "everything you picked would work, but you're
+       missing the closest match" — deliberately NOT correct or wrong,
+       since nothing picked was actually invalid, but the single best
+       answer wasn't identified either.
+    4. Shortlist contains ANY invalid pick (wrong polarity or underspecced)
+       → wrong (red), names which part(s) specifically and why, then
+       states the best substitute regardless of what else was picked.
 
   Substitution criteria, in the user's own stated priority order: (1)
   polarity must match [hard fail if not], (2) case should ideally match
@@ -73,12 +103,32 @@
   <script src="../../../assets/breadcrumb.js" defer></script>
   <style>
     .ds-table-wrap { overflow-x: auto; }
-    .ds-table { width: 100%; border-collapse: collapse; font-size: .68rem; white-space: nowrap; }
+    /* border-collapse:separate (not collapse) — collapsed borders paint
+       at a special table-wide layer that has known rendering bugs with
+       position:sticky cells in Chromium (a thin sliver of whatever's
+       scrolling underneath a sticky cell can leak through at its edge).
+       border-spacing:0 keeps the visual result identical to collapse. */
+    .ds-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: .68rem; white-space: nowrap; }
     .ds-table th { text-align: right; padding: .3rem .5rem; border-bottom: 1px solid var(--colour-border); color: var(--colour-label); font-weight: 700; }
     .ds-table th:first-child, .ds-table th:last-child { text-align: left; }
     .ds-table td { text-align: right; padding: .3rem .5rem; border-bottom: 1px solid rgba(var(--colour-label-rgb), .08); }
     .ds-table td:first-child { text-align: left; font-weight: 700; color: var(--colour-text-strong); }
     .ds-table td:last-child { text-align: left; }
+
+    /* Frozen Type/Case columns — everything from N/P onward scrolls
+       inside .ds-table-wrap while these two stay put. Fixed widths on
+       both so the 2nd column's own `left` offset (= the 1st column's
+       width) is reliable rather than depending on auto-sized content.
+       Each row-state class below sets --row-bg once on the <tr> (CSS
+       custom properties inherit; plain `background` doesn't) so the
+       sticky cells can pick up the SAME colour as the rest of that row
+       via var(--row-bg, ...) instead of needing a duplicate background
+       rule per state — a sticky cell must have its own opaque
+       background or the scrolled columns show through underneath it. */
+    .ds-table th:nth-child(1), .ds-table td:nth-child(1) { position: sticky; left: 0; width: 72px; min-width: 72px; }
+    .ds-table th:nth-child(2), .ds-table td:nth-child(2) { position: sticky; left: 72px; width: 64px; min-width: 64px; border-right: 2px solid var(--colour-border); }
+    .ds-table th:nth-child(1), .ds-table th:nth-child(2) { background: var(--colour-panel); z-index: 2; }
+    .ds-table td:nth-child(1), .ds-table td:nth-child(2) { background: var(--row-bg, var(--colour-panel)); z-index: 1; }
 
     .step-label { font-family: var(--font-display); font-size: .68rem; letter-spacing: .1em; text-transform: uppercase; color: var(--colour-ui-primary); margin: 1.2rem 0 .6rem; }
     .step-label:first-of-type { margin-top: .4rem; }
@@ -96,15 +146,55 @@
     .match-note { font-size: .78rem; color: var(--colour-label); margin: .5rem 0 0; min-height: 1.2em; }
     .match-note b { color: var(--colour-text-strong); }
 
-    tr.ds-row { cursor: pointer; transition: background .15s; }
-    tr.ds-row:hover { background: rgba(var(--colour-ui-primary-rgb), .08); }
-    tr.ds-row.ds-row-disabled { cursor: default; opacity: .35; }
-    tr.ds-row.ds-row-disabled:hover { background: none; }
-    tr.ds-row.ds-row-selected { background: rgba(var(--colour-ui-primary-rgb), .1); }
-    tr.ds-row.ds-row-correct { background: rgba(var(--colour-ui-correct-rgb), .14); }
-    tr.ds-row.ds-row-correct td:first-child::after { content: ' ✓'; color: var(--colour-ui-correct); }
-    tr.ds-row.ds-row-wrong { background: rgba(var(--colour-ui-wrong-rgb), .14); }
-    tr.ds-row.ds-row-wrong td:first-child::after { content: ' ✗'; color: var(--colour-ui-wrong); }
+    /* Fourth verdict tier — "everything picked would work, but the single
+       most-suitable part was missed". Not a hard error (nothing wrong was
+       picked) but not the tightest answer either, so it gets its own
+       amber state rather than being folded into correct/wrong — reuses
+       --colour-ui-restart, the same token shapeGrid's own "missed"
+       state uses for "the right answer existed, you didn't select it". */
+    .result-banner.close {
+      display: flex;
+      background: rgba(var(--colour-ui-restart-rgb), .08);
+      border: 1px solid rgba(var(--colour-ui-restart-rgb), .3);
+      color: var(--colour-ui-restart);
+    }
+
+    tr.ds-row { cursor: pointer; transition: background .15s, color .15s; }
+    /* --row-bg is reused by the sticky Type/Case cells further down, which
+       need a genuinely OPAQUE background (a sticky cell with a see-through
+       background lets the columns scrolling underneath show through it).
+       Any state using a semi-transparent tint layers that tint OVER an
+       opaque --colour-panel backing via a flat gradient trick, rather than
+       using the bare rgba() alone — same visible colour, but actually
+       opaque once painted. Fully-solid states (selected/correct/wrong
+       below) don't need this, they're already opaque on their own. */
+    tr.ds-row:hover { --row-bg: linear-gradient(rgba(var(--colour-ui-primary-rgb), .08), rgba(var(--colour-ui-primary-rgb), .08)), var(--colour-panel); background: var(--row-bg); }
+    /* The faulty part's own row — permanent while this target is chosen,
+       never clickable. Same light tint + bold coloured text as the
+       Step 1 chip's own .chip.selected style (not a solid fill), so the
+       two "this is the part in question" indicators read as one visual
+       language across both steps. */
+    tr.ds-row.ds-row-target { --row-bg: linear-gradient(rgba(var(--colour-ui-primary-rgb), .12), rgba(var(--colour-ui-primary-rgb), .12)), var(--colour-panel); cursor: default; background: var(--row-bg); color: var(--colour-ui-primary); }
+    tr.ds-row.ds-row-target td { color: var(--colour-ui-primary); font-weight: 700; }
+    tr.ds-row.ds-row-target:hover { background: var(--row-bg); }
+    /* In the short-list, BEFORE Check — same blue as Step 1's own
+       selected-chip indicator (--colour-ui-primary), so "this is
+       something I've picked" reads as one consistent colour language
+       across both steps. Toggled by clicking; cleared back to this blue
+       the moment the shortlist changes again after a Check. */
+    tr.ds-row.ds-row-selected { --row-bg: var(--colour-ui-primary); background: var(--row-bg); color: #fff; }
+    tr.ds-row.ds-row-selected td { color: #fff; }
+    tr.ds-row.ds-row-selected:hover { background: var(--row-bg); }
+    /* In the short-list, AFTER Check — recolours each row individually to
+       the same correct/wrong colours the text feedback already uses,
+       rather than leaving every shortlisted row a single uniform colour
+       regardless of whether that specific part actually works. */
+    tr.ds-row.ds-row-selected-correct { --row-bg: var(--colour-ui-correct); background: var(--row-bg); color: #fff; }
+    tr.ds-row.ds-row-selected-correct td { color: #fff; }
+    tr.ds-row.ds-row-selected-correct:hover { background: var(--row-bg); }
+    tr.ds-row.ds-row-selected-wrong { --row-bg: var(--colour-ui-wrong); background: var(--row-bg); color: #fff; }
+    tr.ds-row.ds-row-selected-wrong td { color: #fff; }
+    tr.ds-row.ds-row-selected-wrong:hover { background: var(--row-bg); }
 
     .criteria-list { font-size: .8rem; line-height: 1.7; margin: .6rem 0 0; padding-left: 1.3rem; }
     .criteria-list li b { color: var(--colour-text-strong); }
@@ -124,7 +214,8 @@
 
         <p style="font-size:.85rem; line-height:1.6; margin:0 0 .6rem;">
           Find an appropriate substitute for each transistor below, using Table 1's own data.
-          Work through the criteria in this order — a later one only matters once every earlier one is satisfied:
+          You can shortlist more than one candidate — click a row to add it, click again to remove it — then press
+          Check. Work through the criteria in this order — a later one only matters once every earlier one is satisfied:
         </p>
         <ol class="criteria-list">
           <li><b>Polarity</b> must match (N/P)</li>
@@ -150,6 +241,10 @@
             </thead>
             <tbody id="datasheetBody"></tbody>
           </table>
+        </div>
+
+        <div class="btn-row" style="margin-top:.8rem;">
+          <button class="btn btn-check" id="checkBtn" onclick="checkAnswer()" disabled>Check</button>
         </div>
 
         <div class="result-banner" id="resultBanner"><span id="resultIcon"></span>&nbsp;<span id="resultText"></span></div>
@@ -216,11 +311,18 @@
       return isNaN(n) ? 0 : n;
     }
 
-    function evaluate(targetType, candType) {
+    // Hard requirements ONLY (polarity + specs) — whether a candidate
+    // would electrically WORK at all as a substitute. Case/Use/Beta/FT no
+    // longer disqualify anything here; they only decide which valid
+    // candidate is the single MOST suitable one (see CORRECT/WHY_CORRECT),
+    // surfaced in checkAnswer()'s own feedback rather than as a pass/fail
+    // gate — the shortlist can legitimately contain more than one
+    // genuinely-working part at once now.
+    function checkValidity(targetType, candType) {
       const t = byType[targetType], c = byType[candType];
 
       if (c.pol !== t.pol) {
-        return { ok: false, reason: `Wrong polarity — <b>${targetType}</b> is ${t.pol}-type, but <b>${candType}</b> is ${c.pol}-type. Swapping polarity needs the whole bias network redesigned, not a drop-in part.` };
+        return { valid: false, reason: `Wrong polarity — <b>${targetType}</b> is ${t.pol}-type, but <b>${candType}</b> is ${c.pol}-type. Swapping polarity needs the whole bias network redesigned, not a drop-in part.` };
       }
 
       const specChecks = [
@@ -231,47 +333,21 @@
       ];
       for (const [label, cv, tv, unit] of specChecks) {
         if (cv < tv) {
-          return { ok: false, reason: `Underspecced on ${label} — <b>${targetType}</b> needs at least ${tv}${unit}, but <b>${candType}</b> only offers ${cv}${unit}.` };
+          return { valid: false, reason: `Underspecced on ${label} — <b>${targetType}</b> needs at least ${tv}${unit}, but <b>${candType}</b> only offers ${cv}${unit}.` };
         }
       }
-
-      const bestList = CORRECT[targetType];
-      if (bestList.includes(candType)) {
-        return { ok: true, reason: WHY_CORRECT[targetType] };
-      }
-
-      // Passes polarity + specs but isn't the officially-correct answer —
-      // walk the SAME priority chain (case, use, beta, FT) as a sequential
-      // tie-break, stopping at the FIRST criterion that actually
-      // discriminates between this candidate and the real best answer,
-      // rather than dumping every difference at once (a later criterion
-      // "only matters once every earlier one is satisfied", per the
-      // intro text above).
-      const best = byType[bestList[0]];
-      const bestName = bestList.join(' or ');
-      if (best.case === t.case && c.case !== t.case) {
-        return { ok: false, reason: `<b>${candType}</b> has the right polarity and meets/exceeds the specs, but its case (${c.case}) doesn't match ${targetType}'s own ${t.case} — <b>${bestName}</b> does.` };
-      }
-      if (c.use !== best.use) {
-        return { ok: false, reason: `<b>${candType}</b> has the right polarity, case and specs, but its Use ("${c.use}") isn't as close a match to ${targetType}'s own role as <b>${bestName}</b>'s ("${best.use}").` };
-      }
-      const tBetaFloor = betaFloor(t.beta), cBetaFloor = betaFloor(c.beta), bestBetaFloor = betaFloor(best.beta);
-      if (Math.abs(cBetaFloor - tBetaFloor) > Math.abs(bestBetaFloor - tBetaFloor)) {
-        return { ok: false, reason: `<b>${candType}</b> matches on polarity, case, specs and Use, but its Beta (${c.beta}) sits further from ${targetType}'s own ${t.beta} than <b>${bestName}</b>'s (${best.beta}) does.` };
-      }
-      if (Math.abs(c.ft - t.ft) > Math.abs(best.ft - t.ft)) {
-        return { ok: false, reason: `<b>${candType}</b> matches on every criterion down to Beta, but its F<sub>T</sub> (${c.ft}) is further from ${targetType}'s own ${t.ft} than <b>${bestName}</b>'s (${best.ft}).` };
-      }
-      return { ok: false, reason: `<b>${candType}</b> passes every criterion just as well as <b>${bestName}</b> does — either would be a defensible answer here, but ${bestName} is the one this quiz expects.` };
+      return { valid: true };
     }
 
     // ══════════════════════════════════════════════════════════════════════
     // Rendering + interaction — no quiz-engine.js Q[]/checkAnswer() here,
     // this is a standalone practice widget: either step can be changed at
-    // any time, nothing locks after a first attempt.
+    // any time, nothing locks after Check — re-toggle the shortlist and
+    // press Check again to retry.
     // ══════════════════════════════════════════════════════════════════════
     let currentTarget = null;
-    let currentCandidate = null;
+    let shortlist = new Set();
+    let checked = false; // true right after Check is pressed — rows switch from the blue "shortlisted" colour to per-row correct/wrong; goes false again the moment the shortlist changes.
 
     function renderChips() {
       const c = document.getElementById('targetChips');
@@ -292,48 +368,97 @@
         const tr = document.createElement('tr');
         tr.className = 'ds-row';
         const isTargetItself = d.type === currentTarget;
-        if (isTargetItself) tr.classList.add('ds-row-disabled');
-        if (d.type === currentCandidate) {
-          tr.classList.add(lastVerdict && lastVerdict.ok ? 'ds-row-correct' : 'ds-row-wrong');
+        if (isTargetItself) {
+          tr.classList.add('ds-row-target');
+        } else if (shortlist.has(d.type)) {
+          if (checked) {
+            tr.classList.add(checkValidity(currentTarget, d.type).valid ? 'ds-row-selected-correct' : 'ds-row-selected-wrong');
+          } else {
+            tr.classList.add('ds-row-selected');
+          }
         }
         tr.innerHTML = `<td>${d.type}</td><td>${d.case}</td><td>${d.pol}</td><td>${d.vce}</td><td>${d.vcb}</td><td>${d.ic}</td><td>${d.beta}</td><td>${d.ft}</td><td>${d.power}</td><td>${d.use}</td>`;
         if (!isTargetItself) {
-          tr.addEventListener('click', () => selectCandidate(d.type));
+          tr.addEventListener('click', () => toggleCandidate(d.type));
         }
         body.appendChild(tr);
       });
     }
 
-    let lastVerdict = null;
+    function updateCheckButton() {
+      document.getElementById('checkBtn').disabled = shortlist.size === 0;
+    }
+
+    function clearVerdict() {
+      checked = false;
+      document.getElementById('resultBanner').className = 'result-banner';
+      document.getElementById('workingBox').className = 'working-box';
+    }
 
     function selectTarget(type) {
       currentTarget = type;
-      currentCandidate = null;
-      lastVerdict = null;
-      document.getElementById('matchNote').innerHTML = `Now pick <b>${type}</b>'s replacement from Table 1 below.`;
-      document.getElementById('resultBanner').className = 'result-banner';
-      document.getElementById('workingBox').className = 'working-box';
+      shortlist = new Set();
+      document.getElementById('matchNote').innerHTML = `Now shortlist <b>${type}</b>'s replacement(s) from Table 1, then press Check.`;
+      clearVerdict();
       renderChips();
       renderTable();
+      updateCheckButton();
     }
 
-    function selectCandidate(type) {
+    function toggleCandidate(type) {
       if (!currentTarget) return;
-      currentCandidate = type;
-      lastVerdict = evaluate(currentTarget, type);
-      document.getElementById('matchNote').innerHTML = `<b>${currentTarget}</b> → <b>${type}</b>`;
+      if (shortlist.has(type)) shortlist.delete(type); else shortlist.add(type);
+      clearVerdict();
+      renderTable();
+      updateCheckButton();
+    }
+
+    function checkAnswer() {
+      if (!currentTarget || shortlist.size === 0) return;
+      checked = true;
+      const selected = Array.from(shortlist);
+      const results = selected.map(type => ({ type, ...checkValidity(currentTarget, type) }));
+      const invalids = results.filter(r => !r.valid);
+      const bestList = CORRECT[currentTarget];
 
       const banner = document.getElementById('resultBanner');
-      banner.className = 'result-banner ' + (lastVerdict.ok ? 'correct' : 'wrong');
-      document.getElementById('resultIcon').textContent = lastVerdict.ok ? '✓' : '✗';
-      document.getElementById('resultText').innerHTML = lastVerdict.ok
-        ? `Correct! ${type} is an appropriate substitute for ${currentTarget}.`
-        : `Not the best match.`;
-
+      const icon = document.getElementById('resultIcon');
+      const text = document.getElementById('resultText');
       const working = document.getElementById('workingBox');
+      const content = document.getElementById('workingContent');
       working.className = 'working-box visible';
-      document.getElementById('workingContent').innerHTML = `<div class="working-line">${lastVerdict.reason}</div>`;
 
+      if (invalids.length > 0) {
+        banner.className = 'result-banner wrong';
+        icon.textContent = '✗';
+        text.innerHTML = `${invalids.map(r => `<b>${r.type}</b>`).join(', ')} would not work.`;
+        content.innerHTML = invalids.map(r => `<div class="working-line">${r.reason}</div>`).join('')
+          + `<div class="working-line" style="margin-top:.6rem">The best substitute for <b>${currentTarget}</b> is <b>${bestList.join(' or ')}</b> — ${WHY_CORRECT[currentTarget]}</div>`;
+        renderTable();
+        return;
+      }
+
+      const bestSelected = selected.filter(s => bestList.includes(s));
+      const others = selected.filter(s => !bestList.includes(s));
+
+      if (bestSelected.length > 0) {
+        banner.className = 'result-banner correct';
+        icon.textContent = '✓';
+        text.innerHTML = others.length
+          ? `Correct! <b>${bestSelected.join(' or ')}</b> is the most suitable, but the other part${others.length > 1 ? 's' : ''} you picked would also work.`
+          : `Correct! <b>${bestSelected.join(' or ')}</b> is the most suitable substitute for ${currentTarget}.`;
+        content.innerHTML = `<div class="working-line">${WHY_CORRECT[currentTarget]}</div>`
+          + (others.length ? `<div class="working-line" style="margin-top:.6rem"><b>${others.join(', ')}</b> would also work as a substitute, just not as precisely matched.</div>` : '');
+      } else {
+        // 4th tier: nothing WRONG was picked (every part in the shortlist
+        // genuinely works), but the single most-suitable part was missed
+        // entirely — not a hard error, so it gets its own amber "close"
+        // verdict rather than being folded into correct or wrong.
+        banner.className = 'result-banner close';
+        icon.textContent = '~';
+        text.innerHTML = `Everything you picked would work, but you're missing the closest match.`;
+        content.innerHTML = `<div class="working-line"><b>${selected.join(', ')}</b> would all work as a substitute for ${currentTarget}, but the best match is <b>${bestList.join(' or ')}</b> — ${WHY_CORRECT[currentTarget]}</div>`;
+      }
       renderTable();
     }
 
