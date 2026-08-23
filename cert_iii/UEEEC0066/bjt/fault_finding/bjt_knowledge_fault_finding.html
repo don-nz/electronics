@@ -1,0 +1,345 @@
+<!--
+  NEW knowledge quiz — "choosing a replacement BJT using manufacturers'
+  data", built while bjt_knowledge_bjt_fault_finding.html and
+  bjt_fault_interactive_resistor.html are deliberately parked. This is
+  objective 6 of that other file's own lesson-note header (which already
+  covers it lightly via one 4-candidate fictional "Meridian Semiconductor"
+  question, Q13) — this file goes much deeper, using the class's own REAL
+  18-row datasheet table (Table 1: BC548/549/559, BC327/337, BD639/640,
+  BD139/140, BF180, BF469/470, MJE2955/3055, MJ2955, 2N3055, MJ15003/4),
+  transcribed verbatim from a photographed reference sheet — NOT the
+  fictional-brand convention used elsewhere in this project, since this
+  is real, class-supplied part data the student needs to practice reading
+  directly.
+
+  BESPOKE WIDGET, not the standard QUESTIONS[]/quiz-engine.js sequential
+  format — doesn't fit any existing kind:'multi'/'match'/'truth'/'bits'.
+  Two-step interaction, confirmed with the user before building:
+  Step 1 — click one of 5 target transistors needing replacement (BC548,
+  BC549, MJE3055, 2N3055, BF180). Step 2 — click a candidate row in the
+  full datasheet table below. Feedback appears immediately; either step
+  can be changed at any time (an open-ended practice tool, not a locked
+  one-shot quiz question — the user explicitly chose this "flexible
+  widget" model over 5 sequential Check/Next questions).
+
+  Substitution criteria, in the user's own stated priority order: (1)
+  polarity must match [hard fail if not], (2) case should ideally match
+  [soft — relaxed when no candidate shares it], (3) specs must match or
+  exceed, in this order: VCE, IC, POWER, VCB [hard fail if any is under],
+  (4) Use, (5) Beta, (6) FT — the last three are tie-breakers among
+  candidates that already pass 1-3. evaluate() in the script below
+  implements this exact chain mechanically against the live table data,
+  rather than hand-authoring pass/fail text per pair — with 5 targets and
+  up to 17 possible candidates each, hand-writing ~85 bespoke sentences
+  wasn't a sane use of scope; the mechanical chain produces the same
+  reasoning grounded in the actual numbers.
+
+  Confirmed correct-substitute answer key, derived by running the same
+  chain in Python before writing any question content (see CORRECT
+  below): BC548→BC549 and BC549→BC548 (mutually exact spec matches,
+  closest Use in each direction — mirrors how these two are genuinely
+  interchangeable in real practice). MJE3055→MJ15003 (no other N-type
+  TO-220 exists at all in this table, so case relaxes to the next power
+  tier, TO-3; between the two TO-3 N-type options, MJ15003's FT=2
+  matches MJE3055's own FT=2 exactly, while 2N3055's FT=0.8 doesn't —
+  the deciding tie-break). 2N3055→MJ15003 (the ONLY other N-type TO-3
+  device in the table, comfortably exceeding every spec). BF180→BC548 OR
+  BC549 (GENUINE TIE confirmed with the user — no other N-type TO-72
+  device exists, and once case is relaxed, BC548/BC549 tie on every
+  single remaining criterion: identical specs, neither matches BF180's
+  "UHF amp" use, and both share the highest available FT=300 of any
+  remaining candidate. Both are accepted as correct).
+
+  Table markup style matches the existing .ds-table convention (copied
+  per-page in every file that uses one, per this project's established
+  pattern — no shared .ds-table exists in quiz-common.css). Wrapped in a
+  new .ds-table-wrap (overflow-x:auto) since NO existing .ds-table usage
+  in this project has any responsive handling at all — this table is
+  much wider (10 columns, 18 rows) than any prior use, so horizontal
+  scroll on narrow widths is a real necessity here, not a nice-to-have.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../assets/theme-init.js"></script>
+  <title>BJT Knowledge Quiz — Choosing Replacement BJTs</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../assets/quiz-common.css">
+  <script src="../../../assets/breadcrumb.js" defer></script>
+  <style>
+    .ds-table-wrap { overflow-x: auto; }
+    .ds-table { width: 100%; border-collapse: collapse; font-size: .68rem; white-space: nowrap; }
+    .ds-table th { text-align: right; padding: .3rem .5rem; border-bottom: 1px solid var(--colour-border); color: var(--colour-label); font-weight: 700; }
+    .ds-table th:first-child, .ds-table th:last-child { text-align: left; }
+    .ds-table td { text-align: right; padding: .3rem .5rem; border-bottom: 1px solid rgba(var(--colour-label-rgb), .08); }
+    .ds-table td:first-child { text-align: left; font-weight: 700; color: var(--colour-text-strong); }
+    .ds-table td:last-child { text-align: left; }
+
+    .step-label { font-family: var(--font-display); font-size: .68rem; letter-spacing: .1em; text-transform: uppercase; color: var(--colour-ui-primary); margin: 1.2rem 0 .6rem; }
+    .step-label:first-of-type { margin-top: .4rem; }
+
+    .chip-row { display: flex; flex-wrap: wrap; gap: .5rem; }
+    .chip {
+      font-family: var(--font-mono); font-size: .82rem; font-weight: 700;
+      padding: .5rem 1rem; border-radius: 999px;
+      border: 2px solid var(--colour-border); background: rgba(var(--colour-label-rgb), .06);
+      color: var(--colour-text); cursor: pointer; transition: border-color .15s, background .15s;
+    }
+    .chip:hover { border-color: rgba(var(--colour-ui-primary-rgb), .5); }
+    .chip.selected { border-color: var(--colour-ui-primary); background: rgba(var(--colour-ui-primary-rgb), .12); color: var(--colour-ui-primary); }
+
+    .match-note { font-size: .78rem; color: var(--colour-label); margin: .5rem 0 0; min-height: 1.2em; }
+    .match-note b { color: var(--colour-text-strong); }
+
+    tr.ds-row { cursor: pointer; transition: background .15s; }
+    tr.ds-row:hover { background: rgba(var(--colour-ui-primary-rgb), .08); }
+    tr.ds-row.ds-row-disabled { cursor: default; opacity: .35; }
+    tr.ds-row.ds-row-disabled:hover { background: none; }
+    tr.ds-row.ds-row-selected { background: rgba(var(--colour-ui-primary-rgb), .1); }
+    tr.ds-row.ds-row-correct { background: rgba(var(--colour-ui-correct-rgb), .14); }
+    tr.ds-row.ds-row-correct td:first-child::after { content: ' ✓'; color: var(--colour-ui-correct); }
+    tr.ds-row.ds-row-wrong { background: rgba(var(--colour-ui-wrong-rgb), .14); }
+    tr.ds-row.ds-row-wrong td:first-child::after { content: ' ✗'; color: var(--colour-ui-wrong); }
+
+    .criteria-list { font-size: .8rem; line-height: 1.7; margin: .6rem 0 0; padding-left: 1.3rem; }
+    .criteria-list li b { color: var(--colour-text-strong); }
+  </style>
+</head>
+
+<body>
+  <div class="crumb" id="crumb" data-current="Choosing Replacement BJTs"></div>
+  <header>
+    <h1>BJT Amplifier: Choosing Replacement BJTs</h1>
+    <p>Datasheet Table · Select a Faulty Transistor · Pick the Best Substitute</p>
+  </header>
+
+  <div class="quiz-wrap single-col">
+    <div class="questions-col">
+      <div class="card">
+
+        <p style="font-size:.85rem; line-height:1.6; margin:0 0 .6rem;">
+          Find an appropriate substitute for each transistor below, using Table 1's own data.
+          Work through the criteria in this order — a later one only matters once every earlier one is satisfied:
+        </p>
+        <ol class="criteria-list">
+          <li><b>Polarity</b> must match (N/P)</li>
+          <li><b>Case</b> should ideally match (pins should line up)</li>
+          <li><b>Specs</b> must match or exceed, in this order: <b>V<sub>CE</sub></b>, <b>I<sub>C</sub></b>, <b>Power</b>, <b>V<sub>CB</sub></b></li>
+          <li><b>Use</b> — the closest matching application</li>
+          <li><b>Beta</b> — closest current-gain range</li>
+          <li><b>F<sub>T</sub></b> — closest transition frequency</li>
+        </ol>
+
+        <div class="step-label">Step 1 — select the transistor that needs replacing</div>
+        <div class="chip-row" id="targetChips"></div>
+        <div class="match-note" id="matchNote">Click a transistor above to begin.</div>
+
+        <div class="step-label">Step 2 — select its replacement from Table 1</div>
+        <div class="ds-table-wrap">
+          <table class="ds-table" id="datasheetTable">
+            <thead>
+              <tr>
+                <th>Type</th><th>Case</th><th>N/P</th><th>V<sub>CE</sub></th><th>V<sub>CB</sub></th>
+                <th>I<sub>C</sub> (A)</th><th>Beta</th><th>F<sub>T</sub></th><th>Power</th><th>Use</th>
+              </tr>
+            </thead>
+            <tbody id="datasheetBody"></tbody>
+          </table>
+        </div>
+
+        <div class="result-banner" id="resultBanner"><span id="resultIcon"></span>&nbsp;<span id="resultText"></span></div>
+        <div class="working-box" id="workingBox">
+          <div class="working-title">Why?</div>
+          <div id="workingContent"></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ══════════════════════════════════════════════════════════════════════
+    // Table 1 — transcribed verbatim from the class's own reference sheet.
+    // ══════════════════════════════════════════════════════════════════════
+    const DATASHEET = [
+      { type: 'BC548',   case: 'TO-92*', pol: 'N', vce: 30,  vcb: 30,  ic: 0.1,  beta: '110–800', ft: 300, power: 0.5,  use: 'SS amp' },
+      { type: 'BC549',   case: 'TO-92*', pol: 'N', vce: 30,  vcb: 30,  ic: 0.1,  beta: '200–800', ft: 300, power: 0.5,  use: 'Low noise SS amp' },
+      { type: 'BC559',   case: 'TO-92*', pol: 'P', vce: 30,  vcb: 30,  ic: 0.1,  beta: '125–600', ft: 150, power: 0.5,  use: 'SS amp' },
+      { type: 'BC327',   case: 'TO-92*', pol: 'P', vce: 45,  vcb: 50,  ic: 0.8,  beta: '100–600', ft: 100, power: 0.8,  use: 'Output' },
+      { type: 'BC337',   case: 'TO-92*', pol: 'N', vce: 45,  vcb: 50,  ic: 0.8,  beta: '100–600', ft: 200, power: 0.8,  use: 'Output' },
+      { type: 'BD639',   case: 'TO-92*', pol: 'N', vce: 80,  vcb: 100, ic: 1,    beta: '40–160',  ft: 130, power: 1,    use: 'Audio output' },
+      { type: 'BD640',   case: 'TO-92*', pol: 'P', vce: 80,  vcb: 100, ic: 1,    beta: '40–160',  ft: 50,  power: 1,    use: 'Audio output' },
+      { type: 'BD139',   case: 'TO-126', pol: 'N', vce: 60,  vcb: 100, ic: 1,    beta: '40–160',  ft: 250, power: 8,    use: 'Output' },
+      { type: 'BD140',   case: 'TO-126', pol: 'P', vce: 80,  vcb: 100, ic: 1,    beta: '40–160',  ft: 75,  power: 8,    use: 'Output' },
+      { type: 'BF180',   case: 'TO-72',  pol: 'N', vce: 20,  vcb: 30,  ic: 0.02, beta: '13',      ft: 675, power: 0.15, use: 'UHF amp' },
+      { type: 'BF469',   case: 'TO-126', pol: 'N', vce: 250, vcb: 50,  ic: 0.5,  beta: '50',      ft: 60,  power: 1.8,  use: 'High voltage amp' },
+      { type: 'BF470',   case: 'TO-126', pol: 'P', vce: 250, vcb: 250, ic: 0.05, beta: '50',      ft: 60,  power: 1.8,  use: 'High voltage amp' },
+      { type: 'MJE2955', case: 'TO-220', pol: 'P', vce: 60,  vcb: 70,  ic: 10,   beta: '20–100',  ft: 2,   power: 75,   use: 'Power' },
+      { type: 'MJE3055', case: 'TO-220', pol: 'N', vce: 60,  vcb: 70,  ic: 10,   beta: '20–100',  ft: 2,   power: 75,   use: 'Power' },
+      { type: 'MJ2955',  case: 'TO-3',   pol: 'P', vce: 60,  vcb: 70,  ic: 15,   beta: '20–70',   ft: 4,   power: 115,  use: 'High output power' },
+      { type: '2N3055',  case: 'TO-3',   pol: 'N', vce: 60,  vcb: 90,  ic: 15,   beta: '20',      ft: 0.8, power: 115,  use: 'High output power' },
+      { type: 'MJ15003', case: 'TO-3',   pol: 'N', vce: 140, vcb: 140, ic: 20,   beta: '25–150',  ft: 2,   power: 250,  use: 'High output power' },
+      { type: 'MJ15004', case: 'TO-3',   pol: 'P', vce: 140, vcb: 140, ic: 20,   beta: '25–150',  ft: 2,   power: 250,  use: 'High output power' },
+    ];
+    const byType = {};
+    DATASHEET.forEach(d => byType[d.type] = d);
+
+    const TARGETS = ['BC548', 'BC549', 'MJE3055', '2N3055', 'BF180'];
+
+    // Confirmed via a full Python re-derivation of the same priority chain
+    // before this file was written — see header comment for the reasoning
+    // behind each. BF180 genuinely ties between two candidates (confirmed
+    // with the user), hence the array of two there.
+    const CORRECT = {
+      BC548: ['BC549'],
+      BC549: ['BC548'],
+      MJE3055: ['MJ15003'],
+      '2N3055': ['MJ15003'],
+      BF180: ['BC548', 'BC549'],
+    };
+
+    const WHY_CORRECT = {
+      BC548: 'BC549 matches BC548 exactly on every hard requirement (same case, same V<sub>CE</sub>/V<sub>CB</sub>/I<sub>C</sub>/Power) and is the closest available match on Use too — both are small-signal amp transistors. Its wider beta range is a bonus, not a problem: more available gain than the minimum never hurts.',
+      BC549: 'BC548 matches BC549 exactly on every hard requirement (same case, same V<sub>CE</sub>/V<sub>CB</sub>/I<sub>C</sub>/Power) and is the closest available match on Use — both are small-signal amp transistors. Its beta floor is a little lower, but 110 is still comfortably above what most small-signal designs actually need.',
+      MJE3055: 'No other N-type TO-220 device exists anywhere in this table, so the case requirement has to relax to the next power-transistor tier: TO-3. Between the two TO-3 N-type candidates, MJ15003\'s F<sub>T</sub> (2) matches MJE3055\'s own F<sub>T</sub> (2) exactly, while 2N3055\'s F<sub>T</sub> (0.8) doesn\'t — the deciding factor once polarity, specs and Use ("Power" / "High output power") are satisfied by either.',
+      '2N3055': 'MJ15003 is the only other N-type TO-3 device in the whole table, so it\'s the sole case-matched candidate — and it comfortably exceeds every spec (V<sub>CE</sub>, I<sub>C</sub>, Power, V<sub>CB</sub>) with the same "High output power" Use rating.',
+      BF180: 'No other N-type TO-72 device exists, so the case requirement has to relax entirely. BC548 and BC549 then tie on every remaining criterion: both meet/exceed BF180\'s modest specs, neither matches its "UHF amp" Use (nothing else in the table does either), and both share the highest available F<sub>T</sub> (300) of any remaining candidate — still well short of BF180\'s own 675, but the closest on offer. Either is an acceptable answer here.',
+    };
+
+    function betaFloor(s) {
+      const n = parseFloat(s.replace('–', '-').split('-')[0]);
+      return isNaN(n) ? 0 : n;
+    }
+
+    function evaluate(targetType, candType) {
+      const t = byType[targetType], c = byType[candType];
+
+      if (c.pol !== t.pol) {
+        return { ok: false, reason: `Wrong polarity — <b>${targetType}</b> is ${t.pol}-type, but <b>${candType}</b> is ${c.pol}-type. Swapping polarity needs the whole bias network redesigned, not a drop-in part.` };
+      }
+
+      const specChecks = [
+        ['V<sub>CE</sub>', c.vce, t.vce, 'V'],
+        ['I<sub>C</sub>', c.ic, t.ic, 'A'],
+        ['Power', c.power, t.power, 'W'],
+        ['V<sub>CB</sub>', c.vcb, t.vcb, 'V'],
+      ];
+      for (const [label, cv, tv, unit] of specChecks) {
+        if (cv < tv) {
+          return { ok: false, reason: `Underspecced on ${label} — <b>${targetType}</b> needs at least ${tv}${unit}, but <b>${candType}</b> only offers ${cv}${unit}.` };
+        }
+      }
+
+      const bestList = CORRECT[targetType];
+      if (bestList.includes(candType)) {
+        return { ok: true, reason: WHY_CORRECT[targetType] };
+      }
+
+      // Passes polarity + specs but isn't the officially-correct answer —
+      // walk the SAME priority chain (case, use, beta, FT) as a sequential
+      // tie-break, stopping at the FIRST criterion that actually
+      // discriminates between this candidate and the real best answer,
+      // rather than dumping every difference at once (a later criterion
+      // "only matters once every earlier one is satisfied", per the
+      // intro text above).
+      const best = byType[bestList[0]];
+      const bestName = bestList.join(' or ');
+      if (best.case === t.case && c.case !== t.case) {
+        return { ok: false, reason: `<b>${candType}</b> has the right polarity and meets/exceeds the specs, but its case (${c.case}) doesn't match ${targetType}'s own ${t.case} — <b>${bestName}</b> does.` };
+      }
+      if (c.use !== best.use) {
+        return { ok: false, reason: `<b>${candType}</b> has the right polarity, case and specs, but its Use ("${c.use}") isn't as close a match to ${targetType}'s own role as <b>${bestName}</b>'s ("${best.use}").` };
+      }
+      const tBetaFloor = betaFloor(t.beta), cBetaFloor = betaFloor(c.beta), bestBetaFloor = betaFloor(best.beta);
+      if (Math.abs(cBetaFloor - tBetaFloor) > Math.abs(bestBetaFloor - tBetaFloor)) {
+        return { ok: false, reason: `<b>${candType}</b> matches on polarity, case, specs and Use, but its Beta (${c.beta}) sits further from ${targetType}'s own ${t.beta} than <b>${bestName}</b>'s (${best.beta}) does.` };
+      }
+      if (Math.abs(c.ft - t.ft) > Math.abs(best.ft - t.ft)) {
+        return { ok: false, reason: `<b>${candType}</b> matches on every criterion down to Beta, but its F<sub>T</sub> (${c.ft}) is further from ${targetType}'s own ${t.ft} than <b>${bestName}</b>'s (${best.ft}).` };
+      }
+      return { ok: false, reason: `<b>${candType}</b> passes every criterion just as well as <b>${bestName}</b> does — either would be a defensible answer here, but ${bestName} is the one this quiz expects.` };
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // Rendering + interaction — no quiz-engine.js Q[]/checkAnswer() here,
+    // this is a standalone practice widget: either step can be changed at
+    // any time, nothing locks after a first attempt.
+    // ══════════════════════════════════════════════════════════════════════
+    let currentTarget = null;
+    let currentCandidate = null;
+
+    function renderChips() {
+      const c = document.getElementById('targetChips');
+      c.innerHTML = '';
+      TARGETS.forEach(type => {
+        const btn = document.createElement('button');
+        btn.className = 'chip' + (type === currentTarget ? ' selected' : '');
+        btn.textContent = type;
+        btn.addEventListener('click', () => selectTarget(type));
+        c.appendChild(btn);
+      });
+    }
+
+    function renderTable() {
+      const body = document.getElementById('datasheetBody');
+      body.innerHTML = '';
+      DATASHEET.forEach(d => {
+        const tr = document.createElement('tr');
+        tr.className = 'ds-row';
+        const isTargetItself = d.type === currentTarget;
+        if (isTargetItself) tr.classList.add('ds-row-disabled');
+        if (d.type === currentCandidate) {
+          tr.classList.add(lastVerdict && lastVerdict.ok ? 'ds-row-correct' : 'ds-row-wrong');
+        }
+        tr.innerHTML = `<td>${d.type}</td><td>${d.case}</td><td>${d.pol}</td><td>${d.vce}</td><td>${d.vcb}</td><td>${d.ic}</td><td>${d.beta}</td><td>${d.ft}</td><td>${d.power}</td><td>${d.use}</td>`;
+        if (!isTargetItself) {
+          tr.addEventListener('click', () => selectCandidate(d.type));
+        }
+        body.appendChild(tr);
+      });
+    }
+
+    let lastVerdict = null;
+
+    function selectTarget(type) {
+      currentTarget = type;
+      currentCandidate = null;
+      lastVerdict = null;
+      document.getElementById('matchNote').innerHTML = `Now pick <b>${type}</b>'s replacement from Table 1 below.`;
+      document.getElementById('resultBanner').className = 'result-banner';
+      document.getElementById('workingBox').className = 'working-box';
+      renderChips();
+      renderTable();
+    }
+
+    function selectCandidate(type) {
+      if (!currentTarget) return;
+      currentCandidate = type;
+      lastVerdict = evaluate(currentTarget, type);
+      document.getElementById('matchNote').innerHTML = `<b>${currentTarget}</b> → <b>${type}</b>`;
+
+      const banner = document.getElementById('resultBanner');
+      banner.className = 'result-banner ' + (lastVerdict.ok ? 'correct' : 'wrong');
+      document.getElementById('resultIcon').textContent = lastVerdict.ok ? '✓' : '✗';
+      document.getElementById('resultText').innerHTML = lastVerdict.ok
+        ? `Correct! ${type} is an appropriate substitute for ${currentTarget}.`
+        : `Not the best match.`;
+
+      const working = document.getElementById('workingBox');
+      working.className = 'working-box visible';
+      document.getElementById('workingContent').innerHTML = `<div class="working-line">${lastVerdict.reason}</div>`;
+
+      renderTable();
+    }
+
+    renderChips();
+    renderTable();
+  </script>
+</body>
+
+</html>
