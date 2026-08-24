@@ -27,11 +27,11 @@
   Originally single-select with instant feedback on click; changed to
   this multi-select-then-Check model on request, splitting the pass/fail
   logic into two tiers: checkValidity() is a HARD gate (polarity + specs
-  only — does this candidate work AT ALL), while CORRECT/WHY_CORRECT (the
-  full case/use/beta/FT priority chain) only decides which valid pick is
-  the SINGLE most suitable one, surfaced as commentary rather than a
-  second pass/fail gate — a shortlist can legitimately contain more than
-  one genuinely-working part.
+  only — does this candidate work AT ALL), while findBest() (the full
+  case/use/beta/FT priority chain, see its own comment further down) only
+  decides which valid pick is the SINGLE most suitable one, surfaced as
+  commentary rather than a second pass/fail gate — a shortlist can
+  legitimately contain more than one genuinely-working part.
 
   checkAnswer() has FOUR verdict tiers (confirmed with the user, who
   proposed the 3-way correct/correct/wrong split and then asked about the
@@ -92,9 +92,10 @@
   to a 26-part CSV the user supplied, and Step 2's table changed from
   "always show everything" to a RANDOM 6-candidate draw (see
   drawPoolFor()) rebuilt fresh every time a new target chip is picked —
-  quota 2×TO-92 + 1 each of TO-72/TO-126/TO-220/TO-3, one of CORRECT[
-  target] force-included so the puzzle is always solvable regardless of
-  what else gets drawn, remaining slots genuinely random per attempt.
+  quota 2×TO-92 + 1 each of TO-72/TO-126/TO-220/TO-3, one of findBest(
+  target)'s own answer(s) force-included so the puzzle is always solvable
+  regardless of what else gets drawn, remaining slots genuinely random
+  per attempt.
   BF180 is a real structural edge case: it's the ONLY TO-72 part in the
   whole pool, so whenever it's the target there are zero other TO-72
   candidates to fill that slot — the shortfall rolls over into TO-92
@@ -337,48 +338,28 @@
     const byType = {};
     DATASHEET.forEach(d => byType[d.type] = d);
 
-    const TARGETS = ['BC548', 'BC549', 'MJE3055', '2N3055', 'BF180'];
-
-    // Re-derived (Python, before touching this file) against the FULL
-    // 26-part pool, confirmed with the user — TWO answers changed from
-    // the original 18-part-pool derivation:
-    //  - MJE3055: was MJ15003 (picked via an FT tiebreak), corrected to
-    //    2N3055 — Beta comes BEFORE FT in the stated priority order, and
-    //    2N3055's beta (a flat 20) is an EXACT match to MJE3055's own
-    //    beta floor (20-100 → 20), which should have won before FT was
-    //    ever considered. The original derivation skipped that check.
-    //  - BF180: was {BC548,BC549}, corrected to {2N2222A,2N3394} — both
-    //    now have a beta floor of 100, closer to BF180's own unusually
-    //    low beta (13) than BC548/BC549's floor of 110/200, so they win
-    //    on Beta before FT is even reached (where BC548/549 used to win
-    //    by having the highest FT among a — now larger — five-way tie).
-    // 2N3055's own answer (MJ15003) is unaffected: it's still the ONLY
-    // other N-type TO-3 device in the pool, no tiebreak to redo.
-    const CORRECT = {
-      BC548: ['BC549'],
-      BC549: ['BC548'],
-      MJE3055: ['2N3055'],
-      '2N3055': ['MJ15003'],
-      BF180: ['2N2222A', '2N3394'],
-    };
-
-    const WHY_CORRECT = {
-      BC548: 'BC549 matches BC548 exactly on every hard requirement (same case, same V<sub>CE</sub>/V<sub>CB</sub>/I<sub>C</sub>/Power) and is the closest available match on Use too — both are small-signal amp transistors. Its wider beta range is a bonus, not a problem: more available gain than the minimum never hurts.',
-      BC549: 'BC548 matches BC549 exactly on every hard requirement (same case, same V<sub>CE</sub>/V<sub>CB</sub>/I<sub>C</sub>/Power) and is the closest available match on Use — both are small-signal amp transistors. Its beta floor is a little lower, but 110 is still comfortably above what most small-signal designs actually need.',
-      MJE3055: 'No other N-type TO-220 device in the pool actually meets MJE3055\'s specs (TIP120/TIP31C both fall short on I<sub>C</sub> and Power), so the case requirement has to relax to the next power-transistor tier: TO-3. Between the TO-3 N-type candidates, 2N3055\'s Beta (a flat 20) is an EXACT match to MJE3055\'s own beta floor (20-100 → 20) — MJ15003\'s floor (25) is a little further off, so 2N3055 wins the tiebreak before F<sub>T</sub> even needs considering.',
-      '2N3055': 'MJ15003 is the only other N-type TO-3 device in the whole pool, so it\'s the sole case-matched candidate — and it comfortably exceeds every spec (V<sub>CE</sub>, I<sub>C</sub>, Power, V<sub>CB</sub>) with the same "High output power" Use rating.',
-      BF180: 'No other N-type TO-72 device exists, so the case requirement has to relax entirely. Once specs and Use are satisfied by more than a dozen candidates, Beta becomes the decider: 2N2222A and 2N3394 both have a beta floor of 100 — the closest of anything in the pool to BF180\'s own unusually low beta (13) — beating BC548/BC549\'s own floor of 110/200. Neither is a real UHF part (nothing else in the pool is), but on the stated criteria order they\'re the closest available match.',
-    };
+    // Step 1's target list used to be a fixed 5 (BC548/BC549/MJE3055/
+    // 2N3055/BF180), with the "correct substitute" answer key HAND-
+    // DERIVED and verified in Python for each one, since only 5 needed
+    // covering. Now that Step 1 itself draws randomly from the full pool
+    // (see drawTargets() below), ANY of the 26 parts could become a
+    // target — hand-deriving 26 answer keys wasn't sane scope, so
+    // findBest() below implements the exact same priority chain
+    // (Polarity → Specs → Case → Use → Beta → FT) as a live algorithm
+    // instead of a precomputed lookup. Regression-tested against all 5
+    // of the original hand-verified answers before trusting it for the
+    // other 21 (see memory/commit notes) — reproduced all 5 exactly.
+    let TARGETS = [];
 
     function betaFloor(s) {
-      const n = parseFloat(s.replace('–', '-').split('-')[0]);
+      const n = parseFloat(s.replace('–', '-').replace('+', '').split('-')[0]);
       return isNaN(n) ? 0 : n;
     }
 
     // Hard requirements ONLY (polarity + specs) — whether a candidate
     // would electrically WORK at all as a substitute. Case/Use/Beta/FT no
     // longer disqualify anything here; they only decide which valid
-    // candidate is the single MOST suitable one (see CORRECT/WHY_CORRECT),
+    // candidate is the single MOST suitable one (see findBest() below),
     // surfaced in checkAnswer()'s own feedback rather than as a pass/fail
     // gate — the shortlist can legitimately contain more than one
     // genuinely-working part at once now.
@@ -406,6 +387,101 @@
     function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
     // ══════════════════════════════════════════════════════════════════════
+    // findBest() — the same Polarity→Specs→Case→Use→Beta→FT priority chain
+    // this quiz teaches, run live for an arbitrary target. Each stage
+    // narrows the survivor list; a stage that finds NO exact match among
+    // the current survivors leaves the list untouched (that criterion
+    // "relaxes") rather than emptying it — Case and Use can both relax,
+    // Beta/FT always narrow to whoever's numerically closest (possibly a
+    // multi-way tie, kept rather than arbitrarily broken).
+    // ══════════════════════════════════════════════════════════════════════
+    function findBest(targetType) {
+      const t = byType[targetType];
+      let survivors = DATASHEET.filter(d => d.type !== targetType && checkValidity(targetType, d.type).valid);
+
+      const caseMatches = survivors.filter(d => d.case === t.case);
+      const caseRelaxed = caseMatches.length === 0;
+      if (!caseRelaxed) survivors = caseMatches;
+
+      // Substring match, not exact equality — Use is free text ("SS amp"
+      // vs "Low noise SS amp"), so two genuinely related parts almost
+      // never share the identical string. Caught by regression-testing
+      // against the 5 hand-verified answers: exact-match wrongly picked
+      // BC547 over BC549 for BC548, since NEITHER string equals "SS amp"
+      // exactly — but "Low noise SS amp" contains it and BC547's "Low-
+      // power audio/signal amp" doesn't, so substring-containment is the
+      // metric that actually reflects "same family of use".
+      const tUse = t.use.toLowerCase();
+      const useMatches = survivors.filter(d => { const u = d.use.toLowerCase(); return u.includes(tUse) || tUse.includes(u); });
+      const useRelaxed = useMatches.length === 0;
+      if (!useRelaxed) survivors = useMatches;
+
+      const tBeta = betaFloor(t.beta);
+      const minBetaDist = Math.min(...survivors.map(d => Math.abs(betaFloor(d.beta) - tBeta)));
+      survivors = survivors.filter(d => Math.abs(betaFloor(d.beta) - tBeta) === minBetaDist);
+
+      const minFtDist = Math.min(...survivors.map(d => Math.abs(d.ft - t.ft)));
+      survivors = survivors.filter(d => Math.abs(d.ft - t.ft) === minFtDist);
+
+      return { list: survivors.map(d => d.type), caseRelaxed, useRelaxed, betaDist: minBetaDist, ftDist: minFtDist };
+    }
+
+    function explainBest(targetType, info) {
+      const t = byType[targetType];
+      const names = `<b>${info.list.join('</b> or <b>')}</b>`;
+      const sample = byType[info.list[0]];
+      const bits = [];
+      bits.push(`${names} share${info.list.length > 1 ? '' : 's'} ${targetType}'s own polarity and meet${info.list.length > 1 ? '' : 's'} or exceed${info.list.length > 1 ? '' : 's'} every spec (V<sub>CE</sub>, I<sub>C</sub>, Power, V<sub>CB</sub>).`);
+      if (info.caseRelaxed) {
+        bits.push(`No other ${t.pol}-type part in the pool shares ${targetType}'s own case (${t.case}), so that requirement had to relax.`);
+      } else {
+        bits.push(`It also shares ${targetType}'s own case (${t.case}), so the pins line up.`);
+      }
+      if (info.useRelaxed) {
+        bits.push(`Nothing left matches ${targetType}'s own Use ("${t.use}") exactly, so Beta became the next decider.`);
+      } else {
+        bits.push(`Its Use ("${sample.use}") matches ${targetType}'s own exactly.`);
+      }
+      if (info.betaDist === 0) {
+        bits.push(`Its Beta is an exact match to ${targetType}'s own beta floor.`);
+      } else {
+        bits.push(`It has the closest available Beta to ${targetType}'s own of anything left in the pool (off by ${info.betaDist}).`);
+      }
+      if (info.list.length > 1) {
+        bits.push(`${names} tie on every criterion checked — either is accepted as correct.`);
+      }
+      return bits.join(' ');
+    }
+
+    // Target quota for Step 1 itself: 2×TO-92 + 2×TO-220 + 1×TO-3 + 1×TO-126
+    // — deliberately NO TO-72 slot (the pool's only TO-72 part, BF180, can
+    // still turn up as a Step-2 CANDIDATE for some other target, just never
+    // as a target itself here). Drawn once at page load, not per-attempt —
+    // Step 1's own chip row is the page's top-level navigation, so unlike
+    // Step 2's per-target redraw it shouldn't shuffle itself away mid-use.
+    const TARGET_QUOTA = { 'TO-92': 2, 'TO-220': 2, 'TO-3': 1, 'TO-126': 1 };
+    // A handful of parts are the single most extreme rating in their own
+    // category — BF469/BF470 (250V, nothing else in the pool is even
+    // close) and MJ15003/MJ15004 (250W/20A, likewise) — so findBest()
+    // returns an EMPTY list for them: nothing in the pool meets or
+    // exceeds their specs. Picking one as a Step-1 target would make the
+    // puzzle unsolvable (and crash drawPoolFor(), which force-includes
+    // findBest(target).list[0]). Found by exhaustively testing findBest()
+    // against all 26 pool members before shipping this, not guessed —
+    // excluded from ever being drawn as a target here, though they can
+    // still turn up as Step-2 CANDIDATES/distractors for other targets.
+    function drawTargets() {
+      const eligible = DATASHEET.filter(d => findBest(d.type).list.length > 0);
+      const chosen = [];
+      Object.keys(TARGET_QUOTA).forEach(bucket => {
+        const need = TARGET_QUOTA[bucket];
+        const pool = shuffle(eligible.filter(d => d.bucket === bucket && !chosen.includes(d.type)));
+        chosen.push(...pool.slice(0, need).map(d => d.type));
+      });
+      return shuffle(chosen);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
     // Random pool draw — 6 selectable candidates per target, redrawn fresh
     // every time a new target chip is picked (see selectTarget()). Quota
     // is 2×TO-92 + 1 each of TO-72/TO-126/TO-220/TO-3 (26-part pool minus
@@ -415,9 +491,10 @@
     // BF180 is the target, its own bucket has zero OTHER members left to
     // draw from — the missing slot falls through to the `overflow`
     // bucket (TO-92, the most populous) rather than leaving the sample
-    // short of 6. One of CORRECT[target] is always force-included first
-    // so the puzzle is guaranteed solvable regardless of what else gets
-    // drawn — the remaining slots are then genuinely random per attempt.
+    // short of 6. One of findBest(target)'s own answer(s) is always
+    // force-included first so the puzzle is guaranteed solvable
+    // regardless of what else gets drawn — remaining slots are then
+    // genuinely random per attempt.
     // ══════════════════════════════════════════════════════════════════════
     const QUOTA = { 'TO-92': 2, 'TO-72': 1, 'TO-126': 1, 'TO-220': 1, 'TO-3': 1 };
     const OVERFLOW_BUCKET = 'TO-92';
@@ -428,11 +505,11 @@
       const chosen = [];
 
       // Force-include one of the official best answers, at random when
-      // there's more than one (BF180 has two) — the rest of that answer's
-      // own bucket quota, and every other bucket, is filled independently
-      // at random, so the OTHER tied answer can still legitimately turn
-      // up too on any given draw.
-      const bestPick = shuffle(CORRECT[targetType].slice())[0];
+      // there's more than one (e.g. BF180's own two-way tie) — the rest of
+      // that answer's own bucket quota, and every other bucket, is filled
+      // independently at random, so the OTHER tied answer can still
+      // legitimately turn up too on any given draw.
+      const bestPick = shuffle(findBest(targetType).list.slice())[0];
       chosen.push(bestPick);
 
       const remaining = { ...QUOTA };
@@ -543,7 +620,9 @@
       const selected = Array.from(shortlist);
       const results = selected.map(type => ({ type, ...checkValidity(currentTarget, type) }));
       const invalids = results.filter(r => !r.valid);
-      const bestList = CORRECT[currentTarget];
+      const bestInfo = findBest(currentTarget);
+      const bestList = bestInfo.list;
+      const whyBest = explainBest(currentTarget, bestInfo);
 
       const banner = document.getElementById('resultBanner');
       const icon = document.getElementById('resultIcon');
@@ -557,7 +636,7 @@
         icon.textContent = '✗';
         text.innerHTML = `${invalids.map(r => `<b>${r.type}</b>`).join(', ')} would not work.`;
         content.innerHTML = invalids.map(r => `<div class="working-line">${r.reason}</div>`).join('')
-          + `<div class="working-line" style="margin-top:.6rem">The best substitute for <b>${currentTarget}</b> is <b>${bestList.join(' or ')}</b> — ${WHY_CORRECT[currentTarget]}</div>`;
+          + `<div class="working-line" style="margin-top:.6rem">The best substitute for <b>${currentTarget}</b> is <b>${bestList.join(' or ')}</b> — ${whyBest}</div>`;
         renderTable();
         return;
       }
@@ -571,7 +650,7 @@
         text.innerHTML = others.length
           ? `Correct! <b>${bestSelected.join(' or ')}</b> is the most suitable, but the other part${others.length > 1 ? 's' : ''} you picked would also work.`
           : `Correct! <b>${bestSelected.join(' or ')}</b> is the most suitable substitute for ${currentTarget}.`;
-        content.innerHTML = `<div class="working-line">${WHY_CORRECT[currentTarget]}</div>`
+        content.innerHTML = `<div class="working-line">${whyBest}</div>`
           + (others.length ? `<div class="working-line" style="margin-top:.6rem"><b>${others.join(', ')}</b> would also work as a substitute, just not as precisely matched.</div>` : '');
       } else {
         // 4th tier: nothing WRONG was picked (every part in the shortlist
@@ -581,11 +660,12 @@
         banner.className = 'result-banner close';
         icon.textContent = '~';
         text.innerHTML = `Everything you picked would work, but you're missing the closest match.`;
-        content.innerHTML = `<div class="working-line"><b>${selected.join(', ')}</b> would all work as a substitute for ${currentTarget}, but the best match is <b>${bestList.join(' or ')}</b> — ${WHY_CORRECT[currentTarget]}</div>`;
+        content.innerHTML = `<div class="working-line"><b>${selected.join(', ')}</b> would all work as a substitute for ${currentTarget}, but the best match is <b>${bestList.join(' or ')}</b> — ${whyBest}</div>`;
       }
       renderTable();
     }
 
+    TARGETS = drawTargets();
     renderChips();
     renderTable();
   </script>
