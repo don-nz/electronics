@@ -87,6 +87,35 @@
   in this project has any responsive handling at all — this table is
   much wider (10 columns, 18 rows) than any prior use, so horizontal
   scroll on narrow widths is a real necessity here, not a nice-to-have.
+
+  MAJOR REWORK: pool expanded from the original 18 hand-transcribed rows
+  to a 26-part CSV the user supplied, and Step 2's table changed from
+  "always show everything" to a RANDOM 6-candidate draw (see
+  drawPoolFor()) rebuilt fresh every time a new target chip is picked —
+  quota 2×TO-92 + 1 each of TO-72/TO-126/TO-220/TO-3, one of CORRECT[
+  target] force-included so the puzzle is always solvable regardless of
+  what else gets drawn, remaining slots genuinely random per attempt.
+  BF180 is a real structural edge case: it's the ONLY TO-72 part in the
+  whole pool, so whenever it's the target there are zero other TO-72
+  candidates to fill that slot — the shortfall rolls over into TO-92
+  (the most populous bucket) rather than shipping a 5-option table.
+  VCE/VCB/IC are stored as magnitudes (abs value) even though the source
+  CSV signs some PNP rows negative purely to notate polarity — left
+  signed, checkValidity()'s cv<tv comparisons would have silently broken
+  (a -100V rating would compare as "less than" -40V, backwards from the
+  actual capability comparison).
+
+  Re-deriving the answer key against the full 26-part pool (Python,
+  before touching this file, confirmed with the user) changed TWO of the
+  five answers from the original 18-part derivation — see CORRECT's own
+  comment for the full reasoning: MJE3055 was MJ15003 (an FT tiebreak),
+  corrected to 2N3055 (an exact Beta-floor match, which should have won
+  BEFORE FT was ever considered — the original derivation had skipped
+  that check, a bug that predates this pool expansion and was only
+  caught by redoing the derivation rigorously). BF180 was {BC548,BC549},
+  corrected to {2N2222A,2N3394} (both have a beta floor of 100, closer
+  to BF180's own unusually low beta of 13, beating BC548/549 on the same
+  Beta-before-FT logic). BC548/BC549/2N3055's own answers are unchanged.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -213,9 +242,11 @@
       <div class="card">
 
         <p style="font-size:.85rem; line-height:1.6; margin:0 0 .6rem;">
-          Find an appropriate substitute for each transistor below, using Table 1's own data.
-          You can shortlist more than one candidate — click a row to add it, click again to remove it — then press
-          Check. Work through the criteria in this order — a later one only matters once every earlier one is satisfied:
+          Find an appropriate substitute for each transistor below. Table 1 draws 6 random candidates from a
+          26-part pool each time you pick a transistor to replace — 2 TO-92, and 1 each of TO-72/TO-126/TO-220/TO-3 —
+          so the options are different every attempt. You can shortlist more than one candidate — click a row to add
+          it, click again to remove it — then press Check. Work through the criteria in this order — a later one
+          only matters once every earlier one is satisfied:
         </p>
         <ol class="criteria-list">
           <li><b>Polarity</b> must match (N/P)</li>
@@ -259,51 +290,84 @@
 
   <script>
     // ══════════════════════════════════════════════════════════════════════
-    // Table 1 — transcribed verbatim from the class's own reference sheet.
+    // Table 1 — the pool of 26 real parts the user supplied as a CSV,
+    // superseding the original 18-row hand-transcribed table (dropped the
+    // "*" footnote marker that table's own TO-92 case strings carried —
+    // this CSV is now the canonical source). VCE/VCB/IC are stored as
+    // MAGNITUDES (abs value) even for PNP parts, matching how the
+    // original table already listed every rating as a positive number —
+    // the source CSV uses signed values for some PNP rows (e.g. TIP32C:
+    // VCE=-100) purely to notate polarity, which would silently break
+    // checkValidity()'s cv<tv comparisons if left signed (a -100V rating
+    // would then look "less than" a -40V one, when electrically it's the
+    // opposite — a BIGGER magnitude tolerance). `bucket` is the case
+    // family used for the random-draw distribution below — anything
+    // starting "TO-92" (including 2N2222A's dual "TO-92 / TO-18" listing)
+    // buckets as TO-92; everything else buckets as its own case string.
     // ══════════════════════════════════════════════════════════════════════
     const DATASHEET = [
-      { type: 'BC548',   case: 'TO-92*', pol: 'N', vce: 30,  vcb: 30,  ic: 0.1,  beta: '110–800', ft: 300, power: 0.5,  use: 'SS amp' },
-      { type: 'BC549',   case: 'TO-92*', pol: 'N', vce: 30,  vcb: 30,  ic: 0.1,  beta: '200–800', ft: 300, power: 0.5,  use: 'Low noise SS amp' },
-      { type: 'BC559',   case: 'TO-92*', pol: 'P', vce: 30,  vcb: 30,  ic: 0.1,  beta: '125–600', ft: 150, power: 0.5,  use: 'SS amp' },
-      { type: 'BC327',   case: 'TO-92*', pol: 'P', vce: 45,  vcb: 50,  ic: 0.8,  beta: '100–600', ft: 100, power: 0.8,  use: 'Output' },
-      { type: 'BC337',   case: 'TO-92*', pol: 'N', vce: 45,  vcb: 50,  ic: 0.8,  beta: '100–600', ft: 200, power: 0.8,  use: 'Output' },
-      { type: 'BD639',   case: 'TO-92*', pol: 'N', vce: 80,  vcb: 100, ic: 1,    beta: '40–160',  ft: 130, power: 1,    use: 'Audio output' },
-      { type: 'BD640',   case: 'TO-92*', pol: 'P', vce: 80,  vcb: 100, ic: 1,    beta: '40–160',  ft: 50,  power: 1,    use: 'Audio output' },
-      { type: 'BD139',   case: 'TO-126', pol: 'N', vce: 60,  vcb: 100, ic: 1,    beta: '40–160',  ft: 250, power: 8,    use: 'Output' },
-      { type: 'BD140',   case: 'TO-126', pol: 'P', vce: 80,  vcb: 100, ic: 1,    beta: '40–160',  ft: 75,  power: 8,    use: 'Output' },
-      { type: 'BF180',   case: 'TO-72',  pol: 'N', vce: 20,  vcb: 30,  ic: 0.02, beta: '13',      ft: 675, power: 0.15, use: 'UHF amp' },
-      { type: 'BF469',   case: 'TO-126', pol: 'N', vce: 250, vcb: 50,  ic: 0.5,  beta: '50',      ft: 60,  power: 1.8,  use: 'High voltage amp' },
-      { type: 'BF470',   case: 'TO-126', pol: 'P', vce: 250, vcb: 250, ic: 0.05, beta: '50',      ft: 60,  power: 1.8,  use: 'High voltage amp' },
-      { type: 'MJE2955', case: 'TO-220', pol: 'P', vce: 60,  vcb: 70,  ic: 10,   beta: '20–100',  ft: 2,   power: 75,   use: 'Power' },
-      { type: 'MJE3055', case: 'TO-220', pol: 'N', vce: 60,  vcb: 70,  ic: 10,   beta: '20–100',  ft: 2,   power: 75,   use: 'Power' },
-      { type: 'MJ2955',  case: 'TO-3',   pol: 'P', vce: 60,  vcb: 70,  ic: 15,   beta: '20–70',   ft: 4,   power: 115,  use: 'High output power' },
-      { type: '2N3055',  case: 'TO-3',   pol: 'N', vce: 60,  vcb: 90,  ic: 15,   beta: '20',      ft: 0.8, power: 115,  use: 'High output power' },
-      { type: 'MJ15003', case: 'TO-3',   pol: 'N', vce: 140, vcb: 140, ic: 20,   beta: '25–150',  ft: 2,   power: 250,  use: 'High output power' },
-      { type: 'MJ15004', case: 'TO-3',   pol: 'P', vce: 140, vcb: 140, ic: 20,   beta: '25–150',  ft: 2,   power: 250,  use: 'High output power' },
+      { type: '2N2222A', case: 'TO-92 / TO-18', pol: 'N', vce: 40,  vcb: 75,  ic: 0.8,  beta: '100-300', ft: 300, power: 0.5,   use: 'High current switching, RF' },
+      { type: '2N3055',  case: 'TO-3',          pol: 'N', vce: 60,  vcb: 90,  ic: 15,   beta: '20',      ft: 0.8, power: 115,   use: 'High output power' },
+      { type: '2N3394',  case: 'TO-92',         pol: 'N', vce: 40,  vcb: 60,  ic: 0.2,  beta: '100-300', ft: 300, power: 0.625, use: 'General-purpose switching' },
+      { type: '2N3906',  case: 'TO-92',         pol: 'P', vce: 40,  vcb: 40,  ic: 0.2,  beta: '100-300', ft: 250, power: 0.625, use: 'Complementary PNP switch' },
+      { type: 'BC327',   case: 'TO-92',         pol: 'P', vce: 45,  vcb: 50,  ic: 0.8,  beta: '100-600', ft: 100, power: 0.8,   use: 'Output' },
+      { type: 'BC337',   case: 'TO-92',         pol: 'N', vce: 45,  vcb: 50,  ic: 0.8,  beta: '100-600', ft: 200, power: 0.8,   use: 'Output' },
+      { type: 'BC547',   case: 'TO-92',         pol: 'N', vce: 45,  vcb: 50,  ic: 0.1,  beta: '110-800', ft: 300, power: 0.5,   use: 'Low-power audio/signal amp' },
+      { type: 'BC548',   case: 'TO-92',         pol: 'N', vce: 30,  vcb: 30,  ic: 0.1,  beta: '110-800', ft: 300, power: 0.5,   use: 'SS amp' },
+      { type: 'BC549',   case: 'TO-92',         pol: 'N', vce: 30,  vcb: 30,  ic: 0.1,  beta: '200-800', ft: 300, power: 0.5,   use: 'Low noise SS amp' },
+      { type: 'BC557',   case: 'TO-92',         pol: 'P', vce: 45,  vcb: 50,  ic: 0.1,  beta: '125-800', ft: 150, power: 0.5,   use: 'Low-power complementary amp' },
+      { type: 'BC559',   case: 'TO-92',         pol: 'P', vce: 30,  vcb: 30,  ic: 0.1,  beta: '125-600', ft: 150, power: 0.5,   use: 'SS amp' },
+      { type: 'BD139',   case: 'TO-126',        pol: 'N', vce: 60,  vcb: 100, ic: 1,    beta: '40-160',  ft: 250, power: 8,     use: 'Output' },
+      { type: 'BD140',   case: 'TO-126',        pol: 'P', vce: 80,  vcb: 100, ic: 1,    beta: '40-160',  ft: 75,  power: 8,     use: 'Output' },
+      { type: 'BD639',   case: 'TO-92',         pol: 'N', vce: 80,  vcb: 100, ic: 1,    beta: '40-160',  ft: 130, power: 1,     use: 'Audio output' },
+      { type: 'BD640',   case: 'TO-92',         pol: 'P', vce: 80,  vcb: 100, ic: 1,    beta: '40-160',  ft: 50,  power: 1,     use: 'Audio output' },
+      { type: 'BF180',   case: 'TO-72',         pol: 'N', vce: 20,  vcb: 30,  ic: 0.02, beta: '13',      ft: 675, power: 0.15,  use: 'UHF amp' },
+      { type: 'BF469',   case: 'TO-126',        pol: 'N', vce: 250, vcb: 50,  ic: 0.5,  beta: '50',      ft: 60,  power: 1.8,   use: 'High voltage amp' },
+      { type: 'BF470',   case: 'TO-126',        pol: 'P', vce: 250, vcb: 250, ic: 0.05, beta: '50',      ft: 60,  power: 1.8,   use: 'High voltage amp' },
+      { type: 'MJ15003', case: 'TO-3',          pol: 'N', vce: 140, vcb: 140, ic: 20,   beta: '25-150',  ft: 2,   power: 250,   use: 'High output power' },
+      { type: 'MJ15004', case: 'TO-3',          pol: 'P', vce: 140, vcb: 140, ic: 20,   beta: '25-150',  ft: 2,   power: 250,   use: 'High output power' },
+      { type: 'MJ2955',  case: 'TO-3',          pol: 'P', vce: 60,  vcb: 70,  ic: 15,   beta: '20-70',   ft: 4,   power: 115,   use: 'High output power' },
+      { type: 'MJE2955', case: 'TO-220',        pol: 'P', vce: 60,  vcb: 70,  ic: 10,   beta: '20-100',  ft: 2,   power: 75,    use: 'Power' },
+      { type: 'MJE3055', case: 'TO-220',        pol: 'N', vce: 60,  vcb: 70,  ic: 10,   beta: '20-100',  ft: 2,   power: 75,    use: 'Power' },
+      { type: 'TIP120',  case: 'TO-220',        pol: 'N', vce: 60,  vcb: 60,  ic: 5,    beta: '1000+',   ft: 4,   power: 65,    use: 'Motor driver, high gain switch (Darlington)' },
+      { type: 'TIP31C',  case: 'TO-220',        pol: 'N', vce: 100, vcb: 100, ic: 3,    beta: '10-50',   ft: 3,   power: 40,    use: 'Power amplifiers, regulators' },
+      { type: 'TIP32C',  case: 'TO-220',        pol: 'P', vce: 100, vcb: 100, ic: 3,    beta: '10-50',   ft: 3,   power: 40,    use: 'Power amplifiers, regulators' },
     ];
+    DATASHEET.forEach(d => { d.bucket = d.case.startsWith('TO-92') ? 'TO-92' : d.case; });
     const byType = {};
     DATASHEET.forEach(d => byType[d.type] = d);
 
     const TARGETS = ['BC548', 'BC549', 'MJE3055', '2N3055', 'BF180'];
 
-    // Confirmed via a full Python re-derivation of the same priority chain
-    // before this file was written — see header comment for the reasoning
-    // behind each. BF180 genuinely ties between two candidates (confirmed
-    // with the user), hence the array of two there.
+    // Re-derived (Python, before touching this file) against the FULL
+    // 26-part pool, confirmed with the user — TWO answers changed from
+    // the original 18-part-pool derivation:
+    //  - MJE3055: was MJ15003 (picked via an FT tiebreak), corrected to
+    //    2N3055 — Beta comes BEFORE FT in the stated priority order, and
+    //    2N3055's beta (a flat 20) is an EXACT match to MJE3055's own
+    //    beta floor (20-100 → 20), which should have won before FT was
+    //    ever considered. The original derivation skipped that check.
+    //  - BF180: was {BC548,BC549}, corrected to {2N2222A,2N3394} — both
+    //    now have a beta floor of 100, closer to BF180's own unusually
+    //    low beta (13) than BC548/BC549's floor of 110/200, so they win
+    //    on Beta before FT is even reached (where BC548/549 used to win
+    //    by having the highest FT among a — now larger — five-way tie).
+    // 2N3055's own answer (MJ15003) is unaffected: it's still the ONLY
+    // other N-type TO-3 device in the pool, no tiebreak to redo.
     const CORRECT = {
       BC548: ['BC549'],
       BC549: ['BC548'],
-      MJE3055: ['MJ15003'],
+      MJE3055: ['2N3055'],
       '2N3055': ['MJ15003'],
-      BF180: ['BC548', 'BC549'],
+      BF180: ['2N2222A', '2N3394'],
     };
 
     const WHY_CORRECT = {
       BC548: 'BC549 matches BC548 exactly on every hard requirement (same case, same V<sub>CE</sub>/V<sub>CB</sub>/I<sub>C</sub>/Power) and is the closest available match on Use too — both are small-signal amp transistors. Its wider beta range is a bonus, not a problem: more available gain than the minimum never hurts.',
       BC549: 'BC548 matches BC549 exactly on every hard requirement (same case, same V<sub>CE</sub>/V<sub>CB</sub>/I<sub>C</sub>/Power) and is the closest available match on Use — both are small-signal amp transistors. Its beta floor is a little lower, but 110 is still comfortably above what most small-signal designs actually need.',
-      MJE3055: 'No other N-type TO-220 device exists anywhere in this table, so the case requirement has to relax to the next power-transistor tier: TO-3. Between the two TO-3 N-type candidates, MJ15003\'s F<sub>T</sub> (2) matches MJE3055\'s own F<sub>T</sub> (2) exactly, while 2N3055\'s F<sub>T</sub> (0.8) doesn\'t — the deciding factor once polarity, specs and Use ("Power" / "High output power") are satisfied by either.',
-      '2N3055': 'MJ15003 is the only other N-type TO-3 device in the whole table, so it\'s the sole case-matched candidate — and it comfortably exceeds every spec (V<sub>CE</sub>, I<sub>C</sub>, Power, V<sub>CB</sub>) with the same "High output power" Use rating.',
-      BF180: 'No other N-type TO-72 device exists, so the case requirement has to relax entirely. BC548 and BC549 then tie on every remaining criterion: both meet/exceed BF180\'s modest specs, neither matches its "UHF amp" Use (nothing else in the table does either), and both share the highest available F<sub>T</sub> (300) of any remaining candidate — still well short of BF180\'s own 675, but the closest on offer. Either is an acceptable answer here.',
+      MJE3055: 'No other N-type TO-220 device in the pool actually meets MJE3055\'s specs (TIP120/TIP31C both fall short on I<sub>C</sub> and Power), so the case requirement has to relax to the next power-transistor tier: TO-3. Between the TO-3 N-type candidates, 2N3055\'s Beta (a flat 20) is an EXACT match to MJE3055\'s own beta floor (20-100 → 20) — MJ15003\'s floor (25) is a little further off, so 2N3055 wins the tiebreak before F<sub>T</sub> even needs considering.',
+      '2N3055': 'MJ15003 is the only other N-type TO-3 device in the whole pool, so it\'s the sole case-matched candidate — and it comfortably exceeds every spec (V<sub>CE</sub>, I<sub>C</sub>, Power, V<sub>CB</sub>) with the same "High output power" Use rating.',
+      BF180: 'No other N-type TO-72 device exists, so the case requirement has to relax entirely. Once specs and Use are satisfied by more than a dozen candidates, Beta becomes the decider: 2N2222A and 2N3394 both have a beta floor of 100 — the closest of anything in the pool to BF180\'s own unusually low beta (13) — beating BC548/BC549\'s own floor of 110/200. Neither is a real UHF part (nothing else in the pool is), but on the stated criteria order they\'re the closest available match.',
     };
 
     function betaFloor(s) {
@@ -339,6 +403,61 @@
       return { valid: true };
     }
 
+    function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // Random pool draw — 6 selectable candidates per target, redrawn fresh
+    // every time a new target chip is picked (see selectTarget()). Quota
+    // is 2×TO-92 + 1 each of TO-72/TO-126/TO-220/TO-3 (26-part pool minus
+    // the target itself: 12/1/4/5/4 of those five buckets respectively,
+    // so 2/1/1/1/1 is comfortably satisfiable — EXCEPT TO-72, which has
+    // exactly ONE member in the whole pool (BF180 itself). Whenever
+    // BF180 is the target, its own bucket has zero OTHER members left to
+    // draw from — the missing slot falls through to the `overflow`
+    // bucket (TO-92, the most populous) rather than leaving the sample
+    // short of 6. One of CORRECT[target] is always force-included first
+    // so the puzzle is guaranteed solvable regardless of what else gets
+    // drawn — the remaining slots are then genuinely random per attempt.
+    // ══════════════════════════════════════════════════════════════════════
+    const QUOTA = { 'TO-92': 2, 'TO-72': 1, 'TO-126': 1, 'TO-220': 1, 'TO-3': 1 };
+    const OVERFLOW_BUCKET = 'TO-92';
+
+    function drawPoolFor(targetType) {
+      const target = byType[targetType];
+      const available = DATASHEET.filter(d => d.type !== targetType);
+      const chosen = [];
+
+      // Force-include one of the official best answers, at random when
+      // there's more than one (BF180 has two) — the rest of that answer's
+      // own bucket quota, and every other bucket, is filled independently
+      // at random, so the OTHER tied answer can still legitimately turn
+      // up too on any given draw.
+      const bestPick = shuffle(CORRECT[targetType].slice())[0];
+      chosen.push(bestPick);
+
+      const remaining = { ...QUOTA };
+      remaining[byType[bestPick].bucket]--;
+
+      // Fill every bucket's own quota first; anything a bucket can't
+      // supply (BF180's own TO-72 case, once it's the target) rolls over
+      // into the overflow bucket's own count instead of being dropped.
+      let overflowNeeded = 0;
+      for (const bucket of Object.keys(remaining)) {
+        const need = remaining[bucket];
+        if (need <= 0) continue;
+        const pool = shuffle(available.filter(d => d.bucket === bucket && !chosen.includes(d.type)));
+        const take = pool.slice(0, need);
+        chosen.push(...take.map(d => d.type));
+        if (take.length < need) overflowNeeded += (need - take.length);
+      }
+      if (overflowNeeded > 0) {
+        const pool = shuffle(available.filter(d => d.bucket === OVERFLOW_BUCKET && !chosen.includes(d.type)));
+        chosen.push(...pool.slice(0, overflowNeeded).map(d => d.type));
+      }
+
+      return shuffle(chosen);
+    }
+
     // ══════════════════════════════════════════════════════════════════════
     // Rendering + interaction — no quiz-engine.js Q[]/checkAnswer() here,
     // this is a standalone practice widget: either step can be changed at
@@ -346,6 +465,7 @@
     // press Check again to retry.
     // ══════════════════════════════════════════════════════════════════════
     let currentTarget = null;
+    let currentPool = [];  // the 6 randomly-drawn candidate types for currentTarget (rebuilt fresh in selectTarget())
     let shortlist = new Set();
     let checked = false; // true right after Check is pressed — rows switch from the blue "shortlisted" colour to per-row correct/wrong; goes false again the moment the shortlist changes.
 
@@ -364,22 +484,25 @@
     function renderTable() {
       const body = document.getElementById('datasheetBody');
       body.innerHTML = '';
-      DATASHEET.forEach(d => {
+      if (!currentTarget) return;
+      const visibleTypes = [currentTarget, ...currentPool];
+      visibleTypes.forEach(type => {
+        const d = byType[type];
         const tr = document.createElement('tr');
         tr.className = 'ds-row';
-        const isTargetItself = d.type === currentTarget;
+        const isTargetItself = type === currentTarget;
         if (isTargetItself) {
           tr.classList.add('ds-row-target');
-        } else if (shortlist.has(d.type)) {
+        } else if (shortlist.has(type)) {
           if (checked) {
-            tr.classList.add(checkValidity(currentTarget, d.type).valid ? 'ds-row-selected-correct' : 'ds-row-selected-wrong');
+            tr.classList.add(checkValidity(currentTarget, type).valid ? 'ds-row-selected-correct' : 'ds-row-selected-wrong');
           } else {
             tr.classList.add('ds-row-selected');
           }
         }
         tr.innerHTML = `<td>${d.type}</td><td>${d.case}</td><td>${d.pol}</td><td>${d.vce}</td><td>${d.vcb}</td><td>${d.ic}</td><td>${d.beta}</td><td>${d.ft}</td><td>${d.power}</td><td>${d.use}</td>`;
         if (!isTargetItself) {
-          tr.addEventListener('click', () => toggleCandidate(d.type));
+          tr.addEventListener('click', () => toggleCandidate(type));
         }
         body.appendChild(tr);
       });
@@ -397,6 +520,7 @@
 
     function selectTarget(type) {
       currentTarget = type;
+      currentPool = drawPoolFor(type);
       shortlist = new Set();
       document.getElementById('matchNote').innerHTML = `Now shortlist <b>${type}</b>'s replacement(s) from Table 1, then press Check.`;
       clearVerdict();
