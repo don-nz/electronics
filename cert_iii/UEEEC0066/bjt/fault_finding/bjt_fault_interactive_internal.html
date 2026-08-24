@@ -656,13 +656,17 @@
         //   intact, just carrying no current — same "clean 0V, not
         //   floating" signature as an open B-E junction in the source
         //   14-question quiz, since this is the same underlying cutoff).
-        //   VB is the interesting one: with IB=0, NO current is being
-        //   drawn out of the R1/R2 divider any more, so VB doesn't fall
-        //   like every other fault in this project — it RISES slightly,
-        //   from its normal loaded 1.2V up to the divider's own unloaded
-        //   (open-circuit) value: VCC×R2/(R1+R2) = 12×15/135 ≈ 1.33V —
-        //   matches this file's own already-stated VTH figure exactly,
-        //   since VTH IS that unloaded divider voltage.
+        // VB — corrected against the teacher's own class notes: originally
+        // this question computed the fully rigorous UNLOADED divider
+        // voltage (VCC×R2/(R1+R2) ≈ 1.33V, reasoning that with IB=0 no
+        // current is drawn out of R1/R2 any more). The teacher's own notes
+        // instead hold VB at its normal, unchanged healthy reading (1.2V)
+        // — the SAME "stiff divider, don't re-derive upstream loading
+        // effects" simplification already confirmed for RE-high/RE-open
+        // in bjt_fault_interactive_resistor.html, now recurring here too.
+        // VB moves from a CORRECT/affected option to WRONG/unaffected —
+        // the only field this fault actually changed from Q1's original
+        // design; VE/IC/IE/VC were already right.
         // SCOPE_OUT needs no override — a fully cut-off transistor can't
         // amplify at all, so the shared HEALTHY_SCOPES default for
         // SCOPE_OUT (scope-ch2-flat-only) is already the correct reveal,
@@ -676,14 +680,9 @@
         // OPEN"), so marking it on the symbol isn't a spoiler the way the
         // meter/scope reveals are.
         faultedLeads: ['bjt-base'],
-        // up/delta per meter (VB 1.2→1.33, VC 8.1→12.0, VE 0.6→0.0,
-        // IC 2.17→0.00mA, IE 2.18→0.00mA) feed the ghost arrow — see
-        // addGhost()/syncMeterValues(). The fault's OWN values (IB=0,
-        // hence all of these) are VBE-independent, but the deltas shift
-        // with the healthy baseline whenever VBE changes.
         meterOverride: (answered) => answered
           ? {
-            VB: { value: '1.33', unit: 'V', up: true, delta: '+0.13V' },
+            VB: { value: '1.2', unit: 'V' },
             VC: { value: '12.0', unit: 'V', up: true, delta: '+3.9V' },
             VE: { value: '0.0', unit: 'V', up: false, delta: '−0.6V' },
             IC: { value: '0.00', unit: 'mA', up: false, delta: '−2.17mA' },
@@ -693,10 +692,10 @@
             VB: { value: '?', unit: 'V' }, VC: { value: '?', unit: 'V' },
             VE: { value: '?', unit: 'V' }, IC: { value: '?', unit: 'mA' }, IE: { value: '?', unit: 'mA' },
           },
-        text: () => 'Fault: Q1 <b style="color:var(--colour-ui-primary)">open</b>-circuit <b style="color:var(--colour-ui-primary)">base</b>.', 
-        hint: () => 'With IB forced to exactly zero, the transistor is fully cut off — IC and IE collapse to zero too. Think about what each part of the bias network settles to with no current flowing through it, and whether VB rises or falls once nothing is being drawn out of the divider any more.',
+        text: () => 'Fault: Q1 <b style="color:var(--colour-ui-primary)">open</b>-circuit <b style="color:var(--colour-ui-primary)">base</b>.',
+        hint: () => 'With IB forced to exactly zero, the transistor is fully cut off — IC and IE collapse to zero too. The base divider is treated as stiff enough that VB stays at its normal reading regardless — think about what that forces VE, IC, IE and VC to become downstream of it.',
         options: () => shuffle([
-          { key: 'VB', label: 'VB meter', type: 'correct' },
+          { key: 'VB', label: 'VB meter', type: 'wrong' },
           { key: 'VC', label: 'VC meter', type: 'correct' },
           { key: 'VE', label: 'VE meter', type: 'correct' },
           { key: 'IC', label: 'IC ammeter', type: 'correct' },
@@ -706,7 +705,7 @@
         ]),
         correctExplain: (st) => {
           const keys = st.opts.map(o => o.type === 'correct' ? o.key : null).filter(Boolean).join(', ');
-          return `${keys} — the transistor is fully cut off, so every reading downstream of the base moves`;
+          return `${keys} — VB is held fixed by the stiff divider, so only the currents (now zero) and everything downstream of them move`;
         },
         // Structured "fault analysis" format ported from
         // bjt_npn_troubleshoot_dc.html's own per-fault FAULT_EXPLANATIONS:
@@ -719,32 +718,28 @@
         // class; in a SUBSTITUTED row only the LHS subject symbol keeps
         // its colour, the values themselves stay plain; the final
         // TOTAL row wraps its answer in colour-result.
-        // Derivation order here runs the OPPOSITE direction to every
-        // other fault in this project: an external resistor fault starts
-        // from VB (via the loaded divider) and works down to IE. Here the
-        // fault IS "IB = 0" directly, so the natural chain starts there
-        // and works down to IE/VE/VC, with VB last since it's the one
-        // reading solved differently (the UNLOADED divider) and the one
-        // that moves opposite to every other fault.
         working: (st) => {
           const wrongKeys = st.opts.map(o => o.type === 'wrong' ? o.key : null).filter(Boolean).join(', ');
           return `
     <div class="working-section">Identifying the fault:</div>
     <div class="diagnosis-block">
       <div class="symptom-item">
-        <div class="symptom-title">Symptom 1: Collector voltage has risen to the supply rail (<span class="colour-voltage">V<sub>C</sub></span> ↑ <span class="colour-result">+3.9 V</span>)</div>
+        <div class="symptom-title">Symptom 1: Base voltage stays exactly at its healthy reading</div>
+        <div class="symptom-body">The base divider (<span class="colour-resistor">R<sub>1</sub></span>/<span class="colour-resistor">R<sub>2</sub></span>) is treated as stiff enough that its own output doesn't depend on what's happening downstream of the base lead — <span class="colour-voltage">V<sub>B</sub></span> stays at 1.2 V whether the base lead is intact or broken.</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 2: Collector voltage has risen to the supply rail (<span class="colour-voltage">V<sub>C</sub></span> ↑ <span class="colour-result">+3.9 V</span>)</div>
         <div class="symptom-body">With the base lead open, no base current <span class="colour-current">I<sub>B</sub></span> can flow at all — and since <span class="colour-current">I<sub>C</sub></span> = β×<span class="colour-current">I<sub>B</sub></span>, collector current collapses to zero too. With nothing flowing through <span class="colour-resistor">R<sub>C</sub></span>, nothing is dropped across it, so <span class="colour-voltage">V<sub>C</sub></span> rises all the way up toward <span class="colour-supply">V<sub>CC</sub></span>.</div>
       </div>
       <div class="symptom-item">
-        <div class="symptom-title">Symptom 2: Emitter voltage has fallen to a clean 0 V (<span class="colour-voltage">V<sub>E</sub></span> ↓ <span class="colour-result">−0.6 V</span>)</div>
+        <div class="symptom-title">Symptom 3: Emitter voltage has fallen to a clean 0 V (<span class="colour-voltage">V<sub>E</sub></span> ↓ <span class="colour-result">−0.6 V</span>)</div>
         <div class="symptom-body">Since <span class="colour-current">I<sub>E</sub></span> = <span class="colour-current">I<sub>B</sub></span> + <span class="colour-current">I<sub>C</sub></span> and both are zero, no current flows through <span class="colour-resistor">R<sub>E</sub></span> either. Unlike an open <span class="colour-resistor">R<sub>E</sub></span> itself (where the emitter has NO path to ground and floats unpredictably), <span class="colour-resistor">R<sub>E</sub></span>'s own path here is perfectly intact — just carrying nothing — so <span class="colour-voltage">V<sub>E</sub></span> settles at a clean, well-defined 0 V.</div>
-      </div>
-      <div class="symptom-item">
-        <div class="symptom-title">Symptom 3: Base voltage has RISEN slightly, not fallen (<span class="colour-voltage">V<sub>B</sub></span> ↑ <span class="colour-result">+0.13 V</span>)</div>
-        <div class="symptom-body">Every other fault reasoned about in this project drags <span class="colour-voltage">V<sub>B</sub></span> down. This one is different — with no base current being drawn OUT of the <span class="colour-resistor">R<sub>1</sub></span>/<span class="colour-resistor">R<sub>2</sub></span> divider at all any more, the divider is effectively unloaded, so <span class="colour-voltage">V<sub>B</sub></span> settles at the divider's own open-circuit voltage — slightly HIGHER than its normal loaded value.</div>
       </div>
     </div>
     <div class="working-section">Applying the formulas:</div>
+
+    <div class="working-step">Base voltage — held fixed by the stiff divider, not recalculated:</div>
+    <div class="working-line"><span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-result">1.2 V</span> (unchanged from healthy)</div>
 
     <div class="working-step">Collector current (fully cut off):</div>
     <div class="working-formula-row"><span class="colour-current">I<sub>C</sub></span> = β × <span class="colour-current">I<sub>B</sub></span></div>
@@ -770,16 +765,10 @@
     <div class="working-formula-row"><span class="colour-voltage">V<sub>C</sub></span> = 12 V − 0.00 mA × 1.8 kΩ</div>
     <div class="working-total"><span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-result">12.0 V</span></div>
 
-    <div class="working-step">Base voltage (unloaded — no base current is drawn from the divider):</div>
-    <div class="working-formula-row"><span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-supply">V<sub>CC</sub></span> × ${frac('<span class="colour-resistor">R2</span>', '<span class="colour-resistor">R<sub>1</sub></span> + <span class="colour-resistor">R2</span>')}</div>
-    <div class="working-label">Substituting values:</div>
-    <div class="working-formula-row"><span class="colour-voltage">V<sub>B</sub></span> = 12 V × ${frac('15 kΩ', '120 kΩ + 15 kΩ')}</div>
-    <div class="working-total"><span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-result">1.33 V</span></div>
-
     <div class="working-step" style="margin-top:.6rem">Output scope:</div>
     <div class="working-line">A fully cut-off transistor can't amplify anything — the AC output isn't just reduced, it's completely dead, same symptom as the external-fault testbed's own C1/C2-open question, just for a totally different reason (a broken AC PATH there, versus a fully cut-off TRANSISTOR here).</div>
     <div class="working-step" style="margin-top:.6rem">${wrongKeys} — untouched:</div>
-    <div class="working-line">The input scope probes the external signal source directly, upstream of the whole amplifier — nothing happening inside a cut-off transistor can reach back and change what the signal generator itself is producing.</div>`;
+    <div class="working-line"><span class="colour-voltage">V<sub>B</sub></span> stays healthy for the reason above, and the input scope is upstream of the whole amplifier regardless of what's wrong inside it.</div>`;
         }
       },
       {
@@ -926,13 +915,20 @@
         // exactly why a DMM continuity/diode-test on the physical leads
         // is a necessary complementary technique, not just a nice-to-have,
         // per this quiz's own deferred objective 4).
+        // VB corrected the same way as Q1, against the teacher's own
+        // class notes: held fixed at its healthy 1.2V (stiff-divider
+        // simplification) rather than the fully rigorous unloaded value
+        // (1.33V) — moves from CORRECT/affected to WRONG/unaffected, the
+        // only field that changed. Q1 and Q3 remain each other's DC-
+        // identical twin either way, just with a smaller "affected" set
+        // now (4 of 6 instead of 6 of 6).
         circuitLabel: 'Common Emitter (voltage-divider bias, RE unbypassed)',
         kind: 'multi',
         interactiveCircuit: true,
         faultedLeads: ['bjt-emitter'],
         meterOverride: (answered) => answered
           ? {
-            VB: { value: '1.33', unit: 'V', up: true, delta: '+0.13V' },
+            VB: { value: '1.2', unit: 'V' },
             VC: { value: '12.0', unit: 'V', up: true, delta: '+3.9V' },
             VE: { value: '0.0', unit: 'V', up: false, delta: '−0.6V' },
             IC: { value: '0.00', unit: 'mA', up: false, delta: '−2.17mA' },
@@ -942,10 +938,10 @@
             VB: { value: '?', unit: 'V' }, VC: { value: '?', unit: 'V' },
             VE: { value: '?', unit: 'V' }, IC: { value: '?', unit: 'mA' }, IE: { value: '?', unit: 'mA' },
           },
-        text: () => 'Fault: Q1 <b style="color:var(--colour-ui-primary)">open</b>-circuit <b style="color:var(--colour-ui-primary)">emitter</b>.', 
+        text: () => 'Fault: Q1 <b style="color:var(--colour-ui-primary)">open</b>-circuit <b style="color:var(--colour-ui-primary)">emitter</b>.',
         hint: () => 'If NEITHER base current nor collector current has anywhere to go, both must be forced to zero too — the whole device stops conducting, not just the one broken lead. Compare your answer set here against Q1\'s.',
         options: () => shuffle([
-          { key: 'VB', label: 'VB meter', type: 'correct' },
+          { key: 'VB', label: 'VB meter', type: 'wrong' },
           { key: 'VC', label: 'VC meter', type: 'correct' },
           { key: 'VE', label: 'VE meter', type: 'correct' },
           { key: 'IC', label: 'IC ammeter', type: 'correct' },
@@ -964,7 +960,7 @@
     <div class="diagnosis-block">
       <div class="symptom-item">
         <div class="symptom-title">Symptom: every reading is IDENTICAL to Q1's base-open fault</div>
-        <div class="symptom-body">Base current has to complete its circuit by leaving through the emitter — if the emitter's own bond wire is broken, that circuit can never close, so <span class="colour-current">I<sub>B</sub></span> is blocked just as completely as if the BASE lead itself had broken. From here the consequences cascade exactly the same way as Q1: <span class="colour-current">I<sub>C</sub></span> = β×<span class="colour-current">I<sub>B</sub></span> collapses to zero, <span class="colour-voltage">V<sub>C</sub></span> rises to <span class="colour-supply">V<sub>CC</sub></span>, <span class="colour-resistor">R<sub>E</sub></span> carries nothing so <span class="colour-voltage">V<sub>E</sub></span> settles at a clean 0 V, and with no current drawn from the divider <span class="colour-voltage">V<sub>B</sub></span> rises to its unloaded value.</div>
+        <div class="symptom-body">Base current has to complete its circuit by leaving through the emitter — if the emitter's own bond wire is broken, that circuit can never close, so <span class="colour-current">I<sub>B</sub></span> is blocked just as completely as if the BASE lead itself had broken. From here the consequences cascade exactly the same way as Q1: <span class="colour-current">I<sub>C</sub></span> = β×<span class="colour-current">I<sub>B</sub></span> collapses to zero, <span class="colour-voltage">V<sub>C</sub></span> rises to <span class="colour-supply">V<sub>CC</sub></span>, <span class="colour-resistor">R<sub>E</sub></span> carries nothing so <span class="colour-voltage">V<sub>E</sub></span> settles at a clean 0 V, and <span class="colour-voltage">V<sub>B</sub></span> stays at its normal healthy reading — the base divider is stiff enough that it doesn't care what's happening downstream of the base lead.</div>
       </div>
       <div class="symptom-item">
         <div class="symptom-title">The real lesson: these DC readings alone can't tell WHICH lead broke</div>
@@ -972,6 +968,9 @@
       </div>
     </div>
     <div class="working-section">Applying the formulas:</div>
+
+    <div class="working-step">Base voltage — held fixed by the stiff divider, not recalculated:</div>
+    <div class="working-line"><span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-result">1.2 V</span> (unchanged from healthy)</div>
 
     <div class="working-step">Collector current (fully cut off — no path exists for IB to begin with):</div>
     <div class="working-formula-row"><span class="colour-current">I<sub>C</sub></span> = β × <span class="colour-current">I<sub>B</sub></span></div>
@@ -997,16 +996,10 @@
     <div class="working-formula-row"><span class="colour-voltage">V<sub>C</sub></span> = 12 V − 0.00 mA × 1.8 kΩ</div>
     <div class="working-total"><span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-result">12.0 V</span></div>
 
-    <div class="working-step">Base voltage (unloaded — no base current is drawn from the divider):</div>
-    <div class="working-formula-row"><span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-supply">V<sub>CC</sub></span> × ${frac('<span class="colour-resistor">R2</span>', '<span class="colour-resistor">R<sub>1</sub></span> + <span class="colour-resistor">R2</span>')}</div>
-    <div class="working-label">Substituting values:</div>
-    <div class="working-formula-row"><span class="colour-voltage">V<sub>B</sub></span> = 12 V × ${frac('15 kΩ', '120 kΩ + 15 kΩ')}</div>
-    <div class="working-total"><span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-result">1.33 V</span></div>
-
     <div class="working-step" style="margin-top:.6rem">Output scope:</div>
     <div class="working-line">A fully cut-off transistor can't amplify anything, same as Q1 — the output is completely dead.</div>
     <div class="working-step" style="margin-top:.6rem">${wrongKeys} — untouched:</div>
-    <div class="working-line">The input scope probes the external signal source directly, upstream of the whole amplifier — nothing happening inside a cut-off transistor can reach back and change what the signal generator itself is producing.</div>`;
+    <div class="working-line"><span class="colour-voltage">V<sub>B</sub></span> stays healthy for the reason above, and the input scope is upstream of the whole amplifier regardless of what's wrong inside it.</div>`;
         }
       },
       {
@@ -1189,25 +1182,30 @@
         // — a physical impossibility for an NPN, which is the tell that
         // the junction is actually REVERSE-biased here, not forward-
         // biased: the combined C/E node ends up sitting at a higher
-        // voltage (fed hard by RC from VCC) than the base's own unloaded
-        // divider voltage can support as a forward VBE. With the B-E
-        // junction genuinely off (IB≈0), the circuit collapses to nothing
-        // more than RC and RE forming a plain divider straight across
-        // VCC, with the transistor contributing nothing — and since
-        // neither VB (a pure VCC×R2/(R1+R2) divider) nor VC=VE (a pure
-        // VCC×RE/(RC+RE) divider) ever involves VBE at all, these three
-        // VALUES are actually IDENTICAL whichever VBE assumption is used
-        // — only the "attempted forward bias" contradiction check and the
-        // deltas below moved. Confirmed self-consistent: VBE_check =
-        // VB−VZ comes out negative (reverse-biased), and IC≈IE (matching,
-        // since no base current is being diverted anywhere).
+        // voltage (fed hard by RC from VCC) than the base's own divider
+        // voltage can support as a forward VBE. With the B-E junction
+        // genuinely off (IB≈0), the circuit collapses to nothing more
+        // than RC and RE forming a plain divider straight across VCC,
+        // with the transistor contributing nothing.
+        // VB — corrected against the teacher's own class notes, the SAME
+        // "stiff divider" simplification already confirmed 3 times over
+        // in Q1/Q3 of this file and RE-high/RE-open of
+        // bjt_knowledge_choose_replacement.html: whenever IB≈0 (for
+        // WHATEVER reason — a broken lead there, a reverse-biased
+        // junction here), VB is held at its normal healthy 1.2V rather
+        // than recomputed as the unloaded-divider value (1.33V). VC=VE
+        // and IC/IE are UNAFFECTED by this change — their own value comes
+        // entirely from the RC/RE divider across VCC, nothing to do with
+        // the base-divider loading question at all, so they stay exactly
+        // as before. VB moves from CORRECT/affected to WRONG/unaffected —
+        // the only field that changed.
         circuitLabel: 'Common Emitter (voltage-divider bias, RE unbypassed)',
         kind: 'multi',
         interactiveCircuit: true,
         shortedPair: 'CE',
         meterOverride: (answered) => answered
           ? {
-            VB: { value: '1.33', unit: 'V', up: true, delta: '+0.13V' },
+            VB: { value: '1.2', unit: 'V' },
             VC: { value: '1.57', unit: 'V', up: false, delta: '−6.53V' },
             VE: { value: '1.57', unit: 'V', up: true, delta: '+0.97V' },
             IC: { value: '5.80', unit: 'mA', up: true, delta: '+3.63mA' },
@@ -1217,10 +1215,10 @@
             VB: { value: '?', unit: 'V' }, VC: { value: '?', unit: 'V' },
             VE: { value: '?', unit: 'V' }, IC: { value: '?', unit: 'mA' }, IE: { value: '?', unit: 'mA' },
           },
-        text: () => 'Fault: Q1 <b style="color:var(--colour-ui-primary)">short</b>-circuit <b style="color:var(--colour-ui-primary)">collector-emitter</b>.', 
-        hint: () => 'Tying C straight to E forces VCE to exactly 0V — deeper than ordinary saturation. Try assuming the base-emitter junction still forward-conducts at its usual 0.6V and see what that predicts for the base current\'s DIRECTION. Does the answer actually make sense for an NPN?',
+        text: () => 'Fault: Q1 <b style="color:var(--colour-ui-primary)">short</b>-circuit <b style="color:var(--colour-ui-primary)">collector-emitter</b>.',
+        hint: () => 'Tying C straight to E forces VCE to exactly 0V — deeper than ordinary saturation. Try assuming the base-emitter junction still forward-conducts at its usual 0.6V and see what that predicts for the base current\'s DIRECTION. Does the answer actually make sense for an NPN? And once you\'ve settled that, does the base divider actually need re-deriving, or does it stay at its normal reading regardless?',
         options: () => shuffle([
-          { key: 'VB', label: 'VB meter', type: 'correct' },
+          { key: 'VB', label: 'VB meter', type: 'wrong' },
           { key: 'VC', label: 'VC meter', type: 'correct' },
           { key: 'VE', label: 'VE meter', type: 'correct' },
           { key: 'IC', label: 'IC ammeter', type: 'correct' },
@@ -1230,7 +1228,7 @@
         ]),
         correctExplain: (st) => {
           const keys = st.opts.map(o => o.type === 'correct' ? o.key : null).filter(Boolean).join(', ');
-          return `${keys} — VCE is forced to 0V, and the base-emitter junction ends up reverse-biased, not forward-biased`;
+          return `${keys} — VCE is forced to 0V and the base-emitter junction ends up reverse-biased, but VB itself is held fixed by the stiff divider`;
         },
         working: (st) => {
           const wrongKeys = st.opts.map(o => o.type === 'wrong' ? o.key : null).filter(Boolean).join(', ');
@@ -1238,25 +1236,26 @@
     <div class="working-section">Identifying the fault:</div>
     <div class="diagnosis-block">
       <div class="symptom-item">
-        <div class="symptom-title">Symptom 1: VC and VE become EQUAL, at a genuinely NEW value (≈1.57 V)</div>
+        <div class="symptom-title">Symptom 1: VB stays exactly at its healthy reading</div>
+        <div class="symptom-body">The base divider (<span class="colour-resistor">R<sub>1</sub></span>/<span class="colour-resistor">R<sub>2</sub></span>) is treated as stiff enough that its own output doesn't depend on what's happening at the shorted collector-emitter node — <span class="colour-voltage">V<sub>B</sub></span> stays at 1.2 V regardless.</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 2: VC and VE become EQUAL, at a genuinely NEW value (≈1.57 V)</div>
         <div class="symptom-body">A collector-emitter short forces <span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-voltage">V<sub>E</sub></span> exactly. Unlike Q2 (B-C short, converging near 2.07 V) or Q5 (B-E short, crushed near 0 V), this pair settles somewhere in between — because it's set purely by <span class="colour-resistor">R<sub>C</sub></span> and <span class="colour-resistor">R<sub>E</sub></span> dividing <span class="colour-supply">V<sub>CC</sub></span> between them, nothing to do with the base bias network at all.</div>
       </div>
       <div class="symptom-item">
-        <div class="symptom-title">Symptom 2 — the trap: assuming normal VBE gives an IMPOSSIBLE result</div>
-        <div class="symptom-body">Try assuming the B-E junction still forward-conducts at its usual 0.6 V, with the base fed from its normal Thevenin source (VTH≈1.33 V, RTH≈13.3 kΩ): solving for <span class="colour-current">I<sub>B</sub></span> gives a NEGATIVE number — current trying to flow OUT of an NPN's base, which is physically impossible. That contradiction is the tell: the junction must actually be reverse-biased (switched off), not forward-conducting, in this particular fault.</div>
+        <div class="symptom-title">Symptom 3 — the trap: assuming normal VBE gives an IMPOSSIBLE result</div>
+        <div class="symptom-body">Try assuming the B-E junction still forward-conducts at its usual 0.6 V, with the base fed from its normal 1.2 V: solving for <span class="colour-current">I<sub>B</sub></span> gives a NEGATIVE number — current trying to flow OUT of an NPN's base, which is physically impossible. That contradiction is the tell: the junction must actually be reverse-biased (switched off), not forward-conducting, in this particular fault.</div>
       </div>
       <div class="symptom-item">
-        <div class="symptom-title">Symptom 3: with the junction off, IC and IE match again (both ≈5.80 mA)</div>
+        <div class="symptom-title">Symptom 4: with the junction off, IC and IE match again (both ≈5.80 mA)</div>
         <div class="symptom-body">With <span class="colour-current">I<sub>B</sub></span> ≈ 0, nothing is being diverted into or out of the base at the shorted node any more — every electron that comes in through <span class="colour-resistor">R<sub>C</sub></span> goes straight out through <span class="colour-resistor">R<sub>E</sub></span>, so both ammeters agree again (contrast this with Q2's C-B short, where the two ammeters genuinely disagreed).</div>
       </div>
     </div>
     <div class="working-section">Applying the formulas:</div>
 
-    <div class="working-step">Base voltage — unloaded, since the B-E junction turns out to be OFF (see Symptom 2):</div>
-    <div class="working-formula-row"><span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-supply">V<sub>CC</sub></span> × ${frac('<span class="colour-resistor">R2</span>', '<span class="colour-resistor">R<sub>1</sub></span> + <span class="colour-resistor">R2</span>')}</div>
-    <div class="working-label">Substituting values:</div>
-    <div class="working-formula-row"><span class="colour-voltage">V<sub>B</sub></span> = 12 V × ${frac('15 kΩ', '120 kΩ + 15 kΩ')}</div>
-    <div class="working-total"><span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-result">1.33 V</span></div>
+    <div class="working-step">Base voltage — held fixed by the stiff divider, not recalculated:</div>
+    <div class="working-line"><span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-result">1.2 V</span> (unchanged from healthy)</div>
 
     <div class="working-step">Collector = emitter voltage — a plain RC/RE divider straight across VCC, with the transistor contributing nothing:</div>
     <div class="working-formula-row"><span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-supply">V<sub>CC</sub></span> × ${frac('<span class="colour-resistor">R<sub>E</sub></span>', '<span class="colour-resistor">R<sub>C</sub></span> + <span class="colour-resistor">R<sub>E</sub></span>')}</div>
@@ -1280,7 +1279,7 @@
     <div class="working-step" style="margin-top:.6rem">Output scope:</div>
     <div class="working-line">With the base-emitter junction switched off, there's no active device left to amplify anything — the output is dead, even though both ammeters are reading their HIGHEST currents of any fault in this quiz.</div>
     <div class="working-step" style="margin-top:.6rem">${wrongKeys} — untouched:</div>
-    <div class="working-line">The input scope probes the external signal source directly, upstream of the whole amplifier — nothing happening inside the transistor, shorted or not, can reach back and change what the signal generator itself is producing.</div>`;
+    <div class="working-line"><span class="colour-voltage">V<sub>B</sub></span> stays healthy for the reason above, and the input scope is upstream of the whole amplifier regardless of what's wrong inside it.</div>`;
         }
       },
     ];
