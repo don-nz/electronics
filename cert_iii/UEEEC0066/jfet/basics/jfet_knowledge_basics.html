@@ -1,0 +1,250 @@
+<!--
+  TEMPLATE FILE — read before cloning for a new weekly quiz.
+
+  This file uses a data-driven quiz engine: a single `QUESTIONS` array (in the
+  <script>, search "QUESTIONS —") drives one generic HTML panel and a generic
+  set of engine functions (renderQuestion, checkAnswer, nextQuestion, etc).
+  There is deliberately NO per-question HTML or per-question JS function.
+
+  When cloning this file for a new quiz — even one that starts with just ONE
+  question — KEEP THIS STRUCTURE. Do not revert to a hardcoded per-question
+  panel just because there's only one entry.
+
+  Built on the shared cert_iii/assets/quiz-engine.js engine from the start
+  (project convention for all new quizzes). This is the JFET counterpart to
+  UEEEC0066/bjt/basics/bjt_knowledge_basics.html — Q1 deliberately mirrors
+  that file's own Q1 (leftPanel:'shapeGrid', kind:'multi', "click every
+  valid symbol"), against the class objective "Draw and identify the
+  schematic symbols for N-channel and P-channel JFETs."
+
+  The 8 shapeIds used below (jfet-n-circle, jfet-p-circle, jfet-n-nocircle,
+  jfet-p-nocircle, jfet-error-wronglead-in, jfet-error-wronglead-out,
+  jfet-error-double-in, jfet-error-double-out) are copied from the master
+  reference ../../../assets/shapes/jfet-symbols.svg — edit shapes there
+  first, then re-copy into this <defs> block (cross-file SVG <use>/fetch()
+  is blocked under file://, same reasoning as every other master-shape file
+  in this project). See that master file's own header comment for why
+  there's no "flipped" variant here, unlike the BJT set: the JFET arrow
+  lives on the gate lead, which a drain/source top-bottom swap never
+  touches, so a "flipped" JFET shape would be pixel-identical to the
+  unflipped one.
+
+  Being built one question at a time, same as the BJT fault-finding quiz —
+  do not batch-draft further questions ahead of the user's own direction.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../assets/theme-init.js"></script>
+  <script src="../../../assets/quiz-engine.js"></script>
+  <title>JFET Knowledge Quiz 1</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../assets/quiz-common.css">
+  <script src="../../../assets/breadcrumb.js" defer></script>
+</head>
+
+<body>
+  <!-- Hidden defs: JFET schematic symbols used by Q1's shapeGrid — copied
+       from ../../../assets/shapes/jfet-symbols.svg, edit there first. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur stdDeviation="2" result="b" />
+        <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+      </filter>
+
+      <rect id="jfet-channel" x="-4" y="-25" width="8" height="50" style="fill: var(--colour-jfet)" />
+      <g id="jfet-base-frame">
+        <use href="#jfet-channel" />
+        <line x1="0" y1="-25" x2="0" y2="-50" style="stroke: var(--colour-jfet)" stroke-width="2" />
+        <line x1="0" y1="25" x2="0" y2="50" style="stroke: var(--colour-jfet)" stroke-width="2" />
+        <line x1="-50" y1="-10" x2="-4" y2="-10" style="stroke: var(--colour-jfet)" stroke-width="2" />
+        <circle cx="0" cy="-50" r="2.5" style="fill: var(--colour-jfet)" />
+        <circle cx="0" cy="50" r="2.5" style="fill: var(--colour-jfet)" />
+        <circle cx="-50" cy="-10" r="2.5" style="fill: var(--colour-jfet)" />
+      </g>
+      <circle id="jfet-circle" cx="0" cy="0" r="38" fill="none" stroke="var(--colour-jfet)" stroke-width="2" filter="url(#glow)" />
+
+      <!-- 4 valid symbols: N-channel (gate arrow points IN, toward the
+           channel) / P-channel (points OUT, away) × circle / no-circle. -->
+      <g id="jfet-n-circle"><use href="#jfet-base-frame" /><use href="#jfet-circle" /><polygon points="-14,-16 -14,-4 -4,-10" style="fill: var(--colour-jfet)" /></g>
+      <g id="jfet-p-circle"><use href="#jfet-base-frame" /><use href="#jfet-circle" /><polygon points="-4,-16 -4,-4 -14,-10" style="fill: var(--colour-jfet)" /></g>
+      <g id="jfet-n-nocircle"><use href="#jfet-base-frame" /><polygon points="-14,-16 -14,-4 -4,-10" style="fill: var(--colour-jfet)" /></g>
+      <g id="jfet-p-nocircle"><use href="#jfet-base-frame" /><polygon points="-4,-16 -4,-4 -14,-10" style="fill: var(--colour-jfet)" /></g>
+
+      <!-- 4 error variants: arrow(s) on the drain/source leads instead of
+           the gate lead. -->
+      <g id="jfet-error-wronglead-in"><use href="#jfet-base-frame" /><use href="#jfet-circle" /><polygon points="-4,-38 4,-38 0,-30" style="fill: var(--colour-jfet)" /></g>
+      <g id="jfet-error-wronglead-out"><use href="#jfet-base-frame" /><use href="#jfet-circle" /><polygon points="-4,-30 4,-30 0,-38" style="fill: var(--colour-jfet)" /></g>
+      <g id="jfet-error-double-in"><use href="#jfet-base-frame" /><use href="#jfet-circle" /><polygon points="-4,-38 4,-38 0,-30" style="fill: var(--colour-jfet)" /><polygon points="-4,38 4,38 0,30" style="fill: var(--colour-jfet)" /></g>
+      <g id="jfet-error-double-out"><use href="#jfet-base-frame" /><use href="#jfet-circle" /><polygon points="-4,-30 4,-30 0,-38" style="fill: var(--colour-jfet)" /><polygon points="-4,30 4,30 0,38" style="fill: var(--colour-jfet)" /></g>
+    </defs>
+  </svg>
+
+  <div class="crumb" id="crumb" data-current="Fundamentals"></div>
+  <header>
+    <h1>JFET Knowledge</h1>
+    <p>Conceptual Questions · N-Channel &amp; P-Channel JFETs</p>
+  </header>
+
+  <div class="quiz-wrap" id="quizWrap">
+
+    <!-- LEFT: shape grid (only shown for leftPanel:'shapeGrid' questions) -->
+    <div class="circuit-col">
+      <div id="qShapeGridPanel" style="display:none">
+        <div class="panel-label">Click the shapes to select your answer</div>
+        <div class="shape-grid" id="shapeGridCells"></div>
+      </div>
+    </div>
+
+    <!-- RIGHT: question -->
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <!-- Single reusable question panel — populated from QUESTIONS[cur] by renderQuestion() -->
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+          <div class="options" id="qOptions"></div>
+          <div class="match-wrap" id="qMatch" style="display:none">
+            <div class="match-pool-row" id="matchPoolRow">
+              <div class="match-pool-arrow">▶</div>
+              <div class="match-pool" id="matchPool"></div>
+            </div>
+            <div class="match-columns" id="matchColumns"></div>
+          </div>
+          <div class="bits-wrap" id="qBits" style="display:none">
+            <table class="bits-table">
+              <thead>
+                <tr>
+                  <th rowspan="2">Value</th>
+                  <th>2<sup>3</sup></th>
+                  <th>2<sup>2</sup></th>
+                  <th>2<sup>1</sup></th>
+                  <th>2<sup>0</sup></th>
+                </tr>
+                <tr>
+                  <th>8</th>
+                  <th>4</th>
+                  <th>2</th>
+                  <th>1</th>
+                </tr>
+              </thead>
+              <tbody id="bitsBody"></tbody>
+            </table>
+          </div>
+          <div class="bits-wrap" id="qTruth" style="display:none">
+            <div class="truth-toggle" id="truthToggle" style="display:none"></div>
+            <table class="bits-table">
+              <thead>
+                <tr>
+                  <th id="truthInputHead" colspan="3">Inputs</th>
+                  <th id="truthOutputHead">Output</th>
+                </tr>
+                <tr id="truthColLabels"></tr>
+              </thead>
+              <tbody id="truthBody"></tbody>
+            </table>
+          </div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Summary -->
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS — see quiz-engine.js's own header comment for the full field
+    // reference. Add, remove, split or reorder questions by editing this
+    // array only — nothing in the engine needs to change.
+    // ══════════════════════════════════════════════════════════════════════
+
+    const QUESTIONS = [
+      {
+        // Mirrors bjt_knowledge_basics.html's own Q1 exactly: multi-select
+        // shape-grid, valid symbols mixed with plausible-error variants.
+        // JFET's rule is "exactly one arrow, on the GATE lead" (in = N-
+        // channel, out = P-channel) instead of BJT's "on the emitter arm" —
+        // see jfet-symbols.svg's header comment for why there's no
+        // "flipped" set here (only 4 valid shapes, not 8).
+        leftPanel: 'shapeGrid',
+        kind: 'multi',
+        // The shared SHAPE_VIEWBOX default ('-32 -36 96 76') is tuned for
+        // bjt-symbols.svg's much smaller coordinate range — jfet-symbols.svg's
+        // shapes span roughly ±50 units (longer drain/source/gate leads),
+        // so they overflow/clip under the default. Same fix as
+        // bjt_knowledge_amp_config.html's own oversized shapes: override per
+        // question rather than touching the shared global.
+        shapeViewBox: '-55 -55 110 110',
+        text: () => `<b style="color:var(--colour-ui-primary)">Click</b> every shape below that is a <b class="colour-jfet">valid</b> JFET transistor symbol. There are <b style="color:var(--colour-ui-correct)">4 correct</b> shapes among the 8 shown.`,
+        hint: () => 'A valid symbol has exactly one arrow, on the gate lead (the horizontal one) — never on the drain or source lead. The arrow points INTO the channel for N-channel, or OUT of the channel for P-channel. The circle is optional — it doesn\'t change which symbols are valid.',
+        options: () => shuffle([
+          { label: 'N-channel, circle',    type: 'correct', shapeId: 'jfet-n-circle' },
+          { label: 'P-channel, circle',    type: 'correct', shapeId: 'jfet-p-circle' },
+          { label: 'N-channel, no circle', type: 'correct', shapeId: 'jfet-n-nocircle' },
+          { label: 'P-channel, no circle', type: 'correct', shapeId: 'jfet-p-nocircle' },
+          { label: 'Arrow on drain/source lead, pointing in',  type: 'wrong', shapeId: 'jfet-error-wronglead-in' },
+          { label: 'Arrow on drain/source lead, pointing out', type: 'wrong', shapeId: 'jfet-error-wronglead-out' },
+          { label: 'Two arrows, both pointing in',  type: 'wrong', shapeId: 'jfet-error-double-in' },
+          { label: 'Two arrows, both pointing out', type: 'wrong', shapeId: 'jfet-error-double-out' }
+        ]),
+        correctExplain: (st) => {
+          const nums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(n => n).join(', ');
+          return `Shapes <b>${nums}</b> are the valid JFET symbols`;
+        },
+        working: (st) => {
+          const correctNums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join(', ');
+          const wrongNums = st.opts.map((o, i) => o.type === 'wrong' ? i + 1 : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-step">Valid symbols — shapes ${correctNums}:</div>
+    <div class="working-line">Each has exactly one arrow, on the <b style="color:var(--colour-ui-correct)">gate lead</b>. The arrow points <b style="color:var(--colour-ui-correct)">into</b> the channel for N-channel, or <b style="color:var(--colour-ui-correct)">out of</b> the channel for P-channel. The circle is a drawing style, not a rule — both circled and uncircled forms are valid.</div>
+    <div class="working-line" style="margin-top:.4rem">Unlike a BJT, there's no separate "flipped" variant to watch for here — swapping drain and source top-to-bottom doesn't change the symbol at all, since neither lead carries an arrow.</div>
+    <div class="working-step" style="margin-top:.6rem">Invalid symbols — shapes ${wrongNums}:</div>
+    <div class="working-line">Each breaks the one-arrow-on-the-gate rule: two of them put the arrow on a <b style="color:var(--colour-ui-wrong)">drain/source lead</b> — an arrow never belongs there — and the other two put <b style="color:var(--colour-ui-wrong)">two arrows</b> on the symbol at once, when a real JFET only ever has one.</div>`;
+        }
+      }
+    ];
+
+    initQuizNav();
+    resetQuiz();
+    initQuizFromURL();
+  </script>
+</body>
+</html>
