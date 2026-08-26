@@ -46,6 +46,57 @@
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="../../../assets/quiz-common.css">
   <script src="../../../assets/breadcrumb.js" defer></script>
+  <style>
+    /* Q2 (kind:'fill') — click-a-name-then-click-a-terminal labelling,
+       ported from UEEEC0069/exercises/digital_circuit_derivation_ab.html
+       (the only other file using kind:'fill' so far). That file's own
+       version of these rules also covers a "circuit vs pool" pointer arrow
+       and a multi-question persistent diagram — neither needed here, since
+       this quiz's diagram only ever shows one fill question at a time in
+       the normal two-column circuit-col/questions-col layout, so only the
+       pool box + terminal-slot-box styling is copied over. */
+    .circuit-panel { cursor: default; }
+    .fill-pool-wrap { margin-top: .8rem; }
+    .fill-pool-row { display: flex; align-items: center; gap: .5rem; }
+    .fill-pool-arrow { font-size: 1rem; color: var(--colour-ui-primary); opacity: 0; transition: opacity .15s; }
+    .fill-pool-row.needs-pick .fill-pool-arrow { opacity: 1; animation: fillArrowBounce .8s ease-in-out infinite; }
+    @keyframes fillArrowBounce { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(3px); } }
+    .fill-pool {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: .5rem;
+      padding: .8rem;
+      border: 2px dashed var(--colour-border);
+      border-radius: var(--radius-lg);
+      background: rgba(var(--colour-label-rgb), .05);
+      min-height: 3rem;
+      transition: border-color .15s, background .15s;
+    }
+    .fill-pool.needs-pick {
+      border-color: var(--colour-ui-primary);
+      border-style: solid;
+      background: rgba(var(--colour-ui-primary-rgb), .06);
+      animation: matchPoolPulse 1.1s ease-in-out infinite;
+    }
+    .fill-pool .match-chip { min-width: 84px; text-align: center; }
+    /* Opaque (not translucent) fill — these boxes sit on top of the
+       terminal's leader line, and a see-through fill would let the line
+       visibly cross through the label text sitting on top of it. */
+    .circuit-slot-box { fill: var(--colour-panel); stroke: var(--colour-ui-primary); stroke-width: 1.5px; stroke-dasharray: 4,3; cursor: pointer; }
+    .circuit-slot-box.filled { stroke-dasharray: none; }
+    .circuit-slot-box.correct { stroke: var(--colour-ui-correct); }
+    .circuit-slot-box.wrong { stroke: #ff3d66; }
+    .circuit-slot-box.correct, .circuit-slot-box.wrong { cursor: default; }
+    .jfet-slot-html {
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-body); font-size: 15px; font-weight: 700;
+      color: var(--colour-ui-primary); text-align: center; line-height: 1;
+      pointer-events: none; width: 100%; height: 100%;
+    }
+    .jfet-slot-html.correct { color: var(--colour-ui-correct); }
+    .jfet-slot-html.wrong { color: #ff3d66; }
+  </style>
 </head>
 
 <body>
@@ -94,11 +145,49 @@
 
   <div class="quiz-wrap" id="quizWrap">
 
-    <!-- LEFT: shape grid (only shown for leftPanel:'shapeGrid' questions) -->
+    <!-- LEFT: shape grid (leftPanel:'shapeGrid') or static circuit
+         (leftPanel:'circuit', default display:none — swapLeftPanel()
+         shows/hides it per question). -->
     <div class="circuit-col">
       <div id="qShapeGridPanel" style="display:none">
         <div class="panel-label">Click the shapes to select your answer</div>
         <div class="shape-grid" id="shapeGridCells"></div>
+      </div>
+
+      <!-- Q2's terminal-labelling diagram (kind:'fill') — one N-channel
+           JFET with 3 empty terminal slots (Drain/Gate/Source), each a
+           <foreignObject>-based click target (see this file's own
+           <style> block header comment for why kind:'fill' needs page-
+           local CSS/markup rather than shared quiz-common.css classes). -->
+      <div class="circuit-panel" style="display:none">
+        <div class="panel-label">Click a name below, then click a terminal</div>
+        <svg viewBox="0 0 440 300" xmlns="http://www.w3.org/2000/svg">
+          <use href="#jfet-n-circle" transform="translate(220,150)" />
+
+          <!-- Leader lines from each terminal dot to its slot box. -->
+          <line x1="220" y1="100" x2="220" y2="64" style="stroke: var(--colour-jfet)" stroke-width="1.5" stroke-dasharray="3,2" />
+          <line x1="220" y1="200" x2="220" y2="236" style="stroke: var(--colour-jfet)" stroke-width="1.5" stroke-dasharray="3,2" />
+          <line x1="170" y1="140" x2="130" y2="140" style="stroke: var(--colour-jfet)" stroke-width="1.5" stroke-dasharray="3,2" />
+
+          <g id="slotBoxD" class="circuit-slot-box" transform="translate(160,30)" onclick="slotClicked(0)">
+            <rect width="120" height="34" rx="4" />
+            <foreignObject x="0" y="0" width="120" height="34">
+              <div xmlns="http://www.w3.org/1999/xhtml" id="slotBoxDText" class="jfet-slot-html"></div>
+            </foreignObject>
+          </g>
+          <g id="slotBoxG" class="circuit-slot-box" transform="translate(10,123)" onclick="slotClicked(1)">
+            <rect width="120" height="34" rx="4" />
+            <foreignObject x="0" y="0" width="120" height="34">
+              <div xmlns="http://www.w3.org/1999/xhtml" id="slotBoxGText" class="jfet-slot-html"></div>
+            </foreignObject>
+          </g>
+          <g id="slotBoxS" class="circuit-slot-box" transform="translate(160,236)" onclick="slotClicked(2)">
+            <rect width="120" height="34" rx="4" />
+            <foreignObject x="0" y="0" width="120" height="34">
+              <div xmlns="http://www.w3.org/1999/xhtml" id="slotBoxSText" class="jfet-slot-html"></div>
+            </foreignObject>
+          </g>
+        </svg>
       </div>
     </div>
 
@@ -120,6 +209,16 @@
               <div class="q-hint" id="qHint"></div>
             </div>
           </div>
+
+          <!-- Fill-in pool — shown only for kind:'fill' questions (Q2),
+               toggled via RENDER_EXTRA below. -->
+          <div class="fill-pool-wrap" id="fillPoolWrap" style="display:none">
+            <div class="fill-pool-row" id="fillPoolRow">
+              <div class="fill-pool-arrow">▶</div>
+              <div class="fill-pool" id="fillPool"></div>
+            </div>
+          </div>
+
           <div class="options" id="qOptions"></div>
           <div class="match-wrap" id="qMatch" style="display:none">
             <div class="match-pool-row" id="matchPoolRow">
@@ -239,8 +338,52 @@
     <div class="working-step" style="margin-top:.6rem">Invalid symbols — shapes ${wrongNums}:</div>
     <div class="working-line">Each breaks the one-arrow-on-the-gate rule: two of them put the arrow on a <b style="color:var(--colour-ui-wrong)">drain/source lead</b> — an arrow never belongs there — and the other two put <b style="color:var(--colour-ui-wrong)">two arrows</b> on the symbol at once, when a real JFET only ever has one.</div>`;
         }
+      },
+      {
+        // kind:'fill' — click a name, then click a terminal (see quiz-
+        // engine.js's own header comment for the mechanic; ported from
+        // digital_circuit_derivation_ab.html, the only other file using
+        // it). Pool mixes the 3 real JFET terminal names (col:0/1/2,
+        // matching slotIds' order below) with 3 BJT terminal names as
+        // distractors — deliberately no `col` on those, so they can never
+        // register as any slot's correct answer.
+        leftPanel: 'circuit',
+        kind: 'fill',
+        slotIds: ['slotBoxD', 'slotBoxG', 'slotBoxS'],
+        text: () => `This is an <b style="color:var(--colour-ui-primary)">N-channel JFET</b>. <b style="color:var(--colour-ui-primary)">Click</b> a name below, then <b style="color:var(--colour-ui-primary)">click</b> the terminal it belongs to.`,
+        hint: () => `A JFET only has 3 terminals. Three of the names below belong to a different transistor family entirely — they won't fit anywhere on this diagram.`,
+        options: () => shuffle([
+          { label: 'Drain',     poolHtml: 'Drain',     col: 0 },
+          { label: 'Gate',      poolHtml: 'Gate',      col: 1 },
+          { label: 'Source',    poolHtml: 'Source',    col: 2 },
+          { label: 'Base',      poolHtml: 'Base' },
+          { label: 'Emitter',   poolHtml: 'Emitter' },
+          { label: 'Collector', poolHtml: 'Collector' }
+        ]),
+        correctExplain: (st) => {
+          const wrongCount = st.slotPlaced.filter((p, slot) => p !== st.cor[slot]).length;
+          return wrongCount === 0 ? 'All 3 terminals correctly labelled' : `${st.slotPlaced.length - wrongCount} of ${st.slotPlaced.length} terminals correctly labelled`;
+        },
+        working: (st) => {
+          const mistakes = st.slotPlaced
+            .map((p, slot) => p !== st.cor[slot] ? st.opts[p]?.label ?? '(left blank)' : null)
+            .filter(Boolean);
+          const mistakeLine = mistakes.length
+            ? `<div class="working-step" style="margin-top:.6rem">Mislabelled:</div><div class="working-line">${mistakes.join(', ')}</div>`
+            : '';
+          return `
+    <div class="working-step">A JFET's 3 terminals:</div>
+    <div class="working-line"><b style="color:var(--colour-ui-correct)">Drain</b> and <b style="color:var(--colour-ui-correct)">Source</b> are the two ends of the channel current flows through. <b style="color:var(--colour-ui-correct)">Gate</b> is the control terminal — the voltage between gate and source is what controls how much current flows through the channel.</div>
+    <div class="working-step" style="margin-top:.6rem">Why Base, Emitter and Collector don't belong:</div>
+    <div class="working-line">Those are BJT terminal names, not JFET ones. A JFET is a completely different device — it's controlled by a <em>voltage</em> at the gate rather than a <em>current</em> into a base, and it doesn't have anything corresponding to a BJT's base-emitter junction.</div>
+    ${mistakeLine}`;
+        }
       }
     ];
+
+    RENDER_EXTRA = () => {
+      document.getElementById('fillPoolWrap').style.display = isFill(QUESTIONS[cur]) ? '' : 'none';
+    };
 
     initQuizNav();
     resetQuiz();
