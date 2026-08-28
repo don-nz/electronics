@@ -128,6 +128,19 @@
   </div>
 
   <script>
+    // Q2-Q6's own fixed [source, target] pairs, and the shuffled COLUMN
+    // order each one displays in (re-shuffled once per attempt by
+    // RESET_EXTRA below, same reasoning as the BCD question in digital_
+    // knowledge_digital_codes.html: columns() is called on every render,
+    // not just once at reset, so it can't shuffle() inline without
+    // desyncing from the col indices already baked into st.cor).
+    const Q2_PAIRS = [['0011', '3'], ['0111', '7'], ['1001', '9'], ['1100', '12'], ['1110', '14'], ['0101', '5']];
+    const Q3_PAIRS = [['A', '10'], ['B', '11'], ['C', '12'], ['D', '13'], ['E', '14'], ['F', '15']];
+    const Q4_PAIRS = [['10110101', 'B5'], ['01001110', '4E'], ['11110000', 'F0'], ['00101011', '2B'], ['10000001', '81']];
+    const Q5_PAIRS = [['9C', '10011100'], ['3F', '00111111'], ['A0', '10100000'], ['5D', '01011101'], ['E2', '11100010']];
+    const Q6_PAIRS = [['200', 'C8'], ['58', '3A'], ['149', '95'], ['27', '1B'], ['243', 'F3']];
+    let Q2_ORDER = [], Q3_ORDER = [], Q4_ORDER = [], Q5_ORDER = [], Q6_ORDER = [];
+
     // ══════════════════════════════════════════════════════════════════════
     // QUESTIONS — see quiz-engine.js's own header comment for the full field
     // reference. Add, remove, split or reorder questions by editing this
@@ -161,8 +174,160 @@
           }).join('');
           return `<div class="working-step">Binary breakdown for each value:</div>${rows}`;
         }
+      },
+      {
+        // Q2 — Binary → Decimal. Direct inverse of Q1's own skill, using
+        // the same 4 values (3,7,9,12) plus 2 more (14,5) for a slightly
+        // bigger pool — a gentle re-entry question, not a new concept.
+        leftPanel: 'none',
+        kind: 'match',
+        columns: () => Q2_ORDER,
+        text: () => `<b style="color:var(--colour-ui-primary)">Match</b> each binary value below to its decimal equivalent.`,
+        hint: () => `Same technique as before, just read backwards: add up the powers of two (8, 4, 2, 1) wherever there's a 1.`,
+        options: () => shuffle(Q2_PAIRS.map(([bin, dec]) => ({ label: bin, poolHtml: bin, col: Q2_ORDER.indexOf(dec) }))),
+        correctExplain: (st) => {
+          const wrongCount = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).length;
+          return wrongCount === 0 ? 'All 6 matched correctly' : `${st.opts.length - wrongCount} of ${st.opts.length} matched correctly`;
+        },
+        working: (st) => {
+          const mistakes = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).map(o => o.label);
+          const mistakeLine = mistakes.length
+            ? `<div class="working-step" style="margin-top:.6rem">Mismatched:</div><div class="working-line">${mistakes.join(', ')}</div>`
+            : '';
+          return `
+    <div class="working-step">Binary → decimal:</div>
+    <div class="working-line" style="font-family:'Share Tech Mono',monospace">0011 = <b style="color:var(--colour-ui-correct)">3</b> &nbsp; 0111 = <b style="color:var(--colour-ui-correct)">7</b> &nbsp; 1001 = <b style="color:var(--colour-ui-correct)">9</b> &nbsp; 1100 = <b style="color:var(--colour-ui-correct)">12</b> &nbsp; 1110 = <b style="color:var(--colour-ui-correct)">14</b> &nbsp; 0101 = <b style="color:var(--colour-ui-correct)">5</b></div>
+    ${mistakeLine}`;
+        }
+      },
+      {
+        // Q3 — Hex digits A-F → Decimal. New concept, but pure
+        // memorisation (no calculation) — the load-bearing bridge every
+        // later hex question depends on, so it comes before anything that
+        // needs it.
+        leftPanel: 'none',
+        kind: 'match',
+        columns: () => Q3_ORDER,
+        text: () => `<b style="color:var(--colour-ui-primary)">Match</b> each hexadecimal digit below to its decimal value.`,
+        hint: () => `Hex (base 16) needs 16 single-character digits. 0-9 work as normal, but 10-15 each still need to fit in ONE digit — hex borrows the letters A-F for those.`,
+        options: () => shuffle(Q3_PAIRS.map(([hex, dec]) => ({ label: hex, poolHtml: hex, col: Q3_ORDER.indexOf(dec) }))),
+        correctExplain: (st) => {
+          const wrongCount = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).length;
+          return wrongCount === 0 ? 'All 6 matched correctly' : `${st.opts.length - wrongCount} of ${st.opts.length} matched correctly`;
+        },
+        working: (st) => {
+          const mistakes = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).map(o => o.label);
+          const mistakeLine = mistakes.length
+            ? `<div class="working-step" style="margin-top:.6rem">Mismatched:</div><div class="working-line">${mistakes.join(', ')}</div>`
+            : '';
+          return `
+    <div class="working-step">Hex digit → decimal:</div>
+    <div class="working-line" style="font-family:'Share Tech Mono',monospace">A = <b style="color:var(--colour-ui-correct)">10</b> &nbsp; B = <b style="color:var(--colour-ui-correct)">11</b> &nbsp; C = <b style="color:var(--colour-ui-correct)">12</b> &nbsp; D = <b style="color:var(--colour-ui-correct)">13</b> &nbsp; E = <b style="color:var(--colour-ui-correct)">14</b> &nbsp; F = <b style="color:var(--colour-ui-correct)">15</b></div>
+    <div class="working-line" style="margin-top:.4rem">Counting in hex goes 0, 1, 2 … 9, A, B, C, D, E, F, then rolls over to 10 (which is decimal 16) — exactly like decimal rolls over to 10 after 9.</div>
+    ${mistakeLine}`;
+        }
+      },
+      {
+        // Q4 — Binary → Hex, via nibble grouping. The actual technique
+        // this whole quiz is building toward; Q3 is a hard prerequisite.
+        leftPanel: 'none',
+        kind: 'match',
+        columns: () => Q4_ORDER,
+        text: () => `<b style="color:var(--colour-ui-primary)">Match</b> each 8-bit binary byte below to its 2-digit hexadecimal equivalent.`,
+        hint: () => `Split the byte into two 4-bit nibbles and convert each nibble separately (0000-1111 = 0-F). Each nibble is worth 0-15, so it always fits in exactly one hex digit — that's why a byte always becomes exactly 2 hex digits.`,
+        options: () => shuffle(Q4_PAIRS.map(([bin, hex]) => ({ label: bin, poolHtml: bin, col: Q4_ORDER.indexOf(hex) }))),
+        correctExplain: (st) => {
+          const wrongCount = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).length;
+          return wrongCount === 0 ? 'All 5 matched correctly' : `${st.opts.length - wrongCount} of ${st.opts.length} matched correctly`;
+        },
+        working: (st) => {
+          const mistakes = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).map(o => o.label);
+          const mistakeLine = mistakes.length
+            ? `<div class="working-step" style="margin-top:.6rem">Mismatched:</div><div class="working-line">${mistakes.join(', ')}</div>`
+            : '';
+          return `
+    <div class="working-step">Split each byte into two nibbles, convert each separately:</div>
+    <div class="working-line" style="font-family:'Share Tech Mono',monospace">1011 0101 → B 5 → <b style="color:var(--colour-ui-correct)">B5</b></div>
+    <div class="working-line" style="font-family:'Share Tech Mono',monospace">0100 1110 → 4 E → <b style="color:var(--colour-ui-correct)">4E</b></div>
+    <div class="working-line" style="font-family:'Share Tech Mono',monospace">1111 0000 → F 0 → <b style="color:var(--colour-ui-correct)">F0</b></div>
+    <div class="working-line" style="font-family:'Share Tech Mono',monospace">0010 1011 → 2 B → <b style="color:var(--colour-ui-correct)">2B</b></div>
+    <div class="working-line" style="font-family:'Share Tech Mono',monospace">1000 0001 → 8 1 → <b style="color:var(--colour-ui-correct)">81</b></div>
+    ${mistakeLine}`;
+        }
+      },
+      {
+        // Q5 — Hex → Binary. Same nibble technique, reversed — cheap to
+        // add once Q4 exists, and reversing a skill is where it actually
+        // sticks. Different bytes to Q4 so this can't be answered from
+        // memory of the previous question.
+        leftPanel: 'none',
+        kind: 'match',
+        columns: () => Q5_ORDER,
+        text: () => `<b style="color:var(--colour-ui-primary)">Match</b> each 2-digit hexadecimal byte below to its 8-bit binary equivalent.`,
+        hint: () => `Same nibble technique, in reverse: convert each hex digit to its own 4-bit binary nibble, then join the two nibbles together.`,
+        options: () => shuffle(Q5_PAIRS.map(([hex, bin]) => ({ label: hex, poolHtml: hex, col: Q5_ORDER.indexOf(bin) }))),
+        correctExplain: (st) => {
+          const wrongCount = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).length;
+          return wrongCount === 0 ? 'All 5 matched correctly' : `${st.opts.length - wrongCount} of ${st.opts.length} matched correctly`;
+        },
+        working: (st) => {
+          const mistakes = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).map(o => o.label);
+          const mistakeLine = mistakes.length
+            ? `<div class="working-step" style="margin-top:.6rem">Mismatched:</div><div class="working-line">${mistakes.join(', ')}</div>`
+            : '';
+          return `
+    <div class="working-step">Convert each hex digit to its own nibble, then join them:</div>
+    <div class="working-line" style="font-family:'Share Tech Mono',monospace">9 C → 1001 1100 → <b style="color:var(--colour-ui-correct)">10011100</b></div>
+    <div class="working-line" style="font-family:'Share Tech Mono',monospace">3 F → 0011 1111 → <b style="color:var(--colour-ui-correct)">00111111</b></div>
+    <div class="working-line" style="font-family:'Share Tech Mono',monospace">A 0 → 1010 0000 → <b style="color:var(--colour-ui-correct)">10100000</b></div>
+    <div class="working-line" style="font-family:'Share Tech Mono',monospace">5 D → 0101 1101 → <b style="color:var(--colour-ui-correct)">01011101</b></div>
+    <div class="working-line" style="font-family:'Share Tech Mono',monospace">E 2 → 1110 0010 → <b style="color:var(--colour-ui-correct)">11100010</b></div>
+    ${mistakeLine}`;
+        }
+      },
+      {
+        // Q6 — Decimal → Hex. The capstone: no single-nibble shortcut
+        // exists between decimal and hex, so this genuinely forces two-step
+        // reasoning (decimal → binary → hex, chaining Q1+Q4's own skills,
+        // or dividing by 16 directly) rather than pattern-matching.
+        leftPanel: 'none',
+        kind: 'match',
+        columns: () => Q6_ORDER,
+        text: () => `<b style="color:var(--colour-ui-primary)">Match</b> each decimal value below to its hexadecimal equivalent.`,
+        hint: () => `There's no one-step shortcut here. Either convert decimal → binary → hex (the nibble technique from before), or divide by 16 directly: the quotient is the first hex digit, the remainder is the second (remainders 10-15 become A-F).`,
+        options: () => shuffle(Q6_PAIRS.map(([dec, hex]) => ({ label: dec, poolHtml: dec, col: Q6_ORDER.indexOf(hex) }))),
+        correctExplain: (st) => {
+          const wrongCount = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).length;
+          return wrongCount === 0 ? 'All 5 matched correctly' : `${st.opts.length - wrongCount} of ${st.opts.length} matched correctly`;
+        },
+        working: (st) => {
+          const mistakes = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).map(o => o.label);
+          const mistakeLine = mistakes.length
+            ? `<div class="working-step" style="margin-top:.6rem">Mismatched:</div><div class="working-line">${mistakes.join(', ')}</div>`
+            : '';
+          return `
+    <div class="working-step">Divide by 16 — quotient is the first hex digit, remainder is the second:</div>
+    <div class="working-line" style="font-family:'Share Tech Mono',monospace">200 ÷ 16 = 12 r 8 → C 8 → <b style="color:var(--colour-ui-correct)">C8</b></div>
+    <div class="working-line" style="font-family:'Share Tech Mono',monospace">58 ÷ 16 = 3 r 10 → 3 A → <b style="color:var(--colour-ui-correct)">3A</b></div>
+    <div class="working-line" style="font-family:'Share Tech Mono',monospace">149 ÷ 16 = 9 r 5 → 9 5 → <b style="color:var(--colour-ui-correct)">95</b></div>
+    <div class="working-line" style="font-family:'Share Tech Mono',monospace">27 ÷ 16 = 1 r 11 → 1 B → <b style="color:var(--colour-ui-correct)">1B</b></div>
+    <div class="working-line" style="font-family:'Share Tech Mono',monospace">243 ÷ 16 = 15 r 3 → F 3 → <b style="color:var(--colour-ui-correct)">F3</b></div>
+    ${mistakeLine}`;
+        }
       }
     ];
+
+    // Re-shuffle every match question's own column order once per attempt
+    // (including Restart), BEFORE resetQuiz() calls each question's own
+    // options() — see Q2's own comment for why columns() can't just
+    // shuffle() inline.
+    RESET_EXTRA = () => {
+      Q2_ORDER = shuffle(Q2_PAIRS.map(([, dec]) => dec));
+      Q3_ORDER = shuffle(Q3_PAIRS.map(([, dec]) => dec));
+      Q4_ORDER = shuffle(Q4_PAIRS.map(([, hex]) => hex));
+      Q5_ORDER = shuffle(Q5_PAIRS.map(([, bin]) => bin));
+      Q6_ORDER = shuffle(Q6_PAIRS.map(([, hex]) => hex));
+    };
 
     initQuizNav();
     resetQuiz();
