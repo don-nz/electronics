@@ -874,13 +874,14 @@ function renderQuestion() {
   document.getElementById('qBack').style.display = cur > 0 ? 'inline-block' : 'none';
   const check = document.getElementById('qCheck');
   check.style.display = st.ans ? 'none' : 'inline-block';
-  check.disabled = st.ans || (
-    isMatch(data) ? (data.reusablePool ? !st.assign.every(a => a !== null) : !st.opts.every((o, i) => o.col === null || st.place[i] !== null)) :
-    isBits(data) ? !st.clicks.every(row => row.every(n => bitFromClicks(n) !== null)) :
-    isTruth(data) ? !st.clicks.every(n => zFromClicks(n) !== null) :
-    isFill(data) ? !st.slotPlaced.every(p => p !== null) :
-    (multi ? st.sel.length === 0 : st.sel === null)
-  );
+  // Check is always clickable once a question is on screen — it no longer
+  // waits for a complete answer. checkAnswer() itself substitutes the
+  // correct answer for anything left unanswered/incomplete, so Check also
+  // works as an explicit "show me" for this self-study revision tool,
+  // without needing the ?q=n&ans=1 URL override (fiddly to type on a
+  // phone). Nothing graded here rides on the student's result, so there's
+  // no reason to gate the button on completeness.
+  check.disabled = st.ans;
   const isLast = cur === QUESTIONS.length - 1;
   document.getElementById('qNext').style.display = (st.ans && !isLast) ? 'inline-block' : 'none';
   document.getElementById('qSummary').style.display = (st.ans && isLast) ? 'inline-block' : 'none';
@@ -902,14 +903,20 @@ function renderQuestion() {
 function checkAnswer() {
   const st = Q[cur], data = QUESTIONS[cur];
   if (st.ans) return;
-  if (isMatch(data)) {
-    if (data.reusablePool) { if (!st.assign.every(a => a !== null)) return; }
-    else if (!st.opts.every((o, i) => o.col === null || st.place[i] !== null)) return;
-  }
-  else if (isBits(data)) { if (!st.clicks.every(row => row.every(n => bitFromClicks(n) !== null))) return; }
-  else if (isTruth(data)) { if (!st.clicks.every(n => zFromClicks(n) !== null)) return; }
-  else if (isFill(data)) { if (!st.slotPlaced.every(p => p !== null)) return; }
-  else if (isMulti(data) ? st.sel.length === 0 : st.sel === null) return;
+  // An unanswered or partially-answered question no longer blocks Check —
+  // it substitutes the fully-correct answer (same fillCorrectSelection()
+  // jump()/?ans=1 already use) and shows it like any other checked
+  // question, so Check doubles as an explicit "show me" for revision.
+  // Whatever the student HAD selected is discarded in that case, same as
+  // fillCorrectSelection() always does — there's no "grade what they got
+  // so far" middle ground.
+  const complete =
+    isMatch(data) ? (data.reusablePool ? st.assign.every(a => a !== null) : st.opts.every((o, i) => o.col === null || st.place[i] !== null)) :
+    isBits(data) ? st.clicks.every(row => row.every(n => bitFromClicks(n) !== null)) :
+    isTruth(data) ? st.clicks.every(n => zFromClicks(n) !== null) :
+    isFill(data) ? st.slotPlaced.every(p => p !== null) :
+    (isMulti(data) ? st.sel.length > 0 : st.sel !== null);
+  if (!complete) fillCorrectSelection(cur);
   st.ans = true;
   renderQuestion();
   document.getElementById('qBanner').scrollIntoView({ behavior: 'smooth', block: 'start' });
