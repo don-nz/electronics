@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../assets/theme-init.js"></script>
+  <title>Digital Electronics — Rotary Encoder Explorer</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../assets/quiz-common.css">
+  <script src="../../assets/breadcrumb.js" defer></script>
+  <style>
+    /* Everything else (body/header/.card/.circuit-panel/.panel-label/
+       .btn family/theme toggle) now comes from the shared quiz-common.css
+       + theme-init.js — see that stylesheet before adding anything below
+       that might already exist there. Only genuinely new component types
+       (tabs, the big code readout, the aligned/ambiguous status pill, the
+       side-by-side compare layout) are defined here, built from the same
+       shared tokens rather than their own bespoke ones. */
+    .main-wrap {
+      width: 100%;
+      max-width: 820px;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+      margin: 0 auto;
+    }
+
+    .circuit-panel { cursor: default; }
+
+    /* Shared .btn/.btn-prev have no :disabled state (nothing in the quiz
+       engine ever needs one — its own Prev is just hidden on Q1 rather
+       than disabled) — this explorer's own step counter genuinely needs
+       one, so it's added here rather than to the shared stylesheet. */
+    .btn-prev:disabled { opacity: .35; cursor: not-allowed; }
+
+    .card-top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 1rem;
+      flex-wrap: wrap;
+      width: 100%;
+      margin-bottom: 1.2rem;
+    }
+
+    .tab-bar {
+      display: flex;
+      gap: .5rem;
+      flex-wrap: wrap;
+    }
+
+    .tab-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: .1rem;
+      padding: .4rem .85rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--colour-border);
+      background: var(--colour-panel);
+      color: var(--colour-label);
+      font-family: var(--font-body);
+      cursor: pointer;
+      transition: all .15s;
+      box-shadow: var(--shadow-card);
+    }
+
+    .tab-btn .tab-num {
+      font-family: var(--font-mono);
+      font-size: 1.05rem;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .tab-btn .tab-label {
+      font-size: .6rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      white-space: nowrap;
+    }
+
+    .tab-btn:hover {
+      border-color: var(--colour-ui-primary);
+    }
+
+    .tab-btn.active {
+      background: rgba(var(--colour-ui-primary-rgb), .15);
+      border-color: var(--colour-ui-primary);
+      color: var(--colour-ui-primary);
+    }
+
+    .view {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* Layout only — background/border/radius/padding/cursor all come from
+       the shared .circuit-panel now. */
+    .circuit-panel {
+      width: 100%;
+      max-width: 500px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .value-display {
+      font-family: var(--font-mono);
+      font-size: 1.8rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      color: var(--colour-ui-primary);
+      margin: 0.2rem 0;
+      transition: color 0.2s, font-size 0.2s;
+      text-align: center;
+      max-width: 100%;
+    }
+
+    .value-display.ambiguous {
+      color: var(--colour-ui-wrong);
+      font-size: 1.15rem;
+      letter-spacing: 0.04em;
+      max-width: 340px;
+    }
+
+    .status-tag {
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 0.25rem 0.6rem;
+      border-radius: var(--radius-sm);
+      margin-bottom: 0.8rem;
+    }
+
+    .status-aligned {
+      background: rgba(var(--colour-ui-correct-rgb), 0.12);
+      color: var(--colour-ui-correct);
+    }
+
+    .status-ambiguous {
+      background: rgba(var(--colour-ui-wrong-rgb), 0.15);
+      color: var(--colour-ui-wrong);
+    }
+
+    .compare-row {
+      display: flex;
+      gap: 1.5rem;
+      justify-content: center;
+      flex-wrap: wrap;
+      width: 100%;
+    }
+
+    .compare-panel {
+      max-width: 300px;
+    }
+
+    .compare-panel .panel-label {
+      font-size: .8rem;
+    }
+
+    .compare-panel .value-display {
+      font-size: 1.5rem;
+    }
+
+    .compare-note {
+      margin-top: 1.2rem;
+      max-width: 560px;
+      text-align: center;
+      font-size: .82rem;
+      color: var(--colour-label);
+      line-height: 1.5;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      margin-top: 1rem;
+      width: 100%;
+    }
+
+  </style>
+</head>
+
+<body>
+  <div class="crumb" id="crumb" data-current="Rotary Encoder Explorer"></div>
+  <header>
+    <h1>Digital Electronics</h1>
+    <p>3-Bit Rotary Encoder Explorer</p>
+  </header>
+
+  <div class="main-wrap">
+    <div class="card">
+      <div class="card-top-bar">
+        <div class="tab-bar">
+          <button class="tab-btn active" id="tabBtn1" onclick="showView(1)">
+            <span class="tab-num">1</span><span class="tab-label">Binary</span>
+          </button>
+          <button class="tab-btn" id="tabBtn2" onclick="showView(2)">
+            <span class="tab-num">2</span><span class="tab-label">Binary Boundary</span>
+          </button>
+          <button class="tab-btn" id="tabBtn3" onclick="showView(3)">
+            <span class="tab-num">3</span><span class="tab-label">Gray Code</span>
+          </button>
+          <button class="tab-btn" id="tabBtn4" onclick="showView(4)">
+            <span class="tab-num">4</span><span class="tab-label">Compare</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="view" id="view1">
+      <div class="circuit-panel">
+        <div class="panel-label">3-Bit Standard Binary Rotary Encoder</div>
+        <div class="value-display" id="v1CodeDisplay">000</div>
+        <svg viewBox="0 -50 600 590" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="v1ArrowHead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 Z" style="fill: var(--colour-ui-primary)" />
+            </marker>
+            <marker id="v1ArrowHead2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 Z" style="fill: var(--colour-ui-correct)" />
+            </marker>
+            <filter id="v1Glow" x="-100%" y="-100%" width="300%" height="300%">
+              <feGaussianBlur stdDeviation="4" result="b" />
+              <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+            <clipPath id="v1LeftClip"><rect x="-300" y="-300" width="300" height="600" /></clipPath>
+            <clipPath id="v1RightClip"><rect x="0" y="-300" width="300" height="600" /></clipPath>
+          </defs>
+
+          <g transform="translate(300,260)">
+            <g id="v1DiskSpin" style="transition: transform .4s ease-in-out">
+              <path d="M 28.70,-69.29 A 75,75 0 0,1 -28.70,69.29 L -5.74,13.86 A 15,15 0 0,0 5.74,-13.86 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M 51.66,-124.72 A 135,135 0 0,1 124.72,51.66 L 69.29,28.70 A 75,75 0 0,0 28.70,-69.29 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M -51.66,124.72 A 135,135 0 0,1 -124.72,-51.66 L -69.29,-28.70 A 75,75 0 0,0 -28.70,69.29 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M 74.62,-180.16 A 195,195 0 0,1 180.16,-74.62 L 124.72,-51.66 A 135,135 0 0,0 51.66,-124.72 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M 180.16,74.62 A 195,195 0 0,1 74.62,180.16 L 51.66,124.72 A 135,135 0 0,0 124.72,51.66 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M -74.62,180.16 A 195,195 0 0,1 -180.16,74.62 L -124.72,51.66 A 135,135 0 0,0 -51.66,124.72 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M -180.16,-74.62 A 195,195 0 0,1 -74.62,-180.16 L -51.66,-124.72 A 135,135 0 0,0 -124.72,-51.66 Z" style="fill: var(--colour-disk-ink)" />
+
+              <line x1="5.74" y1="-13.86" x2="74.62" y2="-180.16" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="-5.74" y1="-13.86" x2="-74.62" y2="-180.16" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="-13.86" y1="-5.74" x2="-180.16" y2="-74.62" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="-13.86" y1="5.74" x2="-180.16" y2="74.62" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="-5.74" y1="13.86" x2="-74.62" y2="180.16" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="5.74" y1="13.86" x2="74.62" y2="180.16" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="13.86" y1="5.74" x2="180.16" y2="74.62" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="13.86" y1="-5.74" x2="180.16" y2="-74.62" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <circle cx="0" cy="0" r="15" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <circle cx="0" cy="0" r="75" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <circle cx="0" cy="0" r="135" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <circle cx="0" cy="0" r="195" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+            </g>
+
+            <g id="v1ReadArrow">
+              <line x1="0" y1="-250" x2="0" y2="-205" stroke="var(--colour-ui-primary)" stroke-width="4" marker-end="url(#v1ArrowHead)" />
+              <text id="v1ReadArrowText" x="0" y="-262" text-anchor="middle" font-size="16" font-weight="bold" style="fill: var(--colour-ui-primary)"></text>
+            </g>
+
+            <g id="v1SensorInner" transform="translate(0,-45)">
+              <circle r="9" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle r="7" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle id="v1BlackInner" r="5" fill="#000000" />
+              <circle id="v1YellowInner" r="5" style="fill: #ffe600; filter: url(#v1Glow)" />
+            </g>
+            <g id="v1SensorMid" transform="translate(0,-105)">
+              <circle r="9" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle r="7" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle id="v1BlackMid" r="5" fill="#000000" />
+              <circle id="v1YellowMid" r="5" style="fill: #ffe600; filter: url(#v1Glow)" />
+            </g>
+            <g id="v1SensorOuter" transform="translate(0,-165)">
+              <circle r="9" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle r="7" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle id="v1BlackOuter" r="5" fill="#000000" />
+              <circle id="v1YellowOuter" r="5" style="fill: #ffe600; filter: url(#v1Glow)" />
+            </g>
+
+            <path d="M 199.19,-115.00 A 230,230 0 0 1 220.34,65.96" fill="none" stroke="var(--colour-ui-correct)" stroke-width="4" marker-end="url(#v1ArrowHead2)" />
+            <text x="0" y="-296" text-anchor="middle" font-size="16" font-weight="bold" style="fill: var(--colour-ui-correct)">Read Inner to Outer</text>
+          </g>
+        </svg>
+        <div class="btn-row">
+          <button class="btn btn-prev" id="v1Prev" onclick="v1Step(-1)">← Prev</button>
+          <button class="btn btn-next" onclick="v1Step(1)">Next →</button>
+        </div>
+      </div>
+      </div>
+
+      <div class="view" id="view2" style="display:none">
+      <div class="circuit-panel">
+        <div class="panel-label">3-Bit Standard Binary Rotary Encoder</div>
+        <div class="value-display" id="v2CodeDisplay">000</div>
+        <div class="status-tag status-aligned" id="v2StatusTag">Sector Aligned</div>
+        <svg viewBox="0 -50 600 590" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="v2ArrowHead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 Z" style="fill: var(--colour-ui-primary)" />
+            </marker>
+            <marker id="v2ArrowHead2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 Z" style="fill: var(--colour-ui-correct)" />
+            </marker>
+            <filter id="v2Glow" x="-100%" y="-100%" width="300%" height="300%">
+              <feGaussianBlur stdDeviation="4" result="b" />
+              <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+            <clipPath id="v2LeftClip"><rect x="-300" y="-300" width="300" height="600" /></clipPath>
+            <clipPath id="v2RightClip"><rect x="0" y="-300" width="300" height="600" /></clipPath>
+          </defs>
+
+          <g transform="translate(300,260)">
+            <g id="v2DiskSpin" style="transition: transform .4s ease-in-out">
+              <path d="M 28.70,-69.29 A 75,75 0 0,1 -28.70,69.29 L -5.74,13.86 A 15,15 0 0,0 5.74,-13.86 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M 51.66,-124.72 A 135,135 0 0,1 124.72,51.66 L 69.29,28.70 A 75,75 0 0,0 28.70,-69.29 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M -51.66,124.72 A 135,135 0 0,1 -124.72,-51.66 L -69.29,-28.70 A 75,75 0 0,0 -28.70,69.29 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M 74.62,-180.16 A 195,195 0 0,1 180.16,-74.62 L 124.72,-51.66 A 135,135 0 0,0 51.66,-124.72 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M 180.16,74.62 A 195,195 0 0,1 74.62,180.16 L 51.66,124.72 A 135,135 0 0,0 124.72,51.66 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M -74.62,180.16 A 195,195 0 0,1 -180.16,74.62 L -124.72,51.66 A 135,135 0 0,0 -51.66,124.72 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M -180.16,-74.62 A 195,195 0 0,1 -74.62,-180.16 L -51.66,-124.72 A 135,135 0 0,0 -124.72,-51.66 Z" style="fill: var(--colour-disk-ink)" />
+
+              <line x1="5.74" y1="-13.86" x2="74.62" y2="-180.16" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="-5.74" y1="-13.86" x2="-74.62" y2="-180.16" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="-13.86" y1="-5.74" x2="-180.16" y2="-74.62" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="-13.86" y1="5.74" x2="-180.16" y2="74.62" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="-5.74" y1="13.86" x2="-74.62" y2="180.16" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="5.74" y1="13.86" x2="74.62" y2="180.16" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="13.86" y1="5.74" x2="180.16" y2="74.62" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="13.86" y1="-5.74" x2="180.16" y2="-74.62" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <circle cx="0" cy="0" r="15" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <circle cx="0" cy="0" r="75" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <circle cx="0" cy="0" r="135" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <circle cx="0" cy="0" r="195" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+            </g>
+
+            <g id="v2ReadArrow">
+              <line x1="0" y1="-250" x2="0" y2="-205" stroke="var(--colour-ui-primary)" stroke-width="4" marker-end="url(#v2ArrowHead)" />
+              <text id="v2ReadArrowText" x="0" y="-262" text-anchor="middle" font-size="16" font-weight="bold" style="fill: var(--colour-ui-primary)"></text>
+            </g>
+
+            <g id="v2SensorInner" transform="translate(0,-45)">
+              <circle r="9" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle r="7" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle id="v2BlackInner" r="5" fill="#000000" />
+              <circle id="v2YellowInner" r="5" style="fill: #ffe600; filter: url(#v2Glow)" />
+            </g>
+            <g id="v2SensorMid" transform="translate(0,-105)">
+              <circle r="9" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle r="7" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle id="v2BlackMid" r="5" fill="#000000" />
+              <circle id="v2YellowMid" r="5" style="fill: #ffe600; filter: url(#v2Glow)" />
+            </g>
+            <g id="v2SensorOuter" transform="translate(0,-165)">
+              <circle r="9" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle r="7" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle id="v2BlackOuter" r="5" fill="#000000" />
+              <circle id="v2YellowOuter" r="5" style="fill: #ffe600; filter: url(#v2Glow)" />
+            </g>
+
+            <path d="M 199.19,-115.00 A 230,230 0 0 1 220.34,65.96" fill="none" stroke="var(--colour-ui-correct)" stroke-width="4" marker-end="url(#v2ArrowHead2)" />
+            <text x="0" y="-296" text-anchor="middle" font-size="16" font-weight="bold" style="fill: var(--colour-ui-correct)">Read Inner to Outer</text>
+          </g>
+        </svg>
+        <div class="btn-row">
+          <button class="btn btn-prev" id="v2Prev" onclick="v2Step(-1)">← Prev</button>
+          <button class="btn btn-next" onclick="v2Step(1)">Next →</button>
+        </div>
+      </div>
+      </div>
+
+      <div class="view" id="view3" style="display:none">
+      <div class="circuit-panel">
+        <div class="panel-label">3-Bit Gray Code Rotary Encoder</div>
+        <div class="value-display" id="v3CodeDisplay">000</div>
+        <svg viewBox="0 -50 600 590" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="v3ArrowHead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 Z" style="fill: var(--colour-ui-primary)" />
+            </marker>
+            <marker id="v3ArrowHead2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 Z" style="fill: var(--colour-ui-correct)" />
+            </marker>
+            <filter id="v3Glow" x="-100%" y="-100%" width="300%" height="300%">
+              <feGaussianBlur stdDeviation="4" result="b" />
+              <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+            <clipPath id="v3LeftClip"><rect x="-300" y="-300" width="300" height="600" /></clipPath>
+            <clipPath id="v3RightClip"><rect x="0" y="-300" width="300" height="600" /></clipPath>
+          </defs>
+
+          <g transform="translate(300,260)">
+            <g id="v3DiskSpin" style="transition: transform .4s ease-in-out">
+              <path d="M -74.62,-180.16 A 195.00,195.00 0 0 0 -180.16,-74.62 L -124.72,-51.66 A 135.00,135.00 0 0 1 -51.66,-124.72 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M -124.72,-51.66 A 135.00,135.00 0 0 0 -124.72,51.66 L -69.29,28.70 A 75.00,75.00 0 0 1 -69.29,-28.70 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M -180.16,-74.62 A 195.00,195.00 0 0 0 -180.16,74.62 L -124.72,51.66 A 135.00,135.00 0 0 1 -124.72,-51.66 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M -124.72,51.66 A 135.00,135.00 0 0 0 -51.66,124.72 L -28.70,69.29 A 75.00,75.00 0 0 1 -69.29,28.70 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M -28.70,69.29 A 75.00,75.00 0 0 0 28.70,69.29 L 5.74,13.86 A 15.00,15.00 0 0 1 -5.74,13.86 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M -51.66,124.72 A 135.00,135.00 0 0 0 51.66,124.72 L 28.70,69.29 A 75.00,75.00 0 0 1 -28.70,69.29 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M 28.70,69.29 A 75.00,75.00 0 0 0 69.29,28.70 L 13.86,5.74 A 15.00,15.00 0 0 1 5.74,13.86 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M 51.66,124.72 A 135.00,135.00 0 0 0 124.72,51.66 L 69.29,28.70 A 75.00,75.00 0 0 1 28.70,69.29 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M 74.62,180.16 A 195.00,195.00 0 0 0 180.16,74.62 L 124.72,51.66 A 135.00,135.00 0 0 1 51.66,124.72 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M 69.29,28.70 A 75.00,75.00 0 0 0 69.29,-28.70 L 13.86,-5.74 A 15.00,15.00 0 0 1 13.86,5.74 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M 180.16,74.62 A 195.00,195.00 0 0 0 180.16,-74.62 L 124.72,-51.66 A 135.00,135.00 0 0 1 124.72,51.66 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M 69.29,-28.70 A 75.00,75.00 0 0 0 28.70,-69.29 L 5.74,-13.86 A 15.00,15.00 0 0 1 13.86,-5.74 Z" style="fill: var(--colour-disk-ink)" />
+
+              <line x1="5.74" y1="-13.86" x2="74.62" y2="-180.16" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="-5.74" y1="-13.86" x2="-74.62" y2="-180.16" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="-13.86" y1="-5.74" x2="-180.16" y2="-74.62" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="-13.86" y1="5.74" x2="-180.16" y2="74.62" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="-5.74" y1="13.86" x2="-74.62" y2="180.16" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="5.74" y1="13.86" x2="74.62" y2="180.16" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="13.86" y1="5.74" x2="180.16" y2="74.62" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="13.86" y1="-5.74" x2="180.16" y2="-74.62" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <circle cx="0" cy="0" r="15" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <circle cx="0" cy="0" r="75" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <circle cx="0" cy="0" r="135" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <circle cx="0" cy="0" r="195" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+            </g>
+
+            <g id="v3ReadArrow">
+              <line x1="0" y1="-250" x2="0" y2="-205" stroke="var(--colour-ui-primary)" stroke-width="4" marker-end="url(#v3ArrowHead)" />
+              <text id="v3ReadArrowText" x="0" y="-262" text-anchor="middle" font-size="16" font-weight="bold" style="fill: var(--colour-ui-primary)"></text>
+            </g>
+
+            <g id="v3SensorInner" transform="translate(0,-45)">
+              <circle r="9" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle r="7" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle id="v3BlackInner" r="5" fill="#000000" />
+              <circle id="v3YellowInner" r="5" style="fill: #ffe600; filter: url(#v3Glow)" />
+            </g>
+            <g id="v3SensorMid" transform="translate(0,-105)">
+              <circle r="9" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle r="7" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle id="v3BlackMid" r="5" fill="#000000" />
+              <circle id="v3YellowMid" r="5" style="fill: #ffe600; filter: url(#v3Glow)" />
+            </g>
+            <g id="v3SensorOuter" transform="translate(0,-165)">
+              <circle r="9" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle r="7" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle id="v3BlackOuter" r="5" fill="#000000" />
+              <circle id="v3YellowOuter" r="5" style="fill: #ffe600; filter: url(#v3Glow)" />
+            </g>
+
+            <path d="M 199.19,-115.00 A 230,230 0 0 1 220.34,65.96" fill="none" stroke="var(--colour-ui-correct)" stroke-width="4" marker-end="url(#v3ArrowHead2)" />
+            <text x="0" y="-296" text-anchor="middle" font-size="16" font-weight="bold" style="fill: var(--colour-ui-correct)">Read Inner to Outer</text>
+          </g>
+        </svg>
+        <div class="btn-row">
+          <button class="btn btn-prev" id="v3Prev" onclick="v3Step(-1)">← Prev</button>
+          <button class="btn btn-next" onclick="v3Step(1)">Next →</button>
+        </div>
+      </div>
+      </div>
+
+      <div class="view" id="view4" style="display:none">
+        <div class="compare-row">
+      <div class="circuit-panel compare-panel">
+        <div class="panel-label">Standard Binary</div>
+        <div class="value-display" id="v4bCodeDisplay">000</div>
+        <svg viewBox="0 -50 600 590" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="v4bArrowHead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 Z" style="fill: var(--colour-ui-primary)" />
+            </marker>
+            <marker id="v4bArrowHead2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 Z" style="fill: var(--colour-ui-correct)" />
+            </marker>
+            <filter id="v4bGlow" x="-100%" y="-100%" width="300%" height="300%">
+              <feGaussianBlur stdDeviation="4" result="b" />
+              <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+            <clipPath id="v4bLeftClip"><rect x="-300" y="-300" width="300" height="600" /></clipPath>
+            <clipPath id="v4bRightClip"><rect x="0" y="-300" width="300" height="600" /></clipPath>
+          </defs>
+
+          <g transform="translate(300,260)">
+            <g id="v4bDiskSpin" style="transition: transform .4s ease-in-out">
+              <path d="M 28.70,-69.29 A 75,75 0 0,1 -28.70,69.29 L -5.74,13.86 A 15,15 0 0,0 5.74,-13.86 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M 51.66,-124.72 A 135,135 0 0,1 124.72,51.66 L 69.29,28.70 A 75,75 0 0,0 28.70,-69.29 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M -51.66,124.72 A 135,135 0 0,1 -124.72,-51.66 L -69.29,-28.70 A 75,75 0 0,0 -28.70,69.29 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M 74.62,-180.16 A 195,195 0 0,1 180.16,-74.62 L 124.72,-51.66 A 135,135 0 0,0 51.66,-124.72 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M 180.16,74.62 A 195,195 0 0,1 74.62,180.16 L 51.66,124.72 A 135,135 0 0,0 124.72,51.66 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M -74.62,180.16 A 195,195 0 0,1 -180.16,74.62 L -124.72,51.66 A 135,135 0 0,0 -51.66,124.72 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M -180.16,-74.62 A 195,195 0 0,1 -74.62,-180.16 L -51.66,-124.72 A 135,135 0 0,0 -124.72,-51.66 Z" style="fill: var(--colour-disk-ink)" />
+
+              <line x1="5.74" y1="-13.86" x2="74.62" y2="-180.16" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="-5.74" y1="-13.86" x2="-74.62" y2="-180.16" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="-13.86" y1="-5.74" x2="-180.16" y2="-74.62" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="-13.86" y1="5.74" x2="-180.16" y2="74.62" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="-5.74" y1="13.86" x2="-74.62" y2="180.16" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="5.74" y1="13.86" x2="74.62" y2="180.16" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="13.86" y1="5.74" x2="180.16" y2="74.62" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="13.86" y1="-5.74" x2="180.16" y2="-74.62" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <circle cx="0" cy="0" r="15" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <circle cx="0" cy="0" r="75" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <circle cx="0" cy="0" r="135" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <circle cx="0" cy="0" r="195" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+            </g>
+
+            <g id="v4bReadArrow">
+              <line x1="0" y1="-250" x2="0" y2="-205" stroke="var(--colour-ui-primary)" stroke-width="4" marker-end="url(#v4bArrowHead)" />
+              <text id="v4bReadArrowText" x="0" y="-262" text-anchor="middle" font-size="16" font-weight="bold" style="fill: var(--colour-ui-primary)"></text>
+            </g>
+
+            <g id="v4bSensorInner" transform="translate(0,-45)">
+              <circle r="9" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle r="7" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle id="v4bBlackInner" r="5" fill="#000000" />
+              <circle id="v4bYellowInner" r="5" style="fill: #ffe600; filter: url(#v4bGlow)" />
+            </g>
+            <g id="v4bSensorMid" transform="translate(0,-105)">
+              <circle r="9" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle r="7" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle id="v4bBlackMid" r="5" fill="#000000" />
+              <circle id="v4bYellowMid" r="5" style="fill: #ffe600; filter: url(#v4bGlow)" />
+            </g>
+            <g id="v4bSensorOuter" transform="translate(0,-165)">
+              <circle r="9" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle r="7" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle id="v4bBlackOuter" r="5" fill="#000000" />
+              <circle id="v4bYellowOuter" r="5" style="fill: #ffe600; filter: url(#v4bGlow)" />
+            </g>
+
+            <path d="M 199.19,-115.00 A 230,230 0 0 1 220.34,65.96" fill="none" stroke="var(--colour-ui-correct)" stroke-width="4" marker-end="url(#v4bArrowHead2)" />
+            <text x="0" y="-296" text-anchor="middle" font-size="16" font-weight="bold" style="fill: var(--colour-ui-correct)">Read Inner to Outer</text>
+          </g>
+        </svg>
+      </div>
+      <div class="circuit-panel compare-panel">
+        <div class="panel-label">Gray Code</div>
+        <div class="value-display" id="v4gCodeDisplay">000</div>
+        <svg viewBox="0 -50 600 590" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="v4gArrowHead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 Z" style="fill: var(--colour-ui-primary)" />
+            </marker>
+            <marker id="v4gArrowHead2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 Z" style="fill: var(--colour-ui-correct)" />
+            </marker>
+            <filter id="v4gGlow" x="-100%" y="-100%" width="300%" height="300%">
+              <feGaussianBlur stdDeviation="4" result="b" />
+              <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+            <clipPath id="v4gLeftClip"><rect x="-300" y="-300" width="300" height="600" /></clipPath>
+            <clipPath id="v4gRightClip"><rect x="0" y="-300" width="300" height="600" /></clipPath>
+          </defs>
+
+          <g transform="translate(300,260)">
+            <g id="v4gDiskSpin" style="transition: transform .4s ease-in-out">
+              <path d="M -74.62,-180.16 A 195.00,195.00 0 0 0 -180.16,-74.62 L -124.72,-51.66 A 135.00,135.00 0 0 1 -51.66,-124.72 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M -124.72,-51.66 A 135.00,135.00 0 0 0 -124.72,51.66 L -69.29,28.70 A 75.00,75.00 0 0 1 -69.29,-28.70 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M -180.16,-74.62 A 195.00,195.00 0 0 0 -180.16,74.62 L -124.72,51.66 A 135.00,135.00 0 0 1 -124.72,-51.66 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M -124.72,51.66 A 135.00,135.00 0 0 0 -51.66,124.72 L -28.70,69.29 A 75.00,75.00 0 0 1 -69.29,28.70 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M -28.70,69.29 A 75.00,75.00 0 0 0 28.70,69.29 L 5.74,13.86 A 15.00,15.00 0 0 1 -5.74,13.86 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M -51.66,124.72 A 135.00,135.00 0 0 0 51.66,124.72 L 28.70,69.29 A 75.00,75.00 0 0 1 -28.70,69.29 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M 28.70,69.29 A 75.00,75.00 0 0 0 69.29,28.70 L 13.86,5.74 A 15.00,15.00 0 0 1 5.74,13.86 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M 51.66,124.72 A 135.00,135.00 0 0 0 124.72,51.66 L 69.29,28.70 A 75.00,75.00 0 0 1 28.70,69.29 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M 74.62,180.16 A 195.00,195.00 0 0 0 180.16,74.62 L 124.72,51.66 A 135.00,135.00 0 0 1 51.66,124.72 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M 69.29,28.70 A 75.00,75.00 0 0 0 69.29,-28.70 L 13.86,-5.74 A 15.00,15.00 0 0 1 13.86,5.74 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M 180.16,74.62 A 195.00,195.00 0 0 0 180.16,-74.62 L 124.72,-51.66 A 135.00,135.00 0 0 1 124.72,51.66 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M 69.29,-28.70 A 75.00,75.00 0 0 0 28.70,-69.29 L 5.74,-13.86 A 15.00,15.00 0 0 1 13.86,-5.74 Z" style="fill: var(--colour-disk-ink)" />
+
+              <line x1="5.74" y1="-13.86" x2="74.62" y2="-180.16" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="-5.74" y1="-13.86" x2="-74.62" y2="-180.16" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="-13.86" y1="-5.74" x2="-180.16" y2="-74.62" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="-13.86" y1="5.74" x2="-180.16" y2="74.62" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="-5.74" y1="13.86" x2="-74.62" y2="180.16" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="5.74" y1="13.86" x2="74.62" y2="180.16" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="13.86" y1="5.74" x2="180.16" y2="74.62" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="13.86" y1="-5.74" x2="180.16" y2="-74.62" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <circle cx="0" cy="0" r="15" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <circle cx="0" cy="0" r="75" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <circle cx="0" cy="0" r="135" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <circle cx="0" cy="0" r="195" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+            </g>
+
+            <g id="v4gReadArrow">
+              <line x1="0" y1="-250" x2="0" y2="-205" stroke="var(--colour-ui-primary)" stroke-width="4" marker-end="url(#v4gArrowHead)" />
+              <text id="v4gReadArrowText" x="0" y="-262" text-anchor="middle" font-size="16" font-weight="bold" style="fill: var(--colour-ui-primary)"></text>
+            </g>
+
+            <g id="v4gSensorInner" transform="translate(0,-45)">
+              <circle r="9" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle r="7" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle id="v4gBlackInner" r="5" fill="#000000" />
+              <circle id="v4gYellowInner" r="5" style="fill: #ffe600; filter: url(#v4gGlow)" />
+            </g>
+            <g id="v4gSensorMid" transform="translate(0,-105)">
+              <circle r="9" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle r="7" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle id="v4gBlackMid" r="5" fill="#000000" />
+              <circle id="v4gYellowMid" r="5" style="fill: #ffe600; filter: url(#v4gGlow)" />
+            </g>
+            <g id="v4gSensorOuter" transform="translate(0,-165)">
+              <circle r="9" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle r="7" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle id="v4gBlackOuter" r="5" fill="#000000" />
+              <circle id="v4gYellowOuter" r="5" style="fill: #ffe600; filter: url(#v4gGlow)" />
+            </g>
+
+            <path d="M 199.19,-115.00 A 230,230 0 0 1 220.34,65.96" fill="none" stroke="var(--colour-ui-correct)" stroke-width="4" marker-end="url(#v4gArrowHead2)" />
+            <text x="0" y="-296" text-anchor="middle" font-size="16" font-weight="bold" style="fill: var(--colour-ui-correct)">Read Inner to Outer</text>
+          </g>
+        </svg>
+      </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-prev" id="v4Prev" onclick="v4Step(-1)">← Prev</button>
+          <button class="btn btn-next" onclick="v4Step(1)">Next →</button>
+        </div>
+        <p class="compare-note">Step through together and compare how many bits change at once. Standard binary can flip two or three bits in the same step (worst case at 011→100 and 111→000) — Gray code always changes exactly one bit per step, which is why it avoids the encoder boundary-glitch problem shown in view 2.</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const ORDINALS = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th'];
+    const BINARY_SEQ = ['000', '001', '010', '011', '100', '101', '110', '111'];
+    const GRAY_SEQ = ['000', '001', '011', '010', '110', '111', '101', '100'];
+
+    // Theme toggle is handled entirely by theme-init.js now (data-theme
+    // attribute + auto-injected button next to #crumb) — this page's own
+    // toggleTheme()/updateThemeToggleUI()/initTheme() are gone.
+
+    // Toggles one ring's sensor light between white/black, or a split state at
+    // a boundary where the disk edge sits right under the fixed sensor.
+    function applySensorState(prefix, ring, state) {
+      const yellowEl = document.getElementById(prefix + 'Yellow' + ring);
+      const blackEl = document.getElementById(prefix + 'Black' + ring);
+      yellowEl.removeAttribute('clip-path');
+      blackEl.removeAttribute('clip-path');
+
+      if (state === 'yellow') {
+        yellowEl.style.display = '';
+        blackEl.style.display = 'none';
+      } else if (state === 'black') {
+        yellowEl.style.display = 'none';
+        blackEl.style.display = '';
+      } else if (state === 'split-left-yellow') {
+        yellowEl.style.display = '';
+        blackEl.style.display = '';
+        yellowEl.setAttribute('clip-path', `url(#${prefix}LeftClip)`);
+        blackEl.setAttribute('clip-path', `url(#${prefix}RightClip)`);
+      } else if (state === 'split-right-yellow') {
+        yellowEl.style.display = '';
+        blackEl.style.display = '';
+        blackEl.setAttribute('clip-path', `url(#${prefix}LeftClip)`);
+        yellowEl.setAttribute('clip-path', `url(#${prefix}RightClip)`);
+      }
+    }
+
+    // As the disk rotates clockwise, the incoming sector approaches from the
+    // sensor's left and the outgoing one exits to the right.
+    function ringState(a, b, idx) {
+      if (a[idx] === b[idx]) return a[idx] === '0' ? 'yellow' : 'black';
+      return a[idx] === '0' ? 'split-right-yellow' : 'split-left-yellow';
+    }
+
+    // Every bit that differs between two adjacent codes can settle independently,
+    // so with N bits changing at once there are 2^N possible transient readings.
+    function reachableStates(a, b) {
+      const diffIdx = [0, 1, 2].filter(i => a[i] !== b[i]);
+      const states = new Set();
+      for (let mask = 0; mask < (1 << diffIdx.length); mask++) {
+        const chars = a.split('');
+        diffIdx.forEach((idx, bit) => { if (mask & (1 << bit)) chars[idx] = b[idx]; });
+        states.add(chars.join(''));
+      }
+      return [...states].sort();
+    }
+
+    function formatAmbiguous(states) {
+      if (states.length === 8) return 'Any code (000–111)';
+      if (states.length === 1) return states[0];
+      return states.slice(0, -1).join(', ') + ' or ' + states[states.length - 1];
+    }
+
+    function renderSimple(prefix, SEQ, step) {
+      const seqIndex = ((step % 8) + 8) % 8;
+      const code = SEQ[seqIndex];
+      document.getElementById(prefix + 'DiskSpin').style.transform = `rotate(${45 * step}deg)`;
+      document.getElementById(prefix + 'ReadArrowText').textContent = ORDINALS[seqIndex];
+      document.getElementById(prefix + 'CodeDisplay').textContent = code;
+      ['Inner', 'Mid', 'Outer'].forEach((ring, i) => {
+        applySensorState(prefix, ring, code[i] === '0' ? 'yellow' : 'black');
+      });
+    }
+
+    function renderBoundary(prefix, SEQ, step) {
+      const sectorIndex = Math.floor(step / 2) % 8;
+      const isBoundary = (step % 2 !== 0);
+      const rotationDeg = isBoundary ? sectorIndex * 45 + 22.5 : sectorIndex * 45;
+      document.getElementById(prefix + 'DiskSpin').style.transform = `rotate(${rotationDeg}deg)`;
+
+      const codeDisplay = document.getElementById(prefix + 'CodeDisplay');
+      const statusTag = document.getElementById(prefix + 'StatusTag');
+      const a = SEQ[sectorIndex];
+      const b = SEQ[(sectorIndex + 1) % 8];
+
+      if (isBoundary) {
+        document.getElementById(prefix + 'ReadArrowText').textContent = `${ORDINALS[sectorIndex]} (Boundary Edge)`;
+        statusTag.textContent = 'Boundary Glitch / Ambiguity';
+        statusTag.className = 'status-tag status-ambiguous';
+        codeDisplay.classList.add('ambiguous');
+        codeDisplay.textContent = formatAmbiguous(reachableStates(a, b));
+        ['Inner', 'Mid', 'Outer'].forEach((ring, i) => applySensorState(prefix, ring, ringState(a, b, i)));
+      } else {
+        document.getElementById(prefix + 'ReadArrowText').textContent = ORDINALS[sectorIndex];
+        statusTag.textContent = 'Sector Aligned';
+        statusTag.className = 'status-tag status-aligned';
+        codeDisplay.classList.remove('ambiguous');
+        codeDisplay.textContent = a;
+        ['Inner', 'Mid', 'Outer'].forEach((ring, i) => applySensorState(prefix, ring, a[i] === '0' ? 'yellow' : 'black'));
+      }
+    }
+
+    // View 1: straight binary counter
+    let v1Step_ = 0;
+    function v1Render() {
+      renderSimple('v1', BINARY_SEQ, v1Step_);
+      document.getElementById('v1Prev').disabled = (v1Step_ === 0);
+    }
+    function v1Step(dir) {
+      if (dir === -1 && v1Step_ === 0) return;
+      v1Step_ += dir;
+      v1Render();
+    }
+
+    // View 2: binary counter with boundary-glitch readout
+    let v2Step_ = 0;
+    function v2Render() {
+      renderBoundary('v2', BINARY_SEQ, v2Step_);
+      document.getElementById('v2Prev').disabled = (v2Step_ === 0);
+    }
+    function v2Step(dir) {
+      if (dir === -1 && v2Step_ === 0) return;
+      v2Step_ += dir;
+      v2Render();
+    }
+
+    // View 3: Gray code counter
+    let v3Step_ = 0;
+    function v3Render() {
+      renderSimple('v3', GRAY_SEQ, v3Step_);
+      document.getElementById('v3Prev').disabled = (v3Step_ === 0);
+    }
+    function v3Step(dir) {
+      if (dir === -1 && v3Step_ === 0) return;
+      v3Step_ += dir;
+      v3Render();
+    }
+
+    // View 4: binary and Gray code side by side, one shared step counter
+    let v4Step_ = 0;
+    function v4Render() {
+      renderSimple('v4b', BINARY_SEQ, v4Step_);
+      renderSimple('v4g', GRAY_SEQ, v4Step_);
+      document.getElementById('v4Prev').disabled = (v4Step_ === 0);
+    }
+    function v4Step(dir) {
+      if (dir === -1 && v4Step_ === 0) return;
+      v4Step_ += dir;
+      v4Render();
+    }
+
+    function showView(n) {
+      for (let i = 1; i <= 4; i++) {
+        document.getElementById('view' + i).style.display = (i === n) ? '' : 'none';
+        document.getElementById('tabBtn' + i).classList.toggle('active', i === n);
+      }
+    }
+
+    v1Render();
+    v2Render();
+    v3Render();
+    v4Render();
+  </script>
+</body>
+
+</html>

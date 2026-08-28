@@ -1,0 +1,571 @@
+<!--
+  TEMPLATE FILE — read before cloning for a new weekly quiz.
+
+  This file uses a data-driven quiz engine: a single `QUESTIONS` array (in the
+  <script>, search "QUESTIONS —") drives one generic HTML panel and a generic
+  set of engine functions (renderQuestion, checkAnswer, nextQuestion, etc).
+  There is deliberately NO per-question HTML or per-question JS function.
+
+  When cloning this file for a new quiz — even one that starts with just ONE
+  question — KEEP THIS STRUCTURE. Do not revert to a hardcoded per-question
+  panel just because there's only one entry.
+
+  Built on the shared cert_iii/assets/quiz-engine.js engine from the start
+  (project convention for all new quizzes).
+
+  Q1 is a kind:'fill' question (click a value, then click a row — see quiz-
+  engine.js's own header comment for the mechanic, and UEEEC0066/jfet/
+  basics/jfet_knowledge_basics.html's own Q2 for the most recent prior use
+  of it): a hand-drawn SVG rotary encoder disk, marked in 3-bit reflected
+  binary Gray code (BRGC), styled after the classic Wikipedia reference
+  diagram ("Rotary encoder for angle-measuring devices marked in 3-bit
+  binary-reflected Gray code") but redrawn from scratch as real geometry —
+  not a traced/embedded image — using a small Python script (see the
+  scratchpad, not kept in-repo) to compute the 24 wedge paths (3 rings × 8
+  sectors) from the Gray code sequence itself, so the drawn pattern and the
+  grading answer can never drift out of sync with each other. Black = bit
+  1, white = bit 0; inner ring = MSB, outer ring = LSB. An arrow marks the
+  000 sector (top) and a curved indicator marks the anti-clockwise reading
+  direction. The 8 answer rows are plain HTML (not embedded on the
+  diagram itself, unlike jfet_knowledge_basics.html's Q2) since labelling
+  the sectors directly would give the answer away.
+
+  Sequence validated against the standard reflect-and-prefix construction:
+  000, 001, 011, 010, 110, 111, 101, 100 — every adjacent pair (including
+  the 100→000 wrap) differs by exactly one bit. Going anti-clockwise from
+  000 traverses the entire 8-value cycle, ending at 100 (the last value
+  before the cycle repeats) — hence all 8 Gray code values sit in the pool,
+  none are distractors.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../assets/theme-init.js"></script>
+  <script src="../../assets/quiz-engine.js"></script>
+  <title>Digital Electronics Knowledge Quiz — Codes</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../assets/quiz-common.css">
+  <script src="../../assets/breadcrumb.js" defer></script>
+  <style>
+    /* kind:'fill' pool/slot styling — see this file's own header comment;
+       no shared quiz-common.css classes exist for this mechanic yet, same
+       situation jfet_knowledge_basics.html's own Q2 was in. */
+    .circuit-panel { cursor: default; }
+    .fill-pool-wrap { margin-top: .8rem; }
+    .fill-pool-row { display: flex; align-items: center; gap: .5rem; }
+    .fill-pool-arrow { font-size: 1rem; color: var(--colour-ui-primary); opacity: 0; transition: opacity .15s; }
+    .fill-pool-row.needs-pick .fill-pool-arrow { opacity: 1; animation: fillArrowBounce .8s ease-in-out infinite; }
+    @keyframes fillArrowBounce { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(3px); } }
+    .fill-pool {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: .5rem;
+      padding: .8rem;
+      border: 2px dashed var(--colour-border);
+      border-radius: var(--radius-lg);
+      background: rgba(var(--colour-label-rgb), .05);
+      min-height: 3rem;
+      transition: border-color .15s, background .15s;
+    }
+    .fill-pool.needs-pick {
+      border-color: var(--colour-ui-primary);
+      border-style: solid;
+      background: rgba(var(--colour-ui-primary-rgb), .06);
+      animation: matchPoolPulse 1.1s ease-in-out infinite;
+    }
+    .fill-pool .match-chip { min-width: 64px; text-align: center; }
+
+    /* The 8 answer rows — plain HTML boxes (not SVG/foreignObject, since
+       they don't sit on top of a diagram), styled the same visual language
+       (dashed → solid on fill, correct/wrong stroke colour) as every other
+       fill-slot/match-column box in this project. */
+    /* 2-column grid — DOM order (1st, 2nd, 3rd...) fills left-to-right
+       then wraps, so row 1 of the grid holds 1st|2nd, row 2 holds
+       3rd|4th, and so on. Each grid cell is its own (label + box) pair,
+       keeping "1st" etc immediately to the left of ITS OWN box rather
+       than as a separate column header. */
+    .gray-rows { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem .8rem; margin-top: 1rem; }
+    .gray-row { display: flex; align-items: center; gap: .6rem; }
+    .gray-row-num { flex: 0 0 auto; width: 2.6rem; font-family: var(--font-display); font-size: .72rem; letter-spacing: .05em; color: var(--colour-label); text-align: right; }
+    .gray-slot {
+      flex: 1;
+      min-height: 2.3rem;
+      border: 2px dashed var(--colour-ui-primary);
+      border-radius: var(--radius-md);
+      background: rgba(var(--colour-label-rgb), .04);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      transition: border-color .15s, background .15s, opacity .15s;
+    }
+    .gray-slot.filled { border-style: solid; }
+    .gray-slot.correct { border-color: var(--colour-ui-correct); cursor: default; }
+    .gray-slot.wrong { border-color: #ff3d66; cursor: default; }
+    .gray-slot-text { font-family: 'Share Tech Mono', monospace; font-size: 1rem; font-weight: 700; letter-spacing: .1em; color: var(--colour-ui-primary); }
+    .gray-slot-text.correct { color: var(--colour-ui-correct); }
+    .gray-slot-text.wrong { color: #ff3d66; }
+
+    /* Sequential-fill states — see the page's own slotClicked() override
+       below: only ONE cell is ever actionable in each direction (the next
+       empty slot to fill, or the last-filled slot to clear). Everything
+       else reads as locked. */
+    .gray-slot.gray-slot-target {
+      border-color: var(--colour-ui-primary);
+      border-style: solid;
+      background: rgba(var(--colour-ui-primary-rgb), .10);
+      animation: graySlotPulse 1.1s ease-in-out infinite;
+    }
+    @keyframes graySlotPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(var(--colour-ui-primary-rgb), .3); }
+      50% { box-shadow: 0 0 0 6px rgba(var(--colour-ui-primary-rgb), .12); }
+    }
+    .gray-slot.gray-slot-disabled { opacity: .4; pointer-events: none; cursor: default; }
+    .gray-slot.gray-slot-removable { cursor: pointer; }
+  </style>
+</head>
+
+<body>
+  <div class="crumb" id="crumb" data-current="Codes"></div>
+  <header>
+    <h1>Digital Electronics</h1>
+    <p>Codes · Gray Code · BCD</p>
+  </header>
+
+  <div class="quiz-wrap" id="quizWrap">
+
+    <!-- LEFT: static circuit panel (leftPanel:'circuit') -->
+    <div class="circuit-col">
+      <div class="circuit-panel">
+        <div class="panel-label">3-Bit Gray Code Rotary Encoder</div>
+        <svg viewBox="0 -50 600 590" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="grayArrowHead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 Z" style="fill: var(--colour-ui-primary)" />
+            </marker>
+            <marker id="grayArrowHead2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 Z" style="fill: var(--colour-ui-correct)" />
+            </marker>
+            <filter id="lightGlow" x="-100%" y="-100%" width="300%" height="300%">
+              <feGaussianBlur stdDeviation="4" result="b" />
+              <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+          </defs>
+
+          <g transform="translate(300,260)">
+            <!-- The disk itself — rotated by JS (see rotateDiskTo() below)
+                 so the sector currently being asked about always sits
+                 under the FIXED reading arrow below, the way a real
+                 encoder disk spins past a stationary sensor. Sector k's
+                 own artwork is drawn at its natural rest angle (k steps
+                 anti-clockwise from the top); rotateDiskTo(k) applies
+                 rotate(45*k) — clockwise by construction — to undo
+                 exactly that offset and bring sector k back to the top. -->
+            <g id="diskSpin" style="transition: transform .5s ease-in-out">
+              <path d="M -74.62,-180.16 A 195.00,195.00 0 0 0 -180.16,-74.62 L -124.72,-51.66 A 135.00,135.00 0 0 1 -51.66,-124.72 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M -124.72,-51.66 A 135.00,135.00 0 0 0 -124.72,51.66 L -69.29,28.70 A 75.00,75.00 0 0 1 -69.29,-28.70 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M -180.16,-74.62 A 195.00,195.00 0 0 0 -180.16,74.62 L -124.72,51.66 A 135.00,135.00 0 0 1 -124.72,-51.66 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M -124.72,51.66 A 135.00,135.00 0 0 0 -51.66,124.72 L -28.70,69.29 A 75.00,75.00 0 0 1 -69.29,28.70 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M -28.70,69.29 A 75.00,75.00 0 0 0 28.70,69.29 L 5.74,13.86 A 15.00,15.00 0 0 1 -5.74,13.86 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M -51.66,124.72 A 135.00,135.00 0 0 0 51.66,124.72 L 28.70,69.29 A 75.00,75.00 0 0 1 -28.70,69.29 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M 28.70,69.29 A 75.00,75.00 0 0 0 69.29,28.70 L 13.86,5.74 A 15.00,15.00 0 0 1 5.74,13.86 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M 51.66,124.72 A 135.00,135.00 0 0 0 124.72,51.66 L 69.29,28.70 A 75.00,75.00 0 0 1 28.70,69.29 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M 74.62,180.16 A 195.00,195.00 0 0 0 180.16,74.62 L 124.72,51.66 A 135.00,135.00 0 0 1 51.66,124.72 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M 69.29,28.70 A 75.00,75.00 0 0 0 69.29,-28.70 L 13.86,-5.74 A 15.00,15.00 0 0 1 13.86,5.74 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M 180.16,74.62 A 195.00,195.00 0 0 0 180.16,-74.62 L 124.72,-51.66 A 135.00,135.00 0 0 1 124.72,51.66 Z" style="fill: var(--colour-disk-ink)" />
+              <path d="M 69.29,-28.70 A 75.00,75.00 0 0 0 28.70,-69.29 L 5.74,-13.86 A 15.00,15.00 0 0 1 13.86,-5.74 Z" style="fill: var(--colour-disk-ink)" />
+              <line x1="5.74" y1="-13.86" x2="74.62" y2="-180.16" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="-5.74" y1="-13.86" x2="-74.62" y2="-180.16" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="-13.86" y1="-5.74" x2="-180.16" y2="-74.62" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="-13.86" y1="5.74" x2="-180.16" y2="74.62" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="-5.74" y1="13.86" x2="-74.62" y2="180.16" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="5.74" y1="13.86" x2="74.62" y2="180.16" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="13.86" y1="5.74" x2="180.16" y2="74.62" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <line x1="13.86" y1="-5.74" x2="180.16" y2="-74.62" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <circle cx="0" cy="0" r="15" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <circle cx="0" cy="0" r="75" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <circle cx="0" cy="0" r="135" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+              <circle cx="0" cy="0" r="195" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.5" />
+            </g>
+
+            <!-- Fixed reading arrow — stays put at the top; only its
+                 ordinal label text changes (updated by rotateDiskTo()),
+                 same "no Gray code VALUE printed here" rule as before. -->
+            <g id="readArrow">
+              <line x1="0" y1="-250" x2="0" y2="-205" stroke="var(--colour-ui-primary)" stroke-width="4" marker-end="url(#grayArrowHead)" />
+              <text id="readArrowText" x="0" y="-262" text-anchor="middle" font-size="16" font-weight="bold" style="fill: var(--colour-ui-primary)"></text>
+            </g>
+
+            <!-- Pretend optical sensors — one per ring/bit-track, fixed at
+                 the reading position (NOT inside diskSpin, so they don't
+                 rotate with the disk). Mirrors a real optical encoder: an
+                 LED+photodiode pair per track, light passing straight
+                 through a clear (white/0) sector and blocked by an opaque
+                 (black/1) one. rotateDiskTo() below toggles each whole
+                 group on (bit=0) or fully hidden — not just dimmed
+                 (bit=1), per "if it's a black segment, nothing shows".
+                 Each is a small bright-yellow "lens" dot ringed by two
+                 concentric border circles (a bezel look, not a single
+                 outline). Positions match diskSpin's own ring midpoints:
+                 inner 15-75 (mid 45), middle 75-135 (mid 105), outer
+                 135-195 (mid 165). -->
+            <g id="sensorInner" transform="translate(0,-45)">
+              <circle r="9" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle r="7" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle r="5" style="fill: #ffe600; filter: url(#lightGlow)" />
+            </g>
+            <g id="sensorMid" transform="translate(0,-105)">
+              <circle r="9" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle r="7" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle r="5" style="fill: #ffe600; filter: url(#lightGlow)" />
+            </g>
+            <g id="sensorOuter" transform="translate(0,-165)">
+              <circle r="9" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle r="7" fill="none" style="stroke: var(--colour-disk-ink)" stroke-width="1.2" />
+              <circle r="5" style="fill: #ffe600; filter: url(#lightGlow)" />
+            </g>
+
+            <!-- Anti-clockwise rotation indicator — also fixed. Reversed
+                 (arrowhead now points clockwise, matching the direction
+                 the disk itself actually spins in the animation — see
+                 rotateDiskTo() — even though the VALUES are still read in
+                 anti-clockwise order off the disk's own printed pattern),
+                 shortened to 1/3 of its original 140° span (~46.7°), and
+                 starting (tail end) at the 2 o'clock position. -->
+            <path d="M 199.19,-115.00 A 230,230 0 0 1 220.34,65.96" fill="none" stroke="var(--colour-ui-correct)" stroke-width="4" marker-end="url(#grayArrowHead2)" />
+            <text x="0" y="-296" text-anchor="middle" font-size="16" font-weight="bold" style="fill: var(--colour-ui-correct)">Read Inner to Outer</text>
+          </g>
+        </svg>
+      </div>
+    </div>
+
+    <!-- RIGHT: question -->
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <!-- Single reusable question panel — populated from QUESTIONS[cur] by renderQuestion() -->
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+
+          <!-- Fill-in pool — shown only for kind:'fill' questions, toggled
+               via RENDER_EXTRA below. -->
+          <div class="fill-pool-wrap" id="fillPoolWrap" style="display:none">
+            <div class="fill-pool-row" id="fillPoolRow">
+              <div class="fill-pool-arrow">▶</div>
+              <div class="fill-pool" id="fillPool"></div>
+            </div>
+          </div>
+
+          <!-- The 8 answer rows (Q1's own fill slots). -->
+          <div class="gray-rows" id="grayRows" style="display:none">
+            <div class="gray-row"><span class="gray-row-num">1st</span><div id="graySlot0" class="gray-slot" onclick="slotClicked(0)"><span id="graySlot0Text" class="gray-slot-text"></span></div></div>
+            <div class="gray-row"><span class="gray-row-num">2nd</span><div id="graySlot1" class="gray-slot" onclick="slotClicked(1)"><span id="graySlot1Text" class="gray-slot-text"></span></div></div>
+            <div class="gray-row"><span class="gray-row-num">3rd</span><div id="graySlot2" class="gray-slot" onclick="slotClicked(2)"><span id="graySlot2Text" class="gray-slot-text"></span></div></div>
+            <div class="gray-row"><span class="gray-row-num">4th</span><div id="graySlot3" class="gray-slot" onclick="slotClicked(3)"><span id="graySlot3Text" class="gray-slot-text"></span></div></div>
+            <div class="gray-row"><span class="gray-row-num">5th</span><div id="graySlot4" class="gray-slot" onclick="slotClicked(4)"><span id="graySlot4Text" class="gray-slot-text"></span></div></div>
+            <div class="gray-row"><span class="gray-row-num">6th</span><div id="graySlot5" class="gray-slot" onclick="slotClicked(5)"><span id="graySlot5Text" class="gray-slot-text"></span></div></div>
+            <div class="gray-row"><span class="gray-row-num">7th</span><div id="graySlot6" class="gray-slot" onclick="slotClicked(6)"><span id="graySlot6Text" class="gray-slot-text"></span></div></div>
+            <div class="gray-row"><span class="gray-row-num">8th</span><div id="graySlot7" class="gray-slot" onclick="slotClicked(7)"><span id="graySlot7Text" class="gray-slot-text"></span></div></div>
+          </div>
+
+          <div class="options" id="qOptions"></div>
+          <div class="match-wrap" id="qMatch" style="display:none">
+            <div class="match-pool-row" id="matchPoolRow">
+              <div class="match-pool-arrow">▶</div>
+              <div class="match-pool" id="matchPool"></div>
+            </div>
+            <div class="match-columns" id="matchColumns"></div>
+          </div>
+          <div class="bits-wrap" id="qBits" style="display:none">
+            <table class="bits-table">
+              <thead>
+                <tr>
+                  <th rowspan="2">Value</th>
+                  <th>2<sup>3</sup></th>
+                  <th>2<sup>2</sup></th>
+                  <th>2<sup>1</sup></th>
+                  <th>2<sup>0</sup></th>
+                </tr>
+                <tr>
+                  <th>8</th>
+                  <th>4</th>
+                  <th>2</th>
+                  <th>1</th>
+                </tr>
+              </thead>
+              <tbody id="bitsBody"></tbody>
+            </table>
+          </div>
+          <div class="bits-wrap" id="qTruth" style="display:none">
+            <div class="truth-toggle" id="truthToggle" style="display:none"></div>
+            <table class="bits-table">
+              <thead>
+                <tr>
+                  <th id="truthInputHead" colspan="3">Inputs</th>
+                  <th id="truthOutputHead">Output</th>
+                </tr>
+                <tr id="truthColLabels"></tr>
+              </thead>
+              <tbody id="truthBody"></tbody>
+            </table>
+          </div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Summary -->
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // Row-ordinal labels for the fixed reading arrow (see RENDER_EXTRA's
+    // own disk-rotation logic below) — index-matched to slotIds/col.
+    const ORDINALS = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th'];
+
+    // The same anti-clockwise Gray code sequence the disk itself was drawn
+    // from (see this file's own header comment) — used to drive the 3
+    // pretend light-sensor circles: index-matched to posIdx, each
+    // character MSB→LSB (inner ring → outer ring).
+    const GRAY_SEQ = ['000', '001', '011', '010', '110', '111', '101', '100'];
+
+    // #diskSpin's own CSS transition duration (see its style="transition:
+    // transform .5s ease-in-out") — the light-sensor sync fix in
+    // RENDER_EXTRA below defers by this same amount so the sensors only
+    // update once the disk has actually finished spinning there.
+    const DISK_SPIN_MS = 500;
+    let sensorSyncTimer = null;
+
+    // Q2 (BCD match) — the 4-bit code for each decimal digit, index-matched
+    // (BCD_CODES[3] === '0011' is decimal 3). BCD_ORDER holds the CURRENT
+    // shuffled column order (re-shuffled once per attempt by RESET_EXTRA
+    // below, not on every render — see that assignment for why columns()
+    // can't just call shuffle() directly the way options() does).
+    const BCD_CODES = ['0000', '0001', '0010', '0011', '0100', '0101', '0110', '0111', '1000', '1001'];
+    let BCD_ORDER = [];
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS — see quiz-engine.js's own header comment for the full field
+    // reference. Add, remove, split or reorder questions by editing this
+    // array only — nothing in the engine needs to change.
+    // ══════════════════════════════════════════════════════════════════════
+
+    const QUESTIONS = [
+      {
+        // kind:'fill' — click a Gray code value, then click the row it
+        // belongs to. All 8 values are correct answers (for exactly one
+        // row each) — there are no distractors, since every 3-bit binary
+        // string appears exactly once in the cycle. `col` is the 0-based
+        // row index, matching the order the disk is read in.
+        leftPanel: 'circuit',
+        kind: 'fill',
+        slotIds: ['graySlot0', 'graySlot1', 'graySlot2', 'graySlot3', 'graySlot4', 'graySlot5', 'graySlot6', 'graySlot7'],
+        text: () => `This disk marks angular position in <b style="color:var(--colour-ui-primary)">3-bit Gray code</b>. Starting at the arrow (<b>000</b>) and reading <b style="color:var(--colour-ui-correct)">anti-clockwise</b>, <b style="color:var(--colour-ui-primary)">click</b> a value below, then <b style="color:var(--colour-ui-primary)">click</b> the row it belongs in. The arrow moves to the next sector as you go.`,
+        hint: () => `Black = 1, white = 0. The innermost ring is the most significant bit; the outermost ring is the least significant bit. Every step around the disk — including the very last step back to the start — changes exactly one bit from the step before it.`,
+        options: () => shuffle([
+          { label: '000', poolHtml: '000', col: 0 },
+          { label: '001', poolHtml: '001', col: 1 },
+          { label: '011', poolHtml: '011', col: 2 },
+          { label: '010', poolHtml: '010', col: 3 },
+          { label: '110', poolHtml: '110', col: 4 },
+          { label: '111', poolHtml: '111', col: 5 },
+          { label: '101', poolHtml: '101', col: 6 },
+          { label: '100', poolHtml: '100', col: 7 }
+        ]),
+        correctExplain: (st) => {
+          const wrongCount = st.slotPlaced.filter((p, slot) => p !== st.cor[slot]).length;
+          return wrongCount === 0 ? 'All 8 codes placed in the correct anti-clockwise order' : `${st.slotPlaced.length - wrongCount} of ${st.slotPlaced.length} correctly placed`;
+        },
+        working: (st) => {
+          const mistakes = st.slotPlaced
+            .map((p, slot) => p !== st.cor[slot] ? (st.opts[p]?.label ?? '(left blank)') : null)
+            .filter(Boolean);
+          const mistakeLine = mistakes.length
+            ? `<div class="working-step" style="margin-top:.6rem">Out of order:</div><div class="working-line">${mistakes.join(', ')}</div>`
+            : '';
+          return `
+    <div class="working-step">The correct anti-clockwise sequence:</div>
+    <div class="working-line" style="font-family:'Share Tech Mono',monospace;letter-spacing:.05em"><b style="color:var(--colour-ui-correct)">000 → 001 → 011 → 010 → 110 → 111 → 101 → 100</b></div>
+    <div class="working-line" style="margin-top:.4rem">This is the standard 3-bit <em>reflected binary</em> Gray code. Every adjacent pair — including the wrap from 100 back to 000 — differs by exactly <b>one bit</b>. That's the entire reason rotary encoders use Gray code instead of ordinary binary counting: as the disk rotates across a sector boundary, only one bit-track's reading changes at a time, so even a slightly-misaligned read can never jump to a wildly wrong value the way it could with ordinary binary (e.g. 011 → 100, where all three bits change at once).</div>
+    ${mistakeLine}`;
+        }
+      },
+      {
+        // kind:'match' — BCD (Binary Coded Decimal): each decimal digit
+        // 0-9 gets its own 4-bit code, using ONLY the plain binary value
+        // for that digit (0000-1001) — the other 6 possible 4-bit patterns
+        // (1010-1111) are simply never used in BCD, unlike a full 4-bit
+        // binary count. Columns (decimal 0-9) are shown in random order,
+        // re-shuffled once per attempt via RESET_EXTRA/BCD_ORDER above —
+        // each option's `col` is computed by looking up where its own
+        // digit landed in that shuffled order, so the pairing stays
+        // correct regardless of how the columns happen to be arranged.
+        leftPanel: 'none',
+        kind: 'match',
+        columns: () => BCD_ORDER,
+        text: () => `<b style="color:var(--colour-ui-primary)">BCD</b> stands for <b style="color:var(--colour-ui-primary)">Binary Coded Decimal</b>. <b style="color:var(--colour-ui-primary)">Match</b> each binary code below to the decimal digit it represents.`,
+        hint: () => `Each decimal digit 0-9 gets its own 4-bit binary code — the same as counting normally in binary, just stopping at 9 (1001) instead of continuing on to 15 (1111). The other six 4-bit patterns (1010-1111) are never used in BCD.`,
+        options: () => shuffle(BCD_CODES.map((bin, digit) => ({
+          label: bin,
+          poolHtml: bin,
+          col: BCD_ORDER.indexOf(String(digit))
+        }))),
+        correctExplain: (st) => {
+          const wrongCount = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).length;
+          return wrongCount === 0 ? 'All 10 codes matched correctly' : `${st.opts.length - wrongCount} of ${st.opts.length} matched correctly`;
+        },
+        working: (st) => {
+          const mistakes = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).map(o => o.label);
+          const mistakeLine = mistakes.length
+            ? `<div class="working-step" style="margin-top:.6rem">Mismatched:</div><div class="working-line">${mistakes.join(', ')}</div>`
+            : '';
+          return `
+    <div class="working-step">BCD — one 4-bit code per decimal digit:</div>
+    <div class="working-line" style="font-family:'Share Tech Mono',monospace;letter-spacing:.05em">
+      0 = <b style="color:var(--colour-ui-correct)">0000</b> &nbsp; 1 = <b style="color:var(--colour-ui-correct)">0001</b> &nbsp; 2 = <b style="color:var(--colour-ui-correct)">0010</b> &nbsp; 3 = <b style="color:var(--colour-ui-correct)">0011</b> &nbsp; 4 = <b style="color:var(--colour-ui-correct)">0100</b><br>
+      5 = <b style="color:var(--colour-ui-correct)">0101</b> &nbsp; 6 = <b style="color:var(--colour-ui-correct)">0110</b> &nbsp; 7 = <b style="color:var(--colour-ui-correct)">0111</b> &nbsp; 8 = <b style="color:var(--colour-ui-correct)">1000</b> &nbsp; 9 = <b style="color:var(--colour-ui-correct)">1001</b>
+    </div>
+    <div class="working-line" style="margin-top:.4rem">BCD encodes each digit of a decimal number SEPARATELY, 4 bits at a time — it's not the same as converting the whole number to plain binary. For example, decimal 92 in BCD is <b>1001 0010</b> (9, then 2) — very different from 92 in plain binary (1011100).</div>
+    ${mistakeLine}`;
+        }
+      }
+    ];
+
+    // Override — the shared engine's slotClicked() lets a pool item go
+    // into ANY empty slot and lets ANY filled slot be cleared, in any
+    // order. This quiz wants strict sequential fill instead: placing only
+    // ever targets the next empty row (1st, then 2nd, ...), and clearing
+    // only ever targets the most recently filled row — a stack, not free
+    // placement — so the disk's own anti-clockwise reading order is the
+    // only order the rows can be built in. Same "shadow the global
+    // function in this page's own script" pattern digital_circuit_
+    // derivation_ab.html uses for its own swapLeftPanel() override.
+    function slotClicked(slot) {
+      const st = Q[cur], data = QUESTIONS[cur];
+      if (!isFill(data) || st.ans) return;
+      const nextEmpty = st.slotPlaced.findIndex(p => p === null);
+      if (st.sel === null) {
+        // Nothing picked — a click can only CLEAR the most recently
+        // filled slot (last one before the next empty one, or the very
+        // last slot if the row is already full).
+        const lastFilled = nextEmpty === -1 ? st.slotPlaced.length - 1 : nextEmpty - 1;
+        if (slot === lastFilled && st.slotPlaced[slot] !== null) {
+          st.slotPlaced[slot] = null;
+          renderQuestion();
+        }
+        return;
+      }
+      // A pool item is picked — a click can only PLACE it into the next
+      // empty slot in sequence.
+      if (slot === nextEmpty) {
+        st.slotPlaced[slot] = st.sel;
+        st.sel = null;
+        renderQuestion();
+      }
+    }
+
+    RENDER_EXTRA = () => {
+      const data = QUESTIONS[cur];
+      const isFillQ = isFill(data);
+      document.getElementById('fillPoolWrap').style.display = isFillQ ? '' : 'none';
+      document.getElementById('grayRows').style.display = isFillQ ? '' : 'none';
+
+      const st = Q[cur];
+      const nextEmpty = isFillQ ? st.slotPlaced.findIndex(p => p === null) : -1;
+
+      // Spin the disk (not the arrow) so the sector currently being asked
+      // about sits under the fixed reading arrow — posIdx stays at 7 (the
+      // last sector asked about) once every row is filled/answered,
+      // rather than snapping back to 0, since that's genuinely where the
+      // disk was last "read". ORDINALS labels the arrow with the row
+      // number only, never the Gray code value.
+      const posIdx = isFillQ ? (nextEmpty === -1 ? 7 : nextEmpty) : 0;
+      document.getElementById('diskSpin').style.transform = `rotate(${45 * posIdx}deg)`;
+      const readArrow = document.getElementById('readArrow');
+      readArrow.style.display = isFillQ ? '' : 'none';
+      document.getElementById('readArrowText').textContent = ORDINALS[posIdx];
+
+      // Pretend light sensors — lit (visible) only over a white/0 sector on
+      // their own ring. #diskSpin's rotation is CSS-animated (.5s), but
+      // this display:none/'' toggle isn't — updating the sensors in the
+      // SAME instant as the rotate() above meant they showed the NEW
+      // sector's reading while the disk was still visibly mid-spin from
+      // the OLD one, which is exactly what looked like sensors/rings being
+      // "mixed up". Deferring by DISK_SPIN_MS (matching the CSS transition
+      // duration) makes the sensors update only once the disk has actually
+      // finished turning. clearTimeout guards against a rapid second click
+      // firing this before the first spin's timer lands.
+      clearTimeout(sensorSyncTimer);
+      sensorSyncTimer = setTimeout(() => {
+        const bits = GRAY_SEQ[posIdx].split('').map(Number); // [MSB/inner, mid, LSB/outer]
+        const sensorIds = ['sensorInner', 'sensorMid', 'sensorOuter'];
+        sensorIds.forEach((id, i) => {
+          document.getElementById(id).style.display = (isFillQ && bits[i] === 0) ? '' : 'none';
+        });
+      }, DISK_SPIN_MS);
+
+      if (!isFillQ) return;
+      const lastFilled = nextEmpty === -1 ? st.slotPlaced.length - 1 : nextEmpty - 1;
+      data.slotIds.forEach((elId, slot) => {
+        const box = document.getElementById(elId);
+        box.classList.remove('gray-slot-target', 'gray-slot-disabled', 'gray-slot-removable');
+        if (st.ans) return; // answered — leave the plain correct/wrong styling from renderFill() alone
+        if (st.slotPlaced[slot] === null) {
+          box.classList.add(slot === nextEmpty ? 'gray-slot-target' : 'gray-slot-disabled');
+        } else {
+          box.classList.add(slot === lastFilled ? 'gray-slot-removable' : 'gray-slot-disabled');
+        }
+      });
+    };
+
+    // Re-shuffle Q2's column order once per attempt (including Restart),
+    // BEFORE resetQuiz() calls each question's own options() — same hook
+    // digital_gate_identification.html uses to shuffle QUESTIONS itself.
+    // columns() can't just shuffle() inline the way options() does: it's
+    // called fresh on every render (not just once at reset), so an inline
+    // shuffle would reorder the columns on every click and desync them
+    // from the col indices already baked into st.cor at reset time.
+    RESET_EXTRA = () => {
+      BCD_ORDER = shuffle(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']);
+    };
+
+    initQuizNav();
+    resetQuiz();
+    initQuizFromURL();
+  </script>
+</body>
+</html>
