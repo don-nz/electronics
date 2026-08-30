@@ -1,0 +1,1204 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../assets/theme-init.js"></script>
+  <title>JFET Voltage Divider Bias Quiz</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../assets/quiz-common.css">
+  <script src="../../../assets/breadcrumb.js" defer></script>
+    <style>
+        .progress-wrap {
+      display: flex;
+      gap: .4rem;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+    </style>
+</head>
+
+<body>
+<!--
+  Voltage-divider-bias N-channel JFET DC analysis, 6 questions, cloned from
+  UEEEC0066/jfet/biasing_circuits/jfet_self_bias.html (same 6-question shape,
+  same structure as UEEEC0066/bjt/biasing_circuits/bjt_npn_base_bias.html
+  underneath). The circuit diagram (RG1/RG2/RD/RS, VDD, J1) is the user's
+  own, built to match the teacher's lesson format — RG1/RG2 replace self-
+  bias's single RG with an actual voltage divider across VDD.
+
+  Calculation method taught: V_GS is still GIVEN per example (read off a
+  device curve/datasheet in the real lesson) — the one piece of starting
+  data shown on the circuit permanently, not asked as a question. Unlike
+  self-bias, V_G is NOT pinned to 0 V here — it's set by the RG1/RG2
+  divider, DERIVED as Q1 below (the student should reason their way to it
+  rather than have it handed to them). Because the gate draws no current,
+  the divider is always perfectly "unloaded" regardless of how large
+  RG1/RG2 are — only their RATIO sets V_G, unlike a BJT voltage divider
+  where base current always loads it at least a little. From there:
+    Q1  V_G  = V_DD × R_G2 / (R_G1 + R_G2)   (unloaded divider — I_G ≈ 0)
+    Q2  V_S  = V_G − V_GS
+    Q3  I_DS = V_S / R_S
+    Q4  V_D  = V_DD − (I_DS × R_D)
+    Q5  V_DG = V_D − V_G   (no longer always equals V_D — only true when
+                             V_G happens to be 0, unlike self-bias)
+    Q6  V_DS = V_D − V_S
+-->
+<div class="crumb" id="crumb" data-current="Voltage Divider Bias"></div>
+  <header>
+    <h1>JFET Voltage Divider Bias - Quiz 1</h1>
+    <p>DC Analysis · Voltage Divider-Bias JFET Amplifier</p>
+  </header>
+
+  <div class="quiz-wrap">
+
+    <!-- LEFT: circuit diagram -->
+    <div class="circuit-col">
+      <div class="mode-toggle">
+        <div class="mode-seg" id="modeSeg">
+          <button id="modeExample1" class="active" onclick="setMode('example1')">Example 1</button>
+          <button id="modeExample2" onclick="setMode('example2')">Example 2</button>
+          <button id="modeExample3" onclick="setMode('example3')">Example 3</button>
+          <button id="modeRandomise" onclick="setMode('randomise')">Randomise</button>
+        </div>
+      </div>
+      <div class="circuit-panel" onclick="openModal()" title="Click to zoom">
+        <div class="panel-label">Circuit Diagram — <span id="panelVoltLabel">12 V</span> Supply</div>
+        <div class="zoom-hint">
+          <svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.8" fill="none" />
+            <line x1="12.5" y1="12.5" x2="17" y2="17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            <line x1="6" y1="8" x2="10" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+            <line x1="8" y1="6" x2="8" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+          </svg>
+          Zoom
+        </div>
+
+        <svg id="circuitSvg" viewBox="-90 0 610 560" xmlns="http://www.w3.org/2000/svg"
+          font-family="'Share Tech Mono',monospace">
+
+          <!-- ════════════════════ DEFINITIONS ════════════════════ -->
+
+          <defs>
+            <filter id="glow">
+              <feGaussianBlur stdDeviation="2" result="b" />
+              <feMerge>
+                <feMergeNode in="b" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+
+            <!-- ══ N-CHANNEL JFET SHAPE — copied from assets/shapes/jfet-symbols.svg's
+                 own jfet-n-shape (edit there first). Same circle radius and lead-tip
+                 coordinates as bjt-npn-shape above (gate tip (-17,0), drain tip
+                 (14,-34), source tip (14,34)) so it drops into this BJT-wired circuit
+                 without moving any wiring: gate↔base, drain↔collector, source↔emitter. ══ -->
+            <g id="jfet-n-shape">
+              <circle cx="7" cy="0" r="30" fill="var(--colour-panel)" style="stroke: var(--colour-jfet)" stroke-width="2" filter="url(#glow)" />
+              <line x1="-30" y1="7" x2="0" y2="7" style="stroke: var(--colour-jfet)" stroke-width="2" />
+              <rect x="0" y="-20" width="4" height="40" style="fill: var(--colour-jfet)" />
+              <line x1="0" y1="-15" x2="15" y2="-15" style="stroke: var(--colour-jfet)" stroke-width="2" />
+              <line x1="14" y1="-15" x2="14" y2="-40" style="stroke: var(--colour-jfet)" stroke-width="2" />
+              <line x1="0" y1="15" x2="15" y2="15" style="stroke: var(--colour-jfet)" stroke-width="2" />
+              <line x1="14" y1="15" x2="14" y2="40" style="stroke: var(--colour-jfet)" stroke-width="2" />
+              <polygon points="-8,3 -8,12 2,7" style="fill: var(--colour-jfet)" />
+            </g>
+
+            <!-- ══ PROBE WIRE — 30px dashed stub; rotate() on <use> points it in any direction ══ -->
+            <line id="probe-wire" x1="0" y1="0" x2="30" y2="0"
+              style="stroke: var(--colour-red)" stroke-width="1.5" stroke-dasharray="4,3" opacity=".8" />
+
+            <!-- ══ VOLTMETER SHAPE ══ -->
+            <g id="meter-shape">
+              <circle cx="0" cy="0" r="30" style="fill: var(--colour-meter-fill); stroke: var(--colour-red)"
+                stroke-width="1.5" filter="url(#glow)" />
+              <line x1="-15" y1="-20" x2="15" y2="-20" style="stroke: var(--colour-red)" stroke-width="1.5"/>
+              <line x1="-15" y1="-14" x2="15" y2="-14" style="stroke: var(--colour-red)" stroke-width="1.5" stroke-dasharray="3,2"/>
+            </g>
+
+            <!-- ══ AMMETER BADGE — defined once, instanced with <use> ══ -->
+            <g id="ammeter-shape">
+              <circle cx="0" cy="0" r="30" style="fill: var(--colour-ammeter-fill); stroke: var(--colour-current)"
+                stroke-width="1.5" filter="url(#glow)" />
+            </g>
+
+          </defs>
+
+          <!-- ════════════════════ CIRCUIT GROUP ════════════════════ -->
+
+          <!-- ══ Used to move the entire circuit by (X,Y) pixels ══ -->
+          <g id="circuitGroup" transform="translate(0,5)">
+
+          <!-- ════════════════════ WIRES ════════════════════ -->
+
+          <!-- ── LEFT VERTICAL (common to gate line) ── -->
+          <line x1="60" y1="20" x2="60" y2="530" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VDD rail down to Gate -->
+
+          <!-- ── RIGHT VERTICAL (collector/emitter rail, x=340) ── -->
+          <line x1="340" y1="20" x2="340" y2="530" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VDD rail down to GND -->
+
+          <!-- ── TOP HORIZONTAL ── -->
+          <line x1="40" y1="20" x2="400" y2="20" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VDD rail (RB column to RC column) -->
+          <circle cx="60" cy="20" r="5" style="fill: var(--colour-series)" />
+          <circle cx="340" cy="20" r="5" style="fill: var(--colour-series)" />
+
+          <!-- ── CENTRE HORIZONTAL ── -->
+          <line x1="60" y1="252" x2="309" y2="252" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Base node across to transistor base pin -->
+          <circle cx="60" cy="252" r="5" style="fill: var(--colour-series)" />
+
+          <!-- ── BOTTOM HORIZONTAL ── -->
+          <line x1="20" y1="530" x2="400" y2="530" style="stroke: var(--colour-series)" stroke-width="2" /><!-- GND rail (R2 column to RE column) -->
+          <circle cx="60" cy="530" r="5" style="fill: var(--colour-series)" />
+          <circle cx="340" cy="530" r="5" style="fill: var(--colour-series)" />
+
+          <!-- ════════════════════ NODES ════════════════════ -->
+
+          <!-- ── NODE G (gate — reuses the old "base" node position/id) ── -->
+          <g id="nodeB_lbl" transform="translate(280,235)">
+            <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5" />
+            <text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14"
+              font-weight="bold">G</text>
+          </g>
+
+          <!-- ── NODE D (drain — reuses the old "collector" node position/id) ── -->
+          <g id="nodeC_lbl" transform="translate(360,200)">
+            <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5" />
+            <text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14"
+              font-weight="bold">D</text>
+          </g>
+
+          <!-- ── NODE S (source — reuses the old "emitter" node position/id) ── -->
+          <g id="nodeE_lbl" transform="translate(360,300)">
+            <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5" />
+            <text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14"
+              font-weight="bold">S</text>
+          </g>
+
+          <!-- ════════════════════ VDD ════════════════════ -->
+            <text x="405" y="25" style="fill: var(--colour-voltage-label)" text-anchor="start" font-size="15" 
+              font-weight="bold">V<tspan baseline-shift="sub" font-size="10">DD</tspan>
+              <tspan id="vddValue" style="fill: var(--colour-ui-primary)">+12V</tspan>
+            </text>
+
+          <!-- ════════════════════ Common ════════════════════ -->
+            <text x="405" y="535" style="fill: var(--colour-gnd)" text-anchor="left" font-size="14"
+              font-weight="bold">Common</text>
+
+
+          <!-- ════════════════════ Q1 — N-CHANNEL JFET ════════════════════ -->
+
+          <g id="q1Group" transform="translate(326,245)">
+            <use href="#jfet-n-shape" />
+            <text id="nm-q1" x="-25" y="-20" fill="var(--colour-jfet-labels)" text-anchor="middle" font-size="14"
+              font-weight="bold">Q1</text>
+          </g>
+
+          <!--═══════════════════ RESISTORS ════════════════════ -->
+
+          <!-- ══ RD ══ -->
+          <g id="rdGroup" transform="translate(325,60)">
+            <rect id="box-rd" x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)"
+              stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+            <text id="nm-rd" x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16"
+              font-weight="bold">RD</text>
+            <text id="lbl-rd" x="60" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle"
+              font-size="14">1.00kΩ</text>
+          </g>
+
+          <!-- ══ RG1 ══ -->
+          <g id="rg1Group" transform="translate(45,80)">
+            <rect id="box-rg1" x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)"
+              stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+            <text id="nm-rg1" x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16"
+              font-weight="bold">RG1</text>
+            <text id="lbl-rg1" x="60" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle"
+              font-size="14">1.00MΩ</text>
+          </g>
+
+          <!-- ══ RG2 ══ -->
+          <g id="rg2Group" transform="translate(45,330)">
+            <rect id="box-rg2" x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)"
+              stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+            <text id="nm-rg2" x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16"
+              font-weight="bold">RG2</text>
+            <text id="lbl-rg2" x="60" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle"
+              font-size="14">1.00MΩ</text>
+          </g>
+
+          <!-- ══ RS ══ -->
+          <g id="rsGroup" transform="translate(325,350)">
+            <rect id="box-rs" x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)"
+              stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+            <text id="nm-rs" x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16"
+              font-weight="bold">RS</text>
+            <text id="lbl-rs" x="60" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle"
+              font-size="14">1.00kΩ</text>
+          </g>
+
+          <!--═══════════════════ VOLT METERS ════════════════════ -->
+          <!-- ══ V_D METER — hidden until Q3 is answered ══ -->
+          <g id="meterVD" display="none" transform="translate(435,165)">
+            <use href="#meter-shape" />
+            <text x="-45" y="30" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14"
+              font-weight="bold">V<tspan baseline-shift="sub" font-size="10">D</tspan></text>
+            <text id="meterVDValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle"
+              font-size="15" font-weight="bold">—</text>
+            <text id="meterVDUnit" x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle"
+              font-size="14">V</text>
+          </g>
+
+          <!-- ══ V_S METER — hidden until Q1 is answered ══ -->
+          <g id="meterVS" display="none" transform="translate(435,335)">
+            <use href="#meter-shape" />
+            <text x="-45" y="-25" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14"
+              font-weight="bold">V<tspan baseline-shift="sub" font-size="10">S</tspan></text>
+            <text id="meterVSValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle"
+              font-size="15" font-weight="bold">—</text>
+            <text id="meterVSUnit" x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle"
+              font-size="14">V</text>
+          </g>
+
+          <!-- ══ V_G METER — hidden until Q1 is answered (derived, not given) ══ -->
+          <g id="meterVG" display="none" transform="translate(200,210)">
+            <use href="#meter-shape" />
+            <text x="50" y="20" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14"
+              font-weight="bold">V<tspan baseline-shift="sub" font-size="10">G</tspan></text>
+            <text id="meterVGValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle"
+              font-size="15" font-weight="bold">—</text>
+            <text id="meterVGUnit" x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle"
+              font-size="14">V</text>
+          </g>
+
+
+          <!-- ══ V_GS METER — given per example (the starting data point the whole calculation is built from) ══ -->
+          <g id="meterVGS" transform="translate(270,320)">
+            <use href="#meter-shape" />
+            <text x="35" y="-30" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14"
+              font-weight="bold">V<tspan baseline-shift="sub" font-size="10">GS</tspan></text>
+            <text id="meterVGSValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle"
+              font-size="15" font-weight="bold">—</text>
+            <text id="meterVGSUnit" x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle"
+              font-size="14">V</text>
+          </g>
+
+          <!-- ══ V_DG METER — hidden until Q4 is answered ══ -->
+          <g id="meterVDG" display="none" transform="translate(275,150)">
+            <use href="#meter-shape" />
+            <text x="35" y="45" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14"
+              font-weight="bold">V<tspan baseline-shift="sub" font-size="10">DG</tspan></text>
+            <text id="meterVDGValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle"
+              font-size="15" font-weight="bold">—</text>
+            <text id="meterVDGUnit" x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle"
+              font-size="14">V</text>
+          </g>
+
+
+          <!-- ══ V_DS METER — hidden until Q5 is answered ══ -->
+          <g id="meterVDS" display="none" transform="translate(430,250)">
+            <use href="#meter-shape" />
+            <text x="-50" y="0" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14"
+              font-weight="bold">V<tspan baseline-shift="sub" font-size="10">DS</tspan></text>
+            <text id="meterVDSValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle"
+              font-size="15" font-weight="bold">—</text>
+            <text id="meterVDSUnit" x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle"
+              font-size="14">V</text>
+          </g>
+
+
+          <!-- ════════════════════ AMMETERS ════════════════════ -->
+          <!-- ══ I_DS AMMETER — hidden until Q2 is answered ══ -->
+          <g id="ammeterIDSGroup" display="none" transform="translate(340,480)">
+            <use href="#ammeter-shape" />
+            <text x="-45" y="-10" style="fill: var(--colour-current)" text-anchor="middle" font-size="14" font-weight="bold">I<tspan baseline-shift="sub" font-size="10">DS</tspan></text>
+            <text id="ammeterIDSValue" x="0" y="-2" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">—</text>
+            <text id="ammeterIDSUnit" x="0" y="15" style="fill: var(--colour-current)" text-anchor="middle"
+              font-size="12">mA</text>
+          </g>
+
+
+          </g><!-- /circuitGroup -->
+
+          <!-- ══ XY RULER (dev tool, off by default) ══ -->
+          <g id="xyRuler" display="none"></g>
+        </svg>
+      </div>
+    </div>
+
+    <!-- ════════════════════ QUESTION FRAMEWORK - DO NOT CHANGE MANUALLY ════════════════════ -->
+
+    <!-- RIGHT: question -->
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div class="progress-dot" id="dot-q1"></div>
+          <div class="progress-dot" id="dot-q2"></div>
+          <div class="progress-dot" id="dot-q3"></div>
+          <div class="progress-dot" id="dot-q4"></div>
+          <div class="progress-dot" id="dot-q5"></div>
+          <div class="progress-dot" id="dot-q6"></div>
+          <span class="progress-label" id="progressLabel">1 / 6</span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <!-- Q1 — gate voltage -->
+        <div class="q-panel" id="q1Panel">
+          <div class="q-header">
+            <div class="q-num">Q1</div>
+            <div>
+              <div class="q-text" id="q1Text"></div>
+              <div class="q-hint" id="q1Hint"></div>
+            </div>
+          </div>
+          <div class="options" id="q1Options"></div>
+          <div class="result-banner" id="q1Banner"><span id="q1Icon"></span>&nbsp;<span id="q1BannerText"></span></div>
+          <div class="working-box" id="q1Working">
+            <div class="working-title">Worked Solution</div>
+            <div id="q1WorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-check" id="q1Check" onclick="checkQ1()">Check</button>
+            <button class="btn btn-next" id="q1Next" onclick="showQuestion(2)" style="display:none">Next →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Q2 — source voltage -->
+        <div class="q-panel" id="q2Panel" style="display:none">
+          <div class="q-header">
+            <div class="q-num">Q2</div>
+            <div>
+              <div class="q-text" id="q2Text"></div>
+              <div class="q-hint" id="q2Hint"></div>
+            </div>
+          </div>
+          <div class="options" id="q2Options"></div>
+          <div class="result-banner" id="q2Banner"><span id="q2Icon"></span>&nbsp;<span id="q2BannerText"></span></div>
+          <div class="working-box" id="q2Working">
+            <div class="working-title">Worked Solution</div>
+            <div id="q2WorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="q2Back" onclick="backFromQ2()">← Prev</button>
+            <button class="btn btn-check" id="q2Check" onclick="checkQ2()">Check</button>
+            <button class="btn btn-next" id="q2Next" onclick="showQuestion(3)" style="display:none">Next →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Q3 — drain current -->
+        <div class="q-panel" id="q3Panel" style="display:none">
+          <div class="q-header">
+            <div class="q-num">Q3</div>
+            <div>
+              <div class="q-text" id="q3Text"></div>
+              <div class="q-hint" id="q3Hint"></div>
+            </div>
+          </div>
+          <div class="options" id="q3Options"></div>
+          <div class="result-banner" id="q3Banner"><span id="q3Icon"></span>&nbsp;<span id="q3BannerText"></span></div>
+          <div class="working-box" id="q3Working">
+            <div class="working-title">Worked Solution</div>
+            <div id="q3WorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="q3Back" onclick="backFromQ3()">← Prev</button>
+            <button class="btn btn-check" id="q3Check" onclick="checkQ3()">Check</button>
+            <button class="btn btn-next" id="q3Next" onclick="showQuestion(4)" style="display:none">Next →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Q4 — drain voltage -->
+        <div class="q-panel" id="q4Panel" style="display:none">
+          <div class="q-header">
+            <div class="q-num">Q4</div>
+            <div>
+              <div class="q-text" id="q4Text"></div>
+              <div class="q-hint" id="q4Hint"></div>
+            </div>
+          </div>
+          <div class="options" id="q4Options"></div>
+          <div class="result-banner" id="q4Banner"><span id="q4Icon"></span>&nbsp;<span id="q4BannerText"></span></div>
+          <div class="working-box" id="q4Working">
+            <div class="working-title">Worked Solution</div>
+            <div id="q4WorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="q4Back" onclick="backFromQ4()">← Prev</button>
+            <button class="btn btn-check" id="q4Check" onclick="checkQ4()">Check</button>
+            <button class="btn btn-next" id="q4Next" onclick="showQuestion(5)" style="display:none">Next →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Q5 — drain-gate voltage -->
+        <div class="q-panel" id="q5Panel" style="display:none">
+          <div class="q-header">
+            <div class="q-num">Q5</div>
+            <div>
+              <div class="q-text" id="q5Text"></div>
+              <div class="q-hint" id="q5Hint"></div>
+            </div>
+          </div>
+          <div class="options" id="q5Options"></div>
+          <div class="result-banner" id="q5Banner"><span id="q5Icon"></span>&nbsp;<span id="q5BannerText"></span></div>
+          <div class="working-box" id="q5Working">
+            <div class="working-title">Worked Solution</div>
+            <div id="q5WorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="q5Back" onclick="backFromQ5()">← Prev</button>
+            <button class="btn btn-check" id="q5Check" onclick="checkQ5()">Check</button>
+            <button class="btn btn-next" id="q5Next" onclick="showQuestion(6)" style="display:none">Next →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Q6 — drain-source voltage -->
+        <div class="q-panel" id="q6Panel" style="display:none">
+          <div class="q-header">
+            <div class="q-num">Q6</div>
+            <div>
+              <div class="q-text" id="q6Text"></div>
+              <div class="q-hint" id="q6Hint"></div>
+            </div>
+          </div>
+          <div class="options" id="q6Options"></div>
+          <div class="result-banner" id="q6Banner"><span id="q6Icon"></span>&nbsp;<span id="q6BannerText"></span></div>
+          <div class="working-box" id="q6Working">
+            <div class="working-title">Worked Solution</div>
+            <div id="q6WorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="q6Back" onclick="backFromQ6()">← Prev</button>
+            <button class="btn btn-check" id="q6Check" onclick="checkQ6()">Check</button>
+            <button class="btn btn-summary" id="q6Summary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Summary -->
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Zoom modal -->
+    <div class="diagram-modal" id="diagramModal" onclick="handleModalClick(event)">
+      <div class="modal-inner" id="modalInner">
+        <div class="modal-header">
+          <span class="modal-title" id="modalVoltLabel">Circuit Diagram — 12 V Supply</span>
+          <button class="modal-close" onclick="closeModal()">✕ Close</button>
+        </div>
+        <svg id="modalSvg" viewBox="-90 0 610 560" xmlns="http://www.w3.org/2000/svg"
+          font-family="'Share Tech Mono',monospace"></svg>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ══════════════════════════════════════════════════════════════════════
+    // CIRCUIT CONFIGURATION
+    // ══════════════════════════════════════════════════════════════════════
+
+    // Topology: voltage-divider bias, single-stage N-channel JFET. VDD —RD—
+    // Drain; VDD —RG1—Gate—RG2— Common (RG1/RG2 form an ordinary voltage
+    // divider — since the gate draws no current, none of the divider's
+    // current is ever diverted into it, so it behaves as a perfectly
+    // unloaded divider no matter how large RG1/RG2 are); Source —RS—
+    // Common (its voltage drop IS V_S, same self-bias-style G-S loop as
+    // jfet_self_bias.html, just built on top of a non-zero V_G now).
+    //
+    // V_GS is taken as GIVEN per example — in the real lesson it's read off
+    // the device's transfer curve/datasheet for the desired operating
+    // point; here it's just a set teaching value, shown permanently on the
+    // circuit (not a quiz question). V_G is DERIVED (Q1) from RG1/RG2 —
+    // everything else follows from V_G and V_GS.
+    const EXAMPLE_SETS = {
+      example1: { vdd: 12, rg1: 500000, rg2: 100000, rd: 820, rs: 1000, vgs: -1 }, // rd deliberately ≠ rs — otherwise the Q3 "used RD instead of RS" distractor would show the same digits as the correct answer
+      example2: { vdd: 15, rg1: 680000, rg2: 120000, rd: 1200, rs: 1500, vgs: -2 },
+      example3: { vdd: 9, rg1: 680000, rg2: 150000, rd: 470, rs: 1000, vgs: -1.5 }
+    };
+    let quizMode = 'example1';
+    let V = { ...EXAMPLE_SETS.example1 };
+
+    const QUIZ_QUESTION_COUNT = 6;
+    const QIDS = Array.from({ length: QUIZ_QUESTION_COUNT }, (_, i) => 'q' + (i + 1));
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTION TEXT
+    // ══════════════════════════════════════════════════════════════════════
+    const QUESTIONS = [
+      {
+        text: 'What is the <span style="color:var(--colour-voltage-label)">gate voltage</span> V<sub>G</sub> at the gate of J1?',
+        hint: 'R<sub>G1</sub> and R<sub>G2</sub> form a voltage divider straight across V<sub>DD</sub>. No current flows into the gate, so none of the divider\'s current is diverted away — apply the voltage-divider formula as if the gate weren\'t even connected there.'
+      },
+      {
+        text: 'What is the <span style="color:var(--colour-voltage-label)">source voltage</span> V<sub>S</sub> at the source of J1?',
+        hint: 'No current flows into the gate, so there\'s no voltage drop across R<sub>G</sub> — the gate sits at V<sub>G</sub> = 0 V. Rearrange the self-bias relationship V<sub>GS</sub> = V<sub>G</sub> − V<sub>S</sub> to find V<sub>S</sub>.'
+      },
+      {
+        text: 'What is the <span style="color:var(--colour-current)">drain current</span> I<sub>DS</sub> flowing through R<sub>S</sub>?',
+        hint: 'In self-bias, the drain-source current is the only current flowing through R<sub>S</sub> to common. Apply Ohm\'s Law across R<sub>S</sub>.'
+      },
+      {
+        text: 'What is the <span style="color:var(--colour-voltage-label)">drain voltage</span> V<sub>D</sub>?',
+        hint: 'Find the voltage dropped across R<sub>D</sub>, then subtract it from V<sub>DD</sub>.'
+      },
+      {
+        text: 'What is the <span style="color:var(--colour-voltage-label)">drain-gate voltage</span> V<sub>DG</sub>?',
+        hint: 'V<sub>DG</sub> is the difference between the drain and gate voltages — both measured with respect to common.'
+      },
+      {
+        text: 'What is the <span style="color:var(--colour-voltage-label)">drain-source voltage</span> V<sub>DS</sub>?',
+        hint: 'V<sub>DS</sub> is the difference between the drain and source voltages — both measured with respect to common.'
+      }
+    ];
+    QUESTIONS.forEach((q, i) => {
+      document.getElementById('q' + (i + 1) + 'Text').innerHTML = q.text;
+      document.getElementById('q' + (i + 1) + 'Hint').innerHTML = q.hint;
+    });
+
+    // ══════════════════════════════════════════════════════════════════════
+    // END CIRCUIT CONFIGURATION
+    // ══════════════════════════════════════════════════════════════════════
+
+    // ══════════════════════════════════════════════════════════════════════
+    // CIRCUIT SIMULATION
+    // ══════════════════════════════════════════════════════════════════════
+
+    // ── curated resistor/supply/VGS pools for Randomise mode ──
+    // RG1/RG2 carry no DC current at all (the gate draws none), so their
+    // exact values don't affect the maths — only their ratio does. RG1
+    // (top, VDD side) kept noticeably larger than RG2 (bottom, common
+    // side) since a typical JFET divider biases the gate to a modest
+    // fraction of VDD, not half of it.
+    const RG1_POOL = [220000, 270000, 330000, 390000, 470000, 560000, 680000, 820000, 1000000];
+    const RG2_POOL = [39000, 47000, 56000, 68000, 82000, 100000, 120000, 150000];
+    const RD_POOL = [220, 270, 330, 390, 470, 560, 680, 820, 1000, 1200, 1500, 1800, 2200];
+    const RS_POOL = [330, 470, 560, 680, 820, 1000, 1200, 1500, 1800, 2200];
+    const VDD_POOL = [9, 12, 15, 18, 20];
+    const VGS_POOL = [-1, -1.5, -2, -2.5, -3, -3.5, -4];
+    function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+    // Retries until the combination keeps V_G and V_D comfortably away from
+    // the rails — voltage-divider bias has no feedback loop here to correct
+    // a bad RG1/RG2/RD/RS/VGS combination, so a plain random pick can easily
+    // land V_G or V_D near 0 or near V_DD, neither of which makes for a
+    // sensible example.
+    function randomValues() {
+      for (let attempt = 0; attempt < 25; attempt++) {
+        const vals = { vdd: pick(VDD_POOL), rg1: pick(RG1_POOL), rg2: pick(RG2_POOL), rd: pick(RD_POOL), rs: pick(RS_POOL), vgs: pick(VGS_POOL) };
+        // RD===RS would make the "used RD instead of RS" distractor in Q3
+        // show the exact same digits as the correct answer.
+        if (vals.rd === vals.rs) continue;
+        const vg = vals.vdd * vals.rg2 / (vals.rg1 + vals.rg2);
+        if (vg < vals.vdd * 0.1 || vg > vals.vdd * 0.5) continue; // keep the divider fraction sensible
+        const vs = vg - vals.vgs;
+        if (vs <= 0) continue;
+        const ids = vs / vals.rs;
+        const vd = vals.vdd - ids * vals.rd;
+        if (vd < vals.vdd * 0.15 || vd > vals.vdd * 0.9) continue;
+        if (vd <= vs) continue; // keep V_DS positive (JFET stays in saturation, not triode)
+        return vals;
+      }
+      return { ...EXAMPLE_SETS.example1 };
+    }
+
+    const LETTERS = ['A', 'B', 'C', 'D'];
+    function fmtO0(v) {
+      if (v >= 1e6) return parseFloat((v / 1e6).toFixed(2)) + 'MΩ';
+      if (v >= 1000) return parseFloat((v / 1000).toFixed(2)) + 'kΩ';
+      return parseFloat(v.toFixed(2)) + 'Ω';
+    }
+    function fmtO0Parts(v) {
+      if (v >= 1e6) return { num: String(parseFloat((v / 1e6).toFixed(2))), unit: ' MΩ' };
+      if (v >= 1000) return { num: String(parseFloat((v / 1000).toFixed(2))), unit: ' kΩ' };
+      return { num: String(parseFloat(v.toFixed(2))), unit: ' Ω' };
+    }
+    function fmtA(a) { if (a === 0) return '0 A'; const x = Math.abs(a); if (x >= 1) return parseFloat(a.toFixed(3)) + ' A'; if (x >= 0.001) return parseFloat((a * 1000).toFixed(2)) + ' mA'; return parseFloat((a * 1e6).toFixed(1)) + ' µA'; }
+    // Bias-point voltages in this range are always written in volts, never
+    // millivolts, by convention — so the V/mV cutoff sits at 0.1 V rather
+    // than 1 V.
+    function fmtV(v) { if (v === 0) return '0 V'; const a = Math.abs(v); if (a >= 0.1) return parseFloat(v.toFixed(2)) + ' V'; if (a >= 0.001) return parseFloat((v * 1000).toFixed(2)) + ' mV'; return parseFloat((v * 1e6).toFixed(1)) + ' µV'; }
+    function fmtVParts(v) { if (v === 0) return { val: '0', unit: 'V' }; const a = Math.abs(v); if (a >= 0.1) return { val: String(parseFloat(v.toFixed(2))), unit: 'V' }; if (a >= 0.001) return { val: String(parseFloat((v * 1000).toFixed(2))), unit: 'mV' }; return { val: String(parseFloat((v * 1e6).toFixed(1))), unit: 'µV' }; }
+    function frac(num, den) { return `<span class="working-frac"><span class="num">${num}</span><span class="den">${den}</span></span>`; }
+
+    // ── derived (recomputed whenever the value set changes) ──
+    let VG, VGS, VS, IDS, VRD, VD, VDG, VDS;
+    function recompute() {
+      VG = V.vdd * V.rg2 / (V.rg1 + V.rg2); // unloaded voltage divider — no gate current to divert
+      VGS = V.vgs;                    // given per example
+      VS = VG - VGS;                  // rearranged self-bias relationship
+      IDS = VS / V.rs;                // Ohm's Law across RS (the only current through it)
+      VRD = IDS * V.rd;
+      VD = V.vdd - VRD;
+      VDG = VD - VG;                  // = VD, since VG = 0
+      VDS = VD - VS;
+    }
+
+    // ── mode switching ──
+    function refreshLabels() {
+      ['rg1', 'rg2', 'rd', 'rs'].forEach(r => {
+        const p = fmtO0Parts(V[r]);
+        document.getElementById('lbl-' + r).innerHTML =
+          `<tspan fill="var(--colour-text)">${p.num}</tspan><tspan fill="var(--colour-resistor-labels)">${p.unit}</tspan>`;
+      });
+      document.getElementById('vddValue').innerHTML = `<tspan fill="var(--colour-text)">${V.vdd}</tspan><tspan fill="var(--colour-supply)"> V</tspan>`;
+      const gsp = fmtVParts(VGS);
+      document.getElementById('meterVGSValue').textContent = gsp.val;
+      document.getElementById('meterVGSUnit').textContent = gsp.unit;
+      document.getElementById('panelVoltLabel').textContent = V.vdd + ' V';
+      const mt = document.getElementById('modalVoltLabel');
+      if (mt) mt.textContent = `Circuit Diagram — ${V.vdd} V Supply`;
+    }
+    function setMode(mode) {
+      quizMode = mode;
+      V = (mode === 'randomise') ? randomValues() : { ...EXAMPLE_SETS[mode] };
+      recompute();
+      refreshLabels();
+      ['example1', 'example2', 'example3', 'randomise'].forEach(m => {
+        const b = document.getElementById('mode' + m.charAt(0).toUpperCase() + m.slice(1));
+        if (b) b.classList.toggle('active', m === mode);
+      });
+      resetQuiz();
+    }
+
+    const Q = {};
+    let cur = 'q1';
+
+    function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+    function buildQ1Options() {
+      // correct: VDD * RG2/(RG1+RG2) — the unloaded divider formula
+      // distractors: flipped the ratio (used RG1 in the numerator instead of RG2), assumed an even 50/50 divider, confused with the given VGS
+      return shuffle([
+        { label: fmtV(VG), type: 'correct' },
+        { label: fmtV(V.vdd * V.rg1 / (V.rg1 + V.rg2)), type: 'wrong' },
+        { label: fmtV(V.vdd / 2), type: 'wrong' },
+        { label: fmtV(VGS), type: 'wrong' },
+      ]);
+    }
+    function buildQ2Options() {
+      // correct: VG - VGS
+      // distractors: took VGS literally as VS (sign error), forgot to subtract VGS at all (thinks VS = VG), doubled the magnitude of VGS's contribution
+      return shuffle([
+        { label: fmtV(VS), type: 'correct' },
+        { label: fmtV(VGS), type: 'wrong' },
+        { label: fmtV(VG), type: 'wrong' },
+        { label: fmtV(VG - 2 * VGS), type: 'wrong' },
+      ]);
+    }
+    function buildQ3Options() {
+      // correct: VS / RS
+      // distractors: used RD instead of RS, inverted the fraction, used VG instead of VS
+      return shuffle([
+        { label: fmtA(IDS), type: 'correct' },
+        { label: fmtA(VS / V.rd), type: 'wrong' },
+        { label: fmtA(V.rs / VS), type: 'wrong' },
+        { label: fmtA(VG / V.rs), type: 'wrong' },
+      ]);
+    }
+    function buildQ4Options() {
+      // correct: VDD - IDS*RD
+      // distractors: used RG instead of RD, forgot to subtract from VDD, added instead of subtracting
+      return shuffle([
+        { label: fmtV(VD), type: 'correct' },
+        { label: fmtV(V.vdd - IDS * V.rg1), type: 'wrong' },
+        { label: fmtV(IDS * V.rd), type: 'wrong' },
+        { label: fmtV(V.vdd + IDS * V.rd), type: 'wrong' },
+      ]);
+    }
+    function buildQ5Options() {
+      // correct: VD - VG (= VD, since VG = 0)
+      // distractors: confused with VRD (the drop across RD), used VDD directly, added VS instead of subtracting VG
+      return shuffle([
+        { label: fmtV(VDG), type: 'correct' },
+        { label: fmtV(VRD), type: 'wrong' },
+        { label: fmtV(V.vdd), type: 'wrong' },
+        { label: fmtV(VD + VS), type: 'wrong' },
+      ]);
+    }
+    function buildQ6Options() {
+      // correct: VD - VS
+      // distractors: used VDD instead of VD, used VDD directly, added instead of subtracting
+      return shuffle([
+        { label: fmtV(VDS), type: 'correct' },
+        { label: fmtV(V.vdd - VS), type: 'wrong' },
+        { label: fmtV(V.vdd), type: 'wrong' },
+        { label: fmtV(VD + VS), type: 'wrong' },
+      ]);
+    }
+
+    // ── engine: generic option rendering — leave unchanged ──
+    function renderOptions(qid) {
+      const st = Q[qid], c = document.getElementById(qid + 'Options'); c.innerHTML = '';
+      st.opts.forEach((opt, i) => {
+        const btn = document.createElement('button'); btn.className = 'option-btn';
+        btn.innerHTML = `<span class="option-letter">${LETTERS[i]}</span><span>${opt.label}</span>`;
+        btn.addEventListener('click', () => selectOption(qid, i));
+        c.appendChild(btn);
+      });
+    }
+    function selectOption(qid, i) {
+      if (Q[qid].ans) return;
+      Q[qid].sel = i;
+      document.getElementById(qid + 'Check').disabled = false;
+      document.querySelectorAll('#' + qid + 'Options .option-btn').forEach((b, idx) => b.classList.toggle('selected', idx === i));
+    }
+    function markOptions(qid, sel, cor, ok) {
+      document.querySelectorAll('#' + qid + 'Options .option-btn').forEach((btn, i) => {
+        btn.disabled = true;
+        if (i === cor) { btn.classList.remove('selected'); btn.classList.add('correct'); btn.innerHTML += `<span class="result-icon">✓</span>`; }
+        else if (i === sel && !ok) { btn.classList.remove('selected'); btn.classList.add('wrong'); btn.innerHTML += `<span class="result-icon">✗</span>`; }
+        else btn.classList.add('dimmed');
+      });
+    }
+    function setBanner(qid, ok, correctText) {
+      const banner = document.getElementById(qid + 'Banner');
+      document.getElementById(qid + 'Icon').textContent = ok ? '✓' : '✗';
+      if (ok) { banner.className = 'result-banner correct'; document.getElementById(qid + 'BannerText').innerHTML = `Correct! ${correctText}`; }
+      else { banner.className = 'result-banner wrong'; document.getElementById(qid + 'BannerText').innerHTML = `The correct answer is ${correctText}`; }
+      banner.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // ── circuit-specific SVG annotation show/hide ──
+    // (overrides the fmtVParts above — same 0.1 V cutoff, kept in sync)
+    function fmtVParts(v) {
+      if (v === 0) return { val: '0', unit: 'V' };
+      const a = Math.abs(v);
+      if (a >= 0.1) return { val: v.toFixed(2), unit: 'V' };
+      if (a >= 0.001) return { val: (v * 1000).toFixed(2), unit: 'mV' };
+      return { val: (v * 1e6).toFixed(1), unit: 'µV' };
+    }
+    function setMeter(id, v) {
+      const p = fmtVParts(v);
+      document.getElementById(id + 'Value').textContent = p.val;
+      document.getElementById(id + 'Unit').textContent = p.unit;
+      document.getElementById(id).setAttribute('display', 'inline');
+    }
+    function showVG() { setMeter('meterVG', VG); }
+    function hideVG() { document.getElementById('meterVG').setAttribute('display', 'none'); }
+    function showVS() { setMeter('meterVS', VS); }
+    function hideVS() { document.getElementById('meterVS').setAttribute('display', 'none'); }
+    function fmtAParts(a) {
+      const x = Math.abs(a);
+      if (x >= 1) return { val: a.toFixed(3), unit: 'A' };
+      if (x >= 0.001) return { val: (a * 1000).toFixed(2), unit: 'mA' };
+      return { val: (a * 1e6).toFixed(1), unit: 'µA' };
+    }
+    function showIDS() {
+      const p = fmtAParts(IDS);
+      document.getElementById('ammeterIDSValue').textContent = p.val;
+      document.getElementById('ammeterIDSUnit').textContent = p.unit;
+      document.getElementById('ammeterIDSGroup').setAttribute('display', 'inline');
+    }
+    function hideIDS() { document.getElementById('ammeterIDSGroup').setAttribute('display', 'none'); }
+    function showVD() { setMeter('meterVD', VD); }
+    function hideVD() { document.getElementById('meterVD').setAttribute('display', 'none'); }
+    function showVDG() { setMeter('meterVDG', VDG); }
+    function hideVDG() { document.getElementById('meterVDG').setAttribute('display', 'none'); }
+    function showVDS() { setMeter('meterVDS', VDS); }
+    function hideVDS() { document.getElementById('meterVDS').setAttribute('display', 'none'); }
+
+    // ── Circuit state table — one row per question, cumulative reveal ──
+    const CIRCUIT_STATES = [
+      {
+        enter: { vg: false, vs: false, ids: false, vd: false, vdg: false, vds: false },
+        reveal: { vg: true, vs: false, ids: false, vd: false, vdg: false, vds: false }
+      }, // Q1 → V_G
+      {
+        enter: { vg: true, vs: false, ids: false, vd: false, vdg: false, vds: false },
+        reveal: { vg: true, vs: true, ids: false, vd: false, vdg: false, vds: false }
+      }, // Q2 → V_S
+      {
+        enter: { vg: true, vs: true, ids: false, vd: false, vdg: false, vds: false },
+        reveal: { vg: true, vs: true, ids: true, vd: false, vdg: false, vds: false }
+      }, // Q3 → I_DS
+      {
+        enter: { vg: true, vs: true, ids: true, vd: false, vdg: false, vds: false },
+        reveal: { vg: true, vs: true, ids: true, vd: true, vdg: false, vds: false }
+      }, // Q4 → V_D
+      {
+        enter: { vg: true, vs: true, ids: true, vd: true, vdg: false, vds: false },
+        reveal: { vg: true, vs: true, ids: true, vd: true, vdg: true, vds: false }
+      }, // Q5 → V_DG
+      {
+        enter: { vg: true, vs: true, ids: true, vd: true, vdg: true, vds: false },
+        reveal: { vg: true, vs: true, ids: true, vd: true, vdg: true, vds: true }
+      }, // Q6 → V_DS
+    ];
+
+    function applyCircuitState(s) {
+      s.vg ? showVG() : hideVG();
+      s.vs ? showVS() : hideVS();
+      s.ids ? showIDS() : hideIDS();
+      s.vd ? showVD() : hideVD();
+      s.vdg ? showVDG() : hideVDG();
+      s.vds ? showVDS() : hideVDS();
+    }
+
+    const QUESTION_BUILDERS = [
+      buildQ1Options, buildQ2Options, buildQ3Options,
+      buildQ4Options, buildQ5Options, buildQ6Options,
+    ];
+
+    function checkQ1() {
+      const st = Q.q1; if (st.ans) return; if (st.sel === null) st.sel = st.cor; st.ans = true;
+      const ok = st.sel === st.cor;
+      markOptions('q1', st.sel, st.cor, ok);
+      setBanner('q1', ok, `V<sub>G</sub> = ${fmtV(VG)}`);
+      showQ1Working();
+      applyCircuitState(CIRCUIT_STATES[0].reveal);
+      advanceQuestion(1);
+    }
+    function showQ1Working() {
+      const box = document.getElementById('q1Working');
+      box.className = 'working-box visible';
+      document.getElementById('q1WorkingContent').innerHTML = `
+    <div class="working-line"><span class="colour-resistor">R<sub>G1</sub></span> and <span class="colour-resistor">R<sub>G2</sub></span> form an ordinary voltage divider straight across <span class="colour-supply">V<sub>DD</sub></span>. A JFET's gate draws essentially no current, so none of the divider's current is ever diverted into it — the divider behaves as if nothing were even connected at the gate:</div>
+
+    <div class="working-step">Gate voltage:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>G</sub></span> = <span class="colour-supply">V<sub>DD</sub></span> × ${frac('<span class="colour-resistor">R<sub>G2</sub></span>', '<span class="colour-resistor">R<sub>G1</sub></span> + <span class="colour-resistor">R<sub>G2</sub></span>')}</div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>G</sub></span> = ${V.vdd} V × ${frac(fmtO0(V.rg2), fmtO0(V.rg1) + ' + ' + fmtO0(V.rg2))}</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>G</sub></span> = <span class="colour-result">${fmtV(VG)}</span></div>
+    <div class="working-line" style="margin-top:.6rem">Because the gate draws zero current, <span class="colour-resistor">R<sub>G1</sub></span>/<span class="colour-resistor">R<sub>G2</sub></span>'s actual size never matters here — only their RATIO does. That's what makes voltage-divider bias more predictable than self-bias: <span class="colour-voltage">V<sub>G</sub></span> is set entirely by two resistors you choose, not by anything about the JFET itself.</div>`;
+    }
+
+    function checkQ2() {
+      const st = Q.q2; if (st.ans) return; if (st.sel === null) st.sel = st.cor; st.ans = true;
+      const ok = st.sel === st.cor;
+      markOptions('q2', st.sel, st.cor, ok);
+      setBanner('q2', ok, `V<sub>S</sub> = ${fmtV(VS)}`);
+      showQ2Working();
+      applyCircuitState(CIRCUIT_STATES[1].reveal);
+      advanceQuestion(2);
+    }
+    function showQ2Working() {
+      const box = document.getElementById('q2Working');
+      box.className = 'working-box visible';
+      document.getElementById('q2WorkingContent').innerHTML = `
+    <div class="working-line">You already found <span class="colour-voltage">V<sub>G</sub></span> = ${fmtV(VG)} in Q1. The given operating point for this device is <span class="colour-jfet">V<sub>GS</sub></span> = ${fmtV(VGS)}:</div>
+
+    <div class="working-step">Source voltage:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>S</sub></span> = <span class="colour-voltage">V<sub>G</sub></span> − <span class="colour-jfet">V<sub>GS</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>S</sub></span> = ${fmtV(VG)} − (${fmtV(VGS)})</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>S</sub></span> = <span class="colour-result">${fmtV(VS)}</span></div>
+    <div class="working-line" style="margin-top:.6rem">This is the same self-bias-style G-S loop as before — the only difference from self-bias is that <span class="colour-voltage">V<sub>G</sub></span> is no longer pinned at 0 V, so it has to be carried through from Q1 rather than assumed.</div>`;
+    }
+
+    function checkQ3() {
+      const st = Q.q3; if (st.ans) return; if (st.sel === null) st.sel = st.cor; st.ans = true;
+      const ok = st.sel === st.cor;
+      markOptions('q3', st.sel, st.cor, ok);
+      setBanner('q3', ok, `I<sub>DS</sub> = ${fmtA(IDS)}`);
+      showQ3Working();
+      applyCircuitState(CIRCUIT_STATES[2].reveal);
+      advanceQuestion(3);
+    }
+    function showQ3Working() {
+      const box = document.getElementById('q3Working');
+      box.className = 'working-box visible';
+      document.getElementById('q3WorkingContent').innerHTML = `
+    <div class="working-line">In self-bias, the drain-source current is the only current flowing through <span class="colour-resistor">R<sub>S</sub></span> to common — apply Ohm's Law:</div>
+
+    <div class="working-step">Drain current:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>DS</sub></span> = ${frac('<span class="colour-voltage">V<sub>S</sub></span>', '<span class="colour-resistor">R<sub>S</sub></span>')}</div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>DS</sub></span> = ${frac(fmtV(VS), fmtO0(V.rs))}</div>
+    <div class="working-total"><span class="colour-current">I<sub>DS</sub></span> = <span class="colour-result">${fmtA(IDS)}</span></div>`;
+    }
+
+    function checkQ4() {
+      const st = Q.q4; if (st.ans) return; if (st.sel === null) st.sel = st.cor; st.ans = true;
+      const ok = st.sel === st.cor;
+      markOptions('q4', st.sel, st.cor, ok);
+      setBanner('q4', ok, `V<sub>D</sub> = ${fmtV(VD)}`);
+      showQ4Working();
+      applyCircuitState(CIRCUIT_STATES[3].reveal);
+      advanceQuestion(4);
+    }
+    function showQ4Working() {
+      const box = document.getElementById('q4Working');
+      box.className = 'working-box visible';
+      document.getElementById('q4WorkingContent').innerHTML = `
+    <div class="working-line">Find the voltage dropped across <span class="colour-resistor">R<sub>D</sub></span>, then subtract it from <span class="colour-supply">V<sub>DD</sub></span>:</div>
+
+    <div class="working-step">Step 1. Use Ohm's Law to calculate the voltage drop over RD:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>RD</sub></span> = <span class="colour-current">I<sub>DS</sub></span> × <span class="colour-resistor">R<sub>D</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>RD</sub></span> = ${fmtA(IDS)} × ${fmtO0(V.rd)}</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>RD</sub></span> = <span class="colour-result">${fmtV(VRD)}</span></div>
+
+    <div class="working-step">Step 2. Deduct the voltage drop over <span class="colour-voltage">V<sub>RD</sub></span> from the supply voltage:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>D</sub></span> = <span class="colour-supply">V<sub>DD</sub></span> − <span class="colour-voltage">V<sub>RD</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>D</sub></span> = ${V.vdd} V − ${fmtV(VRD)}</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>D</sub></span> = <span class="colour-result">${fmtV(VD)}</span></div>`;
+    }
+
+    function checkQ5() {
+      const st = Q.q5; if (st.ans) return; if (st.sel === null) st.sel = st.cor; st.ans = true;
+      const ok = st.sel === st.cor;
+      markOptions('q5', st.sel, st.cor, ok);
+      setBanner('q5', ok, `V<sub>DG</sub> = ${fmtV(VDG)}`);
+      showQ5Working();
+      applyCircuitState(CIRCUIT_STATES[4].reveal);
+      advanceQuestion(5);
+    }
+    function showQ5Working() {
+      const box = document.getElementById('q5Working');
+      box.className = 'working-box visible';
+      document.getElementById('q5WorkingContent').innerHTML = `
+    <div class="working-line"><span class="colour-voltage">V<sub>DG</sub></span> is the difference between the drain and gate voltages, both measured with respect to common:</div>
+
+    <div class="working-step">Drain-gate voltage:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>DG</sub></span> = <span class="colour-voltage">V<sub>D</sub></span> − <span class="colour-voltage">V<sub>G</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>DG</sub></span> = ${fmtV(VD)} − ${fmtV(VG)}</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>DG</sub></span> = <span class="colour-result">${fmtV(VDG)}</span></div>
+    <div class="working-line" style="margin-top:.6rem">Unlike self-bias, <span class="colour-voltage">V<sub>DG</sub></span> is NOT the same number as <span class="colour-voltage">V<sub>D</sub></span> here — that shortcut only worked when <span class="colour-voltage">V<sub>G</sub></span> was pinned at 0 V. With the gate now sitting at ${fmtV(VG)}, you have to actually subtract it.</div>`;
+    }
+
+    function checkQ6() {
+      const st = Q.q6; if (st.ans) return; if (st.sel === null) st.sel = st.cor; st.ans = true;
+      const ok = st.sel === st.cor;
+      markOptions('q6', st.sel, st.cor, ok);
+      setBanner('q6', ok, `V<sub>DS</sub> = ${fmtV(VDS)}`);
+      showQ6Working();
+      applyCircuitState(CIRCUIT_STATES[5].reveal);
+      advanceQuestion(6);
+    }
+    function showQ6Working() {
+      const box = document.getElementById('q6Working');
+      box.className = 'working-box visible';
+      document.getElementById('q6WorkingContent').innerHTML = `
+    <div class="working-line"><span class="colour-voltage">V<sub>DS</sub></span> is the difference between the drain and source voltages, both measured with respect to common:</div>
+
+    <div class="working-step">Drain-source voltage:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>DS</sub></span> = <span class="colour-voltage">V<sub>D</sub></span> − <span class="colour-voltage">V<sub>S</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>DS</sub></span> = ${fmtV(VD)} − ${fmtV(VS)}</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>DS</sub></span> = <span class="colour-result">${fmtV(VDS)}</span></div>`;
+    }
+
+    // ── navigation ──
+    function resetQuestion(qid) {
+      const st = Q[qid];
+      st.sel = null; st.ans = false;
+      renderOptions(qid);
+      document.getElementById(qid + 'Banner').className = 'result-banner';
+      document.getElementById(qid + 'Working').className = 'working-box';
+      const chk = document.getElementById(qid + 'Check'); chk.style.display = 'inline-block'; chk.disabled = false;
+      const nxt = document.getElementById(qid + 'Next'); if (nxt) nxt.style.display = 'none';
+    }
+    function backFromQ2() { resetQuestion('q1'); resetQuestion('q2'); showQuestion(1); }
+    function backFromQ3() { resetQuestion('q2'); resetQuestion('q3'); showQuestion(2); }
+    function backFromQ4() { resetQuestion('q3'); resetQuestion('q4'); showQuestion(3); }
+    function backFromQ5() { resetQuestion('q4'); resetQuestion('q5'); showQuestion(4); }
+    function backFromQ6() { resetQuestion('q5'); resetQuestion('q6'); showQuestion(5); }
+
+    function showSummary() {
+      cur = 'summary';
+      QIDS.forEach(q => document.getElementById(q + 'Panel').style.display = 'none');
+      document.getElementById('summaryPanel').style.display = 'block';
+      applyCircuitState(CIRCUIT_STATES[CIRCUIT_STATES.length - 1].reveal);
+      const vals = `<div class="summary-values">
+    <span style="color:var(--colour-supply);font-weight:bold">V<sub>DD</sub></span> = <span style="color:var(--colour-supply)">${V.vdd} V</span>&nbsp;&nbsp;&nbsp;
+    <span style="color:var(--colour-resistor-labels);font-weight:bold">R<sub>G1</sub></span> = <span style="color:var(--colour-resistor-labels)">${fmtO0(V.rg1)}</span>&nbsp;&nbsp;
+    <span style="color:var(--colour-resistor-labels);font-weight:bold">R<sub>G2</sub></span> = <span style="color:var(--colour-resistor-labels)">${fmtO0(V.rg2)}</span>&nbsp;&nbsp;
+    <span style="color:var(--colour-resistor-labels);font-weight:bold">R<sub>D</sub></span> = <span style="color:var(--colour-resistor-labels)">${fmtO0(V.rd)}</span>&nbsp;&nbsp;
+    <span style="color:var(--colour-resistor-labels);font-weight:bold">R<sub>S</sub></span> = <span style="color:var(--colour-resistor-labels)">${fmtO0(V.rs)}</span>&nbsp;&nbsp;
+    <span style="color:var(--colour-jfet-labels);font-weight:bold">V<sub>GS</sub></span> = <span style="color:var(--colour-jfet-labels)">${fmtV(V.vgs)}</span>
+  </div>`;
+      const items = QIDS.map((qid, i) => {
+        const st = Q[qid];
+        const qtext = document.querySelector('#' + qid + 'Panel .q-text').innerHTML;
+        const ans = (st.sel != null && st.opts[st.sel]) ? st.opts[st.sel].label : '—';
+        const ok = st.sel === st.cor;
+        const colour = ok ? 'var(--colour-ui-correct)' : '#ff3366';
+        const mark = ok ? '✓' : '✗';
+        const working = document.getElementById(qid + 'WorkingContent').innerHTML;
+        return `<div class="summary-item">
+      <div class="summary-item-head"><span class="summary-qnum">Q${i + 1}</span><span class="summary-question">${qtext}</span></div>
+      <div class="summary-answer" style="color:${colour}">You answered: ${ans} &nbsp; ${mark}</div>
+      <div class="working-box visible">${working}</div>
+    </div>`;
+      }).join('');
+      document.getElementById('summaryContent').innerHTML = vals + items;
+      QIDS.forEach(q => { const d = document.getElementById('dot-' + q); if (d) d.className = 'progress-dot done'; });
+      document.getElementById('progressLabel').textContent = 'Complete';
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // END CIRCUIT SIMULATION
+    // ══════════════════════════════════════════════════════════════════════
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUIZ ENGINE — generic, unchanged from the resistor-quiz template
+    // ══════════════════════════════════════════════════════════════════════
+
+    function updateProgress() {
+      QIDS.forEach(q => {
+        const d = document.getElementById('dot-' + q); if (!d) return;
+        d.className = 'progress-dot';
+        if (q === cur) d.classList.add('active'); else if (Q[q].ans) d.classList.add('done');
+      });
+      const n = QIDS.indexOf(cur) + 1;
+      const lbl = document.getElementById('progressLabel'); if (lbl && n > 0) lbl.textContent = n + ' / ' + QUIZ_QUESTION_COUNT;
+    }
+
+    function advanceQuestion(n) {
+      const qid = 'q' + n;
+      document.getElementById(qid + 'Check').style.display = 'none';
+      const isLast = (n === QUIZ_QUESTION_COUNT);
+      document.getElementById(qid + (isLast ? 'Summary' : 'Next')).style.display = 'inline-block';
+      updateProgress();
+    }
+
+    function showQuestion(n) {
+      const qid = 'q' + n;
+      cur = qid;
+      QIDS.forEach(q => document.getElementById(q + 'Panel').style.display = 'none');
+      document.getElementById('summaryPanel').style.display = 'none';
+      document.getElementById(qid + 'Panel').style.display = 'flex';
+      const s = Q[qid].ans ? CIRCUIT_STATES[n - 1].reveal : CIRCUIT_STATES[n - 1].enter;
+      applyCircuitState(s);
+      updateProgress();
+    }
+
+    function resetQuiz() {
+      QIDS.forEach((qid, i) => {
+        const opts = QUESTION_BUILDERS[i]();
+        Q[qid] = { sel: null, ans: false, cor: opts.findIndex(o => o.type === 'correct'), opts };
+        renderOptions(qid);
+        document.getElementById(qid + 'Banner').className = 'result-banner';
+        document.getElementById(qid + 'Working').className = 'working-box';
+        const chk = document.getElementById(qid + 'Check');
+        if (chk) { chk.style.display = 'inline-block'; chk.disabled = false; }
+        const isLast = i === QIDS.length - 1;
+        const adv = document.getElementById(qid + (isLast ? 'Summary' : 'Next'));
+        if (adv) adv.style.display = 'none';
+      });
+      document.getElementById('summaryPanel').style.display = 'none';
+      showQuestion(1);
+    }
+
+    // ── zoom modal ──
+    function openModal() {
+      const src = document.getElementById('circuitSvg'), dst = document.getElementById('modalSvg');
+      dst.innerHTML = src.innerHTML; dst.setAttribute('viewBox', src.getAttribute('viewBox'));
+      document.getElementById('diagramModal').classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeModal() {
+      document.getElementById('diagramModal').classList.remove('open');
+      document.getElementById('modalSvg').innerHTML = '';
+      document.body.style.overflow = '';
+    }
+    function handleModalClick(e) { if (e.target.closest('.modal-close')) return; closeModal(); }
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+    setMode('example1');
+
+    /* ─── DEV: jump straight to a question for testing ──────────────────────
+       Console:   jump(6)            → go to Q6
+                  jump(6, true)      → go to Q6 already answered (banner + reveal)
+       URL:       ?q=6               → loads straight on Q6
+                  ?q=6&ans=1         → loads on Q6, answered
+                  ?q=s               → loads straight on the summary (see jumpToSummary below) */
+    function jump(n, answered) {
+      if (n < 1 || n > QUIZ_QUESTION_COUNT) { console.warn('jump: no question', n); return; }
+      showQuestion(n);
+      if (answered) {
+        const st = Q['q' + n];
+        if (st) { st.sel = st.cor; }
+        const check = window['checkQ' + n];
+        if (typeof check === 'function') check();
+      }
+    }
+    window.jump = jump;
+
+    /* ─── DEV: jump straight to the summary, auto-answering every question ──
+       (correctly, so the summary has real banners/workings to review) ────
+       Console:   jumpToSummary()
+       URL:       ?q=s */
+    function jumpToSummary() {
+      for (let i = 1; i <= QUIZ_QUESTION_COUNT; i++) {
+        const st = Q['q' + i];
+        if (!st || st.ans) continue;
+        st.sel = st.cor;
+        const check = window['checkQ' + i];
+        if (typeof check === 'function') check();
+      }
+      showSummary();
+    }
+    window.jumpToSummary = jumpToSummary;
+
+    function goBack(e) { e.preventDefault(); history.back(); }
+    // Only show the back link if there's actually somewhere to go back to —
+    // history.length is 1 when this page was opened directly (new tab, bookmark,
+    // double-click) rather than reached by clicking a link from a menu page.
+    if (history.length > 1) {
+      document.getElementById('menuLink').style.display = '';
+    }
+
+    /* ─── DEV: xy ruler overlay, for lining up SVG coordinates by eye ────────
+       Console:   setXY(1) / setXY(0)     URL: ?xy=1 */
+    function buildXYRuler() {
+      const g = document.getElementById('xyRuler');
+      if (g.dataset.built) return;
+      g.dataset.built = '1';
+      const vb = document.getElementById('circuitSvg').viewBox.baseVal;
+      const W = vb.width, H = vb.height;
+      const hy = H - 10, vx = 10, col = '#ff00ff';
+      let svg = `<line x1="0" y1="${hy}" x2="${W}" y2="${hy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+      for (let x = 0; x <= W; x += 10) {
+        const major = (x % 50 === 0), len = major ? 10 : 5;
+        svg += `<line x1="${x}" y1="${hy - len}" x2="${x}" y2="${hy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+        if (major) svg += `<text x="${x}" y="${hy - 13}" fill="${col}" font-size="8" text-anchor="middle">${x}</text>`;
+      }
+      svg += `<line x1="${vx}" y1="0" x2="${vx}" y2="${H}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+      for (let y = 0; y <= H; y += 10) {
+        const major = (y % 50 === 0), len = major ? 10 : 5;
+        svg += `<line x1="${vx}" y1="${y}" x2="${vx + len}" y2="${y}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+        if (major) svg += `<text x="${vx + 13}" y="${y + 3}" fill="${col}" font-size="8" text-anchor="start">${y}</text>`;
+      }
+      g.innerHTML = svg;
+    }
+    function setXY(on) {
+      if (on) buildXYRuler();
+      document.getElementById('xyRuler').setAttribute('display', on ? 'inline' : 'none');
+    }
+    window.setXY = setXY;
+
+    {
+      const p = new URLSearchParams(location.search);
+      const rKeys = ['vdd', 'rg1', 'rg2', 'rd', 'rs', 'vgs'];
+      if (rKeys.every(k => p.has(k))) {
+        const vals = {}; rKeys.forEach(k => vals[k] = +p.get(k));
+        quizMode = 'custom'; V = vals; recompute(); refreshLabels();
+        ['example1', 'example2', 'example3', 'randomise'].forEach(m => {
+          const b = document.getElementById('mode' + m.charAt(0).toUpperCase() + m.slice(1));
+          if (b) b.classList.toggle('active', false);
+        });
+        resetQuiz();
+      }
+      if (p.has('q')) { if (p.get('q') === 's') jumpToSummary(); else jump(+p.get('q'), p.has('ans')); }
+      if (p.has('xy')) setXY(+p.get('xy') === 1);
+    }
+    /* ──────────────────────────────────────────────────────────────────────── */
+  </script>
+</body>
+
+</html>
