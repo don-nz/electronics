@@ -1,0 +1,1091 @@
+<!--
+  EXPLORATORY TESTBED — internal JFET faults (gate/drain/source lead or
+  junction failures INSIDE the transistor package itself), cloned from
+  UEEEC0066/bjt/fault_finding/bjt_fault_interactive_internal.html — same
+  generalised interactive-circuit engine (ALL_INTERACTIVE_KEYS /
+  TARGET_GROUP_ID / wireComponentClicks / paintComponent /
+  syncInteractiveVisuals / syncMeterValues), same click-the-circuit format,
+  same "click every reading that would show an affected value" mechanic.
+  The circuit and meters are jfet_self_bias.html's own self-bias circuit
+  (RG/RD/RS, VDD, J1, Example 1: VDD=12V, RG=1MΩ, RD=820Ω, RS=1kΩ,
+  VGS=-2.5V, no mode toggle here — this testbed only needs one fixed
+  example) — see that file for the full calculation-quiz version this one
+  borrows its component values from.
+
+  Healthy baseline (recomputed here, not copied from a live V.* object —
+  this file has no Example/Randomise mode toggle, just the one fixed set):
+    V_G = 0 V (no gate current, no drop across R_G)
+    V_S = V_G − V_GS = 0 − (−2.5) = 2.5 V
+    I_DS = V_S / R_S = 2.5 / 1000 = 2.5 mA
+    V_D = V_DD − I_DS×R_D = 12 − 2.05 = 9.95 V
+    V_DG = V_D − V_G = 9.95 V
+    V_DS = V_D − V_S = 7.45 V
+
+  A JFET's fault physics genuinely differs from a BJT's, not just in the
+  labels — see UEEEC0066/jfet/biasing_circuits/jfet_self_bias.html's own
+  history for the reasoning, confirmed with the teacher before building:
+    - A BJT has TWO separate current paths (base loop, collector loop),
+      which is why base-open/emitter-open are DC-identical but
+      collector-open is distinctly different. A JFET only has ONE series
+      current path (VDD→RD→channel→RS→common), so DRAIN-open and
+      SOURCE-open become JFET's own DC-identical twin pair instead —
+      Q1/Q2 below.
+    - Gate-open has no clean deterministic DC answer for a JFET (a
+      floating gate is genuinely erratic in real life) — deliberately
+      NOT covered here.
+    - Gate-drain short can't be solved with this quiz's simplified model
+      either — forcing VG=VD doesn't pin VGS to anything, and solving it
+      for real needs the device's actual transconductance curve
+      (IDSS/VP), which jfet_self_bias.html's whole "VGS is a given
+      teaching value" simplification deliberately avoids. Also NOT
+      covered.
+    - Gate-source short IS solvable, with one flagged simplifying
+      assumption: forcing VGS=0V means the JFET is fully on, and treating
+      "fully on" as a near-zero-resistance channel (D≈S≈G) turns it into
+      a plain VDD→RD→(RG∥RS) divider — see Q3's own comment.
+    - Drain-source short is cleanly solvable with NO extra assumptions —
+      shorting D to S removes the JFET from the circuit entirely (the
+      channel becomes irrelevant), leaving a plain VDD→RD→RS divider —
+      see Q4's own comment.
+  Final fault set (4 questions, not 6 like the BJT original): drain-open,
+  source-open, gate-source short, drain-source short.
+
+  Symbol: jfet-n-shape-large (copied from assets/shapes/jfet-symbols.svg —
+  edit there first), an exact 2x scale of jfet-n-shape, built specifically
+  for this file so open/short fault markers have room to read clearly on
+  individual leads — same rationale as bjt-npn-shape-large in the BJT
+  original. Each lead (jfet-gate/jfet-drain/jfet-source) has its own id so
+  syncLeadFaults() can recolour one independently; jfet-drain/jfet-source
+  are small <g> wrappers (each lead is a jog + a vertical run, not one
+  polyline like a BJT's diagonal arms) with the fault colour cascading to
+  their bare child <line>s via ordinary SVG stroke inheritance.
+
+  Check button starts enabled (not gated on a selection) and reveals every
+  correct answer if clicked with nothing picked — same "stuck student"
+  fix applied to jfet_self_bias.html/jfet_voltage_divider_bias.html, baked
+  in here from the start rather than retrofitted later.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../assets/theme-init.js"></script>
+  <title>JFET Knowledge Quiz — Internal Fault Circuit (Exploratory)</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../assets/quiz-common.css">
+  <script src="../../../assets/breadcrumb.js" defer></script>
+  <style>
+    .progress-wrap { display: flex; gap: .4rem; align-items: center; margin-bottom: 1rem; }
+    .circuit-panel { cursor: default; }
+    @media(min-width:900px) {
+      .quiz-wrap { display: grid;
+        grid-template-columns: minmax(340px, 50%) 1fr;
+        gap: 1.2rem;
+        align-items: start; }
+    }
+    .comp-interactive { cursor: pointer; }
+    .comp-interactive:hover { filter: brightness(1.15); }
+  </style>
+</head>
+
+<body>
+  <!-- Hidden defs — jfet-n-shape-large copied from assets/shapes/jfet-
+       symbols.svg (edit there first), plus the same meter/ammeter/probe
+       shapes as jfet_self_bias.html. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <filter id="glow">
+        <feGaussianBlur stdDeviation="2" result="b" />
+        <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+      </filter>
+
+      <g id="jfet-n-shape-large">
+        <circle cx="14" cy="0" r="60" fill="var(--colour-panel)" style="stroke: var(--colour-jfet)" stroke-width="2" filter="url(#glow)" />
+        <line id="jfet-gate" x1="-60" y1="14" x2="0" y2="14" style="stroke: var(--colour-jfet)" stroke-width="2" />
+        <rect x="0" y="-40" width="8" height="80" style="fill: var(--colour-jfet)" />
+        <g id="jfet-drain" style="stroke: var(--colour-jfet)" stroke-width="2">
+          <line x1="0" y1="-30" x2="30" y2="-30" />
+          <line x1="28" y1="-30" x2="28" y2="-80" />
+        </g>
+        <g id="jfet-source" style="stroke: var(--colour-jfet)" stroke-width="2">
+          <line x1="0" y1="30" x2="30" y2="30" />
+          <line x1="28" y1="30" x2="28" y2="80" />
+        </g>
+        <polygon points="-16,6 -16,24 4,14" style="fill: var(--colour-jfet)" />
+      </g>
+
+      <!-- ══ VOLTMETER SHAPE ══ -->
+      <g id="meter-shape">
+        <circle cx="0" cy="0" r="30" style="fill: var(--colour-meter-fill); stroke: var(--colour-red)" stroke-width="1.5" filter="url(#glow)" />
+        <line x1="-15" y1="-20" x2="15" y2="-20" style="stroke: var(--colour-red)" stroke-width="1.5"/>
+        <line x1="-15" y1="-14" x2="15" y2="-14" style="stroke: var(--colour-red)" stroke-width="1.5" stroke-dasharray="3,2"/>
+      </g>
+
+      <!-- ══ AMMETER BADGE ══ -->
+      <g id="ammeter-shape">
+        <circle cx="0" cy="0" r="30" style="fill: var(--colour-ammeter-fill); stroke: var(--colour-current)" stroke-width="1.5" filter="url(#glow)" />
+      </g>
+
+      <!-- ══ NODE MARKER ══ -->
+      <g id="node-shape">
+        <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5" />
+      </g>
+    </defs>
+  </svg>
+
+  <div class="crumb" id="crumb" data-current="Internal Fault Circuit (Exploratory)"></div>
+  <header>
+    <h1>JFET Self-Bias: Internal Fault Circuit (Exploratory)</h1>
+    <p>Click-the-Circuit Format · Internal JFET Lead Faults · Testbed</p>
+  </header>
+
+  <div class="quiz-wrap">
+
+    <!-- LEFT: circuit diagram -->
+    <div class="circuit-col">
+      <div class="circuit-panel">
+        <div class="panel-label" id="circuitRefLabel">Reference Circuit</div>
+        <svg id="circuitRefSvg" viewBox="-30 0 620 620" xmlns="http://www.w3.org/2000/svg" font-family="'Share Tech Mono',monospace">
+      <g id="jfet-fault-circuit">
+
+        <!-- ════════════════════ WIRES ════════════════════ -->
+        <!-- Continuous VDD-to-common line — RD's box, the JFET's own
+             opaque-filled circle, and RS's box all sit ON this same line
+             and visually interrupt it, same "opaque fill lets the wire
+             run behind it as one continuous line" technique as the BJT
+             original's RC/RE column. -->
+        <line x1="428" y1="20" x2="428" y2="540" style="stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="428" cy="20" r="5" style="fill: var(--colour-series)" />
+        <line x1="340" y1="20" x2="428" y2="20" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VDD rail -->
+
+        <!-- Gate rail: RG's own column, straight down to common, same
+             continuous-line-behind-a-box technique. -->
+        <line x1="70" y1="284" x2="70" y2="540" style="stroke: var(--colour-series)" stroke-width="2" />
+        <line x1="70" y1="284" x2="340" y2="284" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Gate horizontal, to J1's gate tip -->
+
+        <!-- Common rail -->
+        <line x1="30" y1="540" x2="470" y2="540" style="stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="70" cy="540" r="5" style="fill: var(--colour-series)" />
+        <circle cx="428" cy="540" r="5" style="fill: var(--colour-series)" />
+
+        <!-- ════════════════════ NODES — G/D/S probe points ════════════════════ -->
+        <circle cx="340" cy="284" r="5" style="fill: var(--colour-series)" />
+        <g transform="translate(310,310)"><use href="#node-shape" /><text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14" font-weight="bold">G</text></g>
+
+        <circle cx="428" cy="190" r="5" style="fill: var(--colour-series)" />
+        <g transform="translate(453,190)"><use href="#node-shape" /><text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14" font-weight="bold">D</text></g>
+
+        <circle cx="428" cy="350" r="5" style="fill: var(--colour-series)" />
+        <g transform="translate(453,350)"><use href="#node-shape" /><text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14" font-weight="bold">S</text></g>
+
+        <!-- ════════════════════ VDD / Common ════════════════════ -->
+        <text x="345" y="15" style="fill: var(--colour-voltage-label)" text-anchor="start" font-size="15" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">DD</tspan> <tspan style="fill: var(--colour-ui-primary)">+12V</tspan></text>
+        <text x="380" y="560" style="fill: var(--colour-gnd)" text-anchor="middle" font-size="14" font-weight="bold">Common</text>
+
+        <!-- ════════════════════ J1 — N-CHANNEL JFET (enlarged) ════════════════════ -->
+        <g transform="translate(400,270)">
+          <use href="#jfet-n-shape-large" />
+          <text x="55" y="-70" fill="var(--colour-jfet-labels)" text-anchor="middle" font-size="14" font-weight="bold">J1</text>
+          <text x="-70" y="70" fill="var(--colour-jfet-labels)" text-anchor="end" font-size="12">2N5459</text>
+
+          <!-- Internal lead fault markers — hidden unless data.faultedLeads
+               names this lead (see syncLeadFaults()). Positioned partway
+               along each lead's own vertical run. -->
+          <g id="fault-x-jfet-drain" transform="translate(28,-55)" display="none">
+            <line x1="-10" y1="-10" x2="10" y2="10" style="stroke: var(--colour-ui-wrong)" stroke-width="3" stroke-linecap="round" />
+            <line x1="-10" y1="10" x2="10" y2="-10" style="stroke: var(--colour-ui-wrong)" stroke-width="3" stroke-linecap="round" />
+          </g>
+          <g id="fault-x-jfet-source" transform="translate(28,55)" display="none">
+            <line x1="-10" y1="-10" x2="10" y2="10" style="stroke: var(--colour-ui-wrong)" stroke-width="3" stroke-linecap="round" />
+            <line x1="-10" y1="10" x2="10" y2="-10" style="stroke: var(--colour-ui-wrong)" stroke-width="3" stroke-linecap="round" />
+          </g>
+
+          <!-- Internal SHORT markers — an arc joining two leads directly.
+               Hidden unless data.shortedPair names this pair (see
+               syncInternalShort()). Endpoints inset slightly from the
+               true lead tips for a cleaner tangent, same convention as
+               the BJT original. -->
+          <path id="short-GS" d="M -40 14 A 70 70 0 0 0 28 64"
+            style="stroke: var(--colour-ui-wrong)" stroke-width="2.5" fill="none" display="none" />
+          <!-- Bulges right, away from the gate, to stay visually distinct
+               from short-GS rather than overlapping the same left-side
+               space — same reasoning as the BJT original's short-CE. -->
+          <path id="short-DS" d="M 28 -64 A 70 70 0 0 1 28 64"
+            style="stroke: var(--colour-ui-wrong)" stroke-width="2.5" fill="none" display="none" />
+        </g>
+
+        <!-- ════════════════════ RESISTORS ════════════════════ -->
+
+        <g id="comp-RD" transform="translate(413,70)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">RD</text>
+          <text x="65" y="40" text-anchor="middle" font-size="16"><tspan fill="var(--colour-text)">820</tspan><tspan fill="var(--colour-resistor-labels)"> Ω</tspan></text>
+          <rect id="hl-RD" x="-28" y="-8" width="66" height="96" rx="6" fill="none" stroke="transparent" stroke-width="2.5" />
+          <text id="badge-RD" x="48" y="10" text-anchor="middle" font-size="16" font-weight="bold"></text>
+        </g>
+
+        <g id="comp-RG" transform="translate(55,380)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">RG</text>
+          <text x="65" y="40" text-anchor="middle" font-size="16"><tspan fill="var(--colour-text)">1</tspan><tspan fill="var(--colour-resistor-labels)"> MΩ</tspan></text>
+          <rect id="hl-RG" x="-28" y="-8" width="66" height="96" rx="6" fill="none" stroke="transparent" stroke-width="2.5" />
+          <text id="badge-RG" x="48" y="10" text-anchor="middle" font-size="16" font-weight="bold"></text>
+        </g>
+
+        <g id="comp-RS" transform="translate(413,380)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">RS</text>
+          <text x="65" y="40" text-anchor="middle" font-size="16"><tspan fill="var(--colour-text)">1</tspan><tspan fill="var(--colour-resistor-labels)"> kΩ</tspan></text>
+          <rect id="hl-RS" x="-28" y="-8" width="66" height="96" rx="6" fill="none" stroke="transparent" stroke-width="2.5" />
+          <text id="badge-RS" x="48" y="10" text-anchor="middle" font-size="16" font-weight="bold"></text>
+        </g>
+
+        <!-- ════════════════════ VOLT METERS ════════════════════ -->
+
+        <g id="meterVG" transform="translate(180,220)">
+          <use href="#meter-shape" />
+          <text x="-45" y="-10" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">G</tspan></text>
+          <text id="meterVGValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">0</text>
+          <text id="meterVGUnit" x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle" font-size="14">V</text>
+          <rect id="hl-VG" x="-34" y="-36" width="68" height="72" rx="10" fill="none" stroke="transparent" stroke-width="2.5" />
+          <text id="badge-VG" x="42" y="-24" text-anchor="middle" font-size="16" font-weight="bold"></text>
+          <g id="meterVGGhost" display="none" transform="translate(0,55)">
+            <text id="meterVGGhostText" text-anchor="middle" font-weight="bold" font-family="'Share Tech Mono',monospace">
+              <tspan id="meterVGGhostArrow" font-size="18"></tspan><tspan id="meterVGGhostDelta" font-size="13" dx="-3"></tspan>
+            </text>
+          </g>
+        </g>
+
+        <g id="meterVGS" transform="translate(180,350)">
+          <use href="#meter-shape" />
+          <text x="-45" y="-10" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">GS</tspan></text>
+          <text id="meterVGSValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">-2.5</text>
+          <text id="meterVGSUnit" x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle" font-size="14">V</text>
+          <rect id="hl-VGS" x="-34" y="-36" width="68" height="72" rx="10" fill="none" stroke="transparent" stroke-width="2.5" />
+          <text id="badge-VGS" x="42" y="-24" text-anchor="middle" font-size="16" font-weight="bold"></text>
+          <g id="meterVGSGhost" display="none" transform="translate(0,55)">
+            <text id="meterVGSGhostText" text-anchor="middle" font-weight="bold" font-family="'Share Tech Mono',monospace">
+              <tspan id="meterVGSGhostArrow" font-size="18"></tspan><tspan id="meterVGSGhostDelta" font-size="13" dx="-3"></tspan>
+            </text>
+          </g>
+        </g>
+
+        <g id="meterVD" transform="translate(230,150)">
+          <use href="#meter-shape" />
+          <text x="45" y="-10" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">D</tspan></text>
+          <text id="meterVDValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">9.95</text>
+          <text id="meterVDUnit" x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle" font-size="14">V</text>
+          <rect id="hl-VD" x="-34" y="-36" width="68" height="72" rx="10" fill="none" stroke="transparent" stroke-width="2.5" />
+          <text id="badge-VD" x="42" y="-24" text-anchor="middle" font-size="16" font-weight="bold"></text>
+          <g id="meterVDGhost" display="none" transform="translate(0,55)">
+            <text id="meterVDGhostText" text-anchor="middle" font-weight="bold" font-family="'Share Tech Mono',monospace">
+              <tspan id="meterVDGhostArrow" font-size="18"></tspan><tspan id="meterVDGhostDelta" font-size="13" dx="-3"></tspan>
+            </text>
+          </g>
+        </g>
+
+        <g id="meterVS" transform="translate(230,470)">
+          <use href="#meter-shape" />
+          <text x="45" y="-10" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">S</tspan></text>
+          <text id="meterVSValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">2.5</text>
+          <text id="meterVSUnit" x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle" font-size="14">V</text>
+          <rect id="hl-VS" x="-34" y="-36" width="68" height="72" rx="10" fill="none" stroke="transparent" stroke-width="2.5" />
+          <text id="badge-VS" x="42" y="-24" text-anchor="middle" font-size="16" font-weight="bold"></text>
+          <g id="meterVSGhost" display="none" transform="translate(0,55)">
+            <text id="meterVSGhostText" text-anchor="middle" font-weight="bold" font-family="'Share Tech Mono',monospace">
+              <tspan id="meterVSGhostArrow" font-size="18"></tspan><tspan id="meterVSGhostDelta" font-size="13" dx="-3"></tspan>
+            </text>
+          </g>
+        </g>
+
+        <g id="meterVDG" transform="translate(560,150)">
+          <use href="#meter-shape" />
+          <text x="-45" y="-10" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">DG</tspan></text>
+          <text id="meterVDGValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">9.95</text>
+          <text id="meterVDGUnit" x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle" font-size="14">V</text>
+          <rect id="hl-VDG" x="-34" y="-36" width="68" height="72" rx="10" fill="none" stroke="transparent" stroke-width="2.5" />
+          <text id="badge-VDG" x="42" y="-24" text-anchor="middle" font-size="16" font-weight="bold"></text>
+          <g id="meterVDGGhost" display="none" transform="translate(0,55)">
+            <text id="meterVDGGhostText" text-anchor="middle" font-weight="bold" font-family="'Share Tech Mono',monospace">
+              <tspan id="meterVDGGhostArrow" font-size="18"></tspan><tspan id="meterVDGGhostDelta" font-size="13" dx="-3"></tspan>
+            </text>
+          </g>
+        </g>
+
+        <g id="meterVDS" transform="translate(560,470)">
+          <use href="#meter-shape" />
+          <text x="-45" y="-10" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">DS</tspan></text>
+          <text id="meterVDSValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">7.45</text>
+          <text id="meterVDSUnit" x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle" font-size="14">V</text>
+          <rect id="hl-VDS" x="-34" y="-36" width="68" height="72" rx="10" fill="none" stroke="transparent" stroke-width="2.5" />
+          <text id="badge-VDS" x="42" y="-24" text-anchor="middle" font-size="16" font-weight="bold"></text>
+          <g id="meterVDSGhost" display="none" transform="translate(0,55)">
+            <text id="meterVDSGhostText" text-anchor="middle" font-weight="bold" font-family="'Share Tech Mono',monospace">
+              <tspan id="meterVDSGhostArrow" font-size="18"></tspan><tspan id="meterVDSGhostDelta" font-size="13" dx="-3"></tspan>
+            </text>
+          </g>
+        </g>
+
+        <!-- ════════════════════ AMMETER ════════════════════ -->
+
+        <g id="ammeterIDSGroup" transform="translate(428,590)">
+          <use href="#ammeter-shape" />
+          <text x="-45" y="-10" style="fill: var(--colour-current)" text-anchor="middle" font-size="14" font-weight="bold">I<tspan baseline-shift="sub" font-size="10">DS</tspan></text>
+          <text id="ammeterIDSValue" x="0" y="-2" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">2.5</text>
+          <text id="ammeterIDSUnit" x="0" y="15" style="fill: var(--colour-current)" text-anchor="middle" font-size="12">mA</text>
+          <rect id="hl-IDS" x="-34" y="-36" width="68" height="72" rx="10" fill="none" stroke="transparent" stroke-width="2.5" />
+          <text id="badge-IDS" x="42" y="-24" text-anchor="middle" font-size="16" font-weight="bold"></text>
+          <g id="ammeterIDSGroupGhost" display="none" transform="translate(40,4)">
+            <text id="ammeterIDSGroupGhostText" text-anchor="start" font-weight="bold" font-family="'Share Tech Mono',monospace">
+              <tspan id="ammeterIDSGroupGhostArrow" font-size="18"></tspan><tspan id="ammeterIDSGroupGhostDelta" font-size="13" dx="-3"></tspan>
+            </text>
+          </g>
+        </g>
+
+      </g>
+      <g id="xyRuler" display="none"></g>
+        </svg>
+      </div>
+    </div>
+
+    <!-- RIGHT: question -->
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+          <div class="options" id="qOptions"></div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()">Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
+    const DEFAULT_VIEWBOX = '-30 0 620 620';
+    function frac(num, den) { return `<span class="working-frac"><span class="num">${num}</span><span class="den">${den}</span></span>`; }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // HEALTHY BASELINE (fixed — no Example/Randomise mode toggle here)
+    // VDD=12V, RG=1MΩ, RD=820Ω, RS=1kΩ, VGS=-2.5V
+    // ══════════════════════════════════════════════════════════════════════
+    const VDD = 12, RG = 1000000, RD = 820, RS = 1000, VGS_GIVEN = -2.5;
+    const HEALTHY = { VG: 0, VS: 2.5, VGS: -2.5, VD: 9.95, VDG: 9.95, VDS: 7.45, IDS: 2.5 };
+
+    function fmtV(v) { const s = v.toFixed(2).replace(/\.?0+$/, ''); return (s === '-0' ? '0' : s); }
+    function fmtVFull(v) { return v.toFixed(2); }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS
+    // ══════════════════════════════════════════════════════════════════════
+    const QUESTIONS = [
+      {
+        // INTERNAL fault: the drain LEAD itself has failed open (inside
+        // the package). A JFET has only ONE series current path
+        // (VDD→RD→channel→RS→common), unlike a BJT's two separate loops —
+        // so breaking it ANYWHERE kills current everywhere in that loop.
+        // IDS=0 → RD carries no current (VD rises to VDD, no drop) and RS
+        // carries no current either (VS falls to a clean 0V, defined via
+        // its own intact-but-currentless path to common — same "clean 0V,
+        // not floating" signature the BJT original used for its own
+        // open-lead faults). VG is untouched — the gate loop (RG to
+        // common) is entirely independent of the drain/source loop.
+        // VGS, measured live as VG−VS (not held at its "given" teaching
+        // value, since the device isn't actually establishing that
+        // operating point anymore): 0−0 = 0V.
+        circuitLabel: 'Self-Bias N-Channel JFET Amplifier',
+        kind: 'multi',
+        interactiveCircuit: true,
+        faultedLeads: ['jfet-drain'],
+        meterOverride: (answered) => answered
+          ? {
+            VG: { value: '0.00', unit: 'V' },
+            VS: { value: '0.00', unit: 'V', up: false, delta: '−2.50V' },
+            VGS: { value: '0.00', unit: 'V', up: true, delta: '+2.50V' },
+            VD: { value: '12.00', unit: 'V', up: true, delta: '+2.05V' },
+            VDG: { value: '12.00', unit: 'V', up: true, delta: '+2.05V' },
+            VDS: { value: '12.00', unit: 'V', up: true, delta: '+4.55V' },
+            IDS: { value: '0.00', unit: 'mA', up: false, delta: '−2.50mA' },
+          }
+          : {
+            VG: { value: '?', unit: 'V' }, VS: { value: '?', unit: 'V' }, VGS: { value: '?', unit: 'V' },
+            VD: { value: '?', unit: 'V' }, VDG: { value: '?', unit: 'V' }, VDS: { value: '?', unit: 'V' },
+            IDS: { value: '?', unit: 'mA' },
+          },
+        text: () => 'Fault: J1 <b style="color:var(--colour-ui-primary)">open</b>-circuit <b style="color:var(--colour-ui-primary)">drain</b>.',
+        hint: () => 'A JFET only has ONE current path (VDD→RD→channel→RS→common) — unlike a BJT\'s two separate loops. Breaking it anywhere kills current everywhere in that loop. Think about what that does to every meter except VG.',
+        options: () => shuffle([
+          { key: 'VG', label: 'VG meter', type: 'wrong' },
+          { key: 'VS', label: 'VS meter', type: 'correct' },
+          { key: 'VGS', label: 'VGS meter', type: 'correct' },
+          { key: 'VD', label: 'VD meter', type: 'correct' },
+          { key: 'VDG', label: 'VDG meter', type: 'correct' },
+          { key: 'VDS', label: 'VDS meter', type: 'correct' },
+          { key: 'IDS', label: 'IDS ammeter', type: 'correct' },
+        ]),
+        correctExplain: (st) => {
+          const keys = st.opts.map(o => o.type === 'correct' ? o.key : null).filter(Boolean).join(', ');
+          return `${keys} — VG is the only reading untouched, since the gate loop never depended on the drain/source path at all`;
+        },
+        working: () => `
+    <div class="working-section">Identifying the fault:</div>
+    <div class="diagnosis-block">
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 1: Drain voltage has risen to the supply rail (<span class="colour-voltage">V<sub>D</sub></span> ↑ <span class="colour-result">+2.05 V</span>)</div>
+        <div class="symptom-body">With the drain lead open, no drain current <span class="colour-current">I<sub>DS</sub></span> can flow at all through <span class="colour-resistor">R<sub>D</sub></span> — nothing drops across it, so <span class="colour-voltage">V<sub>D</sub></span> rises all the way to <span class="colour-supply">V<sub>DD</sub></span>.</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 2: Source voltage has fallen to a clean 0 V (<span class="colour-voltage">V<sub>S</sub></span> ↓ <span class="colour-result">−2.50 V</span>)</div>
+        <div class="symptom-body">Since it's ONE series loop, no current reaches <span class="colour-resistor">R<sub>S</sub></span> either — its own path to common is perfectly intact, just carrying nothing, so <span class="colour-voltage">V<sub>S</sub></span> settles at a clean, well-defined 0 V rather than floating.</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 3: Gate voltage is unaffected</div>
+        <div class="symptom-body"><span class="colour-resistor">R<sub>G</sub></span> ties the gate straight to common, entirely independent of whatever's happening in the drain/source loop — <span class="colour-voltage">V<sub>G</sub></span> stays at 0 V whether the drain lead is intact or broken.</div>
+      </div>
+    </div>
+    <div class="working-section">Applying the formulas:</div>
+
+    <div class="working-step">Drain current (the whole series loop is broken):</div>
+    <div class="working-total"><span class="colour-current">I<sub>DS</sub></span> = <span class="colour-result">0.00 mA</span></div>
+
+    <div class="working-step">Drain voltage:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>D</sub></span> = <span class="colour-supply">V<sub>DD</sub></span> − <span class="colour-current">I<sub>DS</sub></span> × <span class="colour-resistor">R<sub>D</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>D</sub></span> = 12 V − 0.00 mA × 820 Ω</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>D</sub></span> = <span class="colour-result">12.00 V</span></div>
+
+    <div class="working-step">Source voltage:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>S</sub></span> = <span class="colour-current">I<sub>DS</sub></span> × <span class="colour-resistor">R<sub>S</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>S</sub></span> = 0.00 mA × 1 kΩ</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>S</sub></span> = <span class="colour-result">0.00 V</span></div>
+
+    <div class="working-step">Gate-source, drain-gate, drain-source voltages — all follow directly:</div>
+    <div class="working-line"><span class="colour-voltage">V<sub>GS</sub></span> = V<sub>G</sub> − V<sub>S</sub> = 0 − 0 = <span class="colour-result">0.00 V</span> &nbsp;|&nbsp; <span class="colour-voltage">V<sub>DG</sub></span> = V<sub>D</sub> − V<sub>G</sub> = 12.00 − 0 = <span class="colour-result">12.00 V</span> &nbsp;|&nbsp; <span class="colour-voltage">V<sub>DS</sub></span> = V<sub>D</sub> − V<sub>S</sub> = 12.00 − 0 = <span class="colour-result">12.00 V</span></div>
+    <div class="working-line" style="margin-top:.6rem">VG, RG, RD, RS — untouched: VG is unaffected for the reason above; the resistors themselves aren't readings that move, they're just part of the circuit.</div>`
+      },
+      {
+        // Twin fault to Q1 — the SOURCE lead open instead. Same single-
+        // series-loop logic means it produces the IDENTICAL numbers as
+        // Q1: DC readings alone can't tell drain-open from source-open
+        // apart, exactly mirroring the BJT original's base-open≡emitter-
+        // open twin-fault lesson. A real technician would need a
+        // continuity/resistance test on the powered-down circuit to tell
+        // them apart.
+        circuitLabel: 'Self-Bias N-Channel JFET Amplifier',
+        kind: 'multi',
+        interactiveCircuit: true,
+        faultedLeads: ['jfet-source'],
+        meterOverride: (answered) => answered
+          ? {
+            VG: { value: '0.00', unit: 'V' },
+            VS: { value: '0.00', unit: 'V', up: false, delta: '−2.50V' },
+            VGS: { value: '0.00', unit: 'V', up: true, delta: '+2.50V' },
+            VD: { value: '12.00', unit: 'V', up: true, delta: '+2.05V' },
+            VDG: { value: '12.00', unit: 'V', up: true, delta: '+2.05V' },
+            VDS: { value: '12.00', unit: 'V', up: true, delta: '+4.55V' },
+            IDS: { value: '0.00', unit: 'mA', up: false, delta: '−2.50mA' },
+          }
+          : {
+            VG: { value: '?', unit: 'V' }, VS: { value: '?', unit: 'V' }, VGS: { value: '?', unit: 'V' },
+            VD: { value: '?', unit: 'V' }, VDG: { value: '?', unit: 'V' }, VDS: { value: '?', unit: 'V' },
+            IDS: { value: '?', unit: 'mA' },
+          },
+        text: () => 'Fault: J1 <b style="color:var(--colour-ui-primary)">open</b>-circuit <b style="color:var(--colour-ui-primary)">source</b>.',
+        hint: () => 'Same single series loop as the drain-open fault — breaking it at the source end instead. Will the readings actually look any different?',
+        options: () => shuffle([
+          { key: 'VG', label: 'VG meter', type: 'wrong' },
+          { key: 'VS', label: 'VS meter', type: 'correct' },
+          { key: 'VGS', label: 'VGS meter', type: 'correct' },
+          { key: 'VD', label: 'VD meter', type: 'correct' },
+          { key: 'VDG', label: 'VDG meter', type: 'correct' },
+          { key: 'VDS', label: 'VDS meter', type: 'correct' },
+          { key: 'IDS', label: 'IDS ammeter', type: 'correct' },
+        ]),
+        correctExplain: (st) => {
+          const keys = st.opts.map(o => o.type === 'correct' ? o.key : null).filter(Boolean).join(', ');
+          return `${keys} — identical to the drain-open fault; DC readings alone can't tell the two apart`;
+        },
+        working: () => `
+    <div class="working-section">Identifying the fault:</div>
+    <div class="diagnosis-block">
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom: every reading matches the drain-open fault exactly</div>
+        <div class="symptom-body">A JFET only has ONE series current path — it makes no difference WHERE along that loop the break sits, the whole loop carries zero current either way. This is deliberately the JFET's own version of the "twin fault" lesson: a real technician can't tell drain-open from source-open apart using DC voltage/current readings alone. Distinguishing them needs a continuity or resistance test on the powered-down circuit.</div>
+      </div>
+    </div>
+    <div class="working-section">Applying the formulas:</div>
+    <div class="working-step">Drain current (the whole series loop is broken):</div>
+    <div class="working-total"><span class="colour-current">I<sub>DS</sub></span> = <span class="colour-result">0.00 mA</span></div>
+    <div class="working-step">Drain voltage:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>D</sub></span> = <span class="colour-supply">V<sub>DD</sub></span> − <span class="colour-current">I<sub>DS</sub></span> × <span class="colour-resistor">R<sub>D</sub></span> = 12 − 0 = <span class="colour-result">12.00 V</span></div>
+    <div class="working-step">Source voltage:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>S</sub></span> = <span class="colour-current">I<sub>DS</sub></span> × <span class="colour-resistor">R<sub>S</sub></span> = 0 × 1 kΩ = <span class="colour-result">0.00 V</span></div>
+    <div class="working-step">Gate-source, drain-gate, drain-source voltages:</div>
+    <div class="working-line"><span class="colour-voltage">V<sub>GS</sub></span> = 0 − 0 = <span class="colour-result">0.00 V</span> &nbsp;|&nbsp; <span class="colour-voltage">V<sub>DG</sub></span> = 12.00 − 0 = <span class="colour-result">12.00 V</span> &nbsp;|&nbsp; <span class="colour-voltage">V<sub>DS</sub></span> = 12.00 − 0 = <span class="colour-result">12.00 V</span></div>
+    <div class="working-line" style="margin-top:.6rem">VG, RG, RD, RS — untouched: same reasoning as the drain-open fault.</div>`
+      },
+      {
+        // Gate-SOURCE short. Forces VGS=0V exactly (by definition of the
+        // short — this isn't derived, it's a direct consequence of tying
+        // the two nodes together). VGS=0 is a JFET's fully-ON condition —
+        // this quiz's simplified model has no IDSS/VP to compute the
+        // EXACT current a real device would pull at VGS=0, so it adopts
+        // one flagged assumption: treat "fully on" as a near-zero-
+        // resistance channel, collapsing G≈S≈D into one node. RG is a
+        // million times RS, so for all practical purposes no current
+        // takes that path either (same "RG is basically irrelevant"
+        // theme as the rest of this circuit) — the divider reduces to
+        // just VDD across RD and RS.
+        circuitLabel: 'Self-Bias N-Channel JFET Amplifier',
+        kind: 'multi',
+        interactiveCircuit: true,
+        shortedPair: 'GS',
+        meterOverride: (answered) => answered
+          ? {
+            VG: { value: '6.59', unit: 'V', up: true, delta: '+6.59V' },
+            VS: { value: '6.59', unit: 'V', up: true, delta: '+4.09V' },
+            VGS: { value: '0.00', unit: 'V', up: true, delta: '+2.50V' },
+            VD: { value: '6.59', unit: 'V', up: false, delta: '−3.36V' },
+            VDG: { value: '0.00', unit: 'V', up: false, delta: '−9.95V' },
+            VDS: { value: '0.00', unit: 'V', up: false, delta: '−7.45V' },
+            IDS: { value: '6.59', unit: 'mA', up: true, delta: '+4.09mA' },
+          }
+          : {
+            VG: { value: '?', unit: 'V' }, VS: { value: '?', unit: 'V' }, VGS: { value: '?', unit: 'V' },
+            VD: { value: '?', unit: 'V' }, VDG: { value: '?', unit: 'V' }, VDS: { value: '?', unit: 'V' },
+            IDS: { value: '?', unit: 'mA' },
+          },
+        text: () => 'Fault: J1 <b style="color:var(--colour-ui-primary)">gate-source short</b>.',
+        hint: () => 'A short forces VGS to exactly 0V — a JFET\'s fully-ON condition. Treating a fully-on channel as near-zero resistance collapses gate, drain and source toward the same node. RG is a million times RS, so ignore it and treat this as a plain divider between RD and RS.',
+        options: () => shuffle([
+          { key: 'VG', label: 'VG meter', type: 'correct' },
+          { key: 'VS', label: 'VS meter', type: 'correct' },
+          { key: 'VGS', label: 'VGS meter', type: 'correct' },
+          { key: 'VD', label: 'VD meter', type: 'correct' },
+          { key: 'VDG', label: 'VDG meter', type: 'correct' },
+          { key: 'VDS', label: 'VDS meter', type: 'correct' },
+          { key: 'IDS', label: 'IDS ammeter', type: 'correct' },
+        ]),
+        correctExplain: () => 'every reading moves — this is the only fault here where nothing stays at its healthy value',
+        working: () => `
+    <div class="working-section">Identifying the fault:</div>
+    <div class="diagnosis-block">
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom: EVERY reading has moved — no meter stays healthy</div>
+        <div class="symptom-body">Shorting gate to source forces <span class="colour-voltage">V<sub>GS</sub></span> = 0 V exactly, the JFET's fully-ON condition. This quiz's model has no device transconductance curve (I<sub>DSS</sub>/V<sub>P</sub>) to compute the exact "fully on" current, so treat a fully-on channel as near-zero resistance — gate, drain and source all collapse toward the same node voltage. <span class="colour-resistor">R<sub>G</sub></span> is a million times <span class="colour-resistor">R<sub>S</sub></span>, so essentially none of the current takes that path — ignore it, same as always, and treat this as a plain divider between <span class="colour-resistor">R<sub>D</sub></span> and <span class="colour-resistor">R<sub>S</sub></span>.</div>
+      </div>
+    </div>
+    <div class="working-section">Applying the formulas:</div>
+    <div class="working-step">Shorted node voltage (VDD divided across RD and RS, RG ignored as negligible):</div>
+    <div class="working-formula-row">V<sub>X</sub> = <span class="colour-supply">V<sub>DD</sub></span> × ${frac('<span class="colour-resistor">R<sub>S</sub></span>', '<span class="colour-resistor">R<sub>D</sub></span> + <span class="colour-resistor">R<sub>S</sub></span>')}</div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row">V<sub>X</sub> = 12 V × ${frac('1 kΩ', '820 Ω + 1 kΩ')}</div>
+    <div class="working-total">V<sub>X</sub> = <span class="colour-result">6.59 V</span></div>
+    <div class="working-line"><span class="colour-voltage">V<sub>G</sub></span> = <span class="colour-voltage">V<sub>S</sub></span> = <span class="colour-voltage">V<sub>D</sub></span> = <span class="colour-result">6.59 V</span> (all three collapse to the same node)</div>
+    <div class="working-step">Current through the RD-RS divider:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>DS</sub></span> = ${frac('<span class="colour-supply">V<sub>DD</sub></span>', '<span class="colour-resistor">R<sub>D</sub></span> + <span class="colour-resistor">R<sub>S</sub></span>')} = ${frac('12 V', '820 Ω + 1 kΩ')}</div>
+    <div class="working-total"><span class="colour-current">I<sub>DS</sub></span> = <span class="colour-result">6.59 mA</span></div>
+    <div class="working-line" style="margin-top:.6rem"><span class="colour-voltage">V<sub>GS</sub></span>, <span class="colour-voltage">V<sub>DG</sub></span>, <span class="colour-voltage">V<sub>DS</sub></span> all forced to exactly <span class="colour-result">0.00 V</span> — every pair of nodes involved is the same node.</div>`
+      },
+      {
+        // Drain-SOURCE short — the cleanest fault in the file. Tying D
+        // straight to S removes the JFET from the circuit entirely (the
+        // channel becomes irrelevant either way), leaving a plain
+        // VDD→RD→RS divider — no assumptions about the device needed at
+        // all. VG is untouched (the gate loop never depended on the
+        // drain/source path); VGS becomes a big NEGATIVE number (VG−VS =
+        // 0−6.59), consistent with a real device already being well past
+        // pinch-off/cutoff, which is one way a dead drain-source short
+        // could physically manifest.
+        circuitLabel: 'Self-Bias N-Channel JFET Amplifier',
+        kind: 'multi',
+        interactiveCircuit: true,
+        shortedPair: 'DS',
+        meterOverride: (answered) => answered
+          ? {
+            VG: { value: '0.00', unit: 'V' },
+            VS: { value: '6.59', unit: 'V', up: true, delta: '+4.09V' },
+            VGS: { value: '-6.59', unit: 'V', up: false, delta: '−4.09V' },
+            VD: { value: '6.59', unit: 'V', up: false, delta: '−3.36V' },
+            VDG: { value: '6.59', unit: 'V', up: false, delta: '−3.36V' },
+            VDS: { value: '0.00', unit: 'V', up: false, delta: '−7.45V' },
+            IDS: { value: '6.59', unit: 'mA', up: true, delta: '+4.09mA' },
+          }
+          : {
+            VG: { value: '?', unit: 'V' }, VS: { value: '?', unit: 'V' }, VGS: { value: '?', unit: 'V' },
+            VD: { value: '?', unit: 'V' }, VDG: { value: '?', unit: 'V' }, VDS: { value: '?', unit: 'V' },
+            IDS: { value: '?', unit: 'mA' },
+          },
+        text: () => 'Fault: J1 <b style="color:var(--colour-ui-primary)">drain-source short</b>.',
+        hint: () => 'Tying drain straight to source removes the JFET from the circuit entirely — the channel no longer does anything. What\'s left is just RD and RS in series across VDD.',
+        options: () => shuffle([
+          { key: 'VG', label: 'VG meter', type: 'wrong' },
+          { key: 'VS', label: 'VS meter', type: 'correct' },
+          { key: 'VGS', label: 'VGS meter', type: 'correct' },
+          { key: 'VD', label: 'VD meter', type: 'correct' },
+          { key: 'VDG', label: 'VDG meter', type: 'correct' },
+          { key: 'VDS', label: 'VDS meter', type: 'correct' },
+          { key: 'IDS', label: 'IDS ammeter', type: 'correct' },
+        ]),
+        correctExplain: (st) => {
+          const keys = st.opts.map(o => o.type === 'correct' ? o.key : null).filter(Boolean).join(', ');
+          return `${keys} — VG is untouched; note VD, VS and IDS read the SAME numbers as the gate-source short, only VG/VGS/VDG/VDS tell the two apart`;
+        },
+        working: () => `
+    <div class="working-section">Identifying the fault:</div>
+    <div class="diagnosis-block">
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom: VD, VS and IDS match the gate-source short's numbers exactly — but VG doesn't</div>
+        <div class="symptom-body">Shorting drain to source removes the JFET from the equation entirely — the channel plays no role, so the circuit becomes a plain <span class="colour-resistor">R<sub>D</sub></span>/<span class="colour-resistor">R<sub>S</sub></span> divider, same as the gate-source short's own simplification. The two faults coincidentally produce the SAME V<sub>D</sub>/V<sub>S</sub>/I<sub>DS</sub> numbers — but here the gate is untouched (still 0 V via <span class="colour-resistor">R<sub>G</sub></span>), where the gate-source short pulled it up to 6.59 V too. <span class="colour-voltage">V<sub>G</sub></span>, <span class="colour-voltage">V<sub>GS</sub></span>, <span class="colour-voltage">V<sub>DG</sub></span> and <span class="colour-voltage">V<sub>DS</sub></span> are what actually distinguish the two faults.</div>
+      </div>
+    </div>
+    <div class="working-section">Applying the formulas:</div>
+    <div class="working-step">Shorted node voltage (plain divider, JFET no longer involved):</div>
+    <div class="working-formula-row">V<sub>X</sub> = <span class="colour-supply">V<sub>DD</sub></span> × ${frac('<span class="colour-resistor">R<sub>S</sub></span>', '<span class="colour-resistor">R<sub>D</sub></span> + <span class="colour-resistor">R<sub>S</sub></span>')} = 12 V × ${frac('1 kΩ', '1.82 kΩ')}</div>
+    <div class="working-total">V<sub>X</sub> = <span class="colour-result">6.59 V</span></div>
+    <div class="working-line"><span class="colour-voltage">V<sub>D</sub></span> = <span class="colour-voltage">V<sub>S</sub></span> = <span class="colour-result">6.59 V</span></div>
+    <div class="working-step">Current through the RD-RS series path:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>DS</sub></span> = ${frac('<span class="colour-supply">V<sub>DD</sub></span>', '<span class="colour-resistor">R<sub>D</sub></span> + <span class="colour-resistor">R<sub>S</sub></span>')} = ${frac('12 V', '1.82 kΩ')}</div>
+    <div class="working-total"><span class="colour-current">I<sub>DS</sub></span> = <span class="colour-result">6.59 mA</span></div>
+    <div class="working-step">Gate is untouched — the gate loop never involved the drain/source path:</div>
+    <div class="working-line"><span class="colour-voltage">V<sub>G</sub></span> = <span class="colour-result">0.00 V</span></div>
+    <div class="working-step">Gate-source, drain-gate, drain-source voltages:</div>
+    <div class="working-line"><span class="colour-voltage">V<sub>GS</sub></span> = 0 − 6.59 = <span class="colour-result">−6.59 V</span> &nbsp;|&nbsp; <span class="colour-voltage">V<sub>DG</sub></span> = 6.59 − 0 = <span class="colour-result">6.59 V</span> &nbsp;|&nbsp; <span class="colour-voltage">V<sub>DS</sub></span> = 6.59 − 6.59 = <span class="colour-result">0.00 V</span> (forced exactly by the short)</div>
+    <div class="working-line" style="margin-top:.6rem">A large negative <span class="colour-voltage">V<sub>GS</sub></span> like this is consistent with a real device already sitting well past pinch-off/cutoff — one way a dead drain-source short could plausibly happen in practice.</div>`
+      },
+    ];
+
+    // ══════════════════════════════════════════════════════════════════════
+    // GENERIC ENGINE — same shape as bjt_fault_interactive_internal.html
+    // ══════════════════════════════════════════════════════════════════════
+    function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+    function isMulti(data) { return data.kind === 'multi'; }
+    function isAnswerCorrect(data, st) {
+      if (!isMulti(data)) return st.sel === st.cor;
+      const a = [...st.sel].sort((x, y) => x - y), b = [...st.cor].sort((x, y) => x - y);
+      return a.length === b.length && a.every((v, i) => v === b[i]);
+    }
+    function selectedLabel(data, st) {
+      if (!isMulti(data)) return (st.sel != null && st.opts[st.sel]) ? st.opts[st.sel].label : '—';
+      return st.sel.length ? [...st.sel].sort((a, b) => a - b).map(i => LETTERS[i]).join(', ') : '—';
+    }
+
+    let Q = [];
+    let cur = 0;
+
+    function buildProgressDots() {
+      document.getElementById('progressDots').innerHTML =
+        QUESTIONS.map((_, i) => `<div class="progress-dot" id="dot-${i}"></div>`).join('');
+    }
+    function updateProgress() {
+      QUESTIONS.forEach((_, i) => {
+        const d = document.getElementById('dot-' + i);
+        d.className = 'progress-dot';
+        if (i === cur) d.classList.add('active'); else if (Q[i].ans) d.classList.add('done');
+      });
+      document.getElementById('progressLabel').textContent = (cur + 1) + ' / ' + QUESTIONS.length;
+    }
+
+    function renderOptions() {
+      const st = Q[cur], data = QUESTIONS[cur];
+      const multi = isMulti(data);
+      const c = document.getElementById('qOptions'); c.innerHTML = '';
+      st.opts.forEach((opt, i) => {
+        const btn = document.createElement('button'); btn.className = 'option-btn';
+        btn.innerHTML = `<span class="option-letter">${LETTERS[i]}</span><span>${opt.label}</span>`;
+        if (st.ans) {
+          btn.disabled = true;
+          if (multi) {
+            const selected = st.sel.includes(i);
+            if (opt.type === 'correct') { btn.classList.add(selected ? 'correct' : 'missed'); if (selected) btn.innerHTML += `<span class="result-icon">✓</span>`; }
+            else { btn.classList.add(selected ? 'wrong' : 'dimmed'); if (selected) btn.innerHTML += `<span class="result-icon">✗</span>`; }
+          } else {
+            if (i === st.cor) { btn.classList.add('correct'); btn.innerHTML += `<span class="result-icon">✓</span>`; }
+            else if (i === st.sel) { btn.classList.add('wrong'); btn.innerHTML += `<span class="result-icon">✗</span>`; }
+            else btn.classList.add('dimmed');
+          }
+        } else {
+          if (multi ? st.sel.includes(i) : i === st.sel) btn.classList.add('selected');
+          btn.addEventListener('click', () => selectOption(i));
+        }
+        c.appendChild(btn);
+      });
+    }
+
+    function selectOption(i) {
+      const st = Q[cur], data = QUESTIONS[cur];
+      if (st.ans) return;
+      if (isMulti(data)) {
+        const pos = st.sel.indexOf(i);
+        if (pos >= 0) st.sel.splice(pos, 1); else st.sel.push(i);
+      } else {
+        st.sel = i;
+      }
+      renderQuestion();
+    }
+
+    // ── INTERACTIVE CIRCUIT ──
+    const ALL_INTERACTIVE_KEYS = ['RG', 'RD', 'RS', 'VG', 'VS', 'VGS', 'VD', 'VDG', 'VDS', 'IDS'];
+    const TARGET_GROUP_ID = {
+      RG: 'comp-RG', RD: 'comp-RD', RS: 'comp-RS',
+      VG: 'meterVG', VS: 'meterVS', VGS: 'meterVGS', VD: 'meterVD', VDG: 'meterVDG', VDS: 'meterVDS',
+      IDS: 'ammeterIDSGroup',
+    };
+
+    function wireComponentClicks() {
+      ALL_INTERACTIVE_KEYS.forEach(key => {
+        const g = document.getElementById(TARGET_GROUP_ID[key]);
+        if (!g) return;
+        g.addEventListener('click', () => {
+          const data = QUESTIONS[cur], st = Q[cur];
+          if (!data.interactiveCircuit || st.ans) return;
+          const idx = st.opts.findIndex(o => o.key === key);
+          if (idx >= 0) selectOption(idx);
+        });
+      });
+    }
+
+    function paintComponent(key, idx, st, answered) {
+      const hl = document.getElementById('hl-' + key), badge = document.getElementById('badge-' + key);
+      if (!hl || !badge) return;
+      const selected = st.sel.includes(idx);
+      const isCorrect = st.opts[idx].type === 'correct';
+      if (!answered) {
+        hl.setAttribute('stroke', selected ? 'var(--colour-ui-primary)' : 'transparent');
+        hl.setAttribute('fill', selected ? 'rgba(var(--colour-ui-primary-rgb),.1)' : 'none');
+        badge.textContent = selected ? '✓' : '';
+        badge.setAttribute('fill', 'var(--colour-ui-primary)');
+      } else if (isCorrect) {
+        hl.setAttribute('stroke', selected ? 'var(--colour-ui-correct)' : 'var(--colour-ui-restart)');
+        hl.setAttribute('stroke-dasharray', selected ? 'none' : '4,3');
+        hl.setAttribute('fill', selected ? 'rgba(var(--colour-ui-correct-rgb),.12)' : 'none');
+        badge.textContent = selected ? '✓' : '?';
+        badge.setAttribute('fill', selected ? 'var(--colour-ui-correct)' : 'var(--colour-ui-restart)');
+      } else {
+        hl.setAttribute('stroke', selected ? 'var(--colour-ui-wrong)' : 'transparent');
+        hl.setAttribute('stroke-dasharray', 'none');
+        hl.setAttribute('fill', selected ? 'rgba(var(--colour-ui-wrong-rgb),.12)' : 'none');
+        badge.textContent = selected ? '✗' : '';
+        badge.setAttribute('fill', 'var(--colour-ui-wrong)');
+      }
+      if (!answered || isCorrect) hl.removeAttribute('stroke-dasharray');
+    }
+
+    function syncInteractiveVisuals(data, st) {
+      ALL_INTERACTIVE_KEYS.forEach(key => {
+        const g = document.getElementById(TARGET_GROUP_ID[key]);
+        const idx = (data.interactiveCircuit && st.opts) ? st.opts.findIndex(o => o.key === key) : -1;
+        if (g) g.classList.toggle('comp-interactive', idx >= 0);
+        if (idx >= 0) {
+          paintComponent(key, idx, st, st.ans);
+        } else {
+          const hl = document.getElementById('hl-' + key), badge = document.getElementById('badge-' + key);
+          if (hl) { hl.setAttribute('stroke', 'transparent'); hl.setAttribute('fill', 'none'); hl.removeAttribute('stroke-dasharray'); }
+          if (badge) badge.textContent = '';
+        }
+      });
+    }
+
+    // ── METER VALUES ──
+    const HEALTHY_METERS = {
+      VG: { value: '0.00', unit: 'V' }, VS: { value: '2.50', unit: 'V' }, VGS: { value: '-2.50', unit: 'V' },
+      VD: { value: '9.95', unit: 'V' }, VDG: { value: '9.95', unit: 'V' }, VDS: { value: '7.45', unit: 'V' },
+      IDS: { value: '2.50', unit: 'mA' },
+    };
+    const METER_TEXT_ID = {
+      VG: ['meterVGValue', 'meterVGUnit'], VS: ['meterVSValue', 'meterVSUnit'], VGS: ['meterVGSValue', 'meterVGSUnit'],
+      VD: ['meterVDValue', 'meterVDUnit'], VDG: ['meterVDGValue', 'meterVDGUnit'], VDS: ['meterVDSValue', 'meterVDSUnit'],
+      IDS: ['ammeterIDSValue', 'ammeterIDSUnit'],
+    };
+    function addGhost(groupId, wentUp, deltaStr) {
+      const g = document.getElementById(groupId + 'Ghost'); if (!g) return;
+      const clr = wentUp ? 'var(--colour-up)' : 'var(--colour-down)';
+      document.getElementById(groupId + 'GhostText').setAttribute('fill', clr);
+      document.getElementById(groupId + 'GhostArrow').textContent = wentUp ? '⬆' : '⬇';
+      document.getElementById(groupId + 'GhostDelta').textContent = deltaStr;
+      g.setAttribute('display', 'inline');
+    }
+    function removeGhost(groupId) {
+      const g = document.getElementById(groupId + 'Ghost'); if (g) g.setAttribute('display', 'none');
+    }
+    function syncMeterValues(data, st) {
+      const override = data.meterOverride ? data.meterOverride(st.ans) : null;
+      Object.keys(METER_TEXT_ID).forEach(key => {
+        const state = (override && override[key]) ? override[key] : HEALTHY_METERS[key];
+        const [valId, unitId] = METER_TEXT_ID[key];
+        const valEl = document.getElementById(valId), unitEl = document.getElementById(unitId);
+        if (valEl) valEl.textContent = state.value;
+        if (unitEl) unitEl.textContent = state.unit;
+        if (state.up !== undefined) addGhost(TARGET_GROUP_ID[key], state.up, state.delta);
+        else removeGhost(TARGET_GROUP_ID[key]);
+      });
+    }
+
+    // ── INTERNAL JFET LEAD FAULTS ──
+    const LEAD_HEALTHY_STROKE = 'var(--colour-jfet)';
+    const LEAD_IDS = ['jfet-drain', 'jfet-source'];
+    function syncLeadFaults(data) {
+      const faulted = data.faultedLeads || [];
+      LEAD_IDS.forEach(id => {
+        const lead = document.getElementById(id);
+        const mark = document.getElementById('fault-x-' + id);
+        const isFaulted = faulted.includes(id);
+        if (lead) lead.style.stroke = isFaulted ? 'var(--colour-ui-wrong)' : LEAD_HEALTHY_STROKE;
+        if (mark) mark.style.display = isFaulted ? 'inline' : 'none';
+      });
+    }
+
+    // ── INTERNAL SHORT MARKERS ──
+    const SHORT_PATH_ID = { GS: 'short-GS', DS: 'short-DS' };
+    function syncInternalShort(data) {
+      Object.keys(SHORT_PATH_ID).forEach(key => {
+        const el = document.getElementById(SHORT_PATH_ID[key]);
+        if (el) el.style.display = (data.shortedPair === key) ? 'inline' : 'none';
+      });
+    }
+
+    function showCircuitRef(id, label, viewBox) {
+      document.getElementById('circuitRefLabel').textContent = label || 'Reference Circuit';
+      document.getElementById('circuitRefSvg').setAttribute('viewBox', viewBox || DEFAULT_VIEWBOX);
+      if (xyOn) buildXYRuler();
+    }
+
+    let xyOn = false;
+    function buildXYRuler() {
+      const g = document.getElementById('xyRuler');
+      if (!g) return;
+      const vb = document.getElementById('circuitRefSvg').viewBox.baseVal;
+      const offX = vb.x, offY = vb.y, W = vb.width, H = vb.height;
+      const hy = offY + H - 10, vx = offX + 10, col = '#ff00ff';
+      let svg = `<line x1="${offX}" y1="${hy}" x2="${offX + W}" y2="${hy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+      for (let x = 0; x <= W; x += 10) {
+        const gx = offX + x, major = (Math.round(gx) % 50 === 0), len = major ? 10 : 5;
+        svg += `<line x1="${gx}" y1="${hy - len}" x2="${gx}" y2="${hy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+        if (major) svg += `<text x="${gx}" y="${hy - 13}" fill="${col}" font-size="8" text-anchor="middle">${Math.round(gx)}</text>`;
+      }
+      svg += `<line x1="${vx}" y1="${offY}" x2="${vx}" y2="${offY + H}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+      for (let y = 0; y <= H; y += 10) {
+        const gy = offY + y, major = (Math.round(gy) % 50 === 0), len = major ? 10 : 5;
+        svg += `<line x1="${vx}" y1="${gy}" x2="${vx + len}" y2="${gy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+        if (major) svg += `<text x="${vx + 13}" y="${gy + 3}" fill="${col}" font-size="8" text-anchor="start">${Math.round(gy)}</text>`;
+      }
+      g.innerHTML = svg;
+    }
+    function setXY(on) {
+      xyOn = on;
+      const g = document.getElementById('xyRuler');
+      if (!g) return;
+      if (on) buildXYRuler();
+      g.setAttribute('display', on ? 'inline' : 'none');
+    }
+    window.setXY = setXY;
+
+    function renderQuestion() {
+      const data = QUESTIONS[cur], st = Q[cur];
+      const multi = isMulti(data);
+
+      document.getElementById('qNum').textContent = 'Q' + (cur + 1);
+      document.getElementById('qText').innerHTML = data.text();
+      document.getElementById('qHint').innerHTML = data.hint();
+
+      document.getElementById('qOptions').style.display = data.interactiveCircuit ? 'none' : '';
+      if (!data.interactiveCircuit) renderOptions();
+      syncInteractiveVisuals(data, st);
+      syncMeterValues(data, st);
+      syncLeadFaults(data);
+      syncInternalShort(data);
+
+      const selList = document.getElementById('qSelectedList');
+      if (multi) {
+        selList.style.display = '';
+        const selectedNames = data.interactiveCircuit
+          ? [...st.sel].sort((a, b) => a - b).map(i => st.opts[i].key)
+          : [...st.sel].sort((a, b) => a - b).map(i => LETTERS[i]);
+        selList.textContent = st.sel.length
+          ? `Selected: ${selectedNames.join(', ')}`
+          : (data.interactiveCircuit ? 'Click the meters on the circuit to select your answer (look for ?).' : 'Click the options above to select your answer.');
+      } else {
+        selList.style.display = 'none';
+      }
+
+      const banner = document.getElementById('qBanner');
+      if (st.ans) {
+        const ok = isAnswerCorrect(data, st);
+        banner.className = 'result-banner ' + (ok ? 'correct' : 'wrong');
+        document.getElementById('qIcon').textContent = ok ? '✓' : '✗';
+        document.getElementById('qBannerText').innerHTML = ok ? `Correct! ${data.correctExplain(st)}` : `The correct answer is ${data.correctExplain(st)}`;
+      } else {
+        banner.className = 'result-banner';
+      }
+
+      const working = document.getElementById('qWorking');
+      working.className = 'working-box' + (st.ans ? ' visible' : '');
+      document.getElementById('qWorkingContent').innerHTML = st.ans ? data.working(st) : '';
+
+      document.getElementById('qBack').style.display = cur > 0 ? 'inline-block' : 'none';
+      const check = document.getElementById('qCheck');
+      check.style.display = st.ans ? 'none' : 'inline-block';
+      // Check is never blocked on a selection — a stuck student can click
+      // it cold and it substitutes the correct answer (see checkAnswer()),
+      // same fix applied to jfet_self_bias.html/jfet_voltage_divider_bias.html.
+      check.disabled = st.ans;
+      const isLast = cur === QUESTIONS.length - 1;
+      document.getElementById('qNext').style.display = (st.ans && !isLast) ? 'inline-block' : 'none';
+      document.getElementById('qSummary').style.display = (st.ans && isLast) ? 'inline-block' : 'none';
+
+      showCircuitRef('jfet-fault-circuit', data.circuitLabel);
+      updateProgress();
+    }
+
+    function checkAnswer() {
+      const st = Q[cur], data = QUESTIONS[cur];
+      if (st.ans) return;
+      if (isMulti(data)) { if (st.sel.length === 0) st.sel = [...st.cor]; }
+      else if (st.sel === null) st.sel = st.cor;
+      st.ans = true;
+      renderQuestion();
+      document.getElementById('qBanner').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function scrollToQuestionTop() {
+      document.getElementById('qPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function nextQuestion() { if (cur < QUESTIONS.length - 1) { cur++; renderQuestion(); scrollToQuestionTop(); } }
+
+    function backQuestion() {
+      if (cur <= 0) return;
+      cur--;
+      for (let i = cur; i < QUESTIONS.length; i++) {
+        Q[i].ans = false;
+        Q[i].sel = isMulti(QUESTIONS[i]) ? [] : null;
+      }
+      renderQuestion();
+      scrollToQuestionTop();
+    }
+
+    function goToQuestion(n) {
+      cur = Math.max(0, Math.min(QUESTIONS.length - 1, n - 1));
+      document.getElementById('summaryPanel').style.display = 'none';
+      document.getElementById('qPanel').style.display = 'flex';
+      renderQuestion();
+      scrollToQuestionTop();
+    }
+
+    function resetQuiz() {
+      Q = QUESTIONS.map(data => {
+        const opts = data.options();
+        if (isMulti(data)) {
+          const cor = opts.map((o, i) => o.type === 'correct' ? i : -1).filter(i => i >= 0);
+          return { sel: [], ans: false, cor, opts };
+        }
+        return { sel: null, ans: false, cor: opts.findIndex(o => o.type === 'correct'), opts };
+      });
+      cur = 0;
+      document.getElementById('summaryPanel').style.display = 'none';
+      document.getElementById('qPanel').style.display = 'flex';
+      renderQuestion();
+    }
+
+    function showSummary() {
+      document.getElementById('qPanel').style.display = 'none';
+      document.getElementById('summaryPanel').style.display = 'block';
+      showCircuitRef('jfet-fault-circuit', 'Self-Bias N-Channel JFET Amplifier');
+      const items = QUESTIONS.map((data, i) => {
+        const st = Q[i];
+        const ans = selectedLabel(data, st);
+        const ok = isAnswerCorrect(data, st);
+        const colour = ok ? 'var(--colour-ui-correct)' : '#ff3366';
+        const mark = ok ? '✓' : '✗';
+        return `<div class="summary-item">
+      <div class="summary-item-head"><span class="summary-qnum">Q${i + 1}</span><span class="summary-question">${data.text()}</span></div>
+      <div class="summary-answer" style="color:${colour}">You answered: ${ans} &nbsp; ${mark}</div>
+      <div class="working-box visible">${st.ans ? data.working(st) : ''}</div>
+    </div>`;
+      }).join('');
+      document.getElementById('summaryContent').innerHTML = items;
+      QUESTIONS.forEach((_, i) => { const d = document.getElementById('dot-' + i); if (d) d.className = 'progress-dot done'; });
+      document.getElementById('progressLabel').textContent = 'Complete';
+    }
+
+    buildProgressDots();
+    wireComponentClicks();
+    resetQuiz();
+
+    function goBack(e) { e.preventDefault(); history.back(); }
+    if (history.length > 1) {
+      document.getElementById('menuLink').style.display = '';
+    }
+
+    function jump(n, answered) {
+      if (n < 1 || n > QUESTIONS.length) { console.warn('jump: no question', n); return; }
+      for (let i = 0; i < n - 1; i++) {
+        Q[i].sel = Array.isArray(Q[i].cor) ? [...Q[i].cor] : Q[i].cor;
+        Q[i].ans = true;
+      }
+      goToQuestion(n);
+      if (answered) {
+        Q[cur].sel = Array.isArray(Q[cur].cor) ? [...Q[cur].cor] : Q[cur].cor;
+        checkAnswer();
+      }
+    }
+    window.jump = jump;
+
+    function jumpToSummary() {
+      QUESTIONS.forEach((_, i) => {
+        if (Q[i].ans) return;
+        Q[i].sel = Array.isArray(Q[i].cor) ? [...Q[i].cor] : Q[i].cor;
+        Q[i].ans = true;
+      });
+      showSummary();
+    }
+    window.jumpToSummary = jumpToSummary;
+
+    {
+      const p = new URLSearchParams(location.search);
+      if (p.has('q')) { if (p.get('q') === 's') jumpToSummary(); else jump(+p.get('q'), p.has('ans')); }
+      if (p.has('xy')) setXY(+p.get('xy') === 1);
+    }
+  </script>
+</body>
+
+</html>
