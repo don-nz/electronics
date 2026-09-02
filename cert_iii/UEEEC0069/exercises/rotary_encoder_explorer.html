@@ -496,7 +496,7 @@
       <div class="circuit-panel compare-panel">
         <div class="panel-label">Standard Binary</div>
         <div class="value-display" id="v4bCodeDisplay">000</div>
-        <svg viewBox="0 -50 600 520" xmlns="http://www.w3.org/2000/svg">
+        <svg viewBox="0 -18 600 488" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <marker id="v4bArrowHead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
               <path d="M0,0 L10,5 L0,10 Z" style="fill: var(--colour-ui-primary)" />
@@ -568,7 +568,7 @@
       <div class="circuit-panel compare-panel">
         <div class="panel-label">Gray Code</div>
         <div class="value-display" id="v4gCodeDisplay">000</div>
-        <svg viewBox="0 -50 600 520" xmlns="http://www.w3.org/2000/svg">
+        <svg viewBox="0 -18 600 488" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <marker id="v4gArrowHead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
               <path d="M0,0 L10,5 L0,10 Z" style="fill: var(--colour-ui-primary)" />
@@ -743,7 +743,7 @@
         <div class="panel-label">Standard Binary</div>
         <div class="prev-value" id="v6bPrevValue" style="visibility:hidden"></div>
         <div class="value-display" id="v6bCodeDisplay">000</div>
-        <svg viewBox="0 -50 600 520" xmlns="http://www.w3.org/2000/svg">
+        <svg viewBox="0 -18 600 488" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <marker id="v6bArrowHead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
               <path d="M0,0 L10,5 L0,10 Z" style="fill: var(--colour-ui-primary)" />
@@ -816,7 +816,7 @@
         <div class="panel-label">Gray Code</div>
         <div class="prev-value" id="v6gPrevValue" style="visibility:hidden"></div>
         <div class="value-display" id="v6gCodeDisplay">000</div>
-        <svg viewBox="0 -50 600 520" xmlns="http://www.w3.org/2000/svg">
+        <svg viewBox="0 -18 600 488" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <marker id="v6gArrowHead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
               <path d="M0,0 L10,5 L0,10 Z" style="fill: var(--colour-ui-primary)" />
@@ -976,7 +976,13 @@
     function renderBoundary(prefix, SEQ, step) {
       const sectorIndex = Math.floor(step / 2) % 8;
       const isBoundary = (step % 2 !== 0);
-      const rotationDeg = isBoundary ? sectorIndex * 45 + 22.5 : sectorIndex * 45;
+      // Rotation comes straight from `step`, unbounded — same pattern as
+      // renderSimple()'s `45 * step` — NOT from sectorIndex (which wraps
+      // every 8 sectors via its own %8). Deriving it from sectorIndex used
+      // to make the disk's CSS transform snap from ~337deg back down to
+      // 0deg every full revolution (a linear rotate() transition doesn't
+      // know 360deg=0deg, so that read as spinning sharply backward).
+      const rotationDeg = step * 22.5;
       document.getElementById(prefix + 'DiskSpin').style.transform = `rotate(${rotationDeg}deg)`;
 
       const codeDisplay = document.getElementById(prefix + 'CodeDisplay');
@@ -996,7 +1002,16 @@
       } else {
         document.getElementById(prefix + 'ReadArrowText').textContent = ORDINALS[sectorIndex];
         if (statusTag) { statusTag.textContent = 'Sector Aligned'; statusTag.className = 'status-tag status-aligned'; }
-        prevValue.style.visibility = 'hidden';
+        // sectorIndex 0 reads as "000" whether this is the very first
+        // reading (step 0, nothing before it) or a full revolution wrapping
+        // back around from SEQ[7] — those look identical otherwise, so only
+        // the wrapped-around case (step > 0) gets a "Previous" hint.
+        if (sectorIndex === 0 && step > 0) {
+          prevValue.style.visibility = 'visible';
+          prevValue.innerHTML = `Previous: <span class="prev-code">${SEQ[7]}</span>`;
+        } else {
+          prevValue.style.visibility = 'hidden';
+        }
         codeDisplay.classList.remove('ambiguous');
         codeDisplay.textContent = a;
         ['Inner', 'Mid', 'Outer'].forEach((ring, i) => applySensorState(prefix, ring, a[i] === '0' ? 'yellow' : 'black'));
