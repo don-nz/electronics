@@ -1,0 +1,1254 @@
+<!--
+  BJT Exam Revision Quiz — built from the teacher's own 40-question "BJT
+  Revision Quiz" sample paper (UEEEC0066 Topics 1-5), 2 weeks out from the
+  first exam. Covers every concept in that paper (same 9 section headings,
+  same order) but is NOT a straight transcription: wherever this project
+  already has a richer question format for a concept, that format is reused/
+  adapted here instead of a bare 4-option MCQ —
+
+    - Symbols (sample Q5-7)            -> shapeGrid multi-select (from
+                                           basics/bjt_knowledge_basics.html)
+    - Regions: active/cutoff/saturation
+      (sample Q8,9,20,36, scattered)   -> ONE consolidated kind:'match'
+                                           question instead of 4 separate
+                                           trivia MCQs
+    - Beta/IC/IE calcs (Q14,15)        -> numeric single-select with full
+                                           worked-solution steps (the sample
+                                           only gives a bare answer letter)
+    - Base bias vs voltage-divider
+      stability (Q16,17)               -> ONE kind:'multi' "select every
+                                           true statement" question
+    - Av/Zin/Zout/re' formulas
+      (Q24,25,26,32)                   -> ONE kind:'match' formula-to-name
+                                           question (from ac_parameters/
+                                           bjt_knowledge_ac_params_formulas.html)
+    - Config characteristics (Q27-29)  -> kind:'match'
+    - Config typical use (Q35,37)      -> kind:'match' (from amp_configurations/
+                                           bjt_knowledge_amp_config.html)
+
+  Deliberately kept TEXT-based (plain-string match columns, no shapeId) for
+  everything except the one BJT-symbol shapeGrid — importing the amp_config/
+  ac_params_formulas circuit-thumbnail and waveform-icon SVG libraries too
+  was considered and explicitly declined (see conversation) to keep this
+  buildable correctly within the 2-week timeline; the symbol shapeGrid was
+  kept because its defs are small and self-contained.
+
+  Faults & Testing (sample Q21-23) intentionally stays plain MCQ: the
+  project's richer fault-finding format (bjt_fault_interactive_internal.html
+  / _resistor.html, click-the-circuit DC-meter troubleshooters) is a
+  different, non-quiz-engine bespoke architecture and can't be folded into a
+  QUESTIONS[] entry — each of those 3 questions instead points at the
+  relevant interactive file in its hint for hands-on follow-up practice.
+
+  Built on the shared cert_iii/assets/quiz-engine.js engine, cloned from
+  fault_finding/bjt_knowledge_bjt_fault_finding.html's TEMPLATE FILE
+  skeleton — same "one generic QUESTIONS[] array, no per-question HTML"
+  structure as every other file in this project.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../assets/theme-init.js"></script>
+  <script src="../../assets/quiz-engine.js"></script>
+  <title>BJT Knowledge Quiz — Exam Revision</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../assets/quiz-common.css">
+  <script src="../../assets/breadcrumb.js" defer></script>
+  <style>
+    .progress-wrap { display: flex; gap: .4rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; }
+
+    /* Q2 (kind:'fill') — click-a-name-then-click-a-terminal labelling,
+       same mechanic and CSS as jfet/basics/jfet_knowledge_basics.html's
+       own Q2/Q3, adapted here for a single fixed NPN symbol (no
+       circuitConfig topKey/gateOffset toggle needed — this file only
+       shows one BJT layout, not an N/P-channel pair). */
+    .circuit-panel { cursor: default; }
+    .fill-pool-wrap { margin-top: .8rem; }
+    .fill-pool-row { display: flex; align-items: center; gap: .5rem; }
+    .fill-pool-arrow { font-size: 1rem; color: var(--colour-ui-primary); opacity: 0; transition: opacity .15s; }
+    .fill-pool-row.needs-pick .fill-pool-arrow { opacity: 1; animation: fillArrowBounce .8s ease-in-out infinite; }
+    @keyframes fillArrowBounce { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(3px); } }
+    .fill-pool {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: .5rem;
+      padding: .8rem;
+      border: 2px dashed var(--colour-border);
+      border-radius: var(--radius-lg);
+      background: rgba(var(--colour-label-rgb), .05);
+      min-height: 3rem;
+      transition: border-color .15s, background .15s;
+    }
+    .fill-pool.needs-pick {
+      border-color: var(--colour-ui-primary);
+      border-style: solid;
+      background: rgba(var(--colour-ui-primary-rgb), .06);
+      animation: matchPoolPulse 1.1s ease-in-out infinite;
+    }
+    .fill-pool .match-chip { min-width: 84px; text-align: center; }
+    .circuit-slot-box { fill: var(--colour-panel); stroke: var(--colour-ui-primary); stroke-width: 1.5px; stroke-dasharray: 4,3; cursor: pointer; transition: fill .1s; }
+    .circuit-slot-box.correct { stroke: var(--colour-ui-correct); }
+    .circuit-slot-box.wrong { stroke: #ff3d66; }
+    .circuit-slot-box.correct, .circuit-slot-box.wrong { cursor: default; }
+    /* "filled" = currently chosen (before checking) or chosen-and-graded
+       (after) — inverted to a solid coloured fill rather than just
+       switching the border from dashed to solid, which read as too
+       subtle a change. "correct"/"wrong" alone (no "filled") is the
+       distinct MISSED-correct-answer indicator — stays dashed/outline
+       only, deliberately not inverted, so it still reads as "you didn't
+       pick this" rather than "you did." */
+    .circuit-slot-box.filled { stroke-dasharray: none; fill: var(--colour-ui-primary); }
+    .circuit-slot-box.filled.correct { fill: var(--colour-ui-correct); }
+    .circuit-slot-box.filled.wrong { fill: #ff3d66; }
+    .bjt-slot-html {
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-body); font-size: 15px; font-weight: 700;
+      color: var(--colour-ui-primary); text-align: center; line-height: 1;
+      pointer-events: none; width: 100%; height: 100%;
+    }
+    .bjt-slot-html.correct { color: var(--colour-ui-correct); }
+    .bjt-slot-html.wrong { color: #ff3d66; }
+    .circuit-slot-box.filled .bjt-slot-html { color: var(--colour-panel); }
+  </style>
+</head>
+
+<body>
+  <!-- BJT symbol defs — copied from basics/bjt_knowledge_basics.html's own
+       <defs> block (edit there first if the master symbol shapes change),
+       trimmed to just the 8 valid NPN/PNP variants this quiz's Q5 needs
+       (no invalid/error variants, no B/E/C label variants, no package
+       shapes — this file doesn't have questions that use them). -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <filter id="glow">
+        <feGaussianBlur stdDeviation="2" result="b" />
+        <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+      </filter>
+      <g id="bjt-base-frame">
+        <line x1="-17" y1="0" x2="0" y2="0" style="stroke: var(--colour-bjt)" stroke-width="2" />
+        <line x1="0" y1="-12" x2="0" y2="12" style="stroke: var(--colour-bjt)" stroke-width="2.5" />
+        <polyline points="14,-34 14,-20 0,-8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+        <polyline points="14,34 14,20 0,8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+      </g>
+      <g id="bjt-npn-standard-circle">
+        <use href="#bjt-base-frame" />
+        <circle cx="7" cy="0" r="24" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+        <polygon points="12,18 1,14 6,8" style="fill: var(--colour-bjt)" />
+      </g>
+      <g id="bjt-pnp-standard-circle">
+        <use href="#bjt-base-frame" />
+        <circle cx="7" cy="0" r="24" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+        <polygon points="2,-9 8,-20 13,-14" style="fill: var(--colour-bjt)" />
+      </g>
+      <g id="bjt-npn-flipped-circle">
+        <use href="#bjt-base-frame" />
+        <circle cx="7" cy="0" r="24" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+        <polygon points="12,-18 1,-14 6,-8" style="fill: var(--colour-bjt)" />
+      </g>
+      <g id="bjt-pnp-flipped-circle">
+        <use href="#bjt-base-frame" />
+        <circle cx="7" cy="0" r="24" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+        <polygon points="2,9 8,20 13,14" style="fill: var(--colour-bjt)" />
+      </g>
+      <g id="bjt-npn-standard-nocircle">
+        <use href="#bjt-base-frame" />
+        <polygon points="12,18 1,14 6,8" style="fill: var(--colour-bjt)" />
+      </g>
+      <g id="bjt-pnp-standard-nocircle">
+        <use href="#bjt-base-frame" />
+        <polygon points="2,-9 8,-20 13,-14" style="fill: var(--colour-bjt)" />
+      </g>
+      <g id="bjt-npn-flipped-nocircle">
+        <use href="#bjt-base-frame" />
+        <polygon points="12,-18 1,-14 6,-8" style="fill: var(--colour-bjt)" />
+      </g>
+      <g id="bjt-pnp-flipped-nocircle">
+        <use href="#bjt-base-frame" />
+        <polygon points="2,9 8,20 13,14" style="fill: var(--colour-bjt)" />
+      </g>
+    </defs>
+  </svg>
+
+  <div class="crumb" id="crumb" data-current="Exam Revision"></div>
+  <header>
+    <h1>BJT Amplifiers: Exam Revision Quiz</h1>
+    <p>Fundamentals · Symbols · Biasing · Amplifier Parameters · Faults · Applications</p>
+  </header>
+
+  <div class="quiz-wrap" id="quizWrap">
+
+    <!-- LEFT: shape grid (leftPanel:'shapeGrid') or Q2's terminal-labelling
+         diagram (leftPanel:'circuit', kind:'fill') -->
+    <div class="circuit-col">
+      <div id="qShapeGridPanel" style="display:none">
+        <div class="panel-label">Click the boxes to select your answer</div>
+        <div class="shape-grid" id="shapeGridCells"></div>
+      </div>
+
+      <!-- Two different kind:'fill' diagrams share ONE outer .circuit-panel
+           (so quiz-engine.js's generic swapLeftPanel() keeps working
+           unchanged for any leftPanel:'circuit' question) — RENDER_EXTRA
+           below picks which INNER div is visible per question, via each
+           question's own `diagram` field ('doping' | 'terminals'). -->
+      <div class="circuit-panel" id="circuitPanelWrap" style="display:none">
+
+        <!-- Q1 — NPN/PNP doping-layer diagram, 6 slots (3 per transistor).
+             C/E leads, B lead, and the junction-boundary labels are all
+             given; only each layer's N/P doping type is blank for the
+             student to fill in. -->
+        <div id="circuitPanelDoping" style="display:none">
+          <div class="panel-label">Click a letter below, then click a layer</div>
+          <svg viewBox="0 0 900 400" xmlns="http://www.w3.org/2000/svg" font-family="'Share Tech Mono',monospace">
+            <defs>
+              <marker id="pnArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 Z" style="fill: var(--colour-text)" />
+              </marker>
+            </defs>
+
+            <!-- NPN -->
+            <g>
+              <line x1="190" y1="40" x2="190" y2="100" style="stroke: var(--colour-label)" stroke-width="6" />
+              <text x="190" y="25" text-anchor="middle" font-size="13" font-weight="bold" style="fill: var(--colour-text)">C (Collector)</text>
+              <line x1="190" y1="265" x2="190" y2="325" style="stroke: var(--colour-label)" stroke-width="6" />
+              <text x="190" y="345" text-anchor="middle" font-size="13" font-weight="bold" style="fill: var(--colour-text)">E (Emitter)</text>
+              <line x1="90" y1="182" x2="155" y2="182" style="stroke: var(--colour-label)" stroke-width="6" />
+              <text x="80" y="187" text-anchor="end" font-size="13" font-weight="bold" style="fill: var(--colour-text)">B (Base)</text>
+
+              <g id="npnTop" class="circuit-slot-box" transform="translate(155,100)" onclick="slotClicked(0)">
+                <rect width="70" height="55" />
+                <foreignObject x="0" y="0" width="70" height="55">
+                  <div xmlns="http://www.w3.org/1999/xhtml" id="npnTopText" class="bjt-slot-html" style="font-size:22px"></div>
+                </foreignObject>
+              </g>
+              <g id="npnMid" class="circuit-slot-box" transform="translate(155,155)" onclick="slotClicked(1)">
+                <rect width="70" height="55" />
+                <foreignObject x="0" y="0" width="70" height="55">
+                  <div xmlns="http://www.w3.org/1999/xhtml" id="npnMidText" class="bjt-slot-html" style="font-size:22px"></div>
+                </foreignObject>
+              </g>
+              <g id="npnBottom" class="circuit-slot-box" transform="translate(155,210)" onclick="slotClicked(2)">
+                <rect width="70" height="55" />
+                <foreignObject x="0" y="0" width="70" height="55">
+                  <div xmlns="http://www.w3.org/1999/xhtml" id="npnBottomText" class="bjt-slot-html" style="font-size:22px"></div>
+                </foreignObject>
+              </g>
+
+              <line x1="225" y1="155" x2="295" y2="140" style="stroke: var(--colour-text)" stroke-width="1.3" marker-end="url(#pnArrow)" />
+              <g id="npnBC" class="circuit-slot-box" transform="translate(298,118)" onclick="slotClicked(6)">
+                <rect width="155" height="42" />
+                <foreignObject x="0" y="0" width="155" height="42">
+                  <div xmlns="http://www.w3.org/1999/xhtml" id="npnBCText" class="bjt-slot-html" style="font-size:11px"></div>
+                </foreignObject>
+              </g>
+
+              <line x1="225" y1="210" x2="295" y2="225" style="stroke: var(--colour-text)" stroke-width="1.3" marker-end="url(#pnArrow)" />
+              <g id="npnBE" class="circuit-slot-box" transform="translate(298,207)" onclick="slotClicked(7)">
+                <rect width="155" height="42" />
+                <foreignObject x="0" y="0" width="155" height="42">
+                  <div xmlns="http://www.w3.org/1999/xhtml" id="npnBEText" class="bjt-slot-html" style="font-size:11px"></div>
+                </foreignObject>
+              </g>
+
+              <text x="190" y="375" text-anchor="middle" font-size="15" font-weight="bold" style="fill: var(--colour-bjt-labels)">NPN</text>
+            </g>
+
+            <!-- PNP — identical structure, shifted right -->
+            <g transform="translate(420,0)">
+              <line x1="190" y1="40" x2="190" y2="100" style="stroke: var(--colour-label)" stroke-width="6" />
+              <text x="190" y="25" text-anchor="middle" font-size="13" font-weight="bold" style="fill: var(--colour-text)">C (Collector)</text>
+              <line x1="190" y1="265" x2="190" y2="325" style="stroke: var(--colour-label)" stroke-width="6" />
+              <text x="190" y="345" text-anchor="middle" font-size="13" font-weight="bold" style="fill: var(--colour-text)">E (Emitter)</text>
+              <line x1="90" y1="182" x2="155" y2="182" style="stroke: var(--colour-label)" stroke-width="6" />
+              <text x="80" y="187" text-anchor="end" font-size="13" font-weight="bold" style="fill: var(--colour-text)">B (Base)</text>
+
+              <g id="pnpTop" class="circuit-slot-box" transform="translate(155,100)" onclick="slotClicked(3)">
+                <rect width="70" height="55" />
+                <foreignObject x="0" y="0" width="70" height="55">
+                  <div xmlns="http://www.w3.org/1999/xhtml" id="pnpTopText" class="bjt-slot-html" style="font-size:22px"></div>
+                </foreignObject>
+              </g>
+              <g id="pnpMid" class="circuit-slot-box" transform="translate(155,155)" onclick="slotClicked(4)">
+                <rect width="70" height="55" />
+                <foreignObject x="0" y="0" width="70" height="55">
+                  <div xmlns="http://www.w3.org/1999/xhtml" id="pnpMidText" class="bjt-slot-html" style="font-size:22px"></div>
+                </foreignObject>
+              </g>
+              <g id="pnpBottom" class="circuit-slot-box" transform="translate(155,210)" onclick="slotClicked(5)">
+                <rect width="70" height="55" />
+                <foreignObject x="0" y="0" width="70" height="55">
+                  <div xmlns="http://www.w3.org/1999/xhtml" id="pnpBottomText" class="bjt-slot-html" style="font-size:22px"></div>
+                </foreignObject>
+              </g>
+
+              <line x1="225" y1="155" x2="295" y2="140" style="stroke: var(--colour-text)" stroke-width="1.3" marker-end="url(#pnArrow)" />
+              <g id="pnpBC" class="circuit-slot-box" transform="translate(298,118)" onclick="slotClicked(8)">
+                <rect width="155" height="42" />
+                <foreignObject x="0" y="0" width="155" height="42">
+                  <div xmlns="http://www.w3.org/1999/xhtml" id="pnpBCText" class="bjt-slot-html" style="font-size:11px"></div>
+                </foreignObject>
+              </g>
+
+              <line x1="225" y1="210" x2="295" y2="225" style="stroke: var(--colour-text)" stroke-width="1.3" marker-end="url(#pnArrow)" />
+              <g id="pnpBE" class="circuit-slot-box" transform="translate(298,207)" onclick="slotClicked(9)">
+                <rect width="155" height="42" />
+                <foreignObject x="0" y="0" width="155" height="42">
+                  <div xmlns="http://www.w3.org/1999/xhtml" id="pnpBEText" class="bjt-slot-html" style="font-size:11px"></div>
+                </foreignObject>
+              </g>
+
+              <text x="190" y="375" text-anchor="middle" font-size="15" font-weight="bold" style="fill: var(--colour-bjt-labels)">PNP</text>
+            </g>
+          </svg>
+        </div>
+
+        <!-- Q4's terminal-select diagram — same NPN/PNP doping-layer
+             layout as circuitPanelDoping above, but fully PRE-labelled
+             (N/P letters and junction names are given, static text) —
+             this time the 6 layer boxes themselves are the click targets
+             for a plain kind:'multi' selection (via selectOption(), the
+             same engine function the normal qOptions button list would
+             call — just wired to these SVG boxes instead), not a
+             kind:'fill' pool. Own ids throughout (…Sel suffix) so nothing
+             collides with circuitPanelDoping's identical-looking boxes. -->
+        <div id="circuitPanelTerminalSelect" style="display:none">
+          <div class="panel-label">Click every terminal that applies</div>
+          <svg viewBox="0 0 900 400" xmlns="http://www.w3.org/2000/svg" font-family="'Share Tech Mono',monospace">
+            <defs>
+              <marker id="pnArrowSel" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 Z" style="fill: var(--colour-text)" />
+              </marker>
+            </defs>
+
+            <!-- NPN -->
+            <g>
+              <line x1="190" y1="40" x2="190" y2="100" style="stroke: var(--colour-label)" stroke-width="6" />
+              <text x="190" y="25" text-anchor="middle" font-size="13" font-weight="bold" style="fill: var(--colour-text)">C (Collector)</text>
+              <line x1="190" y1="265" x2="190" y2="325" style="stroke: var(--colour-label)" stroke-width="6" />
+              <text x="190" y="345" text-anchor="middle" font-size="13" font-weight="bold" style="fill: var(--colour-text)">E (Emitter)</text>
+              <line x1="90" y1="182" x2="155" y2="182" style="stroke: var(--colour-label)" stroke-width="6" />
+              <text x="80" y="187" text-anchor="end" font-size="13" font-weight="bold" style="fill: var(--colour-text)">B (Base)</text>
+
+              <g id="npnTopSel" class="circuit-slot-box" transform="translate(155,100)" onclick="selectOption(0)">
+                <rect width="70" height="55" />
+                <foreignObject x="0" y="0" width="70" height="55"><div xmlns="http://www.w3.org/1999/xhtml" class="bjt-slot-html" style="font-size:22px">N</div></foreignObject>
+              </g>
+              <g id="npnMidSel" class="circuit-slot-box" transform="translate(155,155)" onclick="selectOption(1)">
+                <rect width="70" height="55" />
+                <foreignObject x="0" y="0" width="70" height="55"><div xmlns="http://www.w3.org/1999/xhtml" class="bjt-slot-html" style="font-size:22px">P</div></foreignObject>
+              </g>
+              <g id="npnBottomSel" class="circuit-slot-box" transform="translate(155,210)" onclick="selectOption(2)">
+                <rect width="70" height="55" />
+                <foreignObject x="0" y="0" width="70" height="55"><div xmlns="http://www.w3.org/1999/xhtml" class="bjt-slot-html" style="font-size:22px">N</div></foreignObject>
+              </g>
+
+              <line x1="225" y1="155" x2="295" y2="140" style="stroke: var(--colour-text)" stroke-width="1.3" marker-end="url(#pnArrowSel)" />
+              <text x="300" y="137" font-size="12" style="fill: var(--colour-text)">Base-Collector</text>
+              <text x="300" y="151" font-size="12" style="fill: var(--colour-text)">junction</text>
+
+              <line x1="225" y1="210" x2="295" y2="225" style="stroke: var(--colour-text)" stroke-width="1.3" marker-end="url(#pnArrowSel)" />
+              <text x="300" y="222" font-size="12" style="fill: var(--colour-text)">Base-Emitter</text>
+              <text x="300" y="236" font-size="12" style="fill: var(--colour-text)">junction</text>
+
+              <text x="190" y="375" text-anchor="middle" font-size="15" font-weight="bold" style="fill: var(--colour-bjt-labels)">NPN</text>
+            </g>
+
+            <!-- PNP — identical structure, shifted right -->
+            <g transform="translate(420,0)">
+              <line x1="190" y1="40" x2="190" y2="100" style="stroke: var(--colour-label)" stroke-width="6" />
+              <text x="190" y="25" text-anchor="middle" font-size="13" font-weight="bold" style="fill: var(--colour-text)">C (Collector)</text>
+              <line x1="190" y1="265" x2="190" y2="325" style="stroke: var(--colour-label)" stroke-width="6" />
+              <text x="190" y="345" text-anchor="middle" font-size="13" font-weight="bold" style="fill: var(--colour-text)">E (Emitter)</text>
+              <line x1="90" y1="182" x2="155" y2="182" style="stroke: var(--colour-label)" stroke-width="6" />
+              <text x="80" y="187" text-anchor="end" font-size="13" font-weight="bold" style="fill: var(--colour-text)">B (Base)</text>
+
+              <g id="pnpTopSel" class="circuit-slot-box" transform="translate(155,100)" onclick="selectOption(3)">
+                <rect width="70" height="55" />
+                <foreignObject x="0" y="0" width="70" height="55"><div xmlns="http://www.w3.org/1999/xhtml" class="bjt-slot-html" style="font-size:22px">P</div></foreignObject>
+              </g>
+              <g id="pnpMidSel" class="circuit-slot-box" transform="translate(155,155)" onclick="selectOption(4)">
+                <rect width="70" height="55" />
+                <foreignObject x="0" y="0" width="70" height="55"><div xmlns="http://www.w3.org/1999/xhtml" class="bjt-slot-html" style="font-size:22px">N</div></foreignObject>
+              </g>
+              <g id="pnpBottomSel" class="circuit-slot-box" transform="translate(155,210)" onclick="selectOption(5)">
+                <rect width="70" height="55" />
+                <foreignObject x="0" y="0" width="70" height="55"><div xmlns="http://www.w3.org/1999/xhtml" class="bjt-slot-html" style="font-size:22px">P</div></foreignObject>
+              </g>
+
+              <line x1="225" y1="155" x2="295" y2="140" style="stroke: var(--colour-text)" stroke-width="1.3" marker-end="url(#pnArrowSel)" />
+              <text x="300" y="137" font-size="12" style="fill: var(--colour-text)">Base-Collector</text>
+              <text x="300" y="151" font-size="12" style="fill: var(--colour-text)">junction</text>
+
+              <line x1="225" y1="210" x2="295" y2="225" style="stroke: var(--colour-text)" stroke-width="1.3" marker-end="url(#pnArrowSel)" />
+              <text x="300" y="222" font-size="12" style="fill: var(--colour-text)">Base-Emitter</text>
+              <text x="300" y="236" font-size="12" style="fill: var(--colour-text)">junction</text>
+
+              <text x="190" y="375" text-anchor="middle" font-size="15" font-weight="bold" style="fill: var(--colour-bjt-labels)">PNP</text>
+            </g>
+          </svg>
+        </div>
+
+        <!-- Terminal-labelling diagram — a single fixed NPN symbol (no
+             circuitConfig toggle needed, unlike jfet_knowledge_basics.html's
+             N/P-channel pair). Collector = top slot, Base = left/gate-style
+             slot, Emitter = bottom slot, matching bjt-npn-standard-circle's
+             own geometry (emitter is the arrow-bearing bottom lead). -->
+        <div id="circuitPanelFill" style="display:none">
+          <div class="panel-label">Click a name below, then click a terminal</div>
+          <svg viewBox="0 -20 440 340" xmlns="http://www.w3.org/2000/svg">
+            <use href="#bjt-npn-standard-circle" transform="translate(220,150) scale(2.5)" />
+
+            <line x1="255" y1="65" x2="255" y2="29" style="stroke: var(--colour-bjt)" stroke-width="1.5" stroke-dasharray="3,2" />
+            <line x1="255" y1="235" x2="255" y2="271" style="stroke: var(--colour-bjt)" stroke-width="1.5" stroke-dasharray="3,2" />
+            <line x1="177" y1="150" x2="137" y2="150" style="stroke: var(--colour-bjt)" stroke-width="1.5" stroke-dasharray="3,2" />
+
+            <g id="slotBoxTop" class="circuit-slot-box" transform="translate(195,-5)" onclick="slotClicked(0)">
+              <rect width="120" height="34" rx="4" />
+              <foreignObject x="0" y="0" width="120" height="34">
+                <div xmlns="http://www.w3.org/1999/xhtml" id="slotBoxTopText" class="bjt-slot-html"></div>
+              </foreignObject>
+            </g>
+            <g id="slotBoxG" class="circuit-slot-box" transform="translate(17,133)" onclick="slotClicked(1)">
+              <rect width="120" height="34" rx="4" />
+              <foreignObject x="0" y="0" width="120" height="34">
+                <div xmlns="http://www.w3.org/1999/xhtml" id="slotBoxGText" class="bjt-slot-html"></div>
+              </foreignObject>
+            </g>
+            <g id="slotBoxBottom" class="circuit-slot-box" transform="translate(195,271)" onclick="slotClicked(2)">
+              <rect width="120" height="34" rx="4" />
+              <foreignObject x="0" y="0" width="120" height="34">
+                <div xmlns="http://www.w3.org/1999/xhtml" id="slotBoxBottomText" class="bjt-slot-html"></div>
+              </foreignObject>
+            </g>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: question -->
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <!-- Single reusable question panel — populated from QUESTIONS[cur] by renderQuestion() -->
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+
+          <!-- Fill-in pool — shown only for kind:'fill' questions (Q2),
+               toggled via RENDER_EXTRA below. -->
+          <div class="fill-pool-wrap" id="fillPoolWrap" style="display:none">
+            <div class="fill-pool-row" id="fillPoolRow">
+              <div class="fill-pool-arrow">▶</div>
+              <div class="fill-pool" id="fillPool"></div>
+            </div>
+          </div>
+
+          <div class="options" id="qOptions"></div>
+          <div class="match-wrap" id="qMatch" style="display:none">
+            <div class="match-pool-row" id="matchPoolRow">
+              <div class="match-pool-arrow">▶</div>
+              <div class="match-pool" id="matchPool"></div>
+            </div>
+            <div class="match-columns" id="matchColumns"></div>
+          </div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Summary -->
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // Colour-coded pool chip for Q5's carrier-type fill — a small dot
+    // swatch prefix rather than colouring the whole chip button, so it
+    // doesn't fight the shared .match-chip button styling from quiz-
+    // common.css. The colour map itself lives with paintCarrierColors()
+    // near RENDER_EXTRA, since that's the other half that needs it.
+    function swatch(color, label) {
+      return `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${color};margin-right:6px;vertical-align:middle"></span>${label}`;
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS — see quiz-engine.js's own header comment for the full field
+    // reference. Section headers below mirror the sample paper's own 9
+    // section names/order exactly, so this quiz is easy to cross-check
+    // against it while revising.
+    // ══════════════════════════════════════════════════════════════════════
+
+    const QUESTIONS = [
+
+      // ── Fundamentals & Terminals ──────────────────────────────────────
+      {
+        // kind:'fill', 10 slots — 3 doping layers + 2 junction labels, per
+        // transistor. C/E leads, B lead and the junction ARROWS are given
+        // in the diagram; each layer's doping type AND each junction's
+        // name are blank for the student to fill in. Pool has just 4
+        // entries — one reusable chip per distinct value ("N", "P",
+        // "Base-Collector junction", "Base-Emitter junction") — each
+        // correct for multiple slots at once via an ARRAY `col`
+        // (quiz-engine.js's cor-lookup accepts col as one slot index or a
+        // list of them — see its own comment). Physically/logically
+        // accurate too: there are only two doping types and two junction
+        // names to choose from, not ten.
+        leftPanel: 'circuit',
+        kind: 'fill',
+        diagram: 'doping',
+        slotIds: ['npnTop', 'npnMid', 'npnBottom', 'pnpTop', 'pnpMid', 'pnpBottom', 'npnBC', 'npnBE', 'pnpBC', 'pnpBE'],
+        text: () => `Every BJT is built from three doped semiconductor layers, meeting at two junctions. <b style="color:var(--colour-ui-primary)">Click</b> an option below, then <b style="color:var(--colour-ui-primary)">click</b> the layer or junction it belongs to — for BOTH the NPN and PNP structures.`,
+        hint: () => `Read the device's own name literally: "NPN" and "PNP" are just the doping of each layer, in order, top (Collector) to bottom (Emitter). For the junctions: the boundary nearer the Collector is the Base-Collector junction, the one nearer the Emitter is the Base-Emitter junction — true for both transistor types. Each option can be used more than once — click it again after placing it to reuse it elsewhere.`,
+        options: () => shuffle([
+          { label: 'N', poolHtml: 'N', col: [0, 2, 4] },
+          { label: 'P', poolHtml: 'P', col: [1, 3, 5] },
+          { label: 'Base-Collector junction', poolHtml: 'Base-Collector<br>junction', col: [6, 8] },
+          { label: 'Base-Emitter junction', poolHtml: 'Base-Emitter<br>junction', col: [7, 9] },
+        ]),
+        correctExplain: (st) => {
+          const wrongCount = st.slotPlaced.filter((p, slot) => p !== st.cor[slot]).length;
+          return wrongCount === 0 ? 'All 10 correctly labelled' : `${st.slotPlaced.length - wrongCount} of ${st.slotPlaced.length} correctly labelled`;
+        },
+        working: (st) => {
+          const mistakes = st.slotPlaced
+            .map((p, slot) => p !== st.cor[slot] ? (st.opts[p]?.label ?? '(left blank)') : null)
+            .filter(Boolean);
+          const mistakeLine = mistakes.length
+            ? `<div class="working-step" style="margin-top:.6rem">Mislabelled:</div><div class="working-line">${mistakes.join(', ')}</div>`
+            : '';
+          return `
+    <div class="working-step">NPN — read top to bottom:</div>
+    <div class="working-line">Collector = <b style="color:var(--colour-ui-correct)">N</b>, Base = <b style="color:var(--colour-ui-correct)">P</b>, Emitter = <b style="color:var(--colour-ui-correct)">N</b> — the device's own name IS the doping sequence.</div>
+    <div class="working-step" style="margin-top:.6rem">PNP — the mirror image:</div>
+    <div class="working-line">Collector = <b style="color:var(--colour-ui-correct)">P</b>, Base = <b style="color:var(--colour-ui-correct)">N</b>, Emitter = <b style="color:var(--colour-ui-correct)">P</b>.</div>
+    <div class="working-line" style="margin-top:.4rem">Either way, the <b class="colour-bjt">Base</b> is always the OPPOSITE doping type to the Collector/Emitter either side of it — that's exactly what creates the two P-N junctions a BJT relies on.</div>
+    <div class="working-step" style="margin-top:.6rem">Naming the junctions — the same for both types:</div>
+    <div class="working-line">A junction is named after the two layers that meet there. The boundary between the Base layer and the Collector layer (nearer the top) is the <b style="color:var(--colour-ui-correct)">Base-Collector junction</b>; the boundary between the Base layer and the Emitter layer (nearer the bottom) is the <b style="color:var(--colour-ui-correct)">Base-Emitter junction</b>. That naming doesn't depend on which doping type sits where — it's purely about POSITION relative to the Base, so it's identical for NPN and PNP.</div>
+    ${mistakeLine}`;
+        }
+      },
+      {
+        text: () => 'A bipolar junction transistor (BJT) has how many P-N junctions?',
+        hint: () => 'One junction sits between the base and emitter, a second sits between the base and collector.',
+        options: () => shuffle([
+          { label: '1', type: 'wrong' },
+          { label: '2', type: 'correct' },
+          { label: '3', type: 'wrong' },
+          { label: '4', type: 'wrong' },
+        ]),
+        correctExplain: () => 'A BJT has <b>2</b> P-N junctions',
+        working: () => `
+    <div class="working-line">A BJT is built from three doped layers (e.g. N-P-N or P-N-P) sandwiched together, which creates exactly two junctions: the <b class="colour-bjt">base-emitter (B-E) junction</b> and the <b class="colour-bjt">base-collector (B-C) junction</b>. This is also why checking a BJT with a multimeter's diode-test function means checking two separate diode-like junctions, not one.</div>`
+      },
+      {
+        // kind:'fill' — click a name, then click a terminal. Adapted from
+        // jfet/basics/jfet_knowledge_basics.html's own Q2 (same mechanic,
+        // same option pool), with the real/distractor roles flipped: the
+        // 3 BJT terminal names are now correct (col:0/1/2, bound to
+        // slotIds via the fixed onclick indices in the diagram markup
+        // above), and the 3 JFET terminal names are the distractors that
+        // can never register as any slot's correct answer.
+        leftPanel: 'circuit',
+        kind: 'fill',
+        diagram: 'terminals',
+        slotIds: ['slotBoxTop', 'slotBoxG', 'slotBoxBottom'],
+        text: () => `This is an <b style="color:var(--colour-ui-primary)">NPN transistor</b>. <b style="color:var(--colour-ui-primary)">Click</b> a name below, then <b style="color:var(--colour-ui-primary)">click</b> the terminal it belongs to.`,
+        hint: () => `A BJT only has 3 terminals. Three of the names below belong to a different transistor family entirely — they won't fit anywhere on this diagram.`,
+        options: () => shuffle([
+          { label: 'Collector', poolHtml: 'Collector', col: 0 },
+          { label: 'Base',      poolHtml: 'Base',      col: 1 },
+          { label: 'Emitter',   poolHtml: 'Emitter',   col: 2 },
+          { label: 'Drain',     poolHtml: 'Drain' },
+          { label: 'Gate',      poolHtml: 'Gate' },
+          { label: 'Source',    poolHtml: 'Source' }
+        ]),
+        correctExplain: (st) => {
+          const wrongCount = st.slotPlaced.filter((p, slot) => p !== st.cor[slot]).length;
+          return wrongCount === 0 ? 'All 3 terminals correctly labelled' : `${st.slotPlaced.length - wrongCount} of ${st.slotPlaced.length} terminals correctly labelled`;
+        },
+        working: (st) => {
+          const mistakes = st.slotPlaced
+            .map((p, slot) => p !== st.cor[slot] ? st.opts[p]?.label ?? '(left blank)' : null)
+            .filter(Boolean);
+          const mistakeLine = mistakes.length
+            ? `<div class="working-step" style="margin-top:.6rem">Mislabelled:</div><div class="working-line">${mistakes.join(', ')}</div>`
+            : '';
+          return `
+    <div class="working-step">A BJT's 3 terminals:</div>
+    <div class="working-line"><b style="color:var(--colour-ui-correct)">Collector</b> and <b style="color:var(--colour-ui-correct)">Emitter</b> are the two ends of the main current path — the emitter supplies the majority carriers, the collector collects them after they've crossed the base. <b style="color:var(--colour-ui-correct)">Base</b> is the thin control layer in the middle — a small base current controls a much larger collector current.</div>
+    <div class="working-step" style="margin-top:.6rem">Why Drain, Gate and Source don't belong:</div>
+    <div class="working-line">Those are JFET terminal names, not BJT ones. A JFET is a completely different device — it's controlled by a <em>voltage</em> at the gate rather than a <em>current</em> into a base, and it doesn't have anything corresponding to a BJT's base-emitter junction.</div>
+    ${mistakeLine}`;
+        }
+      },
+      {
+        // kind:'multi' with a custom on-diagram click target instead of
+        // the usual qOptions button list — reuses the SAME NPN/PNP layer
+        // diagram as Q1, but fully pre-labelled (static, not kind:'fill')
+        // with the 6 layer boxes themselves wired to selectOption() (see
+        // circuitPanelTerminalSelect markup + RENDER_EXTRA/
+        // paintTerminalSelect above). options() is deliberately NOT
+        // shuffled — each option's array index is hardcoded to a fixed
+        // physical box in the diagram (Collector always drawn on top,
+        // Emitter always on bottom), so shuffling the array would
+        // desync it from the artwork.
+        leftPanel: 'circuit',
+        kind: 'multi',
+        diagram: 'terminalSelect',
+        text: () => 'Select the terminals that are heavily doped to provide many charge carriers.',
+        hint: () => 'That terminal\'s whole job is to supply (emit) carriers into the base — it needs a large, ready supply of them to do that well. True for both transistor types.',
+        options: () => [
+          { label: 'NPN Collector', type: 'wrong' },
+          { label: 'NPN Base', type: 'wrong' },
+          { label: 'NPN Emitter', type: 'correct' },
+          { label: 'PNP Collector', type: 'wrong' },
+          { label: 'PNP Base', type: 'wrong' },
+          { label: 'PNP Emitter', type: 'correct' },
+        ],
+        correctExplain: () => 'Both <b class="colour-bjt">Emitter</b> terminals (NPN and PNP) are heavily doped',
+        working: () => `
+    <div class="working-line">The three regions of a BJT are deliberately doped differently. The <b class="colour-bjt">Emitter</b> is <em>heavily</em> doped so it can supply (emit) a large, steady stream of majority carriers into the base — true whether that carrier is electrons (NPN's N-type emitter) or holes (PNP's P-type emitter). The <b class="colour-bjt">Base</b> is the opposite — thin and <em>lightly</em> doped, so almost all the carriers that enter it sweep straight through to the collector rather than recombining there. The <b class="colour-bjt">Collector</b> is doped somewhere in between, and is also physically the largest region since it has to dissipate the most heat.</div>
+    <div class="working-line" style="margin-top:.4rem">Doping TYPE (N vs P) and doping CONCENTRATION (light/heavy) are two separate things — this question is about concentration, which doesn't show up in the N/P letters themselves, only in which layer is which.</div>`
+      },
+      {
+        // kind:'fill' reusing Q1's EXACT diagram — same #circuitPanelDoping
+        // panel, same npnTop/Mid/Bottom + pnpTop/Mid/Bottom DOM ids — since
+        // this question only needs the 6 layer slots, not the 4 junction
+        // ones. `colorFill:true` tells RENDER_EXTRA to run
+        // paintCarrierColors() (below), which colours each placed layer
+        // with its own carrier's colour (an inline style, so it wins over
+        // the generic blue/green/red .filled scheme this same diagram's
+        // other kind:'fill' questions use), and resets the 4 junction
+        // boxes to their plain given labels on every render (this
+        // question's own slotIds don't cover them, so without this
+        // they'd show whatever Q1 last left there).
+        leftPanel: 'circuit',
+        kind: 'fill',
+        diagram: 'doping',
+        colorFill: true,
+        slotIds: ['npnTop', 'npnMid', 'npnBottom', 'pnpTop', 'pnpMid', 'pnpBottom'],
+        text: () => `Each layer's <b style="color:var(--colour-ui-primary)">majority charge carrier</b> follows directly from its doping type. <b style="color:var(--colour-ui-primary)">Click</b> a carrier below, then <b style="color:var(--colour-ui-primary)">click</b> the layer it applies to — for BOTH the NPN and PNP structures.`,
+        hint: () => `N-type material\'s majority carriers are always Electrons; P-type material\'s are always Holes — true regardless of which terminal (Collector, Base, or Emitter) that layer happens to be. Ions and Protons don\'t apply anywhere here. Each carrier can be used more than once.`,
+        options: () => [
+          { label: 'Holes', poolHtml: swatch('#e8590c', 'Holes'), col: [1, 3, 5] },
+          { label: 'Electrons', poolHtml: swatch('#1971c2', 'Electrons'), col: [0, 2, 4] },
+          { label: 'Ions', poolHtml: swatch('#9c36b5', 'Ions') },
+          { label: 'Protons', poolHtml: swatch('#495057', 'Protons') },
+        ],
+        correctExplain: (st) => {
+          const wrongCount = st.slotPlaced.filter((p, slot) => p !== st.cor[slot]).length;
+          return wrongCount === 0 ? 'All 6 layers correctly labelled' : `${st.slotPlaced.length - wrongCount} of ${st.slotPlaced.length} layers correctly labelled`;
+        },
+        working: (st) => {
+          const mistakes = st.slotPlaced
+            .map((p, slot) => p !== st.cor[slot] ? (st.opts[p]?.label ?? '(left blank)') : null)
+            .filter(Boolean);
+          const mistakeLine = mistakes.length
+            ? `<div class="working-step" style="margin-top:.6rem">Mislabelled:</div><div class="working-line">${mistakes.join(', ')}</div>`
+            : '';
+          return `
+    <div class="working-step">The rule is about doping type, not which terminal:</div>
+    <div class="working-line">N-type material's majority carriers are always <b style="color:#1971c2">Electrons</b>. P-type material's are always <b style="color:#e8590c">Holes</b>. It doesn't matter whether that layer happens to be the Collector, Base, or Emitter — only its doping type decides the carrier.</div>
+    <div class="working-step" style="margin-top:.6rem">NPN — N/P/N:</div>
+    <div class="working-line">Collector = <b style="color:#1971c2">Electrons</b>, Base = <b style="color:#e8590c">Holes</b>, Emitter = <b style="color:#1971c2">Electrons</b>.</div>
+    <div class="working-step" style="margin-top:.6rem">PNP — P/N/P — the mirror image:</div>
+    <div class="working-line">Collector = <b style="color:#e8590c">Holes</b>, Base = <b style="color:#1971c2">Electrons</b>, Emitter = <b style="color:#e8590c">Holes</b>.</div>
+    <div class="working-line" style="margin-top:.4rem">"Ions" and "Protons" don't apply anywhere on this diagram — protons never move in a semiconductor's crystal lattice, and this circuit isn't chemically ionised.</div>
+    ${mistakeLine}`;
+        }
+      },
+
+      // ── NPN vs PNP & Symbols ──────────────────────────────────────────
+      {
+        leftPanel: 'shapeGrid',
+        kind: 'multi',
+        text: () => 'All 8 shapes below are valid BJT symbols. <b style="color:var(--colour-ui-primary)">Click</b> every shape that is specifically an <b class="colour-bjt">NPN</b> transistor — the type whose arrow points <b>out</b> of the emitter.',
+        hint: () => 'An NPN arrow points AWAY from the base (out of the emitter); a PNP arrow points TOWARD the base (into the emitter). The circle, and which side the arrow-bearing lead is drawn on, don\'t matter — only the arrow\'s direction relative to the base does.',
+        options: () => shuffle([
+          { label: 'NPN, standard, circle',    type: 'correct', shapeId: 'bjt-npn-standard-circle' },
+          { label: 'PNP, standard, circle',    type: 'wrong',   shapeId: 'bjt-pnp-standard-circle' },
+          { label: 'NPN, flipped, circle',     type: 'correct', shapeId: 'bjt-npn-flipped-circle' },
+          { label: 'PNP, flipped, circle',     type: 'wrong',   shapeId: 'bjt-pnp-flipped-circle' },
+          { label: 'NPN, standard, no circle', type: 'correct', shapeId: 'bjt-npn-standard-nocircle' },
+          { label: 'PNP, standard, no circle', type: 'wrong',   shapeId: 'bjt-pnp-standard-nocircle' },
+          { label: 'NPN, flipped, no circle',  type: 'correct', shapeId: 'bjt-npn-flipped-nocircle' },
+          { label: 'PNP, flipped, no circle',  type: 'wrong',   shapeId: 'bjt-pnp-flipped-nocircle' },
+        ]),
+        correctExplain: (st) => {
+          const nums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(n => n).join(', ');
+          return `Shapes <b>${nums}</b> are the NPN symbols`;
+        },
+        working: (st) => {
+          const correctNums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join(', ');
+          const wrongNums = st.opts.map((o, i) => o.type === 'wrong' ? i + 1 : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-step">NPN symbols — shapes ${correctNums}:</div>
+    <div class="working-line">Each has its single arrow pointing <b style="color:var(--colour-ui-correct)">away</b> from the base — out of the emitter lead. This matches "Not Pointing iN" as a memory aid for NPN, and physically reflects conventional current flowing OUT of the emitter in an NPN device.</div>
+    <div class="working-step" style="margin-top:.6rem">PNP symbols — shapes ${wrongNums}:</div>
+    <div class="working-line">Each has its arrow pointing <b style="color:var(--colour-ui-wrong)">toward</b> the base instead ("Pointing iN" for PNP) — still valid, correctly-drawn symbols, just the wrong transistor type for this question.</div>`;
+        }
+      },
+      {
+        text: () => 'In a PNP transistor, the current flow is primarily due to:',
+        hint: () => 'The emitter of a PNP transistor is P-type material — think about what its majority carrier is, and which way that carrier flows (from the heavily-doped emitter, through the base, to the collector).',
+        options: () => shuffle([
+          { label: 'Electrons from collector to emitter', type: 'wrong' },
+          { label: 'Holes from emitter to collector', type: 'correct' },
+          { label: 'Electrons from base to collector', type: 'wrong' },
+          { label: 'Protons moving in the base', type: 'wrong' },
+        ]),
+        correctExplain: () => 'A PNP transistor conducts mainly via <b>holes flowing from emitter to collector</b>',
+        working: () => `
+    <div class="working-line">"PNP" describes the doping in order: P-type Emitter, N-type Base, P-type Collector. The P-type emitter's majority carriers are <b class="colour-bjt">holes</b>, and it's this heavy flow of holes injected from the emitter, sweeping through the thin base, and arriving at the collector that carries most of the current — the mirror image of an NPN's electron flow. There's no such thing as a "proton current" in a semiconductor — protons are locked in the crystal lattice and never move.</div>`
+      },
+
+      // ── Basic Operation ──────────────────────────────────────────────
+      {
+        kind: 'match',
+        columns: () => ['Active', 'Cutoff', 'Saturation'],
+        text: () => 'A BJT operates in one of three main regions, set by how its two junctions are biased. <b style="color:var(--colour-ui-primary)">Place</b> each description in its matching region.',
+        hint: () => 'Active region is where amplification happens — one junction on, one off. The other two regions are the "fully off" and "fully on" extremes either side of it.',
+        options: () => shuffle([
+          { label: 'Base-emitter junction forward biased, base-collector junction reverse biased', col: 0 },
+          { label: 'Both junctions reverse biased — IC ≈ 0, transistor behaves like an open switch', col: 1 },
+          { label: 'Both junctions forward biased — IC is maximum, transistor behaves like a closed switch', col: 2 },
+        ]),
+        correctExplain: (st) => {
+          const wrongCount = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).length;
+          return wrongCount === 0 ? 'All 3 regions correctly matched' : `${st.opts.length - wrongCount} of ${st.opts.length} regions correctly matched`;
+        },
+        working: (st) => {
+          const mistakes = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).map(o => o.label);
+          const mistakeLine = mistakes.length
+            ? `<div class="working-step" style="margin-top:.6rem">Misplaced:</div><div class="working-line">${mistakes.join(', ')}</div>`
+            : '';
+          return `
+    <div class="working-step">Active region — for normal amplifier operation:</div>
+    <div class="working-line">The <b class="colour-bjt">base-emitter</b> junction is <b style="color:var(--colour-ui-correct)">forward biased</b> (letting carriers cross into the base), while the <b class="colour-bjt">base-collector</b> junction stays <b style="color:var(--colour-ui-wrong)">reverse biased</b> (sweeping those carriers on to the collector rather than letting them flow backward). This is the only region where IC is genuinely proportional to IB — the region an amplifier is biased to sit in.</div>
+    <div class="working-step" style="margin-top:.6rem">Cutoff — both junctions reverse biased:</div>
+    <div class="working-line">Neither junction conducts, so essentially no collector current flows (IC ≈ 0) regardless of any small IB leakage. The transistor behaves like an <b style="color:var(--colour-ui-wrong)">open switch</b>.</div>
+    <div class="working-step" style="margin-top:.6rem">Saturation — both junctions forward biased:</div>
+    <div class="working-line">Both junctions conduct at once, VCE collapses to a small residual voltage (VCE(sat), typically ~0.2 V), and IC is at its maximum for the circuit — limited only by VCC and RC, not by β×IB any more. The transistor behaves like a <b style="color:var(--colour-ui-correct)">closed switch</b>.</div>
+    ${mistakeLine}`;
+        }
+      },
+      {
+        text: () => 'The approximate base-emitter voltage drop for a silicon BJT is:',
+        hint: () => 'Same ballpark as any forward-biased silicon PN junction (like a silicon diode).',
+        options: () => shuffle([
+          { label: '0.1 V', type: 'wrong' },
+          { label: '0.3 V', type: 'wrong' },
+          { label: '0.6 V', type: 'correct' },
+          { label: '1.2 V', type: 'wrong' },
+        ]),
+        correctExplain: () => 'VBE ≈ <b>0.6 V</b> (often quoted as 0.6-0.7 V) for a silicon BJT',
+        working: () => `
+    <div class="working-line">The base-emitter junction of a silicon BJT is a forward-biased PN junction, and behaves like one: its voltage drop sits close to <b class="colour-bjt">0.6-0.7 V</b> and barely changes even as the current through it changes by orders of magnitude — the same behaviour as an ordinary silicon diode's forward drop.</div>`
+      },
+      {
+        text: () => 'The collector current in a BJT is primarily controlled by:',
+        hint: () => 'A BJT is a current amplifier — its output current is controlled by a much smaller version of the same quantity at the input.',
+        options: () => shuffle([
+          { label: 'Collector voltage', type: 'wrong' },
+          { label: 'Base current', type: 'correct' },
+          { label: 'Emitter current', type: 'wrong' },
+          { label: 'Load resistance', type: 'wrong' },
+        ]),
+        correctExplain: () => 'IC is primarily controlled by <b>IB</b> (IC = β × IB)',
+        working: () => `
+    <div class="working-line">A BJT is fundamentally a <b class="colour-bjt">current-controlled</b> device: a small base current <span class="colour-current">I<sub>B</sub></span> controls a much larger collector current, related by the current gain <span class="colour-bjt">β</span> — <span class="colour-current">I<sub>C</sub></span> = <span class="colour-bjt">β</span> × <span class="colour-current">I<sub>B</sub></span>. This is the key distinction from a voltage-controlled device like a JFET or MOSFET, where an input <em>voltage</em> does the controlling instead.</div>`
+      },
+
+      // ── Current Relations & Beta ────────────────────────────────────
+      {
+        text: () => 'The relationship between emitter, base, and collector current is:',
+        hint: () => 'Apply Kirchhoff\'s Current Law at the transistor: current flows IN through two leads and must all flow OUT through the third.',
+        options: () => shuffle([
+          { label: 'IE = IC + IB', type: 'correct' },
+          { label: 'IE = IC − IB', type: 'wrong' },
+          { label: 'IC = IE + IB', type: 'wrong' },
+          { label: 'IB = IE + IC', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b>IE = IC + IB</b>',
+        working: () => `
+    <div class="working-line">Conventional current flows <em>into</em> the transistor through both the base and collector leads, and — with nowhere else to go — all of it must flow back <em>out</em> through the emitter: <span class="colour-current">I<sub>E</sub></span> = <span class="colour-current">I<sub>C</sub></span> + <span class="colour-current">I<sub>B</sub></span>. Since β is usually large, IB is tiny compared to IC, which is why "IE ≈ IC" is a common shortcut for quick estimates — but the exact relationship is always the sum.</div>`
+      },
+      {
+        text: () => 'The current gain (β or hFE) of a BJT is defined as:',
+        hint: () => 'It compares the OUTPUT current (collector) to the small INPUT current (base) that controls it.',
+        options: () => shuffle([
+          { label: 'IC / IE', type: 'wrong' },
+          { label: 'IE / IC', type: 'wrong' },
+          { label: 'IB / IC', type: 'wrong' },
+          { label: 'IC / IB', type: 'correct' },
+        ]),
+        correctExplain: () => 'β = h<sub>FE</sub> = <b>IC / IB</b>',
+        working: () => `
+    <div class="working-line"><b class="colour-bjt">β</b> (also written h<sub>FE</sub> on datasheets) is the ratio of collector current to the base current that produces it: <span class="colour-bjt">β</span> = <span class="colour-current">I<sub>C</sub></span> / <span class="colour-current">I<sub>B</sub></span>. A small IB produces a much larger IC — that ratio is exactly what makes a BJT a current amplifier.</div>`
+      },
+      {
+        text: () => 'If IC = 9 mA and IB = 0.3 mA, what is β?',
+        hint: () => 'β = IC / IB.',
+        options: () => shuffle([
+          { label: '10', type: 'wrong' },
+          { label: '20', type: 'wrong' },
+          { label: '30', type: 'correct' },
+          { label: '300', type: 'wrong' },
+        ]),
+        correctExplain: () => 'β = IC / IB = 9 mA / 0.3 mA = <b>30</b>',
+        working: () => `
+    <div class="working-formula-row"><span class="colour-bjt">β</span> = ${frac('<span class="colour-current">I<sub>C</sub></span>', '<span class="colour-current">I<sub>B</sub></span>')}</div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-bjt">β</span> = ${frac('9 mA', '0.3 mA')}</div>
+    <div class="working-total"><span class="colour-bjt">β</span> = <span class="colour-result">30</span></div>
+    <div class="working-line" style="margin-top:.6rem">Watch the decimal point on IB — dividing by 3 mA instead of 0.3 mA (a common slip) gives 10, one of the wrong options above.</div>`
+      },
+      {
+        text: () => 'If β = 100 and IB = 50 μA, what is IC?',
+        hint: () => 'IC = β × IB. Keep the units straight: 50 μA = 0.05 mA.',
+        options: () => shuffle([
+          { label: '0.5 mA', type: 'wrong' },
+          { label: '5 mA', type: 'correct' },
+          { label: '50 mA', type: 'wrong' },
+          { label: '500 mA', type: 'wrong' },
+        ]),
+        correctExplain: () => 'IC = β × IB = 100 × 50 μA = <b>5 mA</b>',
+        working: () => `
+    <div class="working-formula-row"><span class="colour-current">I<sub>C</sub></span> = <span class="colour-bjt">β</span> × <span class="colour-current">I<sub>B</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>C</sub></span> = 100 × 50 μA</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>C</sub></span> = 5000 μA</div>
+    <div class="working-total"><span class="colour-current">I<sub>C</sub></span> = <span class="colour-result">5 mA</span></div>
+    <div class="working-line" style="margin-top:.6rem">5000 μA and 5 mA are the same value — μA→mA is a ÷1000 conversion. Missing that conversion (leaving the answer as "5000", closest to the 500 mA option) is the classic mistake here.</div>`
+      },
+
+      // ── Biasing ──────────────────────────────────────────────────────
+      {
+        kind: 'multi',
+        text: () => 'Base bias and voltage-divider bias have very different stability. <b style="color:var(--colour-ui-primary)">Select</b> every TRUE statement below.',
+        hint: () => 'Stability here means: how much does IC shift if you swap in a transistor with a different β? Think about which circuit sets VB (and hence IE and IC) independently of β, and which one doesn\'t.',
+        options: () => shuffle([
+          { label: 'A simple base-bias circuit has poor stability because IC is highly dependent on β', type: 'correct' },
+          { label: 'Voltage-divider bias improves stability by making IC largely independent of β', type: 'correct' },
+          { label: 'A simple base-bias circuit has poor stability because it uses too much current', type: 'wrong' },
+          { label: 'Voltage-divider bias improves stability by increasing β', type: 'wrong' },
+          { label: 'Voltage-divider bias improves stability by eliminating IB completely', type: 'wrong' },
+        ]),
+        correctExplain: (st) => {
+          const nums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(n => n).join(', ');
+          return `Statements <b>${nums}</b> are true`;
+        },
+        working: (st) => {
+          const correctNums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join(', ');
+          const wrongNums = st.opts.map((o, i) => o.type === 'wrong' ? i + 1 : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-step">True — statements ${correctNums}:</div>
+    <div class="working-line">In simple <b class="colour-bjt">base bias</b>, IB is set almost entirely by <span class="colour-supply">V<sub>CC</sub></span> and a single resistor RB — then IC = β×IB directly. Since real transistors of the "same" part number can have wildly different β (often a 3:1 spread or more on a datasheet), IC swings by that same factor from unit to unit or as temperature changes β. <b class="colour-bjt">Voltage-divider bias</b> fixes this by using R1/R2 to fix VB largely independent of IB (a "stiff" divider), which fixes IE ≈ (VB−VBE)/RE almost independent of β — so IC (≈IE) barely moves even if β varies a lot.</div>
+    <div class="working-step" style="margin-top:.6rem">False — statements ${wrongNums}:</div>
+    <div class="working-line">Base bias's problem is a <em>β-dependence</em> problem, not a current-consumption problem. Voltage-divider bias doesn't change the transistor's own β at all (β is a device property) — it works around β-dependence rather than removing IB, which is still exactly what turns the transistor on in either circuit.</div>`;
+        }
+      },
+      {
+        text: () => 'In voltage-divider bias, the base voltage is approximately:',
+        hint: () => 'R1 and R2 form a simple resistive voltage divider across VCC — think about what a plain resistor divider always produces at its midpoint.',
+        options: () => shuffle([
+          { label: 'Equal to VCC', type: 'wrong' },
+          { label: 'A fraction of VCC set by the resistors', type: 'correct' },
+          { label: '0 V', type: 'wrong' },
+          { label: 'The same as collector voltage', type: 'wrong' },
+        ]),
+        correctExplain: () => 'VB is approximately <b>a fraction of VCC set by R1/R2</b>',
+        working: () => `
+    <div class="working-line">Ignoring the small base current drawn out of the divider (a fair approximation when the divider is "stiff"), R1 and R2 behave like a plain resistive voltage divider across <span class="colour-supply">V<sub>CC</sub></span>: <span class="colour-voltage">V<sub>B</sub></span> ≈ <span class="colour-supply">V<sub>CC</sub></span> × ${frac('R2', 'R1 + R2')}. That's a fixed fraction of VCC, set purely by the resistor ratio — not equal to VCC, not 0 V, and not tied to whatever the collector voltage happens to be.</div>`
+      },
+      {
+        text: () => 'The quiescent point (Q-point) represents:',
+        hint: () => '"Quiescent" means at rest — with no AC input signal applied at all.',
+        options: () => shuffle([
+          { label: 'The peak current of the transistor', type: 'wrong' },
+          { label: 'The cutoff voltage', type: 'wrong' },
+          { label: 'The DC operating point of IC and VCE', type: 'correct' },
+          { label: 'The maximum power rating', type: 'wrong' },
+        ]),
+        correctExplain: () => 'The Q-point is <b>the DC operating point (IC and VCE) with no signal applied</b>',
+        working: () => `
+    <div class="working-line">The Q-point is where the transistor "sits" with no AC signal present — a specific (<span class="colour-current">I<sub>C</sub></span>, <span class="colour-voltage">V<sub>CE</sub></span>) pair set by the DC bias circuit alone. It matters because an AC signal then swings the transistor's operating point <em>around</em> this Q-point — if it's positioned badly (too close to cutoff or saturation), the output clips on one side before the other.</div>`
+      },
+
+      // ── Faults & Testing ─────────────────────────────────────────────
+      {
+        text: () => 'When checking a transistor with a multimeter in diode mode, how many PN junctions should you expect to measure?',
+        hint: () => 'Same count as the answer to this quiz\'s very first question — a diode-test check is directly testing those junctions.',
+        options: () => shuffle([
+          { label: '0', type: 'wrong' },
+          { label: '1', type: 'wrong' },
+          { label: '2', type: 'correct' },
+          { label: '3', type: 'wrong' },
+        ]),
+        correctExplain: () => 'A healthy BJT shows <b>2</b> good diode junctions (B-E and B-C)',
+        working: () => `
+    <div class="working-line">A DMM's diode-test function checks a single PN junction like a diode: a healthy forward-biased reading (~0.5-0.7 V) one way, open/no-reading the other way. A BJT has two such junctions — <b class="colour-bjt">base-emitter</b> and <b class="colour-bjt">base-collector</b> — so a healthy transistor shows two good diode readings, and there's no valid B-E-C reading at all (that path goes through the transistor action, not a simple junction).</div>
+    <div class="working-line" style="margin-top:.6rem">For hands-on practice reading real fault symptoms, see the interactive troubleshooters in this folder's <em>Fault-Finding</em> section.</div>`
+      },
+      {
+        text: () => 'A shorted collector-emitter junction in a transistor would make it behave like:',
+        hint: () => 'If C and E are directly tied together, current has a free path straight through the transistor regardless of what the base is doing.',
+        options: () => shuffle([
+          { label: 'A resistor', type: 'wrong' },
+          { label: 'A diode', type: 'wrong' },
+          { label: 'A closed switch', type: 'correct' },
+          { label: 'An open switch', type: 'wrong' },
+        ]),
+        correctExplain: () => 'A shorted C-E junction behaves like <b>a closed switch</b>',
+        working: () => `
+    <div class="working-line">Shorting collector to emitter removes the transistor from the equation entirely — current flows freely from collector to emitter regardless of IB, exactly as if a wire (a <b style="color:var(--colour-ui-wrong)">closed switch</b>) had been placed between them. In a typical amplifier stage this pulls VC down to essentially VE, killing any output signal.</div>
+    <div class="working-line" style="margin-top:.6rem">For hands-on practice reading real fault symptoms, see the interactive troubleshooters in this folder's <em>Fault-Finding</em> section.</div>`
+      },
+      {
+        text: () => 'If a transistor has an open base connection, it will most likely appear to be:',
+        hint: () => 'No connection to the base means no IB can flow in at all — what does IC = β × IB become when IB is forced to zero?',
+        options: () => shuffle([
+          { label: 'In cutoff', type: 'correct' },
+          { label: 'In saturation', type: 'wrong' },
+          { label: 'Operating normally', type: 'wrong' },
+          { label: 'In thermal runaway', type: 'wrong' },
+        ]),
+        correctExplain: () => 'An open base most likely puts the transistor <b>in cutoff</b>',
+        working: () => `
+    <div class="working-line">With the base lead open, no base current can flow into the transistor at all (IB = 0), and since IC = β×IB, that forces IC ≈ 0 too — the same symptom as <b style="color:var(--colour-ui-wrong)">cutoff</b>, even though the actual fault is a broken base connection rather than a deliberately reverse-biased junction. This is exactly why "IC≈0" alone doesn't tell you WHICH fault caused it — an open base and genuine cutoff bias both look the same on a meter.</div>
+    <div class="working-line" style="margin-top:.6rem">For hands-on practice reading real fault symptoms, see the interactive troubleshooters in this folder's <em>Fault-Finding</em> section.</div>`
+      },
+
+      // ── Amplifier Parameters ─────────────────────────────────────────
+      {
+        kind: 'match',
+        columns: () => ['Av', 'Zin', 'Zout', "re′"],
+        text: () => 'Each common-emitter amplifier parameter below has a standard formula. <b style="color:var(--colour-ui-primary)">Place</b> each formula under the parameter it belongs to.',
+        hint: () => 're′ is the one formula with no resistors in it at all — everything else is built either from RC, or from the base-side resistors and β×re′.',
+        options: () => shuffle([
+          { label: `−RC / re′`, col: 0 },
+          { label: `RB1 ∥ RB2 ∥ (β × re′)`, col: 1 },
+          { label: `≈ RC`, col: 2 },
+          { label: `26 mV / IE`, col: 3 },
+        ]),
+        correctExplain: (st) => {
+          const wrongCount = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).length;
+          return wrongCount === 0 ? 'All 4 formulas correctly matched' : `${st.opts.length - wrongCount} of ${st.opts.length} formulas correctly matched`;
+        },
+        working: (st) => {
+          const mistakes = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).map(o => o.label);
+          const mistakeLine = mistakes.length
+            ? `<div class="working-step" style="margin-top:.6rem">Misplaced:</div><div class="working-line">${mistakes.join(', ')}</div>`
+            : '';
+          return `
+    <div class="working-step">re′ — the transistor's own internal AC emitter resistance:</div>
+    <div class="working-line">re′ ≈ 26 mV / IE — the thermal voltage (≈26 mV at room temperature) divided by DC emitter current. Every other formula below is built using this one.</div>
+    <div class="working-step" style="margin-top:.6rem">Voltage gain (Av) — for an emitter-bypassed common-emitter stage:</div>
+    <div class="working-line">Av ≈ −RC / re′. The minus sign is the 180° phase inversion; the size of the gain is set by how big RC is compared to the tiny re′.</div>
+    <div class="working-step" style="margin-top:.6rem">Input resistance (Zin):</div>
+    <div class="working-line">Zin = RB1 ∥ RB2 ∥ (β × re′) — the base-bias divider resistors, in parallel with the impedance looking into the base itself (β multiplies re′ because a small AC base current change produces a β-times-larger AC emitter current change).</div>
+    <div class="working-step" style="margin-top:.6rem">Output resistance (Zout):</div>
+    <div class="working-line">Zout ≈ RC — looking back into the collector, the transistor itself looks like a near-ideal current source (very high impedance), so RC alone dominates what an external load actually sees.</div>
+    ${mistakeLine}`;
+        }
+      },
+      {
+        text: () => 'The effect of a load resistor on voltage gain is:',
+        hint: () => 'A load resistor RL ends up in parallel with RC in the gain formula (−(RC∥RL)/re′) — what does adding a resistor in parallel always do to the combined resistance?',
+        options: () => shuffle([
+          { label: 'Increases gain', type: 'wrong' },
+          { label: 'Decreases gain', type: 'correct' },
+          { label: 'No effect', type: 'wrong' },
+          { label: 'Cancels β', type: 'wrong' },
+        ]),
+        correctExplain: () => 'Adding a load resistor <b>decreases</b> voltage gain',
+        working: () => `
+    <div class="working-line">Once a load RL is connected, the AC collector resistance the transistor actually drives becomes RC ∥ RL (the two resistors in parallel), not RC alone — and a parallel combination is always smaller than either resistor on its own. Since Av ≈ −(RC∥RL)/re′, a smaller effective resistance means a smaller gain magnitude. This is exactly why "unloaded gain" and "loaded gain" are reported as two different numbers for the same amplifier.</div>`
+      },
+      {
+        text: () => 'The purpose of an emitter bypass capacitor is to:',
+        hint: () => 'It sits in parallel with RE, and a capacitor looks like a short circuit to AC signals but an open circuit to DC.',
+        options: () => shuffle([
+          { label: 'Stabilize DC bias', type: 'wrong' },
+          { label: 'Increase AC gain', type: 'correct' },
+          { label: 'Block DC to the emitter', type: 'wrong' },
+          { label: 'Reduce IC', type: 'wrong' },
+        ]),
+        correctExplain: () => 'An emitter bypass capacitor <b>increases AC gain</b>',
+        working: () => `
+    <div class="working-line">To a capacitor, DC looks like an open circuit and AC looks (approximately) like a short circuit. An emitter bypass cap exploits exactly that split: for <b>DC</b>, it does nothing — RE stays fully in the circuit, so the stable, β-independent bias point set up by RE is completely unaffected. For <b>AC</b>, it shorts RE out of the signal path entirely, removing RE from the gain formula and leaving Av ≈ −RC/re′ instead of the much smaller swamped-amplifier gain −RC/RE. It gets the best of both: stable DC bias, and much higher AC gain.</div>`
+      },
+      {
+        text: () => 'If IC = 2 mA, the dynamic emitter resistance re′ is about:',
+        hint: () => 're′ ≈ 26 mV / IE, and IE ≈ IC for this kind of estimate.',
+        options: () => shuffle([
+          { label: '0.013 Ω', type: 'wrong' },
+          { label: '13.0 Ω', type: 'correct' },
+          { label: '26 Ω', type: 'wrong' },
+          { label: '260 Ω', type: 'wrong' },
+        ]),
+        correctExplain: () => 're′ ≈ 26 mV / 2 mA = <b>13 Ω</b>',
+        working: () => `
+    <div class="working-formula-row"><span class="colour-bjt">re′</span> ≈ ${frac('26 mV', '<span class="colour-current">I<sub>E</sub></span>')}</div>
+    <div class="working-label">Substituting IE ≈ IC = 2 mA:</div>
+    <div class="working-formula-row"><span class="colour-bjt">re′</span> ≈ ${frac('26 mV', '2 mA')}</div>
+    <div class="working-total"><span class="colour-bjt">re′</span> ≈ <span class="colour-result">13 Ω</span></div>
+    <div class="working-line" style="margin-top:.6rem">A slipped decimal point (26 Ω, no division at all) or an extra ÷100 (0.013 Ω) are the two most common mistakes with this formula.</div>`
+      },
+
+      // ── Applications & Miscellaneous ─────────────────────────────────
+      {
+        kind: 'match',
+        columns: () => ['Common Emitter', 'Common Collector', 'Common Base'],
+        text: () => 'Each amplifier configuration has different gain and impedance characteristics. <b style="color:var(--colour-ui-primary)">Place</b> each description under the configuration it belongs to.',
+        hint: () => 'Common Collector is the "buffer" of the three — voltage gain ≈1 in exchange for very high input resistance. Common Base swaps roles with it: high voltage gain, but low input resistance instead.',
+        options: () => shuffle([
+          { label: 'High voltage gain, moderate input resistance', col: 0 },
+          { label: 'Voltage gain ≈ 1, high input resistance', col: 1 },
+          { label: 'Low input resistance, high voltage gain', col: 2 },
+        ]),
+        correctExplain: (st) => {
+          const wrongCount = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).length;
+          return wrongCount === 0 ? 'All 3 correctly matched' : `${st.opts.length - wrongCount} of ${st.opts.length} correctly matched`;
+        },
+        working: (st) => {
+          const mistakes = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).map(o => o.label);
+          const mistakeLine = mistakes.length
+            ? `<div class="working-step" style="margin-top:.6rem">Misplaced:</div><div class="working-line">${mistakes.join(', ')}</div>`
+            : '';
+          return `
+    <div class="working-line"><b class="colour-bjt">Common Emitter</b> — significant voltage AND current gain, with a moderate input resistance set by RB1∥RB2∥(β×re′) — the general-purpose amplifier of the three.</div>
+    <div class="working-line"><b class="colour-bjt">Common Collector</b> — the emitter directly follows the base, so voltage gain ≈1 — but β multiplying re′ into the input impedance formula gives it by far the highest input resistance of the three.</div>
+    <div class="working-line"><b class="colour-bjt">Common Base</b> — current gain ≈1 instead, but its input resistance (looking into the emitter, ≈re′ alone with no β multiplier) is the lowest of the three, while its voltage gain is high.</div>
+    ${mistakeLine}`;
+        }
+      },
+      {
+        kind: 'match',
+        columns: () => ['Common Emitter', 'Common Collector', 'Common Base'],
+        text: () => 'Each configuration has a typical real-world use. <b style="color:var(--colour-ui-primary)">Place</b> each use under its matching configuration.',
+        hint: () => 'Think about which gain — voltage or current — each configuration is strong at, and which one it sacrifices instead. That trade-off is exactly what points to its typical role.',
+        options: () => shuffle([
+          { label: 'Small signal amplifier', col: 0 },
+          { label: 'Buffer / impedance matching (no voltage gain)', col: 1 },
+          { label: 'High frequency (RF/Comms)', col: 2 },
+        ]),
+        correctExplain: (st) => {
+          const wrongCount = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).length;
+          return wrongCount === 0 ? 'All 3 correctly matched' : `${st.opts.length - wrongCount} of ${st.opts.length} correctly matched`;
+        },
+        working: (st) => {
+          const mistakes = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).map(o => o.label);
+          const mistakeLine = mistakes.length
+            ? `<div class="working-step" style="margin-top:.6rem">Misplaced:</div><div class="working-line">${mistakes.join(', ')}</div>`
+            : '';
+          return `
+    <div class="working-line"><b class="colour-bjt">Common Emitter</b> — significant voltage AND current gain together make it the default choice for general-purpose <b class="colour-gain">small-signal amplification</b>.</div>
+    <div class="working-line"><b class="colour-bjt">Common Collector</b> — voltage gain ≈1 (the output just "follows" the input) combined with a high input and low output impedance makes it a <b class="colour-gain">buffer/isolator</b>, not a gain stage — used to connect a high-impedance source to a low-impedance load without loading it down.</div>
+    <div class="working-line"><b class="colour-bjt">Common Base</b> — current gain ≈1 and no feedback path through its (grounded) base give it the best <b class="colour-gain">high-frequency/RF</b> response of the three.</div>
+    ${mistakeLine}`;
+        }
+      },
+      {
+        text: () => 'The phase shift of the output relative to the input in a common-emitter amplifier is:',
+        hint: () => 'A rising input increases IC, which pulls MORE voltage across RC — leaving LESS voltage at the collector output. Rising in, falling out.',
+        options: () => shuffle([
+          { label: '0°', type: 'wrong' },
+          { label: '90°', type: 'wrong' },
+          { label: '180°', type: 'correct' },
+          { label: '360°', type: 'wrong' },
+        ]),
+        correctExplain: () => 'A common-emitter amplifier inverts its output — <b>180°</b> phase shift',
+        working: () => `
+    <div class="working-line">A rising input voltage increases <span class="colour-current">I<sub>C</sub></span>, which pulls <em>more</em> voltage drop across <span class="colour-resistor">R<sub>C</sub></span>, leaving <em>less</em> voltage at the collector — so the output falls exactly when the input rises, and vice versa. That's a full <b class="colour-gain">180°</b> phase inversion, one of the defining features of the common-emitter configuration.</div>`
+      },
+      {
+        text: () => 'The saturation region in a BJT means:',
+        hint: () => 'This is the opposite extreme from cutoff — both junctions do the opposite of what they do in cutoff.',
+        options: () => shuffle([
+          { label: 'Both junctions forward biased', type: 'correct' },
+          { label: 'Both junctions reverse biased', type: 'wrong' },
+          { label: 'Base-emitter forward, base-collector reverse', type: 'wrong' },
+          { label: 'No current flow', type: 'wrong' },
+        ]),
+        correctExplain: () => 'Saturation means <b>both junctions are forward biased</b>',
+        working: () => `
+    <div class="working-line">In saturation, <em>both</em> the base-emitter and base-collector junctions are <b style="color:var(--colour-ui-correct)">forward biased</b> at once — the transistor is "fully on," VCE collapses to a small residual value, and IC is at its maximum for the circuit rather than tracking β×IB any more. This is the opposite extreme from <b>cutoff</b> (both junctions reverse biased, IC≈0); the "base-emitter forward, base-collector reverse" option describes the normal <b>active</b> region instead.</div>`
+      },
+      {
+        text: () => 'A common use of a common-collector amplifier is:',
+        hint: () => 'Its voltage gain is ≈1, so it isn\'t used to make a signal bigger — it\'s used to change how a circuit LOADS the source or load around it.',
+        options: () => shuffle([
+          { label: 'Impedance matching', type: 'correct' },
+          { label: 'High voltage gain', type: 'wrong' },
+          { label: 'Low-frequency oscillation', type: 'wrong' },
+          { label: 'Rectification', type: 'wrong' },
+        ]),
+        correctExplain: () => 'A common-collector stage is commonly used for <b>impedance matching</b> (buffering)',
+        working: () => `
+    <div class="working-line">A common-collector's near-unity voltage gain isn't a downside here — its real strength is a very high input resistance combined with a very low output resistance, which lets it sit between a high-impedance source and a low-impedance load without either one loading the other down. That role is exactly what "impedance matching" (buffering) means.</div>`
+      },
+      {
+        text: () => 'Which parameter is most important when using a BJT as a switch?',
+        hint: () => 'A switch only ever needs to be fully OFF or fully ON — think about which two regions those correspond to.',
+        options: () => shuffle([
+          { label: 'β', type: 'wrong' },
+          { label: 'Input resistance', type: 'wrong' },
+          { label: 'Voltage gain', type: 'wrong' },
+          { label: 'Cutoff and saturation levels', type: 'correct' },
+        ]),
+        correctExplain: () => 'For switching, what matters most is <b>cutoff and saturation levels</b>',
+        working: () => `
+    <div class="working-line">A BJT used as a switch is never meant to sit in the linear active region at all — it's driven hard between <b>cutoff</b> (fully off, IC≈0) and <b>saturation</b> (fully on, VCE≈VCE(sat)). What matters is confirming the drive current is enough to force full saturation (not leave it half-on) and that VCE(sat)/leakage figures are acceptable — voltage gain and precise β value are irrelevant, since the transistor never operates anywhere between those two extremes.</div>`
+      },
+      {
+        text: () => 'The maximum safe power a BJT can handle is found in:',
+        hint: () => 'This is a property of the specific physical device, not something you calculate from a general formula.',
+        options: () => shuffle([
+          { label: 'β rating', type: 'wrong' },
+          { label: 'Datasheet\'s absolute maximum ratings', type: 'correct' },
+          { label: 'Ohm\'s law', type: 'wrong' },
+          { label: 'Thevenin equivalent', type: 'wrong' },
+        ]),
+        correctExplain: () => 'Maximum safe power comes from the <b>datasheet\'s absolute maximum ratings</b>',
+        working: () => `
+    <div class="working-line">A BJT's maximum power dissipation (PD(max), along with VCEO, IC(max) and other limits) is a physical property of that specific device, published by the manufacturer in the <b>datasheet's absolute maximum ratings</b> table — it can't be derived from Ohm's law or a Thevenin equivalent, which only describe circuit behaviour, not a component's own physical limits.</div>`
+      },
+      {
+        text: () => 'In small-signal analysis, capacitors are considered:',
+        hint: () => 'This is the whole reason the emitter bypass cap and the coupling caps work the way they do — think about what a cap looks like to an AC signal specifically.',
+        options: () => shuffle([
+          { label: 'Open circuits', type: 'wrong' },
+          { label: 'Short circuits', type: 'correct' },
+          { label: 'Resistors', type: 'wrong' },
+          { label: 'Inductors', type: 'wrong' },
+        ]),
+        correctExplain: () => 'For AC small-signal analysis, capacitors are treated as <b>short circuits</b>',
+        working: () => `
+    <div class="working-line">A capacitor's impedance falls as frequency rises; at typical audio/signal frequencies, a correctly-sized coupling or bypass capacitor's impedance is small enough to treat as effectively <b>0 Ω</b> — a short circuit — for the AC signal, even though the very same capacitor is an <em>open</em> circuit to DC (blocking any DC bias current). That split is exactly why redrawing the AC-equivalent circuit means replacing every capacitor with a plain wire, while VCC itself gets replaced with a direct connection to common (an ideal supply has zero AC impedance too).</div>`
+      },
+    ];
+
+    // Fill-pool visibility isn't automatic — same RENDER_EXTRA hook
+    // jfet_knowledge_basics.html's own fill questions use. Also picks
+    // which of the two diagrams sharing #circuitPanelWrap is shown, via
+    // each fill question's own `diagram` field.
+    // Q4's 6 diagram boxes, in the same order as its own options() array
+    // (npnTop/Mid/Bottom, pnpTop/Mid/Bottom) — shared by paintTerminalSelect
+    // below and nothing else, so it lives right beside RENDER_EXTRA.
+    const TERMINAL_SELECT_IDS = ['npnTopSel', 'npnMidSel', 'npnBottomSel', 'pnpTopSel', 'pnpMidSel', 'pnpBottomSel'];
+    function paintTerminalSelect(st) {
+      TERMINAL_SELECT_IDS.forEach((id, i) => {
+        const box = document.getElementById(id);
+        box.classList.remove('filled', 'correct', 'wrong');
+        const selected = st.sel.includes(i);
+        const isCorrect = st.opts[i].type === 'correct';
+        if (!st.ans) {
+          if (selected) box.classList.add('filled');
+        } else if (isCorrect) {
+          box.classList.add('correct');
+          if (selected) box.classList.add('filled');
+        } else if (selected) {
+          box.classList.add('wrong', 'filled');
+        }
+      });
+    }
+
+    // Q5's carrier colours, keyed by option label — shared between the
+    // pool-chip swatches (options() above) and the placed-layer fill
+    // colours (paintCarrierColors below), so there's one place to tune
+    // them. Deliberately distinct from --colour-ui-correct/--colour-ui-
+    // wrong (the border-stroke colours .correct/.wrong already use) so a
+    // "wrong" red BORDER is never confused with an actual carrier colour.
+    const CARRIER_COLORS = { Holes: '#e8590c', Electrons: '#1971c2', Ions: '#9c36b5', Protons: '#495057' };
+    // Full words ("Electrons", "Protons") overflow the 70px-wide layer
+    // boxes (sized for Q1's single N/P letters) — shown in full in the
+    // pool chip (plenty of room there), but swapped for the standard
+    // scientific shorthand once placed on the diagram itself.
+    const CARRIER_SHORT = { Holes: 'h⁺', Electrons: 'e⁻', Ions: 'ion', Protons: 'p⁺' };
+    const CARRIER_LAYER_IDS = ['npnTop', 'npnMid', 'npnBottom', 'pnpTop', 'pnpMid', 'pnpBottom'];
+    const CARRIER_JUNCTION_IDS = ['npnBC', 'npnBE', 'pnpBC', 'pnpBE'];
+    function paintCarrierColors(st) {
+      CARRIER_LAYER_IDS.forEach((id, slot) => {
+        const box = document.getElementById(id);
+        const placedIdx = st.slotPlaced[slot];
+        const label = placedIdx !== null ? st.opts[placedIdx].label : null;
+        box.style.fill = label ? CARRIER_COLORS[label] : '';
+        if (label) document.getElementById(id + 'Text').textContent = CARRIER_SHORT[label];
+      });
+      // This question's own slotIds don't include the junctions — reset
+      // them to plain given labels every render rather than leaving
+      // whatever Q1 last wrote there.
+      CARRIER_JUNCTION_IDS.forEach(id => {
+        document.getElementById(id).classList.remove('filled', 'correct', 'wrong');
+        document.getElementById(id).style.fill = '';
+      });
+      document.getElementById('npnBCText').innerHTML = 'Base-Collector<br>junction';
+      document.getElementById('npnBEText').innerHTML = 'Base-Emitter<br>junction';
+      document.getElementById('pnpBCText').innerHTML = 'Base-Collector<br>junction';
+      document.getElementById('pnpBEText').innerHTML = 'Base-Emitter<br>junction';
+    }
+
+    RENDER_EXTRA = () => {
+      const data = QUESTIONS[cur], st = Q[cur];
+      document.getElementById('fillPoolWrap').style.display = isFill(data) ? '' : 'none';
+      document.getElementById('circuitPanelDoping').style.display = data.diagram === 'doping' ? '' : 'none';
+      document.getElementById('circuitPanelFill').style.display = data.diagram === 'terminals' ? '' : 'none';
+      document.getElementById('circuitPanelTerminalSelect').style.display = data.diagram === 'terminalSelect' ? '' : 'none';
+      if (data.diagram === 'terminalSelect') {
+        document.getElementById('qOptions').style.display = 'none';
+        document.getElementById('qSelectedList').style.display = 'none';
+        paintTerminalSelect(st);
+      }
+      if (data.diagram === 'doping') {
+        if (data.colorFill) {
+          paintCarrierColors(st);
+        } else {
+          // Q1 (or any future plain doping/fill question) — clear any
+          // inline fill colour Q5 might have left behind on these same
+          // shared boxes, so the generic blue/green/red .filled scheme
+          // shows through untouched.
+          CARRIER_LAYER_IDS.forEach(id => { document.getElementById(id).style.fill = ''; });
+        }
+      }
+    };
+
+    initQuizNav();
+    resetQuiz();
+    initQuizFromURL();
+  </script>
+</body>
+</html>

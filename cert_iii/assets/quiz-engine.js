@@ -1027,7 +1027,12 @@ function resetQuiz() {
       return { ans: false, cor, opts, clicks: opts.map(() => [0, 0, 0, 0]) };
     }
     if (isFill(data)) {
-      const cor = data.slotIds.map((_, slotIdx) => opts.findIndex(o => o.col === slotIdx));
+      // `col` is normally a single slot index, but may also be an array of
+      // slot indices — for a pool item that's the correct fill for several
+      // slots at once (e.g. one reusable "N" chip correct in 3 different
+      // layers), rather than needing a separate near-duplicate option per
+      // slot just to give each one its own scalar `col`.
+      const cor = data.slotIds.map((_, slotIdx) => opts.findIndex(o => Array.isArray(o.col) ? o.col.includes(slotIdx) : o.col === slotIdx));
       return { sel: null, ans: false, cor, opts, slotPlaced: cor.map(() => null) };
     }
     if (isMatch(data)) {
