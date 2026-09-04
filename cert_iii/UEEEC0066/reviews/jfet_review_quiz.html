@@ -1,0 +1,693 @@
+<!--
+  JFET Exam Revision Quiz (V1) — built from the teacher's own 40-question
+  "FET Revision Quiz" sample paper (UEEEC0066 Topics 6-8). That paper mixes
+  JFET and MOSFET questions under one "FET" umbrella, but this course's own
+  curriculum (see jfet/index.html) only teaches JFETs — there is no MOSFET
+  week anywhere in UEEEC0066. So this V1 deliberately covers ONLY the ~30 of
+  40 sample questions that are genuinely JFET content (or have a clean JFET
+  restatement); the MOSFET-only trivia with no JFET equivalent (enhancement-
+  mode operation, gate-oxide construction, substrate-arrow symbol reading,
+  the k/Vth equations, MOSFET-as-switch regions) is dropped rather than
+  taught wrong. Duplicate sample questions asking the same thing twice
+  (e.g. Q16/Q32 both "common-drain gain ≈1", Q19/Q34 both "bypassed RS
+  raises AC gain", Q20/Q38 both "source resistance ≈ 1/gm") are merged into
+  one question each.
+
+  Same reuse-over-transcription approach as bjt_review_quiz.html:
+    - Terminal names (sample Q1)   -> kind:'fill' click-a-name-then-a-
+                                       terminal diagram, reused verbatim from
+                                       basics/jfet_knowledge_basics.html's Q2
+                                       (N-channel circuitConfig), instead of
+                                       a bare "which of these are the 3
+                                       terminals" MCQ.
+    - Symbols (sample Q4)          -> shapeGrid multi "click every valid
+                                       JFET symbol", reused verbatim from
+                                       basics/jfet_knowledge_basics.html's Q1
+                                       (same 8-shape defs).
+    - Amp configs (sample Q12,15-
+      18,20,31,32,35,37,38)        -> TWO kind:'match' questions (input/
+                                       common-terminal identification, and
+                                       gain/phase/use characteristics)
+                                       instead of 8 separate scattered MCQs.
+    - JFET vs BJT (sample Q37's
+      "advantage over BJTs")       -> the existing kind:'match' JFET-vs-BJT
+                                       question from basics.html's own Q4,
+                                       reused verbatim as a wrap-up.
+    - Self-bias resistor count/
+      DC-analysis (sample Q8,10)   -> a worked numeric IDS calculation using
+                                       the exact VG=0/VS=-VGS/IDS=VS·RS⁻¹
+                                       formula chain from
+                                       biasing_circuits/jfet_self_bias.html,
+                                       with a pointer to that interactive
+                                       simulator for further randomised
+                                       practice.
+
+  Faults (sample Q11,24) stay plain MCQ with a hint pointing at
+  fault_finding/jfet_fault_interactive_internal.html and _resistor.html —
+  those click-the-circuit DC-meter troubleshooters are a different, non-
+  quiz-engine bespoke architecture and can't be folded into a QUESTIONS[]
+  entry, same reasoning as the BJT review quiz's own fault section.
+
+  Built on the shared cert_iii/assets/quiz-engine.js engine, cloned from
+  basics/jfet_knowledge_basics.html's own TEMPLATE FILE skeleton (defs,
+  fill-mechanic CSS and circuitPanelFill markup all copied from there
+  unchanged) — same "one generic QUESTIONS[] array, no per-question HTML"
+  structure as every other file in this project.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../assets/theme-init.js"></script>
+  <script src="../../assets/quiz-engine.js"></script>
+  <title>JFET Knowledge Quiz — Exam Revision</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../assets/quiz-common.css">
+  <script src="../../assets/breadcrumb.js" defer></script>
+  <style>
+    .progress-wrap { display: flex; gap: .4rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; }
+
+    /* kind:'fill' (Q1) — click-a-name-then-click-a-terminal labelling,
+       copied unchanged from basics/jfet_knowledge_basics.html's own
+       <style> block (see that file's header comment for why this needs
+       page-local CSS rather than shared quiz-common.css classes). */
+    .circuit-panel { cursor: default; }
+    .fill-pool-wrap { margin-top: .8rem; }
+    .fill-pool-row { display: flex; align-items: center; gap: .5rem; }
+    .fill-pool-arrow { font-size: 1rem; color: var(--colour-ui-primary); opacity: 0; transition: opacity .15s; }
+    .fill-pool-row.needs-pick .fill-pool-arrow { opacity: 1; animation: fillArrowBounce .8s ease-in-out infinite; }
+    @keyframes fillArrowBounce { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(3px); } }
+    .fill-pool {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: .5rem;
+      padding: .8rem;
+      border: 2px dashed var(--colour-border);
+      border-radius: var(--radius-lg);
+      background: rgba(var(--colour-label-rgb), .05);
+      min-height: 3rem;
+      transition: border-color .15s, background .15s;
+    }
+    .fill-pool.needs-pick {
+      border-color: var(--colour-ui-primary);
+      border-style: solid;
+      background: rgba(var(--colour-ui-primary-rgb), .06);
+      animation: matchPoolPulse 1.1s ease-in-out infinite;
+    }
+    .fill-pool .match-chip { min-width: 84px; text-align: center; }
+    .circuit-slot-box { fill: var(--colour-panel); stroke: var(--colour-ui-primary); stroke-width: 1.5px; stroke-dasharray: 4,3; cursor: pointer; }
+    .circuit-slot-box.filled { stroke-dasharray: none; }
+    .circuit-slot-box.correct { stroke: var(--colour-ui-correct); }
+    .circuit-slot-box.wrong { stroke: #ff3d66; }
+    .circuit-slot-box.correct, .circuit-slot-box.wrong { cursor: default; }
+    .jfet-slot-html {
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-body); font-size: 15px; font-weight: 700;
+      color: var(--colour-ui-primary); text-align: center; line-height: 1;
+      pointer-events: none; width: 100%; height: 100%;
+    }
+    .jfet-slot-html.correct { color: var(--colour-ui-correct); }
+    .jfet-slot-html.wrong { color: #ff3d66; }
+  </style>
+</head>
+
+<body>
+  <!-- Hidden defs: JFET schematic symbols used by Q2's shapeGrid, and the
+       Q1 terminal-fill diagram's symbol — copied unchanged from
+       ../../assets/shapes/jfet-symbols.svg via basics/jfet_knowledge_basics.html,
+       edit the master file first. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur stdDeviation="2" result="b" />
+        <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+      </filter>
+
+      <rect id="jfet-channel" x="-10" y="-25" width="4" height="50" style="fill: var(--colour-jfet)" />
+      <g id="jfet-base-frame">
+        <use href="#jfet-channel" />
+        <line x1="10" y1="-15" x2="10" y2="-50" style="stroke: var(--colour-jfet)" stroke-width="2" />
+        <line x1="-10" y1="-15" x2="10" y2="-15" style="stroke: var(--colour-jfet)" stroke-width="2" />
+        <line x1="10" y1="15" x2="10" y2="50" style="stroke: var(--colour-jfet)" stroke-width="2" />
+        <line x1="-10" y1="15" x2="10" y2="15" style="stroke: var(--colour-jfet)" stroke-width="2" />
+        <line x1="-50" y1="10" x2="-9" y2="10" style="stroke: var(--colour-jfet)" stroke-width="2" />
+        <circle cx="10" cy="-50" r="2.5" style="fill: var(--colour-jfet)" />
+        <circle cx="10" cy="50" r="2.5" style="fill: var(--colour-jfet)" />
+        <circle cx="-50" cy="10" r="2.5" style="fill: var(--colour-jfet)" />
+      </g>
+      <g id="jfet-base-frame-gate-top">
+        <use href="#jfet-channel" />
+        <line x1="10" y1="-15" x2="10" y2="-50" style="stroke: var(--colour-jfet)" stroke-width="2" />
+        <line x1="-10" y1="-15" x2="10" y2="-15" style="stroke: var(--colour-jfet)" stroke-width="2" />
+        <line x1="10" y1="15" x2="10" y2="50" style="stroke: var(--colour-jfet)" stroke-width="2" />
+        <line x1="-10" y1="15" x2="10" y2="15" style="stroke: var(--colour-jfet)" stroke-width="2" />
+        <line x1="-50" y1="-10" x2="-9" y2="-10" style="stroke: var(--colour-jfet)" stroke-width="2" />
+        <circle cx="10" cy="-50" r="2.5" style="fill: var(--colour-jfet)" />
+        <circle cx="10" cy="50" r="2.5" style="fill: var(--colour-jfet)" />
+        <circle cx="-50" cy="-10" r="2.5" style="fill: var(--colour-jfet)" />
+      </g>
+      <circle id="jfet-circle" cx="0" cy="0" r="38" fill="none" stroke="var(--colour-jfet)" stroke-width="2" filter="url(#glow)" />
+
+      <g id="jfet-n-circle"><use href="#jfet-base-frame" /><use href="#jfet-circle" /><polygon points="-24,16 -24,4 -14,10" style="fill: var(--colour-jfet)" /></g>
+      <g id="jfet-p-circle"><use href="#jfet-base-frame-gate-top" /><use href="#jfet-circle" /><polygon points="-24,-16 -24,-4 -34,-10" style="fill: var(--colour-jfet)" /></g>
+      <g id="jfet-n-nocircle"><use href="#jfet-base-frame" /><polygon points="-24,16 -24,4 -14,10" style="fill: var(--colour-jfet)" /></g>
+      <g id="jfet-p-nocircle"><use href="#jfet-base-frame-gate-top" /><polygon points="-22,-16 -22,-4 -32,-10" style="fill: var(--colour-jfet)" /></g>
+
+      <g id="jfet-error-wronglead-in"><use href="#jfet-base-frame" /><use href="#jfet-circle" /><polygon points="6,-30 14,-30 10,-22" style="fill: var(--colour-jfet)" /></g>
+      <g id="jfet-error-wronglead-out"><use href="#jfet-base-frame-gate-top" /><use href="#jfet-circle" /><polygon points="6,-24 14,-24 10,-32" style="fill: var(--colour-jfet)" /></g>
+      <g id="jfet-error-double-in"><use href="#jfet-base-frame" /><use href="#jfet-circle" /><polygon points="6,-30 14,-30 10,-22" style="fill: var(--colour-jfet)" /><polygon points="6,30 14,30 10,22" style="fill: var(--colour-jfet)" /></g>
+      <g id="jfet-error-double-out"><use href="#jfet-base-frame-gate-top" /><use href="#jfet-circle" /><polygon points="6,-24 14,-24 10,-32" style="fill: var(--colour-jfet)" /><polygon points="6,24 14,24 10,32" style="fill: var(--colour-jfet)" /></g>
+    </defs>
+  </svg>
+
+  <div class="crumb" id="crumb" data-current="Exam Revision"></div>
+  <header>
+    <h1>JFET Amplifiers: Exam Revision Quiz</h1>
+    <p>Fundamentals · Operation · Biasing · Amplifier Configurations · Faults · JFET vs BJT</p>
+  </header>
+
+  <div class="quiz-wrap" id="quizWrap">
+
+    <!-- LEFT: shape grid (leftPanel:'shapeGrid') or Q1's terminal-labelling
+         diagram (leftPanel:'circuit', kind:'fill') -->
+    <div class="circuit-col">
+      <div id="qShapeGridPanel" style="display:none">
+        <div class="panel-label">Click the shapes to select your answer</div>
+        <div class="shape-grid" id="shapeGridCells"></div>
+      </div>
+
+      <div class="circuit-panel" id="circuitPanelFill" style="display:none">
+        <div class="panel-label">Click a name below, then click a terminal</div>
+        <svg viewBox="0 0 440 300" xmlns="http://www.w3.org/2000/svg">
+          <use id="jfetTerminalUse" href="#jfet-n-circle" transform="translate(220,150)" />
+
+          <line x1="230" y1="100" x2="230" y2="64" style="stroke: var(--colour-jfet)" stroke-width="1.5" stroke-dasharray="3,2" />
+          <line x1="230" y1="200" x2="230" y2="236" style="stroke: var(--colour-jfet)" stroke-width="1.5" stroke-dasharray="3,2" />
+          <line id="gateLeaderLine" x1="170" y1="160" x2="130" y2="160" style="stroke: var(--colour-jfet)" stroke-width="1.5" stroke-dasharray="3,2" />
+
+          <g id="slotBoxTop" class="circuit-slot-box" transform="translate(170,30)">
+            <rect width="120" height="34" rx="4" />
+            <foreignObject x="0" y="0" width="120" height="34">
+              <div xmlns="http://www.w3.org/1999/xhtml" id="slotBoxTopText" class="jfet-slot-html"></div>
+            </foreignObject>
+          </g>
+          <g id="slotBoxG" class="circuit-slot-box" transform="translate(10,143)">
+            <rect width="120" height="34" rx="4" />
+            <foreignObject x="0" y="0" width="120" height="34">
+              <div xmlns="http://www.w3.org/1999/xhtml" id="slotBoxGText" class="jfet-slot-html"></div>
+            </foreignObject>
+          </g>
+          <g id="slotBoxBottom" class="circuit-slot-box" transform="translate(170,236)">
+            <rect width="120" height="34" rx="4" />
+            <foreignObject x="0" y="0" width="120" height="34">
+              <div xmlns="http://www.w3.org/1999/xhtml" id="slotBoxBottomText" class="jfet-slot-html"></div>
+            </foreignObject>
+          </g>
+        </svg>
+      </div>
+    </div>
+
+    <!-- RIGHT: question -->
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+
+          <div class="fill-pool-wrap" id="fillPoolWrap" style="display:none">
+            <div class="fill-pool-row" id="fillPoolRow">
+              <div class="fill-pool-arrow">▶</div>
+              <div class="fill-pool" id="fillPool"></div>
+            </div>
+          </div>
+
+          <div class="options" id="qOptions"></div>
+          <div class="match-wrap" id="qMatch" style="display:none">
+            <div class="match-pool-row" id="matchPoolRow">
+              <div class="match-pool-arrow">▶</div>
+              <div class="match-pool" id="matchPool"></div>
+            </div>
+            <div class="match-columns" id="matchColumns"></div>
+          </div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS — see quiz-engine.js's own header comment for the full field
+    // reference. Add, remove, split or reorder questions by editing this
+    // array only — nothing in the engine needs to change.
+    // ══════════════════════════════════════════════════════════════════════
+
+    const QUESTIONS = [
+      // ── Fundamentals & Symbols ──────────────────────────────────────
+      {
+        // Sample Q1 ("the three terminals of a JFET are...") upgraded from
+        // a bare MCQ into the interactive diagram-labelling mechanic,
+        // reused verbatim from basics/jfet_knowledge_basics.html's own Q2.
+        leftPanel: 'circuit',
+        kind: 'fill',
+        circuitConfig: { shapeId: 'jfet-n-circle', topKey: 'D', gateOffset: 10 },
+        get slotIds() { return jfetSlotIds(this.circuitConfig); },
+        text: () => `This is an <b style="color:var(--colour-ui-primary)">N-channel JFET</b>. <b style="color:var(--colour-ui-primary)">Click</b> a name below, then <b style="color:var(--colour-ui-primary)">click</b> the terminal it belongs to.`,
+        hint: () => `A JFET only has 3 terminals. Three of the names below belong to a different transistor family entirely — they won't fit anywhere on this diagram.`,
+        options: () => shuffle(jfetFillOptions()),
+        correctExplain: jfetFillCorrectExplain,
+        working: jfetFillWorking
+      },
+      {
+        // Sample Q4 ("the schematic symbol...shows the arrow...") upgraded
+        // to shapeGrid multi-select, reused verbatim from basics.html's Q1.
+        leftPanel: 'shapeGrid',
+        kind: 'multi',
+        shapeViewBox: '-55 -55 110 110',
+        text: () => `<b style="color:var(--colour-ui-primary)">Click</b> every shape below that is a <b class="colour-jfet">valid</b> JFET transistor symbol. There are <b style="color:var(--colour-ui-correct)">4 correct</b> shapes among the 8 shown.`,
+        hint: () => 'A valid symbol has exactly one arrow, on the gate lead (the horizontal one) — never on the drain or source lead. The arrow points INTO the channel for N-channel, or OUT of the channel for P-channel. The circle is optional — it doesn\'t change which symbols are valid.',
+        options: () => shuffle([
+          { label: 'N-channel, circle',    type: 'correct', shapeId: 'jfet-n-circle' },
+          { label: 'P-channel, circle',    type: 'correct', shapeId: 'jfet-p-circle' },
+          { label: 'N-channel, no circle', type: 'correct', shapeId: 'jfet-n-nocircle' },
+          { label: 'P-channel, no circle', type: 'correct', shapeId: 'jfet-p-nocircle' },
+          { label: 'Arrow on drain/source lead, pointing in',  type: 'wrong', shapeId: 'jfet-error-wronglead-in' },
+          { label: 'Arrow on drain/source lead, pointing out', type: 'wrong', shapeId: 'jfet-error-wronglead-out' },
+          { label: 'Two arrows, both pointing in',  type: 'wrong', shapeId: 'jfet-error-double-in' },
+          { label: 'Two arrows, both pointing out', type: 'wrong', shapeId: 'jfet-error-double-out' }
+        ]),
+        correctExplain: (st) => {
+          const nums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(n => n).join(', ');
+          return `Shapes <b>${nums}</b> are the valid JFET symbols`;
+        },
+        working: (st) => {
+          const correctNums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join(', ');
+          const wrongNums = st.opts.map((o, i) => o.type === 'wrong' ? i + 1 : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-step">Valid symbols — shapes ${correctNums}:</div>
+    <div class="working-line">Each has exactly one arrow, on the <b style="color:var(--colour-ui-correct)">gate lead</b>. The arrow points <b style="color:var(--colour-ui-correct)">into</b> the channel for N-channel, or <b style="color:var(--colour-ui-correct)">out of</b> the channel for P-channel.</div>
+    <div class="working-step" style="margin-top:.6rem">Invalid symbols — shapes ${wrongNums}:</div>
+    <div class="working-line">Each breaks the one-arrow-on-the-gate rule: two put the arrow on a <b style="color:var(--colour-ui-wrong)">drain/source lead</b>, and two put <b style="color:var(--colour-ui-wrong)">two arrows</b> on the symbol at once.</div>`;
+        }
+      },
+      {
+        text: () => 'In an N-channel JFET, current flow is primarily due to:',
+        hint: () => 'N-type material\'s majority carriers follow directly from its doping — no different from any other N-type semiconductor.',
+        options: () => shuffle([
+          { label: 'Electrons', type: 'correct' },
+          { label: 'Holes', type: 'wrong' },
+          { label: 'Both electrons and holes', type: 'wrong' },
+          { label: 'No carriers', type: 'wrong' },
+        ]),
+        correctExplain: () => 'An N-channel JFET conducts primarily via <b>electrons</b>',
+        working: () => `<div class="working-line">The N-channel is doped N-type material, so its majority carriers are <b style="color:var(--colour-ui-correct)">electrons</b>. A JFET is a <b>unipolar</b> device — only one carrier type does the work of conducting current through the channel.</div>`
+      },
+      {
+        text: () => 'The gate-source junction of a JFET is normally:',
+        hint: () => 'Think about what keeps gate current near zero, and how the depletion region needs to behave to control the channel.',
+        options: () => shuffle([
+          { label: 'Forward biased', type: 'wrong' },
+          { label: 'Reverse biased', type: 'correct' },
+          { label: 'Shorted to the source', type: 'wrong' },
+          { label: 'At zero bias', type: 'wrong' },
+        ]),
+        correctExplain: () => 'The gate-source junction is normally <b>reverse biased</b>',
+        working: () => `<div class="working-line">A JFET's gate is a PN junction against the channel. Keeping it <b style="color:var(--colour-ui-correct)">reverse biased</b> widens the depletion region into the channel as <span class="colour-voltage">V<sub>GS</sub></span> becomes more negative (N-channel), narrowing the conducting path and reducing drain current — that's the entire control mechanism.</div>
+    <div class="working-line" style="margin-top:.4rem">Because a reverse-biased junction conducts essentially zero current, almost no current ever flows into the gate — the direct reason a JFET's input resistance is so high.</div>`
+      },
+      {
+        text: () => 'The input resistance of a JFET is:',
+        hint: () => 'Directly follows from how the gate-source junction is normally biased.',
+        options: () => shuffle([
+          { label: 'Zero', type: 'wrong' },
+          { label: 'Low', type: 'wrong' },
+          { label: 'Moderate', type: 'wrong' },
+          { label: 'Very high', type: 'correct' },
+        ]),
+        correctExplain: () => 'A JFET\'s input resistance is <b>very high</b>',
+        working: () => `<div class="working-line">Directly follows from the gate-source junction always being <b style="color:var(--colour-ui-correct)">reverse biased</b> — a reverse-biased junction draws only a tiny leakage current no matter what voltage is applied, so the gate looks like an extremely high resistance (typically hundreds of MΩ or more) to whatever is driving it.</div>`
+      },
+
+      // ── JFET Operation & Characteristics ──────────────────────────────
+      {
+        text: () => 'The transfer curve of a JFET shows:',
+        hint: () => 'The transfer curve is what links the input control voltage to the output current.',
+        options: () => shuffle([
+          { label: 'Drain current vs. gate-source voltage', type: 'correct' },
+          { label: 'Source current vs. drain voltage', type: 'wrong' },
+          { label: 'Input resistance vs. frequency', type: 'wrong' },
+          { label: 'Gate current vs. gate voltage', type: 'wrong' },
+        ]),
+        correctExplain: () => `The transfer curve plots <b><span class="colour-current">I<sub>D</sub></span> vs. <span class="colour-voltage">V<sub>GS</sub></span></b>`,
+        working: () => `<div class="working-line">The transfer curve is the graph of <b style="color:var(--colour-ui-correct)">drain current (<span class="colour-current">I<sub>D</sub></span>)</b> against <b style="color:var(--colour-ui-correct)">gate-source voltage (<span class="colour-voltage">V<sub>GS</sub></span>)</b> — it shows exactly how the gate voltage controls channel current, running from <span class="colour-current">I<sub>D</sub></span> = <span class="colour-current">I<sub>DSS</sub></span> at <span class="colour-voltage">V<sub>GS</sub></span> = 0 down to <span class="colour-current">I<sub>D</sub></span> = 0 at <span class="colour-voltage">V<sub>GS</sub></span> = <span class="colour-voltage">V<sub>P</sub></span> (pinch-off).</div>`
+      },
+      {
+        text: () => 'Transconductance (gm) for a JFET is defined as:',
+        hint: () => 'Same idea as a BJT\'s β — how much does the output change for a given change at the input?',
+        options: () => shuffle([
+          { label: `Change in <span class="colour-current">I<sub>D</sub></span> / Change in <span class="colour-voltage">V<sub>DS</sub></span>`, type: 'wrong' },
+          { label: `Change in <span class="colour-current">I<sub>D</sub></span> / Change in <span class="colour-voltage">V<sub>GS</sub></span>`, type: 'correct' },
+          { label: `<span class="colour-current">I<sub>D</sub></span> / <span class="colour-voltage">V<sub>DS</sub></span>`, type: 'wrong' },
+          { label: `Change in <span class="colour-voltage">V<sub>GS</sub></span> / Change in <span class="colour-current">I<sub>D</sub></span>`, type: 'wrong' },
+        ]),
+        correctExplain: () => `<span class="colour-jfet">g<sub>m</sub></span> = <b>Δ<span class="colour-current">I<sub>D</sub></span> / Δ<span class="colour-voltage">V<sub>GS</sub></span></b>`,
+        working: () => `<div class="working-line">Transconductance measures how much the output current changes for a given change in input voltage — <b style="color:var(--colour-ui-correct)"><span class="colour-jfet">g<sub>m</sub></span> = Δ<span class="colour-current">I<sub>D</sub></span> / Δ<span class="colour-voltage">V<sub>GS</sub></span></b>, the slope of the transfer curve at the Q-point. It's the JFET equivalent of a BJT's β: the key gain-controlling parameter used in every small-signal formula.</div>`
+      },
+      {
+        text: () => `The maximum drain current (<span class="colour-current">I<sub>DSS</sub></span>) in a JFET occurs when:`,
+        hint: () => 'Think about when the depletion region is at its narrowest.',
+        options: () => shuffle([
+          { label: `<span class="colour-voltage">V<sub>GS</sub></span> = 0`, type: 'correct' },
+          { label: `<span class="colour-jfet">g<sub>m</sub></span> = 0`, type: 'wrong' },
+          { label: `<span class="colour-voltage">V<sub>DS</sub></span> = 0`, type: 'wrong' },
+          { label: `<span class="colour-voltage">V<sub>GS</sub></span> = V<sub>P</sub>`, type: 'wrong' },
+        ]),
+        correctExplain: () => `<span class="colour-current">I<sub>DSS</sub></span> occurs at <b>V<sub>GS</sub> = 0</b>`,
+        working: () => `<div class="working-line">With no gate-source bias, the depletion region is at its narrowest and the channel is at its widest — so current is at its maximum, <b style="color:var(--colour-ui-correct)"><span class="colour-current">I<sub>DSS</sub></span></b> ("drain-to-source current, gate shorted"). This is the <span class="colour-current">I<sub>D</sub></span>-axis intercept of the transfer curve.</div>`
+      },
+      {
+        text: () => `The pinch-off voltage (<span class="colour-voltage">V<sub>P</sub></span>) is defined as the:`,
+        hint: () => 'The opposite extreme from IDSS on the transfer curve.',
+        options: () => shuffle([
+          { label: `Drain-source voltage at max <span class="colour-current">I<sub>D</sub></span>`, type: 'wrong' },
+          { label: 'Threshold voltage', type: 'wrong' },
+          { label: `Gate-source voltage at which <span class="colour-current">I<sub>D</sub></span> = 0`, type: 'correct' },
+          { label: `Gate voltage at maximum <span class="colour-current">I<sub>D</sub></span>`, type: 'wrong' },
+        ]),
+        correctExplain: () => `<span class="colour-voltage">V<sub>P</sub></span> is the <b>gate-source voltage at which I<sub>D</sub> = 0</b>`,
+        working: () => `<div class="working-line">As <span class="colour-voltage">V<sub>GS</sub></span> becomes more negative (N-channel), the depletion regions from each side of the gate junction grow until they meet in the middle of the channel — fully pinching it off. The <span class="colour-voltage">V<sub>GS</sub></span> value where this happens, and drain current drops to zero, is <b style="color:var(--colour-ui-correct)"><span class="colour-voltage">V<sub>P</sub></span></b>. It marks the opposite end of the transfer curve from <span class="colour-current">I<sub>DSS</sub></span>.</div>`
+      },
+      {
+        text: () => `In an FET, increasing <span class="colour-voltage">V<sub>DS</sub></span> beyond pinch-off mainly:`,
+        hint: () => 'This is the JFET\'s own version of the "active region" — the flat part of its output characteristic.',
+        options: () => shuffle([
+          { label: `Decreases <span class="colour-current">I<sub>D</sub></span> sharply`, type: 'wrong' },
+          { label: `Keeps <span class="colour-current">I<sub>D</sub></span> nearly constant`, type: 'correct' },
+          { label: `Increases <span class="colour-current">I<sub>D</sub></span> linearly`, type: 'wrong' },
+          { label: `Zeroes <span class="colour-jfet">g<sub>m</sub></span>`, type: 'wrong' },
+        ]),
+        correctExplain: () => `Beyond pinch-off, <b><span class="colour-current">I<sub>D</sub></span> stays nearly constant</b> as V<sub>DS</sub> keeps rising`,
+        working: () => `<div class="working-line">Once <span class="colour-voltage">V<sub>DS</sub></span> is large enough to pinch off the channel at the drain end, further increases in <span class="colour-voltage">V<sub>DS</sub></span> barely change <span class="colour-current">I<sub>D</sub></span> — the device is behaving as a near-ideal <b style="color:var(--colour-ui-correct)">constant-current source</b>, set by <span class="colour-voltage">V<sub>GS</sub></span> alone. This flat "active/saturation" region is exactly what makes a JFET usable as a predictable voltage amplifier.</div>`
+      },
+      {
+        text: () => 'In small-signal analysis, the controlled current source for a JFET is represented as:',
+        hint: () => 'The controlled source models the device\'s own gain — the same relationship as gm\'s own definition.',
+        options: () => shuffle([
+          { label: `<span class="colour-current">I<sub>D</sub></span> × <span class="colour-resistor">R<sub>D</sub></span>`, type: 'wrong' },
+          { label: `<span class="colour-jfet">g<sub>m</sub></span> × <span class="colour-voltage">v<sub>gs</sub></span>`, type: 'correct' },
+          { label: `<span class="colour-current">I<sub>DSS</sub></span>`, type: 'wrong' },
+          { label: `<span class="colour-voltage">V<sub>DS</sub></span> × <span class="colour-jfet">g<sub>m</sub></span>`, type: 'wrong' },
+        ]),
+        correctExplain: () => `The AC drain current source is <b><span class="colour-jfet">g<sub>m</sub></span> × <span class="colour-voltage">v<sub>gs</sub></span></b>`,
+        working: () => `<div class="working-line">The JFET's small-signal AC model replaces the device with a current source of value <b style="color:var(--colour-ui-correct)"><span class="colour-jfet">g<sub>m</sub></span> × <span class="colour-voltage">v<sub>gs</sub></span></b> between drain and source (v<sub>gs</sub> being the small AC signal riding on <span class="colour-voltage">V<sub>GS</sub></span>) — this single relationship is what every CS/CD/CG gain formula below is built from.</div>`
+      },
+
+      // ── Biasing ─────────────────────────────────────────────────────
+      {
+        text: () => 'How many resistors are used in a self-bias Common Source JFET amplifier?',
+        hint: () => 'Count the resistors needed to bias the gate, set the source voltage automatically, and develop an output.',
+        options: () => shuffle([
+          { label: '1', type: 'wrong' },
+          { label: '2', type: 'wrong' },
+          { label: '3', type: 'correct' },
+          { label: '4', type: 'wrong' },
+        ]),
+        correctExplain: () => 'Self-bias uses <b>3</b> resistors',
+        working: () => `<div class="working-line">Self-bias needs <b><span class="colour-resistor">R<sub>G</sub></span></b> (holds the gate near 0 V — carries no DC current, so its exact value doesn't matter much), <b><span class="colour-resistor">R<sub>S</sub></span></b> (its voltage drop sets <span class="colour-voltage">V<sub>GS</sub></span> automatically, hence "self" bias), and <b><span class="colour-resistor">R<sub>D</sub></span></b> (develops the output voltage and sets <span class="colour-voltage">V<sub>D</sub></span>).</div>
+    <div class="working-line" style="margin-top:.4rem">See the interactive <a href="../jfet/biasing_circuits/jfet_self_bias.html">Self-Bias DC Analysis</a> simulator for the full step-by-step walkthrough with randomised values.</div>`
+      },
+      {
+        text: () => 'Voltage-divider bias in a JFET circuit:',
+        hint: () => 'Individual JFETs of the same part number can have quite different characteristics — think about what a stiff divider protects against.',
+        options: () => shuffle([
+          { label: 'Makes the bias less dependent on the JFET\'s characteristics', type: 'correct' },
+          { label: 'Increases the gate current', type: 'wrong' },
+          { label: 'Increases the transconductance', type: 'wrong' },
+          { label: 'Reduces noise', type: 'wrong' },
+        ]),
+        correctExplain: () => 'Voltage-divider bias makes the Q-point <b>less dependent on device characteristics</b>',
+        working: () => `<div class="working-line">Individual JFETs of the same part number can have very different <span class="colour-current">I<sub>DSS</sub></span> and <span class="colour-voltage">V<sub>P</sub></span> values — self-bias's Q-point rides directly on those. Voltage-divider bias instead sets a fixed <span class="colour-voltage">V<sub>G</sub></span> from <span class="colour-resistor">R1</span>/<span class="colour-resistor">R2</span> (much bigger than any device-to-device spread), which <b style="color:var(--colour-ui-correct)">stabilises the Q-point</b> against that variation — the same reasoning as a BJT's own voltage-divider bias.</div>
+    <div class="working-line" style="margin-top:.4rem">See the interactive <a href="../jfet/biasing_circuits/jfet_voltage_divider_bias.html">Voltage-Divider Bias</a> simulator for a full worked example.</div>`
+      },
+      {
+        text: () => 'The quiescent point (Q-point) represents:',
+        hint: () => '"Quiescent" means at rest — with no AC input signal applied at all.',
+        options: () => shuffle([
+          { label: 'DC operating point', type: 'correct' },
+          { label: 'Maximum AC output', type: 'wrong' },
+          { label: 'Zero-bias condition', type: 'wrong' },
+          { label: 'Cutoff', type: 'wrong' },
+        ]),
+        correctExplain: () => `The Q-point is the <b>DC operating point</b> (I<sub>D</sub> and V<sub>DS</sub> with no signal applied)`,
+        working: () => `<div class="working-line">The Q-point is where the amplifier sits with <b style="color:var(--colour-ui-correct)">no AC signal applied</b> — its DC values of <span class="colour-current">I<sub>D</sub></span>, <span class="colour-voltage">V<sub>GS</sub></span> and <span class="colour-voltage">V<sub>DS</sub></span>. Everything an AC signal does happens as a swing around this fixed point, so choosing it well (comfortably inside the active region, away from both pinch-off and the supply rail) is what biasing is for.</div>`
+      },
+      {
+        // Numeric single-select, static values (same static-not-randomised
+        // pattern as bjt_review_quiz.html's own β calculations) using the
+        // exact self-bias formula chain from jfet_self_bias.html.
+        text: () => `In a self-bias JFET amplifier, <span class="colour-voltage">V<sub>GS</sub></span> = -2 V and <span class="colour-resistor">R<sub>S</sub></span> = 1 kΩ. What is <span class="colour-current">I<sub>DS</sub></span>?`,
+        hint: () => 'Use the same self-bias formula chain: no gate current means the gate sits at 0 V.',
+        options: () => shuffle([
+          { label: '2 mA', type: 'correct' },
+          { label: '-2 mA', type: 'wrong' },
+          { label: '4 mA', type: 'wrong' },
+          { label: '1 mA', type: 'wrong' },
+        ]),
+        correctExplain: () => `<span class="colour-current">I<sub>DS</sub></span> = <b>2 mA</b>`,
+        working: () => `<div class="working-step">Self-bias's formula chain:</div>
+    <div class="working-line">No current flows into the gate, so <span class="colour-resistor">R<sub>G</sub></span> drops nothing and <b style="color:var(--colour-ui-correct)"><span class="colour-voltage">V<sub>G</sub></span> = 0 V</b>.</div>
+    <div class="working-line"><span class="colour-voltage">V<sub>GS</sub></span> = <span class="colour-voltage">V<sub>G</sub></span> − <span class="colour-voltage">V<sub>S</sub></span>, rearranged: <b style="color:var(--colour-ui-correct)"><span class="colour-voltage">V<sub>S</sub></span> = V<sub>G</sub> − V<sub>GS</sub> = 0 − (−2 V) = 2 V</b>.</div>
+    <div class="working-line"><span class="colour-current">I<sub>DS</sub></span> is the only current through <span class="colour-resistor">R<sub>S</sub></span>, so by Ohm's Law: <b style="color:var(--colour-ui-correct)">I<sub>DS</sub> = V<sub>S</sub> / R<sub>S</sub> = 2 V / 1 kΩ = 2 mA</b>.</div>
+    <div class="working-line" style="margin-top:.4rem">Try the interactive <a href="../jfet/biasing_circuits/jfet_self_bias.html">Self-Bias DC Analysis</a> simulator for randomised practice values and the full V<sub>G</sub>→V<sub>S</sub>→I<sub>DS</sub>→V<sub>D</sub>→V<sub>DG</sub>→V<sub>DS</sub> chain.</div>`
+      },
+
+      // ── Amplifier Configurations ───────────────────────────────────
+      {
+        kind: 'match',
+        columns: () => ['Common Source', 'Common Drain (Source Follower)', 'Common Gate'],
+        text: () => 'Each description below matches one JFET amplifier configuration. <b style="color:var(--colour-ui-primary)">Place</b> each one under the correct configuration.',
+        hint: () => 'The configuration is named after whichever terminal is common (AC-grounded) to both the input and output loops — that terminal is never where the input signal is applied.',
+        options: () => shuffle([
+          { label: 'Input signal applied to the Gate; output taken from the Drain', col: 0 },
+          { label: 'Input signal applied to the Gate; output taken from the Source', col: 1 },
+          { label: 'Input signal applied to the Source; output taken from the Drain', col: 2 },
+          { label: 'The Source terminal is common to both input and output', col: 0 },
+          { label: 'The Drain terminal is common to both input and output', col: 1 },
+          { label: 'The Gate terminal is common to both input and output', col: 2 },
+        ]),
+        correctExplain: (st) => {
+          const wrongCount = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).length;
+          return wrongCount === 0 ? 'All 6 correctly matched' : `${st.opts.length - wrongCount} of ${st.opts.length} correctly matched`;
+        },
+        working: () => `
+    <div class="working-line"><b style="color:var(--colour-ui-correct)">Common Source</b> (the standard voltage amplifier): input at Gate, output at Drain, Source is the shared/grounded terminal.</div>
+    <div class="working-line"><b style="color:var(--colour-ui-correct)">Common Drain</b> (source follower): input at Gate, output at Source, Drain sits at AC ground (tied straight to <span class="colour-supply">V<sub>DD</sub></span>, which is an AC ground for a well-decoupled supply).</div>
+    <div class="working-line"><b style="color:var(--colour-ui-correct)">Common Gate</b>: input at Source, output at Drain, Gate is grounded — the mirror image of common source.</div>`
+      },
+      {
+        kind: 'match',
+        columns: () => ['Common Source', 'Common Drain (Source Follower)', 'Common Gate'],
+        text: () => 'Each characteristic below belongs to one JFET amplifier configuration. <b style="color:var(--colour-ui-primary)">Place</b> each one correctly.',
+        hint: () => 'Only one configuration inverts the signal. Only one has a voltage gain that can never exceed 1.',
+        options: () => shuffle([
+          { label: `Voltage gain ≈ <span class="colour-jfet">g<sub>m</sub></span> × <span class="colour-resistor">R<sub>D</sub></span>; output is 180° out of phase with the input (inverting)`, col: 0 },
+          { label: 'Voltage gain is always slightly less than 1 (unity gain); output is in phase with the input — used as a buffer', col: 1 },
+          { label: 'Non-inverting voltage gain with a very low input impedance — mainly used in RF/high-frequency circuits', col: 2 },
+          { label: 'The most commonly used configuration for general-purpose voltage amplification', col: 0 },
+        ]),
+        correctExplain: (st) => {
+          const wrongCount = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).length;
+          return wrongCount === 0 ? 'All 4 correctly matched' : `${st.opts.length - wrongCount} of ${st.opts.length} correctly matched`;
+        },
+        working: () => `
+    <div class="working-line"><b style="color:var(--colour-ui-correct)">Common Source</b> is the workhorse voltage amplifier — real, useful gain (<span class="colour-jfet">g<sub>m</sub></span> × <span class="colour-resistor">R<sub>D</sub></span>), but it inverts the signal by 180°.</div>
+    <div class="working-line"><b style="color:var(--colour-ui-correct)">Common Drain / Source Follower</b> trades gain away entirely (always <1, no inversion) in exchange for a very high input impedance and very low output impedance — ideal as a buffer stage.</div>
+    <div class="working-line"><b style="color:var(--colour-ui-correct)">Common Gate</b> has a low input impedance (looking into the Source) but doesn't invert — mostly seen in RF work where its impedance matches typical low-impedance sources.</div>`
+      },
+      {
+        text: () => `If <span class="colour-resistor">R<sub>S</sub></span> is bypassed (with a capacitor) in a common-source circuit:`,
+        hint: () => 'The bypass capacitor\'s job for AC signals is the same trick as a BJT\'s own emitter bypass cap.',
+        options: () => shuffle([
+          { label: 'DC bias is destroyed', type: 'wrong' },
+          { label: 'AC gain increases', type: 'correct' },
+          { label: 'AC gain decreases', type: 'wrong' },
+          { label: `<span class="colour-jfet">g<sub>m</sub></span> decreases`, type: 'wrong' },
+        ]),
+        correctExplain: () => `Bypassing <span class="colour-resistor">R<sub>S</sub></span> <b>increases the AC gain</b>`,
+        working: () => `<div class="working-line"><span class="colour-resistor">R<sub>S</sub></span> still sets the DC bias point — the bypass capacitor is a short circuit for AC signals only, not DC, so the Q-point is untouched. For AC, shorting out <span class="colour-resistor">R<sub>S</sub></span> removes it from the gain formula entirely (Av ≈ <span class="colour-jfet">g<sub>m</sub></span> × <span class="colour-resistor">R<sub>D</sub></span> instead of a smaller R<sub>S</sub>-degraded value), so <b style="color:var(--colour-ui-correct)">AC gain increases</b>. The same DC-bias-stability / AC-gain-boost trade-off shows up identically in a BJT's emitter-bypass capacitor.</div>`
+      },
+      {
+        text: () => 'The small-signal dynamic resistance looking into the Source is approximately:',
+        hint: () => 'This is the small-signal resistance of the terminal itself, not counting any external resistor tied to it.',
+        options: () => shuffle([
+          { label: `<span class="colour-resistor">R<sub>D</sub></span>`, type: 'wrong' },
+          { label: `<span class="colour-resistor">R<sub>S</sub></span>`, type: 'wrong' },
+          { label: `<span class="colour-jfet">g<sub>m</sub></span> × <span class="colour-voltage">V<sub>GS</sub></span>`, type: 'wrong' },
+          { label: `1 / <span class="colour-jfet">g<sub>m</sub></span>`, type: 'correct' },
+        ]),
+        correctExplain: () => `The source's own dynamic resistance is <b>1 / g<sub>m</sub></b>`,
+        working: () => `<div class="working-line">Looking into the Source terminal itself (ignoring any external <span class="colour-resistor">R<sub>S</sub></span>), the small-signal resistance is <b style="color:var(--colour-ui-correct)">1 / <span class="colour-jfet">g<sub>m</sub></span></b> — this is exactly why a source-follower's output impedance is so low: <span class="colour-jfet">g<sub>m</sub></span> is typically a few mA/V, so 1/g<sub>m</sub> works out to only a few hundred ohms.</div>`
+      },
+
+      // ── Faults & Testing ────────────────────────────────────────────
+      {
+        text: () => 'A fault where the Source became open-circuit would cause:',
+        hint: () => 'A JFET only has one current path — think about what happens to every point along that path when it\'s broken.',
+        options: () => shuffle([
+          { label: `<span class="colour-current">I<sub>DS</sub></span> to reach <span class="colour-current">I<sub>DSS</sub></span>`, type: 'wrong' },
+          { label: `<span class="colour-voltage">V<sub>D</sub></span> to go to <span class="colour-supply">V<sub>DD</sub></span>`, type: 'correct' },
+          { label: `<span class="colour-current">I<sub>G</sub></span> to increase`, type: 'wrong' },
+          { label: `<span class="colour-voltage">V<sub>D</sub></span> to fall to zero`, type: 'wrong' },
+        ]),
+        correctExplain: () => `An open Source drives <b>V<sub>D</sub> up to V<sub>DD</sub></b>`,
+        working: () => `<div class="working-line">A JFET only has ONE current path: <span class="colour-supply">V<sub>DD</sub></span> → <span class="colour-resistor">R<sub>D</sub></span> → channel → <span class="colour-resistor">R<sub>S</sub></span> → common. Breaking it anywhere — including an open Source lead — kills current everywhere in that loop. With <b style="color:var(--colour-ui-correct)"><span class="colour-current">I<sub>DS</sub></span> = 0</b>, <span class="colour-resistor">R<sub>D</sub></span> drops no voltage at all, so <b style="color:var(--colour-ui-correct)"><span class="colour-voltage">V<sub>D</sub></span> rises all the way to <span class="colour-supply">V<sub>DD</sub></span></b>.</div>
+    <div class="working-line" style="margin-top:.4rem">Try this fault yourself in the <a href="../jfet/fault_finding/jfet_fault_interactive_internal.html">JFET Internal Fault</a> or <a href="../jfet/fault_finding/jfet_fault_interactive_resistor.html">JFET Resistor Fault</a> interactive troubleshooters.</div>`
+      },
+      {
+        text: () => 'A shorted drain-source in a JFET amplifier would cause:',
+        hint: () => 'Think about what a plain wire between two terminals removes from the circuit entirely.',
+        options: () => shuffle([
+          { label: 'No source current', type: 'wrong' },
+          { label: `<span class="colour-current">I<sub>D</sub></span> to be very small`, type: 'wrong' },
+          { label: 'Infinite gain', type: 'wrong' },
+          { label: 'No drain voltage swing', type: 'correct' },
+        ]),
+        correctExplain: () => 'A drain-source short causes <b>no drain voltage swing</b>',
+        working: () => `<div class="working-line">Tying drain straight to source removes the JFET from the circuit entirely — the channel no longer does anything useful, and whatever DC voltage sits at that shorted node stays fixed regardless of the input signal. With the transistor unable to modulate it, <b style="color:var(--colour-ui-correct)">there's no drain voltage swing</b> at all — the amplifier produces no AC output.</div>`
+      },
+
+      // ── JFET vs BJT ─────────────────────────────────────────────────
+      {
+        // Reused verbatim from basics.html's own Q4 — ties directly to
+        // sample Q37's "advantage of FETs over BJTs: higher input
+        // resistance" as a natural wrap-up comparison question.
+        kind: 'match',
+        columns: () => ['JFET', 'BJT'],
+        text: () => `Each feature below describes either a <b class="colour-jfet">JFET</b> or a <b class="colour-bjt">BJT</b>. <b style="color:var(--colour-ui-primary)">Place</b> each one under the correct device.`,
+        hint: () => `Think about what actually CONTROLS the output current in each device — a voltage, or a current? That single question answers half of these.`,
+        options: () => shuffle([
+          { label: 'Controlled by an input VOLTAGE (VGS) rather than an input current', col: 0 },
+          { label: 'Controlled by an input CURRENT (IB) rather than an input voltage', col: 1 },
+          { label: 'Extremely high input impedance — its control terminal draws almost no current', col: 0 },
+          { label: 'Comparatively low input impedance — its control terminal must draw a real, non-zero current to operate', col: 1 },
+          { label: 'Unipolar device — conducts using only ONE type of charge carrier (majority carriers)', col: 0 },
+          { label: 'Bipolar device — conducts using BOTH electrons and holes as charge carriers', col: 1 },
+        ]),
+        correctExplain: (st) => {
+          const wrongCount = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).length;
+          return wrongCount === 0 ? 'All 6 features correctly matched' : `${st.opts.length - wrongCount} of ${st.opts.length} features correctly matched`;
+        },
+        working: () => `
+    <div class="working-line">A <b class="colour-jfet">JFET</b>'s gate is a reverse-biased PN junction — it draws essentially zero gate current, so the device is controlled purely by the gate-source <b>voltage</b> (V<sub>GS</sub>), and that same reverse-biased junction is why its input impedance is so high. This is the direct answer to "an advantage of FETs over BJTs": higher input resistance.</div>
+    <div class="working-line">A <b class="colour-bjt">BJT</b>'s base-emitter junction is forward-biased in normal operation — it needs a real base <b>current</b> (I<sub>B</sub>) to turn the device on, which is also why its input impedance is comparatively low.</div>
+    <div class="working-total">The unipolar/bipolar split follows the same logic: a <b class="colour-jfet">JFET</b>'s channel conducts with only majority carriers — hence "unipolar" — while a <b class="colour-bjt">BJT</b> relies on both electron AND hole flow to work, hence "bi-polar."</div>`
+      }
+    ];
+
+    // ── Configurable JFET terminal-labelling circuit (Q1) — copied
+    // unchanged from basics/jfet_knowledge_basics.html. ──
+    const SLOT_COL = { slotBoxTop: 0, slotBoxG: 1, slotBoxBottom: 2 };
+    ['slotBoxTop', 'slotBoxG', 'slotBoxBottom'].forEach(id => {
+      document.getElementById(id).addEventListener('click', () => slotClicked(SLOT_COL[id]));
+    });
+    function jfetSlotIds(cfg) {
+      return cfg.topKey === 'D' ? ['slotBoxTop', 'slotBoxG', 'slotBoxBottom'] : ['slotBoxBottom', 'slotBoxG', 'slotBoxTop'];
+    }
+    function applyJfetCircuitConfig(cfg) {
+      document.getElementById('jfetTerminalUse').setAttribute('href', '#' + cfg.shapeId);
+      SLOT_COL.slotBoxTop = cfg.topKey === 'D' ? 0 : 2;
+      SLOT_COL.slotBoxBottom = cfg.topKey === 'D' ? 2 : 0;
+      const gateY = 150 + cfg.gateOffset;
+      const line = document.getElementById('gateLeaderLine');
+      line.setAttribute('y1', gateY);
+      line.setAttribute('y2', gateY);
+      document.getElementById('slotBoxG').setAttribute('transform', `translate(10,${143 + (cfg.gateOffset - 10)})`);
+    }
+    function jfetFillOptions() {
+      return [
+        { label: 'Drain',     poolHtml: 'Drain',     col: 0 },
+        { label: 'Gate',      poolHtml: 'Gate',      col: 1 },
+        { label: 'Source',    poolHtml: 'Source',    col: 2 },
+        { label: 'Base',      poolHtml: 'Base' },
+        { label: 'Emitter',   poolHtml: 'Emitter' },
+        { label: 'Collector', poolHtml: 'Collector' }
+      ];
+    }
+    function jfetFillCorrectExplain(st) {
+      const wrongCount = st.slotPlaced.filter((p, slot) => p !== st.cor[slot]).length;
+      return wrongCount === 0 ? 'All 3 terminals correctly labelled' : `${st.slotPlaced.length - wrongCount} of ${st.slotPlaced.length} terminals correctly labelled`;
+    }
+    function jfetFillWorking(st) {
+      const mistakes = st.slotPlaced
+        .map((p, slot) => p !== st.cor[slot] ? st.opts[p]?.label ?? '(left blank)' : null)
+        .filter(Boolean);
+      const mistakeLine = mistakes.length
+        ? `<div class="working-step" style="margin-top:.6rem">Mislabelled:</div><div class="working-line">${mistakes.join(', ')}</div>`
+        : '';
+      return `
+    <div class="working-step">A JFET's 3 terminals:</div>
+    <div class="working-line"><b style="color:var(--colour-ui-correct)">Drain</b> and <b style="color:var(--colour-ui-correct)">Source</b> are the two ends of the channel current flows through. <b style="color:var(--colour-ui-correct)">Gate</b> is the control terminal — the voltage between gate and source is what controls how much current flows through the channel.</div>
+    <div class="working-step" style="margin-top:.6rem">Why Base, Emitter and Collector don't belong:</div>
+    <div class="working-line">Those are BJT terminal names, not JFET ones.</div>
+    ${mistakeLine}`;
+    }
+
+    RENDER_EXTRA = () => {
+      document.getElementById('fillPoolWrap').style.display = isFill(QUESTIONS[cur]) ? '' : 'none';
+      const cfg = QUESTIONS[cur].circuitConfig;
+      if (cfg) applyJfetCircuitConfig(cfg);
+    };
+
+    // Randomise question ORDER (not just each question's own options) on
+    // every load and every Restart — same reasoning and pattern as
+    // bjt_review_quiz.html's own RESET_EXTRA (itself matching
+    // digital_gate_identification.html's precedent): a short revision
+    // session should draw from across the whole quiz, not always start
+    // at Q1. Safe even though Q1's circuitConfig-driven diagram is unique
+    // to this array position — RENDER_EXTRA reapplies it fresh from
+    // QUESTIONS[cur] on every render regardless of where Q1 lands.
+    RESET_EXTRA = () => shuffle(QUESTIONS);
+
+    initQuizNav();
+    resetQuiz();
+    initQuizFromURL();
+  </script>
+</body>
+</html>
