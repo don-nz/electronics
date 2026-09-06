@@ -1,0 +1,540 @@
+<!--
+  Knowledge quiz for JFET amplifier AC parameters — SELF-BIAS Common Source,
+  RS unbypassed. The JFET counterpart to
+  ../../bjt/ac_parameters/bjt_knowledge_ac_params_ce.html — same
+  architecture, same "one worked stage, progressive-reveal diagram badges"
+  approach, same shared quiz-engine.js — but the actual electrical content
+  is genuinely different, not a search-and-replace of the BJT file:
+
+    - re′ (BJT) has no JFET equivalent — a BJT's β is (approximately)
+      constant regardless of bias point, so re′=26mV/IE is a one-step
+      lookup. A JFET's transconductance gm is NOT constant — it depends on
+      WHERE the Q-point sits between VGS=0 (gm=gm0, maximum) and VGS=VP
+      (gm=0, pinched off): gm = gm0×(1 − VGS/VP). Q1 asks for gm at this
+      stage's own Q-point, given gm0 (a datasheet parameter, shown on the
+      diagram the same way β=200 was given directly in the BJT file) —
+      this is a genuinely JFET-specific calculation, not a relabelled
+      re′ question.
+    - Zb (BJT) — the "β multiplies whatever's in the emitter leg" step —
+      has NO JFET equivalent at all, because a JFET's gate draws
+      (essentially) zero current. There's nothing to reflect. Q2 asks for
+      Zin directly (= RG, full stop); Q3 is a dedicated conceptual
+      question asking WHY no Zb-style step was needed, so this genuine
+      simplification doesn't get glossed over as "the JFET version was
+      just easier" without understanding why.
+    - Zout ≈ RD (drain looks into a near-ideal current source in parallel
+      with RD, same ro-ignored idealisation the BJT file uses for RC) —
+      the one part of this quiz that IS a direct structural parallel to
+      the BJT version, since the physics (transistor's own output
+      resistance assumed very high, only the external resistor matters)
+      really is the same idea in both device families.
+    - Av = −gm×RD / (1 + gm×RS) — the self-bias equivalent of the BJT's
+      Av ≈ −RC/(RE+re′), with RS unbypassed providing the same source
+      (emitter) degeneration effect. Deliberately left un-simplified (RS
+      not dropped, no bypass cap) for the same reason the BJT file keeps
+      RE unbypassed: it's the genuinely general formula, and a "bypassed"
+      sibling file can drop the (1+gm×RS) term explicitly later, the same
+      way bjt_knowledge_ac_params_ce_bypassed.html did for RE.
+
+  ONE worked N-channel JFET self-bias stage is used throughout: 2N5459,
+  IDSS = 8 mA, VP = −4 V, gm0 = 2×IDSS/|VP| = 4 mA/V (all given, shown on
+  the diagram). RG = 1 MΩ, RS = 1 kΩ (unbypassed), RD = 2.2 kΩ, VDD = 15 V.
+  The DC Q-point (VGS = −2 V, IDS = 2 mA) is GIVEN on the diagram via an
+  ammeter-style IDS badge (same convention as the BJT file's IE badge) —
+  deliberately the exact same Q-point numbers already used in
+  ../../reviews/jfet_review_quiz.html's own self-bias IDS calculation
+  question, so a student who did that one recognises these values. This
+  file only covers AC parameters, not the DC bias derivation (see
+  ../biasing_circuits/jfet_self_bias.html for that).
+
+  Circuit diagram (jfet-self-bias-ac) uses the same large-scale WIRES/NODES
+  layout convention as the BJT file, simplified for self-bias's own
+  topology: RG runs from the gate node straight to COMMON (not to VDD —
+  unlike a BJT's R1/R2 divider, self-bias has nothing at all connecting
+  the gate side to the supply rail), so there's no "top rail spanning both
+  columns" the way the BJT file needed one for R1 and RC to share VDD —
+  only RD taps VDD here. That's a real, visible topology difference this
+  diagram is drawn to show, not hidden by forcing the BJT layout to fit.
+
+  JFET symbol shape (jfet-n-shape) copied from
+  ../biasing_circuits/jfet_self_bias.html's own defs (itself copied from
+  assets/shapes/jfet-symbols.svg) for visual consistency with that file's
+  DC-analysis diagram of the same physical circuit.
+
+  Built directly on the shared engine, assets/quiz-engine.js — same
+  "one generic QUESTIONS[] array, no per-question HTML" structure as
+  every other file in this project. See bjt_knowledge_ac_params_ce.html's
+  own header comment for the RENDER_EXTRA / progressive-reveal-badge
+  pattern this file reuses (updateGmReveal/updateZReveal).
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../assets/theme-init.js"></script>
+  <title>JFET Knowledge Quiz — AC Parameters (Self-Bias)</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../assets/quiz-common.css">
+  <script src="../../../assets/breadcrumb.js" defer></script>
+  <script src="../../../assets/quiz-engine.js"></script>
+  <style>
+    .progress-wrap { display: flex; gap: .4rem; align-items: center; margin-bottom: 1rem; }
+    @media (max-width: 480px) {
+      .frac-option { font-size: .82em; }
+    }
+    @media(min-width:900px) {
+      .quiz-wrap { display: grid;
+        grid-template-columns: minmax(340px, 700px) 1fr;
+        gap: 1.2rem;
+        align-items: start; }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Hidden defs: self-bias N-channel JFET Common Source AC amplifier. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <filter id="glow">
+        <feGaussianBlur stdDeviation="2" result="b" />
+        <feMerge>
+          <feMergeNode in="b" />
+          <feMergeNode in="SourceGraphic" />
+        </feMerge>
+      </filter>
+
+      <!-- ══ N-CHANNEL JFET SHAPE — copied from ../biasing_circuits/jfet_self_bias.html ══ -->
+      <g id="jfet-n-shape">
+        <circle cx="7" cy="0" r="30" fill="var(--colour-panel)" style="stroke: var(--colour-jfet)" stroke-width="2" filter="url(#glow)" />
+        <line x1="-30" y1="7" x2="0" y2="7" style="stroke: var(--colour-jfet)" stroke-width="2" />
+        <rect x="0" y="-20" width="4" height="40" style="fill: var(--colour-jfet)" />
+        <line x1="0" y1="-15" x2="15" y2="-15" style="stroke: var(--colour-jfet)" stroke-width="2" />
+        <line x1="14" y1="-15" x2="14" y2="-40" style="stroke: var(--colour-jfet)" stroke-width="2" />
+        <line x1="0" y1="15" x2="15" y2="15" style="stroke: var(--colour-jfet)" stroke-width="2" />
+        <line x1="14" y1="15" x2="14" y2="40" style="stroke: var(--colour-jfet)" stroke-width="2" />
+        <polygon points="-8,3 -8,12 2,7" style="fill: var(--colour-jfet)" />
+      </g>
+
+      <!-- ══ AC SIGNAL SOURCE SHAPE — circle with one sine cycle ══ -->
+      <g id="ac-source-shape">
+        <circle cx="0" cy="0" r="24" fill="none" style="stroke: var(--colour-signal)" stroke-width="2" filter="url(#glow)" />
+        <path d="M -16,0 C -11,-14 -5,-14 0,0 C 5,14 11,14 16,0" fill="none" style="stroke: var(--colour-signal)" stroke-width="2.5" stroke-linecap="round" />
+      </g>
+
+      <!-- ══ AMMETER BADGE ══ -->
+      <g id="ammeter-shape">
+        <circle cx="0" cy="0" r="30" style="fill: var(--colour-ammeter-fill); stroke: var(--colour-current)" stroke-width="1.5" filter="url(#glow)" />
+      </g>
+
+      <!-- ══ Z-VALUE METER BADGE ══ -->
+      <g id="z-meter-shape">
+        <circle cx="0" cy="0" r="25" style="fill: var(--colour-meter-fill); stroke: var(--colour-gain)" stroke-width="1.5" filter="url(#glow)" />
+      </g>
+
+      <!-- ══ VOLTMETER SHAPE — copied from ../biasing_circuits/jfet_self_bias.html's own meter-shape ══ -->
+      <g id="meter-shape">
+        <circle cx="0" cy="0" r="30" style="fill: var(--colour-meter-fill); stroke: var(--colour-red)" stroke-width="1.5" filter="url(#glow)" />
+        <line x1="-15" y1="-20" x2="15" y2="-20" style="stroke: var(--colour-red)" stroke-width="1.5" />
+        <line x1="-15" y1="-14" x2="15" y2="-14" style="stroke: var(--colour-red)" stroke-width="1.5" stroke-dasharray="3,2" />
+      </g>
+
+      <!-- ══ COUPLING CAPACITOR SHAPE ══ -->
+      <g id="cap-shape">
+        <rect x="-4" y="-12" width="8" height="24" style="fill: var(--colour-panel)" />
+        <line x1="-4" y1="-12" x2="-4" y2="12" style="stroke: var(--colour-capacitor)" stroke-width="2.5" />
+        <line x1="4" y1="-12" x2="4" y2="12" style="stroke: var(--colour-capacitor)" stroke-width="2.5" />
+      </g>
+
+      <g id="jfet-self-bias-ac">
+
+        <!-- ════════════════════ PRETEND DATASHEET ════════════════════
+             Top-left corner reference card, JFET-themed (colour-jfet
+             border/param-names) — the same device values previously shown
+             as plain text beside Q1 (IDSS, VP, gm0), now presented the way
+             a real datasheet excerpt would list them, matching the
+             mock-datasheet convention used elsewhere in this project
+             (e.g. reviews/bjt_review_quiz.html's BC547 table). ── -->
+        <g id="datasheetTableJfet" transform="translate(10,5)">
+          <rect x="0" y="0" width="155" height="80" rx="4" style="fill: rgba(0,0,0,.25)" stroke="var(--colour-jfet)" stroke-width="1" />
+          <text x="6" y="13" style="fill: var(--colour-text)" text-anchor="start" font-size="9" font-weight="bold" letter-spacing=".03em">2N5459 — TYPICAL RATINGS</text>
+          <line x1="6" y1="19" x2="149" y2="19" style="stroke: var(--colour-border)" stroke-width="1" />
+
+          <text x="6" y="35" style="fill: var(--colour-jfet)" font-size="12">I<tspan baseline-shift="sub" font-size="7">DSS</tspan></text>
+          <text x="149" y="35" style="fill: var(--colour-text)" text-anchor="end" font-size="12">8 mA typ</text>
+
+          <text x="6" y="52" style="fill: var(--colour-jfet)" font-size="12">V<tspan baseline-shift="sub" font-size="7">P</tspan></text>
+          <text x="149" y="52" style="fill: var(--colour-text)" text-anchor="end" font-size="12">-4 V typ</text>
+
+          <text x="6" y="69" style="fill: var(--colour-jfet)" font-size="12">g<tspan baseline-shift="sub" font-size="7">m0</tspan></text>
+          <text x="149" y="69" style="fill: var(--colour-text)" text-anchor="end" font-size="12">4 mA/V typ</text>
+        </g>
+
+        <!-- ════════════════════ WIRES ════════════════════ -->
+
+        <!-- ── GATE VERTICAL (x=200) — RG runs to COMMON, NOT to VDD.
+             Unlike a BJT's R1/R2 divider, self-bias has nothing at all
+             connecting the gate side to the supply rail. ── -->
+        <line x1="200" y1="287" x2="200" y2="360" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Gate node down to RG -->
+        <line x1="200" y1="440" x2="200" y2="540" style="stroke: var(--colour-series)" stroke-width="2" /><!-- RG down to Common rail -->
+
+        <!-- ── DRAIN/SOURCE VERTICAL (x=440) ── -->
+        <line x1="440" y1="30" x2="440" y2="540" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VDD down to Drain pin -->
+
+        <!-- ── TOP HORIZONTAL (VDD rail) ── -->
+        <line x1="260" y1="30" x2="560" y2="30" style="stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="440" cy="30" r="5" style="fill: var(--colour-series)" />
+
+        <!-- ── BOTTOM HORIZONTAL (Common rail) ── -->
+        <line x1="10" y1="540" x2="620" y2="540" style="stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="200" cy="540" r="5" style="fill: var(--colour-series)" />
+        <circle cx="440" cy="540" r="5" style="fill: var(--colour-series)" />
+
+        <!-- ── CENTRE HORIZONTAL — AC source, through CIN, to the gate node, on to the JFET's own gate lead ── -->
+        <line x1="30" y1="287" x2="396" y2="287" style="stroke: var(--colour-series)" stroke-width="2" />
+
+        <!-- ── OUTPUT HORIZONTAL — Drain pin, through COUT, to output ── -->
+        <line x1="440" y1="220" x2="600" y2="220" style="stroke: var(--colour-series)" stroke-width="2" />
+
+        <!-- ════════════════════ NODES ════════════════════ -->
+
+        <!-- ── NODE G — Zin is looked up from here, rightward into the gate ── -->
+        <circle cx="200" cy="287" r="5" style="fill: var(--colour-series)" />
+        <text x="170" y="272" style="fill: var(--colour-gain)" font-size="16" text-anchor="middle" font-weight="bold">Z<tspan baseline-shift="sub" font-size="13">in &#10145;</tspan></text>
+        <g id="zinBadgeJfet" display="none" transform="translate(140,232)">
+          <use href="#z-meter-shape" />
+          <text x="0" y="2" style="fill: var(--colour-text)" text-anchor="middle" font-size="14" font-weight="bold">1.0</text>
+          <text x="0" y="19" style="fill: var(--colour-gain)" text-anchor="middle" font-size="12">M&#937;</text>
+        </g>
+
+        <!-- ── NODE D — Zout is looked up from here, leftward into the drain ── -->
+        <circle cx="440" cy="220" r="5" style="fill: var(--colour-series)" />
+        <text x="490" y="200" style="fill: var(--colour-gain)" font-size="16" text-anchor="middle" font-weight="bold"><tspan baseline-shift="-70%">&#11013;</tspan> Z<tspan baseline-shift="sub" font-size="13">out</tspan></text>
+        <g id="zoutBadgeJfet" display="none" transform="translate(510,160)">
+          <use href="#z-meter-shape" />
+          <text x="0" y="2" style="fill: var(--colour-text)" text-anchor="middle" font-size="14" font-weight="bold">2.2</text>
+          <text x="0" y="19" style="fill: var(--colour-gain)" text-anchor="middle" font-size="12">k&#937;</text>
+        </g>
+
+        <!-- ════════════════════ AC INPUT COMPONENTS ════════════════════ -->
+        <g id="outputTerminalPlain">
+          <circle cx="30" cy="287" r="5" style="fill: var(--colour-signal)" />
+          <polygon points="24,307,36,307 30,297" style="fill: var(--colour-series)" />
+          <line x1="30" y1="297" x2="30" y2="390" style="stroke: var(--colour-series)" stroke-width="2" />
+          <text x="5" y="403" style="fill: var(--colour-signal)" text-anchor="start" font-size="16" font-weight="bold">input</text>
+          <line x1="30" y1="410" x2="30" y2="520" style="stroke: var(--colour-series)" stroke-width="2" />
+          <polygon points="24,520 36,520 30,530" style="fill: var(--colour-series)" />
+          <circle cx="30" cy="540" r="5" style="fill: var(--colour-signal)" />
+        </g>
+        <g transform="translate(80,287)">
+          <use href="#cap-shape" />
+          <text x="0" y="-25" fill="var(--colour-capacitor-labels)" text-anchor="middle" font-size="16" font-weight="bold">C<tspan baseline-shift="sub" font-size="13">IN</tspan></text>
+        </g>
+
+        <!-- ════════════════════ AC OUTPUT COMPONENTS ════════════════════ -->
+        <g transform="translate(570,220)">
+          <use href="#cap-shape" />
+          <text x="0" y="-25" fill="var(--colour-capacitor-labels)" text-anchor="middle" font-size="16" font-weight="bold">C<tspan baseline-shift="sub" font-size="13">OUT</tspan></text>
+        </g>
+        <g id="outputTerminalPlain">
+          <circle cx="600" cy="220" r="5" style="fill: var(--colour-signal)" />
+          <text x="580" y="383" style="fill: var(--colour-signal)" text-anchor="start" font-size="16" font-weight="bold">output</text>
+          <circle cx="600" cy="540" r="5" style="fill: var(--colour-signal)" />
+          <line x1="600" y1="230" x2="600" y2="370" style="stroke: var(--colour-series)" stroke-width="2" />
+          <polygon points="594,240 606,240 600,230" style="fill: var(--colour-series)" />
+          <line x1="600" y1="390" x2="600" y2="530" style="stroke: var(--colour-series)" stroke-width="2" />
+          <polygon points="594,520 606,520 600,530" style="fill: var(--colour-series)" />
+        </g>
+
+        <!-- ════════════════════ VDD ════════════════════ -->
+        <g transform="translate(280,-1)">
+          <text x="120" y="15" style="fill: var(--colour-voltage-label)" text-anchor="start" font-size="15" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">DD</tspan></text>
+          <text x="160" y="20" style="fill: var(--colour-text)" text-anchor="start" font-size="14" font-weight="bold">+15 V</text>
+        </g>
+
+        <!-- ════════════════════ COMMON LABEL ════════════════════ -->
+        <text x="120" y="555" fill="var(--colour-gnd)" text-anchor="middle" font-size="14" font-weight="bold">Common</text>
+
+        <!-- ════════════════════ JFET — N-CHANNEL ════════════════════ -->
+        <g transform="translate(426,280)">
+          <use href="#jfet-n-shape" />
+          <text x="-15" y="-30" fill="var(--colour-jfet-labels)" text-anchor="middle" font-size="14" font-weight="bold">Q1</text>
+          <!-- ── gm reveal — hidden until Q1 is answered, toggled via updateGmReveal().
+               Not a datasheet spec (it's Q-point-dependent, not a fixed device rating),
+               so it stays here rather than moving into datasheetTableJfet below, which
+               lists only the fixed parameters (IDSS, VP, gm0). ── -->
+          <text id="gmRevealJfet" display="none" x="35" y="-10" fill="var(--colour-jfet-labels)" text-anchor="start" font-size="13" font-weight="bold">g<tspan baseline-shift="sub" font-size="9">m</tspan> ≈ 2 mA/V</text>
+        </g>
+
+        <!-- ════════════════════ RESISTORS ════════════════════ -->
+
+        <!-- ── RD ── -->
+        <g transform="translate(425,80)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="30" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">RD</text>
+          <text x="60" y="30" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16">2.2 kΩ</text>
+        </g>
+
+        <!-- ── RG ── -->
+        <g transform="translate(185,360)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="60" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">RG</text>
+          <text x="60" y="60" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16">1.0 MΩ</text>
+        </g>
+
+        <!-- ── RS ── -->
+        <g transform="translate(425,360)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="60" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">RS</text>
+          <text x="60" y="60" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16">1.0 kΩ</text>
+        </g>
+
+        <!-- ════════════════════ AMMETERS ════════════════════ -->
+
+        <!-- ── IDS INDICATOR — given per example (same "always visible" convention
+             as the VGS meter below), not progressively revealed. Was previously
+             gated behind circuitAmmeter/CIRCUIT_REF_EXTRA (visible only on Q1) —
+             now shown for the whole quiz, since IDS is foundational Q-point data
+             relevant throughout, not just to the gm calculation. ── -->
+        <g id="idsIndJfet" transform="translate(440,485)">
+          <use href="#ammeter-shape" />
+          <text x="45" y="0" style="fill: var(--colour-current)" text-anchor="middle" font-size="14" font-weight="bold">I<tspan baseline-shift="sub" font-size="10">DS</tspan></text>
+          <text x="0" y="-2" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">2.0</text>
+          <text x="0" y="15" style="fill: var(--colour-current)" text-anchor="middle" font-size="12">mA</text>
+        </g>
+
+        <!-- ── IDS INDICATOR TOP — same current, shown again where it leaves VDD,
+             to make the "one current, whole loop" point visually. Always visible,
+             same reasoning as idsIndJfet above. ── -->
+        <g id="idsIndJfetTop" transform="translate(440,60)">
+          <circle cx="0" cy="0" r="8" style="fill: var(--colour-current)" />
+          <text x="25" y="0" style="fill: var(--colour-current)" text-anchor="middle" font-size="14" font-weight="bold">I<tspan baseline-shift="sub" font-size="10">DS</tspan></text>
+        </g>
+
+        <!-- ════════════════════ VOLTAGE METERS ════════════════════ -->
+        <!-- ── VGS METER ── -->
+        <g transform="translate(370,350)">
+          <use href="#meter-shape" />
+          <text x="30" y="-35" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">GS</tspan></text>
+          <text x="0" y="-2" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">-2.0</text>
+          <text x="0" y="15" style="fill: var(--colour-red)" text-anchor="middle" font-size="12">V</text>
+        </g>
+
+      </g>
+    </defs>
+  </svg>
+
+  <div class="crumb" id="crumb" data-current="AC Parameters — Self-Bias"></div>
+  <header>
+    <h1>JFET Amplifier: AC Parameters — Self-Bias</h1>
+    <p>Voltage Gain · Input &amp; Output Resistance · Common Source (Self-Bias, RS Unbypassed)</p>
+  </header>
+
+  <div class="quiz-wrap">
+
+    <!-- LEFT: circuit diagram -->
+    <div class="circuit-col">
+      <div class="circuit-panel" onclick="openModal()" title="Click to zoom">
+        <div class="panel-label" id="circuitRefLabel">Reference Circuit</div>
+        <div class="zoom-hint">
+          <svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.8" fill="none" />
+            <line x1="12.5" y1="12.5" x2="17" y2="17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            <line x1="6" y1="8" x2="10" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+            <line x1="8" y1="6" x2="8" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+          </svg>
+          Zoom
+        </div>
+        <svg id="circuitRefSvg" viewBox="-10 -10 660 570" xmlns="http://www.w3.org/2000/svg">
+          <use id="circuitRefUse" href="#jfet-self-bias-ac" />
+          <g id="xyRuler" display="none"></g>
+        </svg>
+      </div>
+    </div>
+
+    <!-- RIGHT: question -->
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+          <div class="options" id="qOptions"></div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Zoom modal -->
+    <div class="diagram-modal" id="diagramModal" onclick="handleModalClick(event)">
+      <div class="modal-inner" id="modalInner">
+        <div class="modal-header">
+          <span class="modal-title" id="modalTitle">Reference Circuit</span>
+          <button class="modal-close" onclick="closeModal()">✕ Close</button>
+        </div>
+        <svg id="modalSvg" viewBox="-10 -10 660 570" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const DEFAULT_VIEWBOX = '-10 -10 660 570';
+
+    CIRCUIT_SVG_ID = 'circuitRefSvg';
+    DEFAULT_CIRCUIT_VIEWBOX = DEFAULT_VIEWBOX;
+    // No CIRCUIT_REF_EXTRA needed — the IDS badges are always visible now
+    // (see their own comments above), not gated behind a circuit swap.
+    SUMMARY_CIRCUIT_REF = { id: 'jfet-self-bias-ac', label: 'Common Source (self-bias, RS unbypassed)', viewBox: DEFAULT_VIEWBOX };
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS — gm, Zin, why-no-Zb, Zout, Av for a self-bias JFET CS stage.
+    // ══════════════════════════════════════════════════════════════════════
+
+    const QUESTIONS = [
+      {
+        circuitId: 'jfet-self-bias-ac',
+        circuitLabel: 'Common Source (self-bias, RS unbypassed)',
+        text: () => `What is <b class="colour-jfet">g<sub>m</sub></b> at this stage's own Q-point?`,
+        hint: () => `Unlike a BJT's β, a JFET's gm isn't constant — it depends on where VGS sits between 0 and VP. gm = gm0 × (1 − VGS/VP), using the gm0, VGS and VP already given on the diagram.`,
+        options: () => shuffle([
+          { label: `<b class="colour-jfet">g<sub>m</sub></b> = g<sub>m0</sub> × (1 − ${frac('<b class="colour-voltage">V<sub>GS</sub></b>', '<b class="colour-voltage">V<sub>P</sub></b>')}) = 4 × (1 − ${frac('-2', '-4')}) = 4 × 0.5 = <b>2 mA/V</b>`, type: 'correct' },
+          { label: `<b class="colour-jfet">g<sub>m</sub></b> = g<sub>m0</sub> × ${frac('<b class="colour-voltage">V<sub>GS</sub></b>', '<b class="colour-voltage">V<sub>P</sub></b>')} = 4 × ${frac('-2', '-4')} = 4 × 0.5 = <b>2 mA/V</b> (forgot the "1 −")`, type: 'wrong' },
+          { label: `<b class="colour-jfet">g<sub>m</sub></b> = ${frac('g<sub>m0</sub>', '<b class="colour-current">I<sub>DSS</sub></b>')} = ${frac('4 mA/V', '8 mA')} = <b>0.5 V<sup>-1</sup></b>`, type: 'wrong' },
+          { label: `<b class="colour-jfet">g<sub>m</sub></b> = g<sub>m0</sub> = <b>4 mA/V</b> (this is only true at VGS = 0)`, type: 'wrong' },
+        ]),
+        correctExplain: () => `<b class="colour-jfet">g<sub>m</sub></b> = g<sub>m0</sub> × (1 − V<sub>GS</sub>/V<sub>P</sub>) ≈ <b>2 mA/V</b>`,
+        working: () => `
+    <div class="working-line">A JFET's transconductance falls off linearly from its maximum (g<sub>m0</sub>, at V<sub>GS</sub>=0) to zero (at V<sub>GS</sub>=V<sub>P</sub>, fully pinched off) — it is NOT a fixed device constant the way a BJT's β is treated.</div>
+    <div class="working-formula-row"><b class="colour-jfet">g<sub>m</sub></b> = g<sub>m0</sub> × (1 − ${frac('<b class="colour-voltage">V<sub>GS</sub></b>', '<b class="colour-voltage">V<sub>P</sub></b>')}) = 4 mA/V × (1 − ${frac('-2 V', '-4 V')})</div>
+    <div class="working-total"><b class="colour-jfet">g<sub>m</sub></b> ≈ 2 mA/V — exactly half of g<sub>m0</sub>, because this Q-point sits exactly halfway between V<sub>GS</sub>=0 and pinch-off. Keep this value, every AC parameter from here on uses it.</div>`
+      },
+      {
+        circuitId: 'jfet-self-bias-ac',
+        circuitLabel: 'Common Source (self-bias, RS unbypassed)',
+        text: () => `What is the <b style="color:var(--colour-ui-primary)">AC</b> input resistance <b class="colour-resistor">Z<sub>in</sub></b> seen by the signal source?`,
+        hint: () => `The gate itself draws essentially zero current (that reverse-biased junction again) — so from the source's point of view, the ONLY path to ground is whatever resistor is actually wired there.`,
+        options: () => shuffle([
+          { label: `<b class="colour-gain">Zin</b> = <b class="colour-resistor">RG</b> = <b>1.0 MΩ</b>`, type: 'correct' },
+          { label: `<b class="colour-gain">Zin</b> = g<sub>m</sub> × <b class="colour-resistor">RG</b> = 2 mA/V × 1 MΩ = <b>2,000 MΩ</b>`, type: 'wrong' },
+          { label: `<b class="colour-gain">Zin</b> = ${frac('1', '<b class="colour-resistor">RG</b>')} = ${frac('1', '1 MΩ')} = <b>1 µS</b>`, type: 'wrong' },
+          { label: `<b class="colour-gain">Zin</b> ≈ ${frac('1', 'g<sub>m</sub>')} = ${frac('1', '2 mA/V')} = <b>500 Ω</b>`, type: 'wrong' },
+        ]),
+        correctExplain: () => `<b class="colour-resistor">Z<sub>in</sub></b> = <b class="colour-resistor">R<sub>G</sub></b> = <b>1.0 MΩ</b>`,
+        working: () => `
+    <div class="working-line">Nothing about g<sub>m</sub>, RS or the transistor's own gain enters this at all — the gate junction is reverse biased and draws no current, so R<sub>G</sub> is the only thing loading the source.</div>
+    <div class="working-formula-row"><b class="colour-resistor">Z<sub>in</sub></b> = <b class="colour-resistor">R<sub>G</sub></b> = 1.0 MΩ</div>
+    <div class="working-total">This is exactly why JFET (and MOSFET) amplifier stages are prized for very high input impedance — Z<sub>in</sub> can be pushed as high as R<sub>G</sub> is made, limited only by leakage and bias-stability concerns, not by any device-internal current-reflection limit.</div>`
+      },
+      {
+        circuitId: 'jfet-self-bias-ac',
+        circuitLabel: 'Common Source (self-bias, RS unbypassed)',
+        text: () => `The BJT common-emitter version of this quiz needed a separate "<b class="colour-bjt">Z<sub>b</sub></b>" step (β × whatever's in the emitter leg) before it could find Z<sub>in</sub>. Why did THIS calculation skip that step entirely?`,
+        hint: () => `Zb exists because a BJT's base current is a real, non-zero current that has to be supplied — think about what current actually flows into a JFET's gate.`,
+        options: () => shuffle([
+          { label: `A JFET's gate current is essentially zero, so there's no base-side current for anything in the source leg to "reflect" into — unlike a BJT, where every unit of base current supplies β times as much emitter current`, type: 'correct' },
+          { label: `RS (1 kΩ) is simply too small a value for its effect to matter, the same way RE's contribution was small in the BJT version`, type: 'wrong' },
+          { label: `Self-bias circuits don't have an emitter-equivalent resistor at all`, type: 'wrong' },
+          { label: `gm is too small compared to β for the reflection effect to be worth calculating`, type: 'wrong' },
+        ]),
+        correctExplain: () => `A JFET's <b>gate current is essentially zero</b> — there's nothing for RS to reflect into`,
+        working: () => `
+    <div class="working-line">A BJT's base-emitter junction is forward biased — a real base current I<sub>B</sub> has to flow to turn the device on at all, and Kirchhoff's Current Law means every unit of that current supplies β times as much emitter current. That's precisely WHY anything sitting in the emitter leg (RE, re′) gets multiplied by β when reflected into the base circuit.</div>
+    <div class="working-line" style="margin-top:.4rem">A JFET's gate-source junction is reverse biased instead — essentially zero gate current flows, regardless of what RS is doing in the source leg. With no base-side current to relate anything to, there is nothing to reflect, and no β-style multiplier to apply. Z<sub>in</sub> is just whatever resistor is physically wired from gate to ground.</div>
+    <div class="working-total">This is the direct, mechanistic reason a JFET's input impedance can be so much higher than a BJT's — not just "JFETs happen to have high impedance," but a specific consequence of near-zero gate current removing an entire calculation step altogether.</div>`
+      },
+      {
+        circuitId: 'jfet-self-bias-ac',
+        circuitLabel: 'Common Source (self-bias, RS unbypassed)',
+        text: () => `What is the approximate <b style="color:var(--colour-ui-primary)">AC</b> output resistance <b class="colour-resistor">Z<sub>out</sub></b>, looking back into the drain terminal?`,
+        hint: () => `Zero the source, then look back into the drain node. The transistor's own internal drain resistance (rd) is assumed very high compared to RD in this approximation, so it's ignored — leaving only whatever is directly wired to that node.`,
+        options: () => shuffle([
+          { label: `<b class="colour-gain">Zout</b> ≈ <b class="colour-resistor">RD</b>`, type: 'correct' },
+          { label: `<b class="colour-gain">Zout</b> ≈ <b class="colour-resistor">RS</b>`, type: 'wrong' },
+          { label: `<b class="colour-gain">Zout</b> ≈ <b class="colour-gain">Zin</b>`, type: 'wrong' },
+          { label: `<b class="colour-gain">Zout</b> ≈ <b class="colour-resistor">RD</b> ∥ <b class="colour-resistor">RS</b>`, type: 'wrong' },
+        ]),
+        correctExplain: () => `<b class="colour-resistor">Z<sub>out</sub></b> ≈ <b class="colour-resistor">R<sub>D</sub></b>`,
+        working: () => `
+    <div class="working-line">With the source zeroed, the only thing directly wired to the drain node (besides the transistor's internal, very-high r<sub>d</sub> — ignored here) is <b class="colour-resistor">R<sub>D</sub></b> itself, running up to the AC-grounded <b class="colour-supply">V<sub>DD</sub></b> rail.</div>
+    <div class="working-formula-row"><b class="colour-resistor">Z<sub>out</sub></b> ≈ <b class="colour-resistor">R<sub>D</sub></b> = 2.2 kΩ</div>
+    <div class="working-total">Exactly the same reasoning as a BJT common-emitter stage's Z<sub>out</sub> ≈ R<sub>C</sub> — whichever device sits between drain/collector and the AC-grounded supply rail, its own output resistance is assumed high enough to ignore, leaving only the external resistor.</div>`
+      },
+      {
+        circuitId: 'jfet-self-bias-ac',
+        circuitLabel: 'Common Source (self-bias, RS unbypassed)',
+        text: () => `What is the voltage gain <b class="colour-gain">|A<sub>v</sub>|</b> of this self-bias stage?`,
+        hint: () => `|Av| = gm×RD / (1 + gm×RS) for a common-source stage with an unbypassed source resistor — the same "degeneration" shape as a BJT's RC/(RE+re′), just built from gm instead of 1/re′.`,
+        options: () => shuffle([
+          { label: `<b class="colour-gain">|Av|</b> = ${frac('g<sub>m</sub>×<b class="colour-resistor">RD</b>', '1 + g<sub>m</sub>×<b class="colour-resistor">RS</b>')} = ${frac('2×2.2', '1 + 2×1')} = ${frac('4.4', '3')} ≈ <b>1.47</b>`, type: 'correct' },
+          { label: `<b class="colour-gain">|Av|</b> = g<sub>m</sub> × <b class="colour-resistor">RD</b> = 2 mA/V × 2.2 kΩ = <b>4.4</b>`, type: 'wrong' },
+          { label: `<b class="colour-gain">|Av|</b> = ${frac('<b class="colour-resistor">RD</b>', 'g<sub>m</sub>×<b class="colour-resistor">RS</b>')} = ${frac('2.2', '2×1')} = <b>1.1</b>`, type: 'wrong' },
+          { label: `<b class="colour-gain">|Av|</b> = ${frac('1 + g<sub>m</sub>×<b class="colour-resistor">RS</b>', 'g<sub>m</sub>×<b class="colour-resistor">RD</b>')} = ${frac('3', '4.4')} ≈ <b>0.68</b>`, type: 'wrong' },
+        ]),
+        correctExplain: () => `<b class="colour-gain">|A<sub>v</sub>|</b> = g<sub>m</sub>R<sub>D</sub> / (1 + g<sub>m</sub>R<sub>S</sub>) ≈ <b>1.47</b>`,
+        working: () => `
+    <div class="working-formula-row"><b class="colour-gain">|A<sub>v</sub>|</b> = ${frac('g<sub>m</sub> × <b class="colour-resistor">R<sub>D</sub></b>', '1 + g<sub>m</sub> × <b class="colour-resistor">R<sub>S</sub></b>')} = ${frac('2 mA/V × 2.2 kΩ', '1 + 2 mA/V × 1 kΩ')} = ${frac('4.4', '3')}</div>
+    <div class="working-total"><b class="colour-gain">|A<sub>v</sub>|</b> ≈ 1.47 — notice this is quite a bit LOWER than the BJT common-emitter stage's gain (≈6.44) from a similar-sized load resistor. JFETs typically have much lower transconductance than BJTs at comparable bias currents, which is the direct reason JFET voltage-amplifier stages usually give up some gain in exchange for their far higher input impedance.</div>`
+      },
+    ];
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUIZ ENGINE — shared: assets/quiz-engine.js. Only this file's own
+    // progressive-reveal badge functions remain inline below.
+    // ══════════════════════════════════════════════════════════════════════
+
+    /* gm reveal on the diagram itself, once Q1 has been answered. Persists
+       regardless of which question is currently on screen. */
+    function updateGmReveal() {
+      document.getElementById('gmRevealJfet').setAttribute('display', Q[0].ans ? 'inline' : 'none');
+    }
+
+    /* Zin/Zout value badges — Zin=Q2(idx1), Zout=Q4(idx3) (Q3/idx2 is the
+       conceptual "why no Zb" question, no badge of its own). */
+    function updateZReveal() {
+      document.getElementById('zinBadgeJfet').setAttribute('display', Q[1].ans ? 'inline' : 'none');
+      document.getElementById('zoutBadgeJfet').setAttribute('display', Q[3].ans ? 'inline' : 'none');
+    }
+
+    RENDER_EXTRA = () => { updateGmReveal(); updateZReveal(); };
+
+    initQuizNav();
+    resetQuiz();
+    initQuizFromURL();
+  </script>
+</body>
+
+</html>
