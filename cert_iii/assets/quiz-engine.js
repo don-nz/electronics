@@ -187,6 +187,14 @@ function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.fl
 // across every file that had its own copy of this; genuinely file-agnostic.
 function frac(num, den) { return `<span class="working-frac"><span class="num">${num}</span><span class="den">${den}</span></span>`; }
 
+// Formats a number to AT MOST `decimals` places, trimming trailing zeros
+// (and a trailing decimal point) — e.g. trimNum(1.750, 3) -> "1.75",
+// trimNum(0, 2) -> "0", trimNum(-2, 1) -> "-2". Same parseFloat(x.toFixed(n))
+// trick several bespoke files (e.g. jfet_self_bias.html's own fmtV/fmtA)
+// already used locally — shared here so every quiz's meter/badge value text
+// follows one consistent convention instead of each file re-rolling it.
+function trimNum(v, decimals) { return parseFloat(v.toFixed(decimals)).toString(); }
+
 // kind:'multi' questions allow any number of selections; kind:'match'
 // questions sort every option into one of N columns; kind:'bits' fills in a
 // table of binary digits by click-cycling each cell; everything else is
