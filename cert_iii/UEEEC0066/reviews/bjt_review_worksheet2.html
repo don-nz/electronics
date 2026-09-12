@@ -406,7 +406,7 @@
       reP = 0.026 / IE;
       ZbVal = V.beta * (V.re + reP);
       RinVal = 1 / (1 / V.r1 + 1 / V.r2 + 1 / ZbVal);
-      RoutVal = (V.re * reP) / (V.re + reP);
+      RoutVal = reP + (1 / (1 / V.r1 + 1 / V.r2)) / (V.beta + 1);
       AvVal = V.re / (V.re + reP);
     }
 
@@ -582,17 +582,18 @@
       { // j) Rout
         circuitId: 'cc-divider-ac', circuitLabel: 'Common Collector (voltage-divider bias, emitter follower)',
         text: () => 'Calculate the amplifier\'s <b style="color:var(--colour-ui-primary)">output resistance</b> <b class="colour-gain">R<sub>OUT</sub></b>, looking back into the emitter terminal.',
-        hint: () => 'Zero the source, then look back into the emitter node. Unlike a common-emitter stage, the emitter here also has a path back through the transistor into the low-impedance source — Rout ≈ R3∥re′.',
+        hint: () => 'Zero the source, then look back into the emitter node. The transistor\'s own re′ is in series with whatever drives the base (here, R1∥R2) reflected back by 1/(β+1) — Rout ≈ re′ + (R1∥R2)/(β+1).',
         options: () => shuffle([
-          { label: `<span class="frac-option"><b class="colour-gain">ROUT</b> ≈ ${frac('<b class="colour-resistor">R3</b> × <b class="colour-bjt">re′</b>', '<b class="colour-resistor">R3</b> + <b class="colour-bjt">re′</b>')} = ${frac(`${fmtR(V.re)} × ${fmtOhm1(reP)}`, `${fmtR(V.re)} + ${fmtOhm1(reP)}`)} ≈ ${fmtOhm1(RoutVal)}</span>`, type: 'correct' },
-          { label: `<b class="colour-gain">ROUT</b> ≈ <b class="colour-resistor">R3</b> = ${fmtR(V.re)}`, type: 'wrong' },
-          { label: `<b class="colour-gain">ROUT</b> ≈ <b class="colour-gain">RIN</b> ≈ ${fmtK2(RinVal)}`, type: 'wrong' },
-          { label: `<span class="frac-option"><b class="colour-gain">ROUT</b> ≈ ${frac('1', `${frac('1', '<b class="colour-resistor">R3</b>')}+${frac('1', '<b class="colour-resistor">R1</b>')}+${frac('1', '<b class="colour-resistor">R2</b>')}`)} = ${frac('1', `${frac('1', fmtR(V.re))}+${frac('1', fmtR(V.r1))}+${frac('1', fmtR(V.r2))}`)} ≈ ${fmtOhm1(1 / (1 / V.re + 1 / V.r1 + 1 / V.r2))}</span>`, type: 'wrong' },
+          { label: `<b class="colour-gain">ROUT</b> ≈ <b class="colour-bjt">re′</b> + ${frac('<b class="colour-resistor">R1</b>∥<b class="colour-resistor">R2</b>', 'β + 1')} = ${fmtOhm1(reP)} + ${frac(fmtR(1 / (1 / V.r1 + 1 / V.r2)), `${V.beta} + 1`)} ≈ ${fmtOhm1(RoutVal)}`, type: 'correct' },
+          { label: `<b class="colour-gain">ROUT</b> ≈ <b class="colour-bjt">re′</b> + (<b class="colour-resistor">R1</b>∥<b class="colour-resistor">R2</b>) = ${fmtOhm1(reP)} + ${fmtR(1 / (1 / V.r1 + 1 / V.r2))} ≈ ${fmtR(reP + 1 / (1 / V.r1 + 1 / V.r2))} (forgot to divide by β+1)`, type: 'wrong' },
+          { label: `<b class="colour-gain">ROUT</b> ≈ <b class="colour-bjt">re′</b> = ${fmtOhm1(reP)} (ignored the R1∥R2 term entirely)`, type: 'wrong' },
+          { label: `<b class="colour-gain">ROUT</b> ≈ <b class="colour-bjt">re′</b> + ${frac('<b class="colour-resistor">R1</b> + <b class="colour-resistor">R2</b>', 'β + 1')} = ${fmtOhm1(reP)} + ${frac(fmtR(V.r1 + V.r2), `${V.beta} + 1`)} ≈ ${fmtOhm1(reP + (V.r1 + V.r2) / (V.beta + 1))} (used R1+R2 in series instead of R1∥R2)`, type: 'wrong' },
         ]),
-        correctExplain: () => `<b class="colour-gain">R<sub>OUT</sub></b> ≈ R3∥r<sub>e</sub>′ ≈ ${fmtOhm1(RoutVal)}`,
+        correctExplain: () => `<b class="colour-gain">R<sub>OUT</sub></b> ≈ r<sub>e</sub>′ + (R1∥R2)/(β+1) ≈ ${fmtOhm1(RoutVal)}`,
         working: () => `
-    <div class="working-line">Looking back into the emitter node with the source zeroed sees two parallel paths: R3 itself, and the transistor's own internal re′ reflected back through from the (near-zero) source side. Since re′ is so much smaller than R3, it dominates.</div>
-    <div class="working-total"><b class="colour-gain">R<sub>OUT</sub></b> ≈ R3∥r<sub>e</sub>′ ≈ ${fmtOhm1(RoutVal)} — LOW, unlike a common-emitter stage's Zout≈RC, which is usually fairly HIGH — a big part of why emitter followers are used as buffer stages.</div>`,
+    <div class="working-line">Looking back into the emitter node with the source zeroed, the transistor's own re′ sits in series with whatever drives the base — here, R1∥R2 — reflected back into the emitter circuit by the same 1/(β+1) current-divider effect that scales any base-side resistance down when viewed from the emitter.</div>
+    <div class="working-formula-row"><b class="colour-gain">R<sub>OUT</sub></b> ≈ <b class="colour-bjt">r<sub>e</sub>′</b> + ${frac('<b class="colour-resistor">R1</b>∥<b class="colour-resistor">R2</b>', 'β + 1')} = ${fmtOhm1(reP)} + ${frac(fmtR(1 / (1 / V.r1 + 1 / V.r2)), `${V.beta} + 1`)}</div>
+    <div class="working-total"><b class="colour-gain">R<sub>OUT</sub></b> ≈ ${fmtOhm1(RoutVal)} — still LOW compared to a common-emitter stage's Zout≈RC, which is usually fairly HIGH — a big part of why emitter followers are used as buffer stages. Notice the divider's own resistance (R1∥R2) matters here too, scaled down by (β+1) — a "stiffer" divider (smaller R1∥R2) gives an even lower Rout.</div>`,
       },
       { // k) typical use
         circuitId: 'cc-divider-ac', circuitLabel: 'Common Collector (voltage-divider bias, emitter follower)',
