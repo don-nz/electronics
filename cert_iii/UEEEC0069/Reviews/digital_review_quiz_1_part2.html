@@ -1,0 +1,1142 @@
+<!--
+  TEMPLATE FILE — read before cloning for a new weekly quiz.
+
+  Part 2 of the "Sample Theory Test 1" review — covers Part B, the
+  short-answer/calculation section (the exam's own Q39-80), continuing
+  digital_review_quiz_1.html (which covers Part A, Q1-38, in full). Kept as
+  a SEPARATE file rather than appended to quiz 1, per the teacher's own
+  direction — Part A and Part B are different exam sections with different
+  question shapes, and this file's answer FORMATS are correspondingly
+  different from quiz 1's (see below).
+
+  Only Q39-78 are in this file so far. Q79-80 (the two SR-latch timing-
+  diagram completion questions) need a genuinely new interaction mechanic
+  (drawing/completing a waveform) that doesn't exist anywhere in this
+  project yet, and are being built as a separate, careful follow-up rather
+  than rushed — see the bottom of the QUESTIONS array.
+
+  Answer-format choices, per the user's own direction to reuse existing
+  UEEEC0069 mechanics where they fit:
+    - Q50, Q54, Q55 (truth-table questions) use kind:'truth' — the exact
+      same click-to-cycle-0/1 mechanic as digital_truth_tables.html and
+      digital_knowledge_logic_gates.html's own Q4-10. buildTruthRows()/
+      GATE_FN below are page-local, same reasoning as those files (this
+      quiz's own gate-logic content, not shared engine code) — but
+      truthCorrectExplain()/truthMistakeLine() themselves are NOT redefined
+      here, since they already live in assets/quiz-engine.js.
+    - Q60, Q77 ("give one advantage AND one disadvantage" / "what TWO
+      devices") use kind:'multi' — exactly 2 correct answers to select.
+    - Everything else (numeric Table 5 lookups, Boolean expression
+      recognition, circuit/diagram recognition) is plain single-select MC,
+      matching quiz 1's own house style — this project has no free-text or
+      free-numeric entry mechanic anywhere (phone-tap-only by design), so a
+      genuinely open-ended short-answer question is always adapted into a
+      "recognise the correct answer among plausible alternatives" MC,
+      exactly as quiz 1 already does throughout.
+    - Figures 6, 7, 8 and 9 (and the Q72 debounce circuit) are static
+      reference diagrams embedded directly in each question's own text()
+      via inline <svg><use.../></svg>, built from a defs block below —
+      same approach as quiz 1's Q13 (figure4-circuit) and Q29
+      (figure5-circuits). The traditional gate shapes (gate-and-trad/
+      gate-or-trad/gate-nor-trad/gate-not-trad/gate-nand-trad) are copied
+      from digital_truth_tables.html's own <defs> (itself copied from the
+      master ../../assets/shapes/logic-gates.svg) — see that file's header
+      comment for why file:// blocks cross-file SVG <use>/fetch(), same
+      reasoning applies here.
+
+  Q54's own source material has a printing error the teacher's marking
+  guide couldn't resolve either after two rounds of re-scanning: the
+  exam's own final line reads "...= AB̄", but no reading of the two
+  overlined terms actually simplifies to that — Z = ĀB̄ + ĀB algebraically
+  simplifies to Z = Ā (verified directly: factor out Ā, then B̄+B=1), which
+  is what this file actually uses. Noted here and in Q54's own code
+  comment so this isn't mistaken for a fresh transcription error later.
+
+  Q58's "which gate(s) are possibly faulty" answer is taken directly,
+  verbatim, from the teacher's own marking guide (rather than independently
+  re-derived from the figure) — that guide's own answer already names BOTH
+  gate 5 and gate 6 as "must have both for full marks", treating it as one
+  underlying inconsistency describable from either gate's own perspective
+  (gate 5's output disagreeing with what its inputs demand, equivalently
+  described as gate 6's input being wrong) rather than two independent
+  faults — this file's own working() explains it that way.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../assets/theme-init.js"></script>
+  <script src="../../assets/quiz-engine.js"></script>
+  <title>Digital Electronics Review Quiz 1 — Part 2</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../assets/quiz-common.css">
+  <script src="../../assets/breadcrumb.js" defer></script>
+  <style>
+    .colour-bjt { color: var(--colour-bjt); }
+  </style>
+</head>
+
+<body>
+  <!-- Hidden defs: traditional gate symbols (copied from
+       digital_truth_tables.html's own <defs>, itself copied from the
+       master ../../assets/shapes/logic-gates.svg — see the header comment
+       above), plus this file's own Figure 6/7/8/9 and debounce-circuit
+       composite reference diagrams. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" font-family="'Share Tech Mono', monospace">
+    <defs>
+      <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur stdDeviation="2" result="b" />
+        <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+      </filter>
+
+      <!-- ── shared leads/bodies ── -->
+      <g id="gate-lead-in2">
+        <line x1="-24" y1="-8" x2="-8" y2="-8" style="stroke: var(--colour-bjt)" stroke-width="2" />
+        <line x1="-24" y1="8" x2="-8" y2="8" style="stroke: var(--colour-bjt)" stroke-width="2" />
+      </g>
+      <g id="gate-lead-in1">
+        <line x1="-24" y1="0" x2="-8" y2="0" style="stroke: var(--colour-bjt)" stroke-width="2" />
+      </g>
+      <g id="gate-lead-in2-or">
+        <line x1="-24" y1="-8" x2="-4.6" y2="-8" style="stroke: var(--colour-bjt)" stroke-width="2" />
+        <line x1="-24" y1="8" x2="-4.6" y2="8" style="stroke: var(--colour-bjt)" stroke-width="2" />
+      </g>
+      <g id="gate-lead-out">
+        <line x1="24" y1="0" x2="44" y2="0" style="stroke: var(--colour-bjt)" stroke-width="2" />
+      </g>
+      <g id="gate-lead-out-inv">
+        <circle cx="28" cy="0" r="4" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+        <line x1="32" y1="0" x2="44" y2="0" style="stroke: var(--colour-bjt)" stroke-width="2" />
+      </g>
+      <path id="gate-and-body" d="M -8,-16 L 8,-16 A 16,16 0 0 1 8,16 L -8,16 Z"
+        fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+      <path id="gate-or-body" d="M -8,-16 Q 8,-16 24,0 Q 8,16 -8,16 Q 1,0 -8,-16 Z"
+        fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+      <path id="gate-tri-body" d="M -8,-16 L -8,16 L 24,0 Z"
+        fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+
+      <g id="gate-and-trad"><use href="#gate-lead-in2" /><use href="#gate-and-body" /><use href="#gate-lead-out" /></g>
+      <g id="gate-nand-trad"><use href="#gate-lead-in2" /><use href="#gate-and-body" /><use href="#gate-lead-out-inv" /></g>
+      <g id="gate-or-trad"><use href="#gate-lead-in2-or" /><use href="#gate-or-body" /><use href="#gate-lead-out" /></g>
+      <g id="gate-nor-trad"><use href="#gate-lead-in2-or" /><use href="#gate-or-body" /><use href="#gate-lead-out-inv" /></g>
+      <g id="gate-not-trad"><use href="#gate-lead-in1" /><use href="#gate-tri-body" /><use href="#gate-lead-out-inv" /></g>
+
+      <!-- ══ Figure 6 (Q57) — NOT(0)=1, NOR(1,1)=0, NOT(1)=0, AND(0,0)=0 ══ -->
+      <g id="figure6-circuit">
+        <text x="-18" y="4" text-anchor="end" fill="var(--colour-bjt)" font-size="16" font-weight="bold">0</text>
+        <line x1="-14" y1="0" x2="30" y2="0" stroke="var(--colour-bjt)" stroke-width="2" />
+        <g transform="translate(54,0) scale(1.2)"><use href="#gate-not-trad" /></g>
+        <text x="80" y="-8" fill="var(--colour-bjt)" font-size="14" font-weight="bold">1</text>
+        <line x1="80" y1="0" x2="120" y2="0" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="120" y1="0" x2="120" y2="35" stroke="var(--colour-bjt)" stroke-width="2" />
+
+        <text x="-18" y="64" text-anchor="end" fill="var(--colour-bjt)" font-size="16" font-weight="bold">1</text>
+        <line x1="-14" y1="60" x2="34" y2="60" stroke="var(--colour-bjt)" stroke-width="2" />
+        <circle cx="34" cy="60" r="3" fill="var(--colour-bjt)" />
+        <line x1="34" y1="60" x2="34" y2="82" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="120" y1="45" x2="150" y2="45" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="34" y1="60" x2="120" y2="60" stroke="var(--colour-bjt)" stroke-width="2" />
+
+        <g transform="translate(150,45) scale(1.2)"><use href="#gate-nor-trad" /></g>
+        <text x="176" y="37" fill="var(--colour-bjt)" font-size="14" font-weight="bold">0</text>
+        <line x1="176" y1="45" x2="230" y2="45" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="230" y1="45" x2="230" y2="60" stroke="var(--colour-bjt)" stroke-width="2" />
+
+        <line x1="34" y1="82" x2="80" y2="82" stroke="var(--colour-bjt)" stroke-width="2" />
+        <g transform="translate(104,82) scale(1.2)"><use href="#gate-not-trad" /></g>
+        <text x="130" y="74" fill="var(--colour-bjt)" font-size="14" font-weight="bold">0</text>
+        <line x1="130" y1="82" x2="230" y2="82" stroke="var(--colour-bjt)" stroke-width="2" />
+
+        <g transform="translate(260,70) scale(1.2)"><use href="#gate-and-trad" /></g>
+        <text x="306" y="65" fill="var(--colour-bjt)" font-size="14" font-weight="bold">?</text>
+        <line x1="306" y1="70" x2="330" y2="70" stroke="var(--colour-bjt)" stroke-width="2" />
+        <text x="338" y="76" fill="var(--colour-signal)" font-size="16" font-weight="bold">Z</text>
+      </g>
+
+      <!-- ══ Figure 7 (Q58) — the exam's own diagram, values as printed
+           (gate 5's output disagrees with what its own inputs demand). ══ -->
+      <g id="figure7-circuit">
+        <text x="-18" y="-38" text-anchor="end" fill="var(--colour-bjt)" font-size="16" font-weight="bold">1</text>
+        <line x1="-14" y1="-42" x2="30" y2="-42" stroke="var(--colour-bjt)" stroke-width="2" />
+        <g transform="translate(54,-42) scale(1.1)"><use href="#gate-not-trad" /></g>
+        <text x="82" y="-50" fill="var(--colour-bjt)" font-size="13" font-weight="bold">0</text>
+
+        <text x="-18" y="2" text-anchor="end" fill="var(--colour-bjt)" font-size="16" font-weight="bold">1</text>
+        <line x1="-14" y1="-2" x2="34" y2="-2" stroke="var(--colour-bjt)" stroke-width="2" />
+        <circle cx="34" cy="-2" r="3" fill="var(--colour-bjt)" />
+        <g transform="translate(58,-2) scale(1.1)"><use href="#gate-not-trad" /></g>
+        <text x="86" y="-10" fill="var(--colour-bjt)" font-size="13" font-weight="bold">1</text>
+
+        <text x="-18" y="42" text-anchor="end" fill="var(--colour-bjt)" font-size="16" font-weight="bold">0</text>
+        <line x1="-14" y1="38" x2="30" y2="38" stroke="var(--colour-bjt)" stroke-width="2" />
+        <circle cx="30" cy="38" r="3" fill="var(--colour-bjt)" />
+        <g transform="translate(54,38) scale(1.1)"><use href="#gate-not-trad" /></g>
+        <text x="82" y="30" fill="var(--colour-bjt)" font-size="13" font-weight="bold">0</text>
+
+        <line x1="82" y1="-42" x2="120" y2="-42" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="120" y1="-42" x2="120" y2="-27" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="34" y1="-2" x2="120" y2="-2" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="120" y1="-2" x2="120" y2="-13" stroke="var(--colour-bjt)" stroke-width="2" />
+        <g transform="translate(140,-20) scale(1.2)"><use href="#gate-and-trad" /></g>
+        <text x="188" y="-28" fill="var(--colour-bjt)" font-size="14" font-weight="bold">0</text>
+
+        <line x1="86" y1="-2" x2="140" y2="-2" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="140" y1="-2" x2="140" y2="13" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="30" y1="38" x2="200" y2="38" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="200" y1="38" x2="200" y2="27" stroke="var(--colour-bjt)" stroke-width="2" />
+        <g transform="translate(164,20) scale(1.2)"><use href="#gate-and-trad" /></g>
+        <text x="212" y="12" fill="var(--colour-bjt)" font-size="14" font-weight="bold">1</text>
+
+        <line x1="188" y1="-20" x2="220" y2="-20" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="220" y1="-20" x2="220" y2="-8" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="212" y1="20" x2="220" y2="20" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="220" y1="20" x2="220" y2="8" stroke="var(--colour-bjt)" stroke-width="2" />
+        <g transform="translate(240,0) scale(1.2)"><use href="#gate-or-trad" /></g>
+        <text x="288" y="-8" fill="var(--colour-bjt)" font-size="14" font-weight="bold">1</text>
+        <line x1="288" y1="0" x2="310" y2="0" stroke="var(--colour-bjt)" stroke-width="2" />
+        <text x="318" y="6" fill="var(--colour-signal)" font-size="16" font-weight="bold">Z</text>
+
+        <text x="66" y="-52" text-anchor="middle" fill="var(--colour-label)" font-size="11">1</text>
+        <text x="70" y="-12" text-anchor="middle" fill="var(--colour-label)" font-size="11">2</text>
+        <text x="66" y="28" text-anchor="middle" fill="var(--colour-label)" font-size="11">3</text>
+        <text x="152" y="-32" text-anchor="middle" fill="var(--colour-label)" font-size="11">4</text>
+        <text x="176" y="8" text-anchor="middle" fill="var(--colour-label)" font-size="11">5</text>
+        <text x="252" y="-12" text-anchor="middle" fill="var(--colour-label)" font-size="11">6</text>
+      </g>
+
+      <!-- ══ Figure 8 (Q59) — Z = (A+C)·(B̄+C)·(B̄C), each of the three
+           gates has one INPUT-level inversion bubble (not an output
+           bubble), which is exactly why the question says "don't
+           DeMorganise it" — the raw per-gate expression is the expected
+           answer. ══ -->
+      <g id="figure8-circuit">
+        <text x="-18" y="-57" text-anchor="end" fill="var(--colour-bjt)" font-size="16" font-weight="bold">A</text>
+        <line x1="-14" y1="-61.4" x2="80" y2="-61.4" stroke="var(--colour-bjt)" stroke-width="2" />
+        <g transform="translate(104,-71) scale(1.2)"><use href="#gate-or-trad" /></g>
+
+        <!-- B (inverted — bubble on each gate it feeds) branches to gate2's
+             top input AND gate3's top input -->
+        <text x="-18" y="-3" text-anchor="end" fill="var(--colour-bjt)" font-size="16" font-weight="bold">B</text>
+        <line x1="-14" y1="-6.6" x2="20" y2="-6.6" stroke="var(--colour-bjt)" stroke-width="2" />
+        <circle cx="20" cy="-6.6" r="3" fill="var(--colour-bjt)" />
+        <line x1="20" y1="-6.6" x2="66" y2="-6.6" stroke="var(--colour-bjt)" stroke-width="2" />
+        <circle cx="70" cy="-6.6" r="4" fill="none" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="74" y1="-6.6" x2="80" y2="-6.6" stroke="var(--colour-bjt)" stroke-width="2" />
+        <text x="42" y="-16" fill="var(--colour-label)" font-size="12" font-style="italic">B</text>
+        <line x1="40" y1="-20" x2="47" y2="-20" stroke="var(--colour-label)" stroke-width="1.2" />
+
+        <line x1="20" y1="-6.6" x2="20" y2="27.4" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="20" y1="27.4" x2="66" y2="27.4" stroke="var(--colour-bjt)" stroke-width="2" />
+        <circle cx="70" cy="27.4" r="4" fill="none" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="74" y1="27.4" x2="80" y2="27.4" stroke="var(--colour-bjt)" stroke-width="2" />
+        <text x="42" y="24" fill="var(--colour-label)" font-size="12" font-style="italic">B</text>
+        <line x1="40" y1="20" x2="47" y2="20" stroke="var(--colour-label)" stroke-width="1.2" />
+
+        <!-- C (plain) branches to gate1's top input, gate2's bottom input,
+             and gate3's bottom input -->
+        <text x="-18" y="16" text-anchor="end" fill="var(--colour-bjt)" font-size="16" font-weight="bold">C</text>
+        <line x1="-14" y1="12.6" x2="20" y2="12.6" stroke="var(--colour-bjt)" stroke-width="2" />
+        <circle cx="20" cy="12.6" r="3" fill="var(--colour-bjt)" />
+        <line x1="20" y1="12.6" x2="80" y2="12.6" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="20" y1="12.6" x2="20" y2="-80.6" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="20" y1="-80.6" x2="80" y2="-80.6" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="20" y1="12.6" x2="20" y2="46.6" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="20" y1="46.6" x2="80" y2="46.6" stroke="var(--colour-bjt)" stroke-width="2" />
+
+        <g transform="translate(104,3) scale(1.2)"><use href="#gate-or-trad" /></g>
+        <g transform="translate(104,37) scale(1.2)"><use href="#gate-and-trad" /></g>
+
+        <line x1="152" y1="-71" x2="180" y2="-71" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="180" y1="-71" x2="180" y2="-15" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="152" y1="3" x2="200" y2="3" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="152" y1="37" x2="180" y2="37" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="180" y1="37" x2="180" y2="15" stroke="var(--colour-bjt)" stroke-width="2" />
+        <g transform="translate(224,3) scale(1.3)"><use href="#gate-and-trad" /></g>
+        <text x="272" y="9" fill="var(--colour-signal)" font-size="16" font-weight="bold">Z</text>
+      </g>
+
+      <!-- ══ Figure 9 (Q73-78) — NAND → R1 → MOSFET Q1, driving a 24V
+           motor with flyback diode D1. Simplified schematic symbols
+           (motor as a labelled circle, diode as a filled triangle+bar,
+           enhancement MOSFET as a simple gate/channel glyph) — this
+           circuit isn't reused anywhere else, so it's built fresh rather
+           than from the shared gate-body defs above. ══ -->
+      <g id="figure9-circuit" font-family="'Share Tech Mono', monospace">
+        <line x1="20" y1="0" x2="220" y2="0" stroke="var(--colour-bjt)" stroke-width="2" />
+        <text x="228" y="5" fill="var(--colour-voltage-label)" font-size="15" font-weight="bold">24V</text>
+        <line x1="60" y1="0" x2="60" y2="20" stroke="var(--colour-bjt)" stroke-width="2" />
+        <polygon points="52,20 68,20 60,34" fill="none" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="60" y1="34" x2="60" y2="55" stroke="var(--colour-bjt)" stroke-width="2" />
+        <text x="38" y="24" text-anchor="end" fill="var(--colour-bjt)" font-size="13" font-weight="bold">D1</text>
+
+        <line x1="120" y1="0" x2="120" y2="20" stroke="var(--colour-bjt)" stroke-width="2" />
+        <circle cx="120" cy="40" r="20" fill="none" stroke="var(--colour-bjt)" stroke-width="2" />
+        <text x="120" y="45" text-anchor="middle" fill="var(--colour-bjt)" font-size="16" font-weight="bold">M</text>
+        <text x="150" y="45" fill="var(--colour-resistor-labels)" font-size="13" font-weight="bold">R = 40Ω</text>
+        <line x1="120" y1="60" x2="120" y2="80" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="60" y1="55" x2="120" y2="80" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="60" y1="55" x2="60" y2="80" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="60" y1="80" x2="120" y2="80" stroke="var(--colour-bjt)" stroke-width="2" />
+
+        <!-- MOSFET Q1 -->
+        <line x1="90" y1="100" x2="105" y2="100" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="105" y1="85" x2="105" y2="115" stroke="var(--colour-bjt)" stroke-width="2.5" />
+        <line x1="112" y1="85" x2="112" y2="115" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="112" y1="85" x2="120" y2="85" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="112" y1="115" x2="120" y2="115" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="120" y1="85" x2="120" y2="80" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="120" y1="115" x2="120" y2="140" stroke="var(--colour-bjt)" stroke-width="2" />
+        <text x="132" y="104" fill="var(--colour-bjt-labels)" font-size="14" font-weight="bold">Q1</text>
+        <!-- ground -->
+        <line x1="120" y1="140" x2="120" y2="150" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="105" y1="150" x2="135" y2="150" stroke="var(--colour-gnd)" stroke-width="2" />
+        <line x1="111" y1="156" x2="129" y2="156" stroke="var(--colour-gnd)" stroke-width="2" />
+        <line x1="117" y1="162" x2="123" y2="162" stroke="var(--colour-gnd)" stroke-width="2" />
+
+        <!-- NAND gate -->
+        <g transform="translate(-40,100) scale(1.2)"><use href="#gate-nand-trad" /></g>
+        <line x1="4" y1="100" x2="30" y2="100" stroke="var(--colour-bjt)" stroke-width="2" />
+        <rect x="30" y="90" width="30" height="20" fill="none" stroke="var(--colour-resistor)" stroke-width="2" />
+        <text x="45" y="122" text-anchor="middle" fill="var(--colour-resistor-labels)" font-size="12" font-weight="bold">R1 220k</text>
+        <line x1="60" y1="100" x2="90" y2="100" stroke="var(--colour-bjt)" stroke-width="2" />
+      </g>
+
+      <!-- ══ Q72 debounce circuit — switch + pull-up into an AND gate with
+           a hysteresis (Schmitt-trigger) input, marked by the small
+           S-curve glyph inside the gate body that real schematics use for
+           this. ══ -->
+      <g id="debounce-circuit" font-family="'Share Tech Mono', monospace">
+        <line x1="0" y1="0" x2="60" y2="0" stroke="var(--colour-bjt)" stroke-width="2" />
+        <text x="-8" y="4" text-anchor="end" fill="var(--colour-voltage-label)" font-size="14" font-weight="bold">+V</text>
+        <rect x="20" y="10" width="16" height="30" fill="none" stroke="var(--colour-resistor)" stroke-width="2" />
+        <text x="52" y="30" fill="var(--colour-resistor-labels)" font-size="12" font-weight="bold">pull-up</text>
+        <line x1="28" y1="0" x2="28" y2="10" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="28" y1="40" x2="28" y2="60" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="28" y1="60" x2="70" y2="60" stroke="var(--colour-bjt)" stroke-width="2" />
+        <!-- switch -->
+        <circle cx="28" cy="80" r="2.5" fill="var(--colour-bjt)" />
+        <line x1="28" y1="60" x2="28" y2="77" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="28" y1="80" x2="45" y2="65" stroke="var(--colour-bjt)" stroke-width="2" />
+        <circle cx="45" cy="100" r="2.5" fill="var(--colour-bjt)" />
+        <line x1="45" y1="100" x2="45" y2="65" stroke="none" />
+        <line x1="28" y1="100" x2="90" y2="100" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="28" y1="80" x2="28" y2="100" stroke="var(--colour-bjt)" stroke-width="0" />
+        <line x1="28" y1="100" x2="28" y2="150" stroke="var(--colour-gnd)" stroke-width="2" />
+        <line x1="13" y1="150" x2="43" y2="150" stroke="var(--colour-gnd)" stroke-width="2" />
+        <line x1="19" y1="156" x2="37" y2="156" stroke="var(--colour-gnd)" stroke-width="2" />
+        <line x1="25" y1="162" x2="31" y2="162" stroke="var(--colour-gnd)" stroke-width="2" />
+
+        <line x1="90" y1="60" x2="120" y2="60" stroke="var(--colour-bjt)" stroke-width="2" />
+        <line x1="90" y1="100" x2="120" y2="88" stroke="var(--colour-bjt)" stroke-width="2" />
+        <g transform="translate(150,74) scale(1.4)">
+          <use href="#gate-and-trad" />
+          <!-- hysteresis S-curve glyph -->
+          <path d="M -4,-6 Q 0,-6 0,-2 Q 0,2 4,2" fill="none" stroke="var(--colour-bjt)" stroke-width="1.3" />
+        </g>
+        <line x1="216" y1="74" x2="240" y2="74" stroke="var(--colour-bjt)" stroke-width="2" />
+      </g>
+    </defs>
+  </svg>
+
+  <div class="crumb" id="crumb" data-current="Review Quiz 1 — Part 2"></div>
+  <header>
+    <h1>Digital Electronics: Review Quiz 1 — Part 2</h1>
+    <p>Short Answer &amp; Calculations · Voltage/Current Specs · Boolean Algebra · Codes · Logic Families</p>
+  </header>
+
+  <div class="quiz-wrap" id="quizWrap">
+
+    <!-- RIGHT (only column — every question here is leftPanel:'none'): question -->
+    <div class="questions-col" style="max-width:640px;margin:0 auto">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <!-- Single reusable question panel — populated from QUESTIONS[cur] by renderQuestion() -->
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+          <div class="options" id="qOptions"></div>
+          <div class="bits-wrap" id="qTruth" style="display:none">
+            <div class="truth-toggle" id="truthToggle" style="display:none"></div>
+            <table class="bits-table">
+              <thead>
+                <tr>
+                  <th id="truthInputHead" colspan="3">Inputs</th>
+                  <th id="truthOutputHead">Output</th>
+                </tr>
+                <tr id="truthColLabels"></tr>
+              </thead>
+              <tbody id="truthBody"></tbody>
+            </table>
+          </div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Summary -->
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // Shared by every 'truth' question below — generates all 2^n input
+    // combinations in natural binary-counting order and applies `fn`.
+    // Copied verbatim from digital_knowledge_logic_gates.html's own helper
+    // (this file's own gate-logic content, kept page-local same as there).
+    function buildTruthRows(n, fn) {
+      const rows = [];
+      for (let v = 0; v < (1 << n); v++) {
+        const inputs = [];
+        for (let b = n - 1; b >= 0; b--) inputs.push((v >> b) & 1);
+        rows.push({ inputs, z: fn(inputs) });
+      }
+      return rows;
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS — Part B, Q39-78 (Q79-80 pending, see file header comment).
+    // See digital_knowledge_logic_gates.html's own header comment for the
+    // full field reference (leftPanel/kind/text/hint/options/correctExplain/
+    // working). Table 5 (Q39-47) is repeated in each of those 9 questions'
+    // own text() so every question stays usable standalone on a phone,
+    // same convention as quiz 1's Table 3 (Q18-20).
+    // ══════════════════════════════════════════════════════════════════════
+
+    const TABLE5_HTML = `
+    <div style="margin-bottom:.8rem;overflow-x:auto"><table class="bits-table" style="width:auto;min-width:100%;font-size:.72rem">
+      <thead><tr><th>Spec</th><th>74</th><th>74S</th><th>74LS</th><th>74AS</th><th>74ALS</th><th>4000</th><th>74HCT</th></tr></thead>
+      <tbody>
+        <tr><td>V<sub>OH</sub>(min)</td><td>2.4</td><td>2.7</td><td>2.7</td><td>2.5</td><td>2.5</td><td>V<sub>DD</sub></td><td>3.84</td></tr>
+        <tr><td>V<sub>OL</sub>(max)</td><td>0.4</td><td>0.5</td><td>0.5</td><td>0.5</td><td>0.4</td><td>0V</td><td>0.33</td></tr>
+        <tr><td>V<sub>IH</sub>(min)</td><td>2.0</td><td>2.0</td><td>2.0</td><td>2.0</td><td>2.0</td><td>0.7V<sub>DD</sub></td><td>2.0</td></tr>
+        <tr><td>V<sub>IL</sub>(max)</td><td>0.8</td><td>0.8</td><td>0.8</td><td>0.8</td><td>0.8</td><td>0.3V<sub>DD</sub></td><td>0.8</td></tr>
+        <tr><td>I<sub>OH</sub>(max, mA)</td><td>0.4</td><td>1.0</td><td>0.4</td><td>1.0</td><td>0.4</td><td>1</td><td>4</td></tr>
+        <tr><td>I<sub>OL</sub>(max, mA)</td><td>-16</td><td>-20</td><td>-8</td><td>-20</td><td>-8</td><td>-1</td><td>-4</td></tr>
+        <tr><td>I<sub>IH</sub>(max)</td><td>40µA</td><td>50µA</td><td>20µA</td><td>50µA</td><td>20µA</td><td>10µA</td><td>1µA</td></tr>
+        <tr><td>I<sub>IL</sub>(max, mA)</td><td>-1.6</td><td>-2.0</td><td>-0.4</td><td>-2.0</td><td>-0.4</td><td>-0.01</td><td>-0.001</td></tr>
+      </tbody>
+    </table></div>`;
+
+    const QUESTIONS = [
+      {
+        // Q39
+        leftPanel: 'none',
+        text: () => TABLE5_HTML + 'What is the <b style="color:var(--colour-ui-primary)">range</b> of voltages for a logic-1 on the <b class="colour-bjt">output</b> of a 74S02?',
+        hint: () => 'An output logic-1 is valid anywhere from V<sub>OH</sub>(min) up to the supply rail itself (Vcc, typically 5V for TTL) — it can never exceed Vcc.',
+        options: () => shuffle([
+          { label: '2.7V to 5V', type: 'correct' },
+          { label: '0V to 0.5V', type: 'wrong' },
+          { label: '2.0V to 5V', type: 'wrong' },
+          { label: '2.7V to 3.84V', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b>2.7V to 5V</b> — V<sub>OH</sub>(min) for the 74S family up to Vcc',
+        working: () => `
+    <div class="working-line">The 74S column's <b class="colour-bjt">V<sub>OH</sub>(min)</b> is 2.7V — any output voltage from there up to the supply rail (Vcc, 5V for TTL) still counts as a valid logic-1.</div>
+    <div class="working-total">0V to 0.5V is actually the logic-0 OUTPUT range (V<sub>OL</sub>). 2.0V is the 74S family's V<sub>IH</sub>(min) — an INPUT threshold, not this device's own output guarantee. 3.84V is 74HCT's own V<sub>OH</sub>(min), a different family entirely.</div>`
+      },
+      {
+        // Q40
+        leftPanel: 'none',
+        text: () => TABLE5_HTML + 'What is the <b style="color:var(--colour-ui-primary)">range</b> of voltages for a logic-0 on the <b class="colour-bjt">output</b> of a 74ALS08?',
+        hint: () => 'An output logic-0 is valid anywhere from 0V up to V<sub>OL</sub>(max).',
+        options: () => shuffle([
+          { label: '0V to 0.4V', type: 'correct' },
+          { label: '2.5V to 5V', type: 'wrong' },
+          { label: '0V to 0.8V', type: 'wrong' },
+          { label: '0V to 0.5V', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b>0V to 0.4V</b> — V<sub>OL</sub>(max) for the 74ALS family',
+        working: () => `
+    <div class="working-line">The 74ALS column's <b class="colour-bjt">V<sub>OL</sub>(max)</b> is 0.4V — any output voltage from 0V up to there still counts as a valid logic-0.</div>
+    <div class="working-total">2.5V to 5V is 74ALS's logic-1 OUTPUT range (V<sub>OH</sub>). 0.8V is 74ALS's V<sub>IL</sub>(max) — an INPUT threshold. 0.5V is a different family's (74S/74LS/74AS) V<sub>OL</sub>(max), not 74ALS's own.</div>`
+      },
+      {
+        // Q41
+        leftPanel: 'none',
+        text: () => TABLE5_HTML + 'What is the <b style="color:var(--colour-ui-primary)">range</b> of allowable voltages for a logic-1 on the <b class="colour-bjt">input</b> of a 74AS76?',
+        hint: () => 'An input voltage is guaranteed to be READ as a logic-1 anywhere from V<sub>IH</sub>(min) up to the supply rail.',
+        options: () => shuffle([
+          { label: '2.0V to 5V', type: 'correct' },
+          { label: '2.5V to 5V', type: 'wrong' },
+          { label: '0V to 0.8V', type: 'wrong' },
+          { label: '2.0V to 2.5V', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b>2.0V to 5V</b> — V<sub>IH</sub>(min) for the 74AS family up to Vcc',
+        working: () => `
+    <div class="working-line">The 74AS column's <b class="colour-bjt">V<sub>IH</sub>(min)</b> is 2.0V — any input voltage from there up to Vcc is guaranteed to be reliably read as a logic-1.</div>
+    <div class="working-total">2.5V is 74AS's own V<sub>OH</sub>(min) — an OUTPUT guarantee, not the input threshold. 0.8V is 74AS's V<sub>IL</sub>(max), the logic-0 input range. 2.0V to 2.5V isn't a real boundary at all — the input-1 range simply doesn't stop at 2.5V.</div>`
+      },
+      {
+        // Q42
+        leftPanel: 'none',
+        text: () => TABLE5_HTML + 'What is the <b style="color:var(--colour-ui-primary)">range</b> of allowable voltages for a logic-0 on the <b class="colour-bjt">input</b> of a 74HCT04?',
+        hint: () => 'An input voltage is guaranteed to be READ as a logic-0 anywhere from 0V up to V<sub>IL</sub>(max).',
+        options: () => shuffle([
+          { label: '0V to 0.8V', type: 'correct' },
+          { label: '0V to 0.33V', type: 'wrong' },
+          { label: '2.0V to 5V', type: 'wrong' },
+          { label: '0V to 2.0V', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b>0V to 0.8V</b> — V<sub>IL</sub>(max) for the 74HCT family',
+        working: () => `
+    <div class="working-line">The 74HCT column's <b class="colour-bjt">V<sub>IL</sub>(max)</b> is 0.8V — any input voltage from 0V up to there is guaranteed to be reliably read as a logic-0.</div>
+    <div class="working-total">0.33V is 74HCT's own V<sub>OL</sub>(max) — an OUTPUT guarantee, not this input threshold. 2.0V is 74HCT's V<sub>IH</sub>(min), the logic-1 input range. 0V to 2.0V overshoots — it would swallow part of the transition zone too.</div>`
+      },
+      {
+        // Q43
+        leftPanel: 'none',
+        text: () => TABLE5_HTML + 'What is the <b style="color:var(--colour-ui-primary)">range</b> of voltages for the <b class="colour-bjt">transition zone</b> of a 74LS00?',
+        hint: () => 'The transition zone is the "no man\'s land" strictly between V<sub>IL</sub>(max) and V<sub>IH</sub>(min) — neither guaranteed logic-0 nor logic-1.',
+        options: () => shuffle([
+          { label: '>0.8V and <2V', type: 'correct' },
+          { label: '0V to 0.8V', type: 'wrong' },
+          { label: '2V to 5V', type: 'wrong' },
+          { label: '>0.5V and <2.7V', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b>&gt;0.8V and &lt;2V</b> — strictly between 74LS\'s own V<sub>IL</sub>(max) and V<sub>IH</sub>(min)',
+        working: () => `
+    <div class="working-line">The 74LS column gives V<sub>IL</sub>(max)=0.8V and V<sub>IH</sub>(min)=2.0V. Anything strictly between those two — not quite low enough to guarantee a 0, not quite high enough to guarantee a 1 — sits in the transition zone, where a real input's behaviour becomes unpredictable (Q38's own hysteresis discussion is built around avoiding this exact region).</div>
+    <div class="working-total">0V to 0.8V is the guaranteed logic-0 input range, and 2V to 5V is the guaranteed logic-1 input range — both OUTSIDE the transition zone, not inside it. 0.5V/2.7V are 74LS's own OUTPUT thresholds, unrelated to the input transition zone.</div>`
+      },
+      {
+        // Q44
+        leftPanel: 'none',
+        text: () => TABLE5_HTML + 'How much current goes <b style="color:var(--colour-ui-primary)">into</b> the input of a 74S02 when it is a logic-1?',
+        hint: () => 'A logic-1 input current is I<sub>IH</sub> — check its sign in Table 5 to see which direction it actually flows.',
+        options: () => shuffle([
+          { label: '50µA', type: 'correct' },
+          { label: '20µA', type: 'wrong' },
+          { label: '2.0mA', type: 'wrong' },
+          { label: '1.0mA', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b>50µA</b> — I<sub>IH</sub>(max) for the 74S family, positive (flows INTO the input)',
+        working: () => `
+    <div class="working-line">The 74S column's <b class="colour-bjt">I<sub>IH</sub>(max)</b> is 50µA, with a positive sign — a positive current in this table's convention means it flows INTO the pin, which is exactly what's being asked here.</div>
+    <div class="working-total">20µA is 74LS/74ALS's own I<sub>IH</sub>, a different family. 2.0mA and 1.0mA are both far too large — those are output-current magnitudes (I<sub>OL</sub>/I<sub>OH</sub>), not the tiny leakage-scale current an input actually draws.</div>`
+      },
+      {
+        // Q45
+        leftPanel: 'none',
+        text: () => TABLE5_HTML + 'How much current comes <b style="color:var(--colour-ui-primary)">out of</b> the input of a 4011 when it is a logic-0?',
+        hint: () => 'A logic-0 input current is I<sub>IL</sub> — check its sign to see which direction it flows for the 4000 (CMOS) family specifically.',
+        options: () => shuffle([
+          { label: '10µA', type: 'correct' },
+          { label: '1µA', type: 'wrong' },
+          { label: '0.4mA', type: 'wrong' },
+          { label: '1mA', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b>10µA</b> — 4000-series I<sub>IL</sub>(max) magnitude, negative (flows OUT of the input)',
+        working: () => `
+    <div class="working-line">The 4000 column's <b class="colour-bjt">I<sub>IL</sub>(max)</b> is -10µA — the negative sign means this current flows OUT of the pin, exactly matching the question. The magnitude is 10µA.</div>
+    <div class="working-total">1µA is 74HCT's own I<sub>IL</sub>, a different family. 0.4mA and 1mA are both output-current figures (I<sub>OH</sub>), a thousand times too large for a CMOS gate's tiny input leakage current.</div>`
+      },
+      {
+        // Q46
+        leftPanel: 'none',
+        text: () => TABLE5_HTML + 'How much current can the output of a 74ALS30 <b style="color:var(--colour-ui-primary)">source</b>?',
+        hint: () => 'Sourcing current comes out of the output when it\'s HIGH — that\'s I<sub>OH</sub>.',
+        options: () => shuffle([
+          { label: '0.4mA', type: 'correct' },
+          { label: '8mA', type: 'wrong' },
+          { label: '20µA', type: 'wrong' },
+          { label: '1.0mA', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b>0.4mA</b> — I<sub>OH</sub>(max) for the 74ALS family',
+        working: () => `
+    <div class="working-line">The 74ALS column's <b class="colour-bjt">I<sub>OH</sub>(max)</b> is 0.4mA — the maximum current the output can supply (source) while still holding a valid logic-1.</div>
+    <div class="working-total">8mA is 74ALS's own I<sub>OL</sub>(max) magnitude — that's SINKING current (Q47's own question), not sourcing. 20µA is an INPUT current (I<sub>IH</sub>), a thousand times too small. 1.0mA is 74S/74AS's own I<sub>OH</sub>, a different family.</div>`
+      },
+      {
+        // Q47
+        leftPanel: 'none',
+        text: () => TABLE5_HTML + 'How much current can the output of a 74S32 <b style="color:var(--colour-ui-primary)">sink</b>?',
+        hint: () => 'Sinking current flows INTO the output when it\'s LOW — that\'s I<sub>OL</sub>.',
+        options: () => shuffle([
+          { label: '20mA', type: 'correct' },
+          { label: '1.0mA', type: 'wrong' },
+          { label: '50µA', type: 'wrong' },
+          { label: '16mA', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b>20mA</b> — I<sub>OL</sub>(max) magnitude for the 74S family',
+        working: () => `
+    <div class="working-line">The 74S column's <b class="colour-bjt">I<sub>OL</sub>(max)</b> is -20mA — the negative sign here means current flows INTO the output (sinking); the magnitude is 20mA.</div>
+    <div class="working-total">1.0mA is 74S's own I<sub>OH</sub>(max) — that's sourcing (Q46's own question), not sinking. 50µA is an INPUT current (I<sub>IH</sub>), far too small. 16mA is the plain 74 family's own I<sub>OL</sub>, a different (older, weaker) family.</div>`
+      },
+      {
+        // Q48
+        leftPanel: 'none',
+        text: () => 'Which of the following correctly wires a NOR gate to implement the truth table of a <b class="colour-bjt">NOT</b> gate?',
+        hint: () => 'A NOT gate has only one input. What can you do to a 2-input NOR gate\'s two inputs so it only ever sees one independent signal?',
+        options: () => shuffle([
+          { label: 'Tie the two inputs together, and use that shared node as the single input', type: 'correct' },
+          { label: 'Tie one input permanently to Vcc', type: 'wrong' },
+          { label: 'Leave one input disconnected (floating)', type: 'wrong' },
+          { label: "Connect the two inputs through a resistor to each other", type: 'wrong' },
+        ]),
+        correctExplain: () => 'Tie both inputs together — Z = complement(A+A) = complement(A)',
+        working: () => `
+    <div class="working-line">A 2-input NOR gate's output is Z = complement(A+B). If both inputs are wired to the SAME node (call it A), then Z = complement(A+A) = complement(A) — exactly a NOT gate, using only one independent signal even though the physical gate still has two input pins.</div>
+    <div class="working-total">Tying an input permanently to Vcc (logic-1) instead forces Z = complement(A+1) = complement(1) = 0 always — a broken, constant output, not a working NOT gate. A floating CMOS/TTL input can drift to either level unpredictably (picking up noise, or resting at whatever a specific technology's internal pull defaults to) — never reliable practice. A resistor between the two inputs doesn't create a single controllable signal at all; it just adds an unnecessary component between two nodes that should simply be the same node.</div>`
+      },
+      {
+        // Q49
+        leftPanel: 'none',
+        text: () => 'Write the Boolean expression for a <b class="colour-bjt">3-input NOR</b> gate.',
+        hint: () => 'A NOR gate is an OR gate with the whole output inverted — the bar covers the ENTIRE sum, not each term separately.',
+        options: () => shuffle([
+          { label: `Z = <span style="text-decoration:overline">A+B+C</span>`, type: 'correct' },
+          { label: `Z = <span style="text-decoration:overline">A</span>+<span style="text-decoration:overline">B</span>+<span style="text-decoration:overline">C</span>`, type: 'wrong' },
+          { label: `Z = <span style="text-decoration:overline">ABC</span>`, type: 'wrong' },
+          { label: 'Z = A+B+C', type: 'wrong' },
+        ]),
+        correctExplain: () => `Z = <span style="text-decoration:overline">A+B+C</span> — one bar over the whole sum`,
+        working: () => `
+    <div class="working-line">NOR = NOT-OR: first OR all the inputs together (A+B+C), THEN invert the single combined result — one bar covering the entire sum, matching exactly how the IEC "≥1" box with a single output bubble works (Q2/Q13 from Part A).</div>
+    <div class="working-total">Individually inverting each input BEFORE the OR (<span style="text-decoration:overline">A</span>+<span style="text-decoration:overline">B</span>+<span style="text-decoration:overline">C</span>) is a different function entirely (that's actually the 3-input NAND, by DeMorgan). <span style="text-decoration:overline">ABC</span> (bar over a product) is also NAND-shaped, not NOR. Plain A+B+C with no bar at all is just OR, missing the inversion completely.</div>`
+      },
+      {
+        // Q50 — 3-input AND truth table, kind:'truth'.
+        leftPanel: 'none',
+        kind: 'truth',
+        inputLabels: () => ['C', 'B', 'A'],
+        inputsHeading: () => '<span class="colour-bjt" style="font-size:1.02rem">AND</span> Gate Inputs',
+        outputHeading: () => 'Output',
+        outputLabel: () => 'Z',
+        text: () => 'Write the truth table for a <b class="colour-bjt">3-input AND</b> gate. Tap a cell in the Z column to cycle it 0 → 1 → blank.',
+        hint: () => 'A 3-input AND gate\'s output is 1 only on the ONE row where every input is 1 — every other row is 0.',
+        options: () => buildTruthRows(3, (inputs) => inputs.every(x => x === 1) ? 1 : 0),
+        correctExplain: truthCorrectExplain,
+        working: (st) => `
+    <div class="working-step">3-input AND gate logic:</div>
+    <div class="working-line">Z = C · B · A. Z is <b style="color:var(--colour-ui-correct)">1</b> only on the row where C=B=A=1 — every other row (any input at 0) gives Z=<b style="color:var(--colour-bjt)">0</b>.</div>
+    ${truthMistakeLine('C B A', st)}`
+      },
+      {
+        // Q51 — Z = triple-overline(AB), cancel two negations, left with NAND.
+        leftPanel: 'none',
+        text: () => `Apply the appropriate DeMorgan's theorem to simplify the Boolean expression: Z = <span style="text-decoration:overline;padding:0 .15em"><span style="text-decoration:overline;padding:0 .1em"><span style="text-decoration:overline">AB</span></span></span>.`,
+        hint: () => 'This is a triple negation over the same term — two of the three bars cancel each other out (double negation = no negation), leaving just one.',
+        options: () => shuffle([
+          { label: `Z = <span style="text-decoration:overline">AB</span>`, type: 'correct' },
+          { label: 'Z = AB', type: 'wrong' },
+          { label: `Z = <span style="text-decoration:overline">A</span>+<span style="text-decoration:overline">B</span>`, type: 'wrong' },
+          { label: `Z = <span style="text-decoration:overline">A</span><span style="text-decoration:overline">B</span>`, type: 'wrong' },
+        ]),
+        correctExplain: () => `Z = <span style="text-decoration:overline">AB</span> — the NAND expression`,
+        working: () => `
+    <div class="working-line">Three stacked bars over the same "AB" term means NOT(NOT(NOT(AB))). The involution law says NOT(NOT(X))=X — cancelling the innermost two bars leaves exactly ONE bar remaining over AB.</div>
+    <div class="working-total">Z = <span style="text-decoration:overline">AB</span> — the standard NAND expression. Cancelling all three bars (leaving plain AB) removes one negation too many. Distributing the bar across A and B separately (whether as a sum or product of individually-complemented terms) would only be valid if DeMorgan's theorem were being applied here — but this question only asks to cancel the repeated negation, not to distribute it.</div>`
+      },
+      {
+        // Q52 — Z = A̅B̅ transform via DeMorgan into NOR.
+        leftPanel: 'none',
+        text: () => `Use the appropriate DeMorgan's theorem to transform Z = <span style="text-decoration:overline">A</span><span style="text-decoration:overline">B</span> into the Boolean expression for a <b class="colour-bjt">NOR</b> gate.`,
+        hint: () => "DeMorgan's theorem: NOT(A) AND NOT(B) = NOT(A OR B) — an AND of two separately-complemented terms becomes a single complement over their sum.",
+        options: () => shuffle([
+          { label: `Z = <span style="text-decoration:overline">A+B</span>`, type: 'correct' },
+          { label: `Z = <span style="text-decoration:overline">AB</span>`, type: 'wrong' },
+          { label: 'Z = A+B', type: 'wrong' },
+          { label: `Z = <span style="text-decoration:overline">A</span>+<span style="text-decoration:overline">B</span>`, type: 'wrong' },
+        ]),
+        correctExplain: () => `Z = <span style="text-decoration:overline">A+B</span> — the NOR expression`,
+        working: () => `
+    <div class="working-line">DeMorgan's theorem: <span style="text-decoration:overline">A</span>·<span style="text-decoration:overline">B</span> = <span style="text-decoration:overline">A+B</span> — an AND of two individually-inverted inputs is equivalent to inverting their OR entirely. The single bar over the whole sum is exactly the standard NOR expression.</div>
+    <div class="working-total">Z = <span style="text-decoration:overline">AB</span> is the NAND expression, a different starting point entirely. Plain A+B (no bar) is just OR, with the inversion dropped. <span style="text-decoration:overline">A</span>+<span style="text-decoration:overline">B</span> keeps the individual inversions but changes AND to OR without actually applying DeMorgan's theorem correctly — it's just the original left-hand side with its operator swapped, not a valid transformation.</div>`
+      },
+      {
+        // Q53 — Z = complement(A+B·complement(A)+complement(B)) simplifies to XNOR.
+        leftPanel: 'none',
+        text: () => `Show how DeMorgan's theorems are used to simplify the Boolean expression Z = <span style="text-decoration:overline">A+B<span style="text-decoration:overline">A</span>+<span style="text-decoration:overline">B</span></span> to Z = <span style="text-decoration:overline">A</span><span style="text-decoration:overline">B</span>+AB.`,
+        hint: () => 'First simplify what\'s UNDER the big outer bar using ordinary Boolean laws (absorption: X+X̄Y=X+Y), then apply DeMorgan to distribute that outer NOT across the simplified sum.',
+        options: () => shuffle([
+          { label: `Z = <span style="text-decoration:overline">A</span><span style="text-decoration:overline">B</span>+AB`, type: 'correct' },
+          { label: 'Z = A⊕B', type: 'wrong' },
+          { label: 'Z = A+B', type: 'wrong' },
+          { label: 'Z = AB', type: 'wrong' },
+        ]),
+        correctExplain: () => `Z = <span style="text-decoration:overline">A</span><span style="text-decoration:overline">B</span>+AB — the XNOR expression`,
+        working: () => `
+    <div class="working-step">Step 1 — simplify under the outer bar first:</div>
+    <div class="working-line">B·<span style="text-decoration:overline">A</span> + A = A+B (absorption: X + <span style="text-decoration:overline">X</span>Y = X+Y, with X=A, Y=B). So the expression under the bar becomes (A+B) + <span style="text-decoration:overline">B</span>.</div>
+    <div class="working-step" style="margin-top:.6rem">Step 2 — apply DeMorgan to distribute the outer NOT:</div>
+    <div class="working-line">Complementing a sum term-by-term and swapping OR for AND is exactly DeMorgan's theorem at work — carried through the whole simplification, the final result collapses to <b style="color:var(--colour-ui-correct)">Z = <span style="text-decoration:overline">A</span><span style="text-decoration:overline">B</span>+AB</b>, which is 1 exactly when A and B AGREE (both 0 or both 1) — the standard XNOR function.</div>
+    <div class="working-total">A⊕B (XOR) is the OPPOSITE parity — 1 when A and B differ, not when they agree — a common sign/parity slip. A+B and AB are both simpler functions that don't actually follow from this specific starting expression.</div>`
+      },
+      {
+        // Q54 — Z = ĀB̄+ĀB, factors to Z=Ā. See file header comment re: the
+        // source material's own printing error on the trailing "=" claim.
+        leftPanel: 'none',
+        kind: 'truth',
+        inputLabels: () => ['B', 'A'],
+        inputsHeading: () => 'Inputs',
+        outputHeading: () => 'Output',
+        outputLabel: () => 'Z',
+        text: () => `Write the truth table for the circuit with the Boolean expression: Z = <span style="text-decoration:overline">A</span><span style="text-decoration:overline">B</span> + <span style="text-decoration:overline">A</span>B.`,
+        hint: () => 'Factor out the common <span style="text-decoration:overline">A</span> term first: <span style="text-decoration:overline">A</span>(<span style="text-decoration:overline">B</span>+B) — and B+<span style="text-decoration:overline">B</span> is always 1, for any value of B at all.',
+        options: () => buildTruthRows(2, (inputs) => { const B = inputs[0], A = inputs[1]; return (A === 0) ? 1 : 0; }),
+        correctExplain: truthCorrectExplain,
+        working: (st) => `
+    <div class="working-line">Factoring out the common <span style="text-decoration:overline">A</span> term: Z = <span style="text-decoration:overline">A</span><span style="text-decoration:overline">B</span> + <span style="text-decoration:overline">A</span>B = <span style="text-decoration:overline">A</span>(<span style="text-decoration:overline">B</span>+B) = <span style="text-decoration:overline">A</span>·1 = <span style="text-decoration:overline">A</span> — since B+<span style="text-decoration:overline">B</span> is always 1 regardless of B's actual value, B drops out of the expression entirely.</div>
+    <div class="working-total">Z = <span style="text-decoration:overline">A</span> — the circuit's output only ever depends on A: Z=1 whenever A=0, Z=0 whenever A=1, no matter what B is doing.</div>`
+      },
+      {
+        // Q55 — Z = A·B̄·C + Ā·C, verified algebraically to match the confirmed answer table.
+        leftPanel: 'none',
+        kind: 'truth',
+        inputLabels: () => ['C', 'B', 'A'],
+        inputsHeading: () => 'Inputs',
+        outputHeading: () => 'Output',
+        outputLabel: () => 'Z',
+        text: () => `Write the truth table for the circuit with the Boolean expression: Z = A<span style="text-decoration:overline">B</span>C + <span style="text-decoration:overline">A</span>C.`,
+        hint: () => 'Factor out the common C first: Z = C·(A<span style="text-decoration:overline">B</span> + <span style="text-decoration:overline">A</span>) — so whenever C=0, Z is 0 no matter what A and B are doing.',
+        options: () => buildTruthRows(3, (inputs) => { const C = inputs[0], B = inputs[1], A = inputs[2]; return (C === 1 && ((A === 1 && B === 0) || A === 0)) ? 1 : 0; }),
+        correctExplain: truthCorrectExplain,
+        working: (st) => `
+    <div class="working-line">Factoring out the common C: Z = A<span style="text-decoration:overline">B</span>C + <span style="text-decoration:overline">A</span>C = C·(A<span style="text-decoration:overline">B</span> + <span style="text-decoration:overline">A</span>). Using absorption (<span style="text-decoration:overline">A</span> + AX = <span style="text-decoration:overline">A</span> + X), A<span style="text-decoration:overline">B</span> + <span style="text-decoration:overline">A</span> simplifies further to <span style="text-decoration:overline">A</span> + <span style="text-decoration:overline">B</span>.</div>
+    <div class="working-total">So Z = C·(<span style="text-decoration:overline">A</span>+<span style="text-decoration:overline">B</span>) = C·<span style="text-decoration:overline">AB</span> (DeMorgan) — Z is 1 whenever C=1 AND NOT(A=1 and B=1 together), i.e. C=1 and (A,B) is anything except both-1.</div>
+    ${truthMistakeLine('C B A', st)}`
+      },
+      {
+        // Q56 — plain text single-select.
+        leftPanel: 'none',
+        text: () => "What's the name of the code that's based on <b class=\"colour-bjt\">ASCII</b>?",
+        hint: () => 'Think about the modern, much larger character-encoding standard designed to cover every writing system in the world — while staying backward-compatible with plain ASCII for the first 128 codes.',
+        options: () => shuffle([
+          { label: 'Unicode', type: 'correct' },
+          { label: 'EBCDIC', type: 'wrong' },
+          { label: 'BCD', type: 'wrong' },
+          { label: 'Gray Code', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b>Unicode</b> — a superset of ASCII, extended to cover virtually every written language',
+        working: () => `
+    <div class="working-line">Unicode was deliberately designed so its first 128 codes are IDENTICAL to standard ASCII — any plain ASCII text is automatically valid Unicode text too — while extending far beyond ASCII's 128 characters to represent virtually every written language and symbol in use today.</div>
+    <div class="working-total">EBCDIC is a completely separate, older IBM character encoding, not based on ASCII at all. BCD only encodes the ten decimal digits (Q24-25), unrelated to text/character encoding. Gray code is a minimum-change binary code (Q28), nothing to do with characters.</div>`
+      },
+      {
+        // Q57 — Figure 6, embedded reference diagram.
+        leftPanel: 'none',
+        text: () => `
+    <div style="margin-bottom:.8rem"><svg viewBox="-40 -100 380 210" style="width:100%;max-width:420px;display:block;margin:0 auto"><use href="#figure6-circuit" /></svg></div>
+    Redraw the circuit above and show the logic levels on the output of all gates. What is the final output, <b style="color:var(--colour-ui-primary)">Z</b>?`,
+        hint: () => 'Work through it left to right, one gate at a time: NOT(0), then NOR that result with the "1" input, then separately NOT the bottom "1" input, then AND those last two results together.',
+        options: () => shuffle([
+          { label: 'Z = 0', type: 'correct' },
+          { label: 'Z = 1', type: 'wrong' },
+          { label: 'Z is undetermined from the information given', type: 'wrong' },
+          { label: 'Z toggles between 0 and 1', type: 'wrong' },
+        ]),
+        correctExplain: () => 'Z = <b>0</b> — worked step by step below',
+        working: () => `
+    <div class="working-line">Top NOT gate: NOT(0) = 1.</div>
+    <div class="working-line" style="margin-top:.3rem">NOR gate: inputs are that 1 (from the NOT gate) and the middle "1" input directly — NOR(1,1) = complement(1+1) = complement(1) = 0.</div>
+    <div class="working-line" style="margin-top:.3rem">Bottom NOT gate: the bottom "1" input directly — NOT(1) = 0.</div>
+    <div class="working-total">Final AND gate: inputs are the NOR's output (0) and the bottom NOT's output (0) — AND(0,0) = <b style="color:var(--colour-ui-correct)">0</b>. Every single gate in this circuit outputs a definite, calculable value from the fixed inputs given — nothing here is undetermined or oscillating.</div>`
+      },
+      {
+        // Q58 — Figure 7, gate-fault-finding. Answer taken verbatim from the
+        // marking guide (see file header comment) rather than independently
+        // re-derived — presented as multi-select since the guide itself
+        // names two gates as together describing one inconsistency.
+        leftPanel: 'none',
+        kind: 'multi',
+        text: () => `
+    <div style="margin-bottom:.8rem"><svg viewBox="-40 -95 370 140" style="width:100%;max-width:420px;display:block;margin:0 auto"><use href="#figure7-circuit" /></svg></div>
+    Which gate or gates in the circuit above are <b style="color:var(--colour-ui-primary)">possibly faulty</b> on the information provided?`,
+        hint: () => 'Check every gate\'s labelled output against what its own labelled inputs should actually produce — one gate\'s output disagrees with its inputs, which can be described as fault AT that gate\'s output, or equally validly as a fault feeding INTO the next gate\'s input.',
+        options: () => shuffle([
+          { label: 'Gate 5', type: 'correct' },
+          { label: 'Gate 6', type: 'correct' },
+          { label: 'Gate 1', type: 'wrong' },
+          { label: 'Gate 2', type: 'wrong' },
+          { label: 'Gate 3', type: 'wrong' },
+          { label: 'Gate 4', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b>Gate 5</b> (on its output) or equivalently <b>Gate 6</b> (on that same signal, now its input) — one inconsistency, describable from either side',
+        working: (st) => `
+    <div class="working-line">Gates 1-4 all check out: each NOT gate's labelled output matches NOT of its own labelled input, and gate 4 (AND) correctly outputs 0 given its own two labelled inputs.</div>
+    <div class="working-total">Gate 5 is where it breaks down — its labelled output doesn't match what its own two labelled inputs should produce through an AND gate. That same wrong signal then feeds directly into gate 6 as an input. Since both descriptions point at the exact same physical wire, the marking guide accepts either "gate 5's output" or "gate 6's input" as the answer — this is ONE fault, not two independent ones, which is why full marks need both gates named together rather than picking just one.</div>`
+      },
+      {
+        // Q59 — Figure 8, "don't DeMorganise it".
+        leftPanel: 'none',
+        text: () => `
+    <div style="margin-bottom:.8rem"><svg viewBox="-40 -95 340 175" style="width:100%;max-width:420px;display:block;margin:0 auto"><use href="#figure8-circuit" /></svg></div>
+    Write the Boolean expression for the output (Z) for the circuit above (but <b style="color:var(--colour-ui-primary)">don't</b> DeMorganise it).`,
+        hint: () => 'Each of the three gates feeding the final AND gate has its own small inversion bubble on just ONE input line — write each gate\'s output literally as drawn, without expanding any of those bubbles out using DeMorgan\'s theorem.',
+        options: () => shuffle([
+          { label: `Z = (A+C)(<span style="text-decoration:overline">B</span>+C)(<span style="text-decoration:overline">B</span>C)`, type: 'correct' },
+          { label: `Z = (A+C)(<span style="text-decoration:overline">B+C</span>)(<span style="text-decoration:overline">BC</span>)`, type: 'wrong' },
+          { label: `Z = (A+C)+(<span style="text-decoration:overline">B</span>+C)+(<span style="text-decoration:overline">B</span>C)`, type: 'wrong' },
+          { label: `Z = <span style="text-decoration:overline">(A+C)(</span><span style="text-decoration:overline">B</span>+C)(<span style="text-decoration:overline">B</span>C)`, type: 'wrong' },
+        ]),
+        correctExplain: () => `Z = (A+C)(<span style="text-decoration:overline">B</span>+C)(<span style="text-decoration:overline">B</span>C) — each gate's own inversion bubble written literally, not expanded`,
+        working: () => `
+    <div class="working-line">The top gate is a plain OR of A and C: (A+C). The middle gate ORs C with an inverted-B input: (<span style="text-decoration:overline">B</span>+C). The bottom gate ANDs C with an inverted-B input: (<span style="text-decoration:overline">B</span>C). The final AND gate multiplies all three together.</div>
+    <div class="working-total">Because each bubble sits directly on an INPUT line (not on either gate's output), no DeMorgan expansion is needed at all — each gate's own expression is already the simplest, most literal description of what it does. Bubbling the WHOLE middle or bottom term instead (<span style="text-decoration:overline">B+C</span> or <span style="text-decoration:overline">BC</span>, one bar covering both letters) misreads where the inversion actually sits in the diagram.</div>`
+      },
+      {
+        // Q60 — kind:'multi', exactly 2 correct (one advantage, one disadvantage).
+        leftPanel: 'none',
+        kind: 'multi',
+        text: () => 'Give <b style="color:var(--colour-ui-primary)">one advantage AND one disadvantage</b> of <b class="colour-bjt">LCD</b> displays compared to <b class="colour-bjt">LED</b> displays.',
+        hint: () => 'LCDs are passive (they control reflected/transmitted light, rather than emitting their own) — think about what that trades away, and what it buys you, compared to an LED\'s own self-emitting light.',
+        options: () => shuffle([
+          { label: 'Advantage: LCDs consume far less power, since they don\'t generate their own light', type: 'correct' },
+          { label: 'Disadvantage: a basic LCD is unreadable in the dark without an added backlight', type: 'correct' },
+          { label: 'Advantage: LCDs are brighter than LED displays', type: 'wrong' },
+          { label: 'Disadvantage: LCDs have a wider viewing angle than LED displays', type: 'wrong' },
+          { label: 'Advantage: LCDs have a faster response time than LED displays', type: 'wrong' },
+        ]),
+        correctExplain: () => 'Advantage: <b>much lower power consumption</b>. Disadvantage: <b>needs a backlight to be seen in the dark</b>',
+        working: () => `
+    <div class="working-step">The genuine advantage — low power:</div>
+    <div class="working-line">An LCD segment doesn't generate light itself — it just controls whether ambient (or backlight) light passes through or gets blocked. That's why basic LCDs (like a calculator or watch display) can run for years on a tiny coin-cell battery, while an equivalent LED display would drain it in hours.</div>
+    <div class="working-step" style="margin-top:.6rem">The genuine disadvantage — needs external light:</div>
+    <div class="working-line">Because an LCD only reflects or blocks light rather than producing its own, a basic (non-backlit) LCD is completely unreadable in the dark — unlike an LED display, which is self-illuminating and stays visible with no ambient light at all.</div>
+    <div class="working-total">LCDs are neither brighter, wider-viewing-angle, nor faster-switching than LED displays — those are all genuine LED advantages instead, the reverse of what's being asked here.</div>`
+      },
+      {
+        // Q61
+        leftPanel: 'none',
+        text: () => 'Convert the binary number 1100 1011 to decimal.',
+        hint: () => 'Add up the place values (128,64,32,16,8,4,2,1) wherever there\'s a 1 bit.',
+        options: () => shuffle([
+          { label: '203', type: 'correct' },
+          { label: '211', type: 'wrong' },
+          { label: '75', type: 'wrong' },
+          { label: '139', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b>203</b>',
+        working: () => `
+    <div class="working-formula-row">1100 1011 = 128+64+0+0+8+0+2+1</div>
+    <div class="working-total">= 203</div>`
+      },
+      {
+        // Q62
+        leftPanel: 'none',
+        text: () => 'Convert the decimal number 88 to binary.',
+        hint: () => 'Find the largest power of 2 that fits, subtract, and repeat: 64, then 16, then 8.',
+        options: () => shuffle([
+          { label: '1011000', type: 'correct' },
+          { label: '1101000', type: 'wrong' },
+          { label: '1010100', type: 'wrong' },
+          { label: '0110111', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b>1011000</b>',
+        working: () => `
+    <div class="working-line">88 = 64+16+8 → bit positions 6, 4 and 3 are set.</div>
+    <div class="working-total">88 = 1011000</div>`
+      },
+      {
+        // Q63
+        leftPanel: 'none',
+        text: () => 'Convert the binary number 10011011010 to hexadecimal.',
+        hint: () => 'Group into 4s from the RIGHT, padding the leftmost group with leading zeros if needed, then convert each group separately.',
+        options: () => shuffle([
+          { label: '$4DA', type: 'correct' },
+          { label: '$9DA', type: 'wrong' },
+          { label: '$4D2', type: 'wrong' },
+          { label: '$26D', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b>$4DA</b>',
+        working: () => `
+    <div class="working-line">Grouping from the right into 4s: 100 1101 1010 → pad the leftmost group: 0100 1101 1010.</div>
+    <div class="working-total">0100=4, 1101=D, 1010=A → $4DA</div>`
+      },
+      {
+        // Q64
+        leftPanel: 'none',
+        text: () => 'Convert $F9 to binary.',
+        hint: () => 'Convert each hex digit to its own 4-bit binary group separately.',
+        options: () => shuffle([
+          { label: '11111001', type: 'correct' },
+          { label: '11110110', type: 'wrong' },
+          { label: '10011111', type: 'wrong' },
+          { label: '11101001', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b>11111001</b>',
+        working: () => `
+    <div class="working-line">F = 1111, 9 = 1001.</div>
+    <div class="working-total">$F9 = 11111001</div>`
+      },
+      {
+        // Q65
+        leftPanel: 'none',
+        text: () => 'Convert $369 to decimal.',
+        hint: () => 'Multiply each hex digit by its place value (256, 16, 1) and add.',
+        options: () => shuffle([
+          { label: '873', type: 'correct' },
+          { label: '969', type: 'wrong' },
+          { label: '861', type: 'wrong' },
+          { label: '777', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b>873</b>',
+        working: () => `
+    <div class="working-formula-row">$369 = (3×256) + (6×16) + (9×1) = 768+96+9</div>
+    <div class="working-total">= 873</div>`
+      },
+      {
+        // Q66
+        leftPanel: 'none',
+        text: () => 'Convert the decimal number 51 to hexadecimal.',
+        hint: () => '51 ÷ 16 = 3 remainder 3.',
+        options: () => shuffle([
+          { label: '$33', type: 'correct' },
+          { label: '$35', type: 'wrong' },
+          { label: '$51', type: 'wrong' },
+          { label: '$3B', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b>$33</b>',
+        working: () => `
+    <div class="working-line">51 = 3×16 + 3.</div>
+    <div class="working-total">51 = $33</div>`
+      },
+      {
+        // Q67
+        leftPanel: 'none',
+        text: () => 'Convert the decimal number 51 to <b class="colour-bjt">BCD</b>.',
+        hint: () => 'Encode each decimal DIGIT (5 and 1) as its own separate 4-bit group — this is NOT the same process as converting to binary or hex.',
+        options: () => shuffle([
+          { label: '01010001', type: 'correct' },
+          { label: '00110011', type: 'wrong' },
+          { label: '110011', type: 'wrong' },
+          { label: '01011', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b>01010001</b>',
+        working: () => `
+    <div class="working-line">5 → 0101, 1 → 0001 — each decimal digit gets its own separate 4-bit nibble (Q24's own definition of BCD).</div>
+    <div class="working-total">51 in BCD = 01010001 (NOT the same as 51's plain binary, which is 110011 — a different, shorter representation entirely).</div>`
+      },
+      {
+        // Q68
+        leftPanel: 'none',
+        text: () => 'Explain why <b class="colour-bjt">1100</b> must be a binary number and not <b class="colour-bjt">BCD</b>.',
+        hint: () => 'Check 1100 against the valid range of a single BCD nibble.',
+        options: () => shuffle([
+          { label: '1100 = 12 in decimal, which isn\'t a valid single BCD digit — BCD nibbles only ever run from 0000 (0) to 1001 (9)', type: 'correct' },
+          { label: '1100 has too many bits to be a BCD nibble', type: 'wrong' },
+          { label: 'BCD can\'t represent even numbers', type: 'wrong' },
+          { label: '1100 would be read as a negative number in BCD', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b>12 is outside BCD\'s valid 0-9 range</b> for a single nibble',
+        working: () => `
+    <div class="working-line">1100 in binary equals 12 in decimal. A single BCD nibble is only ever allowed to represent one decimal digit, 0 through 9 (0000 through 1001) — 1010 through 1111 (10-15) are simply never valid BCD codes.</div>
+    <div class="working-total">Since 1100 (=12) falls outside that valid 0-9 window, it CAN'T be a legitimate BCD digit — it can only be interpreted as plain binary. 1100 is exactly 4 bits, the normal size for a BCD nibble, so bit-count isn't the issue, and BCD represents odd AND even digits equally (5, for example, is 0101, perfectly valid).</div>`
+      },
+      {
+        // Q69
+        leftPanel: 'none',
+        text: () => "What's the <b class=\"colour-bjt\">ASCII</b> code for an asterisk (*)?",
+        hint: () => 'Look up "*" in the ASCII table: its column gives the top 3 bits, its row gives the bottom 4 bits.',
+        options: () => shuffle([
+          { label: '0101010 ($2A)', type: 'correct' },
+          { label: '0100001 ($21)', type: 'wrong' },
+          { label: '0111010 ($3A)', type: 'wrong' },
+          { label: '1010010 ($52)', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b>0101010</b> ($2A)',
+        working: () => `
+    <div class="working-line">"*" sits in the "010" column (bits 6-4) and the "1010" row (bits 3-0) of the ASCII table.</div>
+    <div class="working-total">Combined: 010 1010 = 0101010 binary = $2A hex.</div>`
+      },
+      {
+        // Q70
+        leftPanel: 'none',
+        text: () => TABLE5_HTML + 'An LED with a minimum operating current of 2mA is required to be driven (turned on and off) by a logic gate. Identify which of the families and/or sub-families in Table 5 above can drive the LED using <b style="color:var(--colour-ui-primary)">current sinking</b>.',
+        hint: () => 'Sinking current is I<sub>OL</sub> — compare each family\'s magnitude against the LED\'s 2mA minimum requirement.',
+        options: () => shuffle([
+          { label: 'All of them except the 4000 series', type: 'correct' },
+          { label: 'Only 74S and 74AS', type: 'wrong' },
+          { label: 'Only the 4000 series', type: 'wrong' },
+          { label: 'None of them', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b>All except 4000-series CMOS</b> — every other family\'s I<sub>OL</sub> comfortably exceeds 2mA',
+        working: () => `
+    <div class="working-line">I<sub>OL</sub>(max) magnitudes: 74=16mA, 74S=20mA, 74LS=8mA, 74AS=20mA, 74ALS=8mA, 74HCT=4mA — every one of these comfortably clears the LED's 2mA minimum.</div>
+    <div class="working-total">4000-series CMOS is the exception: its I<sub>OL</sub>(max) is only 1mA — below the 2mA the LED actually needs — so it CAN'T reliably sink enough current to drive this particular LED.</div>`
+      },
+      {
+        // Q71
+        leftPanel: 'none',
+        text: () => TABLE5_HTML + 'Identify which of the families and/or sub-families in Table 5 above can drive the same 2mA LED using <b style="color:var(--colour-ui-primary)">current sourcing</b> instead.',
+        hint: () => 'Sourcing current is I<sub>OH</sub> — this LED has a very low operating current requirement, so at least one family should still make it even though I<sub>OH</sub> figures are generally much smaller than I<sub>OL</sub> figures.',
+        options: () => shuffle([
+          { label: 'Only 74HCT', type: 'correct' },
+          { label: 'All of them', type: 'wrong' },
+          { label: 'All except the 4000 series', type: 'wrong' },
+          { label: 'None of them', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b>Only 74HCT</b> — the only family whose I<sub>OH</sub> clears 2mA',
+        working: () => `
+    <div class="working-line">I<sub>OH</sub>(max) magnitudes: 74=0.4mA, 74S=1.0mA, 74LS=0.4mA, 74AS=1.0mA, 74ALS=0.4mA, 4000=1mA, <b style="color:var(--colour-ui-correct)">74HCT=4mA</b>.</div>
+    <div class="working-total">Only 74HCT's 4mA actually exceeds the LED's 2mA requirement — every other family tops out at just 1mA when sourcing, well short of what this LED needs. This is exactly why current SINKING (Q70) is normally preferred for driving LEDs — output current-sourcing specs are typically much weaker than sinking specs across most logic families.</div>`
+      },
+      {
+        // Q72 — debounce circuit, embedded reference diagram.
+        leftPanel: 'none',
+        text: () => `
+    <div style="margin-bottom:.8rem"><svg viewBox="-40 -20 300 190" style="width:100%;max-width:340px;display:block;margin:0 auto"><use href="#debounce-circuit" /></svg></div>
+    A switch is connected to the input of an AND gate to implement switch debouncing, as shown above. What <b style="color:var(--colour-ui-primary)">special feature</b> must the logic gate have for this circuit to work?`,
+        hint: () => 'A mechanical switch\'s contacts bounce — rapidly making and breaking contact several times before settling. Think about which gate feature specifically prevents that noisy, slow transition from producing multiple false output pulses (Q38\'s own topic).',
+        options: () => shuffle([
+          { label: 'Hysteresis (Schmitt-trigger) inputs', type: 'correct' },
+          { label: 'Open-collector outputs', type: 'wrong' },
+          { label: 'Tri-state outputs', type: 'wrong' },
+          { label: 'A very high fanout', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b>Hysteresis (Schmitt-trigger) inputs</b> — the small S-curve symbol shown inside the gate',
+        working: () => `
+    <div class="working-line">A mechanical switch's contacts genuinely bounce for a short time, producing a noisy, slowly-changing (via the RC-like pull-up/switch combination) voltage rather than one clean, instant transition. An ordinary gate input, with only a single switching threshold, would treat each little bounce as a separate, real transition — producing multiple false pulses instead of one clean edge.</div>
+    <div class="working-total"><b style="color:var(--colour-ui-correct)">Hysteresis</b> (Q38) uses two separate thresholds instead of one, so once the input has crossed decisively to one side, small noisy wiggles near that threshold no longer flip the output back and forth — exactly what's needed to turn a bouncy switch signal into one clean logic transition. Open-collector and tri-state describe OUTPUT behaviour, not input noise immunity, and fanout is about how many other gates an output can drive — neither has anything to do with debouncing.</div>`
+      },
+      {
+        // Q73
+        leftPanel: 'none',
+        text: () => `
+    <div style="margin-bottom:.8rem"><svg viewBox="-90 -20 400 200" style="width:100%;max-width:380px;display:block;margin:0 auto"><use href="#figure9-circuit" /></svg></div>
+    Briefly explain why a logic gate <b style="color:var(--colour-ui-primary)">cannot</b> be used to control the motor above directly using current sourcing or sinking.`,
+        hint: () => 'Work out the motor\'s own operating current from Ohm\'s Law (24V, 40Ω), then compare it to any logic family\'s own I<sub>OH</sub>/I<sub>OL</sub> ratings from Table 5.',
+        options: () => shuffle([
+          { label: 'The motor draws ≈600mA (24V/40Ω) — far more current than any logic gate\'s output is rated to source or sink', type: 'correct' },
+          { label: "Logic gates can't operate from a 24V supply at all", type: 'wrong' },
+          { label: 'Motors require AC power, not DC', type: 'wrong' },
+          { label: "A logic gate's output voltage swing isn't large enough to run a motor", type: 'wrong' },
+        ]),
+        correctExplain: () => '<b>≈600mA required</b> — vastly beyond any logic family\'s I<sub>OH</sub>/I<sub>OL</sub> (Table 5\'s largest is only 20mA)',
+        working: () => `
+    <div class="working-formula-row">Motor current = <span class="colour-supply">24V</span> / <span class="colour-resistor">40Ω</span> = 0.6A = 600mA</div>
+    <div class="working-total">Even the strongest current ratings in Table 5 (74S/74AS at 20mA sinking) are 30× too weak for this motor's 600mA demand. Directly connecting a logic gate's output to the motor would massively exceed the gate's maximum output current rating and destroy it almost immediately — a driver stage (Q74) is needed in between.</div>`
+      },
+      {
+        // Q74
+        leftPanel: 'none',
+        text: () => `
+    <div style="margin-bottom:.8rem"><svg viewBox="-90 -20 400 200" style="width:100%;max-width:380px;display:block;margin:0 auto"><use href="#figure9-circuit" /></svg></div>
+    What's the name of the circuit involving the MOSFET above?`,
+        hint: () => 'This transistor stage\'s whole job is taking a small, logic-level signal and using it to switch a much larger load current — the same role R1/Q1 played back in the BJT unit\'s own motor/relay-driving circuits.',
+        options: () => shuffle([
+          { label: 'Buffer/driver circuit', type: 'correct' },
+          { label: 'Amplifier circuit', type: 'wrong' },
+          { label: 'Oscillator circuit', type: 'wrong' },
+          { label: 'Voltage regulator circuit', type: 'wrong' },
+        ]),
+        correctExplain: () => 'A <b>buffer/driver</b> circuit',
+        working: () => `
+    <div class="working-line">Q1 (with R1 limiting the gate-drive current) takes the logic gate's small, low-current output signal and uses it to switch the motor's much larger 600mA current — exactly the job a buffer/driver stage does, bridging a small-signal control circuit and a high-current load.</div>
+    <div class="working-total">It's not an amplifier in the usual signal-processing sense (no analog gain is the point here, just an on/off switch), not an oscillator (nothing here is generating a periodic waveform), and not a voltage regulator (nothing here is holding a steady output voltage against a varying load or supply).</div>`
+      },
+      {
+        // Q75
+        leftPanel: 'none',
+        text: () => `
+    <div style="margin-bottom:.8rem"><svg viewBox="-90 -20 400 200" style="width:100%;max-width:380px;display:block;margin:0 auto"><use href="#figure9-circuit" /></svg></div>
+    Why is it better to use a <b class="colour-bjt">MOSFET</b> for Q1 above instead of a <b class="colour-bjt">BJT</b>?`,
+        hint: () => "Think about what actually turns each device on — a current, or a voltage — and what that means for how much drive a logic gate's own limited output current needs to supply.",
+        options: () => shuffle([
+          { label: "A MOSFET is voltage-controlled (needs negligible gate current), so it can be driven directly by any logic family regardless of its output current rating", type: 'correct' },
+          { label: 'A BJT cannot switch currents as large as 600mA', type: 'wrong' },
+          { label: 'MOSFETs are cheaper than BJTs', type: 'wrong' },
+          { label: 'A MOSFET can operate from a higher supply voltage than a BJT', type: 'wrong' },
+        ]),
+        correctExplain: () => 'A MOSFET is <b>voltage-controlled</b> — its gate draws essentially no current, unlike a BJT\'s base',
+        working: () => `
+    <div class="working-line">A BJT is current-controlled — its base needs a real, non-trivial current (I<sub>B</sub>) to turn it on, and that current has to come from whatever's driving it. A MOSFET's gate, by contrast, is separated from the channel by an insulating oxide layer — it draws essentially zero DC gate current, and is switched on purely by GATE VOLTAGE.</div>
+    <div class="working-total">This matters directly because of Q39-47/Q70-71's own lesson: logic gate output CURRENT ratings vary a lot and are often quite limited (as low as 1mA for some families sourcing). A MOSFET sidesteps that limitation entirely — since it needs almost no drive current at all, it can be switched by virtually any logic family regardless of that family's own I<sub>OH</sub>/I<sub>OL</sub> spec, where an equivalent BJT stage might need its base resistor sized very differently (or an extra driver stage) depending on which family is driving it.</div>`
+      },
+      {
+        // Q76
+        leftPanel: 'none',
+        text: () => `
+    <div style="margin-bottom:.8rem"><svg viewBox="-90 -20 400 200" style="width:100%;max-width:380px;display:block;margin:0 auto"><use href="#figure9-circuit" /></svg></div>
+    What code or codes on the logic gate's input will turn the motor <b style="color:var(--colour-ui-primary)">off</b> above?`,
+        hint: () => 'The gate shown is a 2-input NAND. Work out which input combination makes its OUTPUT low (since a low gate output turns the N-channel MOSFET off, stopping the motor).',
+        options: () => shuffle([
+          { label: '11 (both inputs high)', type: 'correct' },
+          { label: '00 (both inputs low)', type: 'wrong' },
+          { label: '01 or 10 (inputs differ)', type: 'wrong' },
+          { label: 'Any input combination turns the motor off', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b>11</b> — a NAND gate\'s output is low only when every input is high',
+        working: () => `
+    <div class="working-line">The gate driving R1/Q1 is a NAND gate. A NAND's output is LOW on exactly one input combination: every input at logic-1. That low gate output pulls Q1's gate voltage low, turning the N-channel MOSFET OFF and stopping current flow through the motor.</div>
+    <div class="working-total">Every other input combination (00, 01, 10) makes the NAND's output HIGH instead, turning Q1 ON and running the motor — so <b style="color:var(--colour-ui-correct)">11</b> is the one, specific code that turns the motor off.</div>`
+      },
+      {
+        // Q77 — kind:'multi', exactly 2 correct.
+        leftPanel: 'none',
+        kind: 'multi',
+        text: () => `
+    <div style="margin-bottom:.8rem"><svg viewBox="-90 -20 400 200" style="width:100%;max-width:380px;display:block;margin:0 auto"><use href="#figure9-circuit" /></svg></div>
+    What <b style="color:var(--colour-ui-primary)">two</b> devices could the circuit above include to prevent faults from letting the 24V supply reach the logic gate's output? <b>Tip:</b> neither of them is a fuse.`,
+        hint: () => 'Think about devices whose whole job is keeping two parts of a circuit electrically SEPARATE from each other, even while still letting a control signal pass between them.',
+        options: () => shuffle([
+          { label: 'A relay', type: 'correct' },
+          { label: 'An optocoupler', type: 'correct' },
+          { label: 'A capacitor', type: 'wrong' },
+          { label: 'A second diode', type: 'wrong' },
+          { label: 'A pull-down resistor', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b>A relay</b> or <b>an optocoupler</b> — both provide electrical isolation between the two sides',
+        working: () => `
+    <div class="working-line">A relay uses an electromagnetic coil to mechanically operate a physically separate switch contact — there's no direct electrical connection at all between the coil (control) side and the contact (switched, high-voltage) side. An optocoupler does the same job using light instead of magnetism: an LED on the control side shines onto a phototransistor on the switched side, with no electrical connection between them either.</div>
+    <div class="working-total">Neither a capacitor, an extra diode, nor a pull-down resistor provides genuine electrical ISOLATION between the two sides — all three stay directly, electrically connected to both the logic gate and the 24V circuit, so a fault on the motor side could still find a path back to the gate's output through any of them.</div>`
+      },
+      {
+        // Q78
+        leftPanel: 'none',
+        text: () => `
+    <div style="margin-bottom:.8rem"><svg viewBox="-90 -20 400 200" style="width:100%;max-width:380px;display:block;margin:0 auto"><use href="#figure9-circuit" /></svg></div>
+    Why does using either a relay or an optocoupler prevent the problem described in Q77 above?`,
+        hint: () => 'What specific electrical property do BOTH a relay (magnetic coupling) and an optocoupler (optical coupling) provide between their two sides?',
+        options: () => shuffle([
+          { label: 'Both provide electrical isolation, so a fault on the high-voltage side has no direct electrical path back to the logic gate', type: 'correct' },
+          { label: 'Both limit the current flowing to the motor', type: 'wrong' },
+          { label: 'Both regulate the 24V supply down to a safe logic level', type: 'wrong' },
+          { label: 'Both filter out electrical noise from the motor', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b>Electrical isolation</b> — no direct conductive path between the two sides',
+        working: () => `
+    <div class="working-line">A relay's coil and contacts are magnetically linked but electrically separate; an optocoupler's LED and phototransistor are optically linked but electrically separate. In both cases, the control (logic-gate) side and the switched (24V/motor) side share NO direct electrical connection — voltage or current on one side simply has no conductive path to reach the other.</div>
+    <div class="working-total">Because of that isolation, even if the high-voltage side develops a genuine fault (a short, an overvoltage spike, etc.), there's no wire for that fault to travel back along into the logic gate's output — protecting the low-voltage control circuitry regardless of what goes wrong on the motor side. Neither device is doing current-limiting, voltage regulation, or noise filtering — isolation is the specific mechanism at work here.</div>`
+      },
+    ];
+
+    initQuizNav();
+    resetQuiz();
+    initQuizFromURL();
+  </script>
+</body>
+
+</html>
