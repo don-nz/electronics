@@ -987,7 +987,7 @@ let DEFAULT_CIRCUIT_VIEWBOX = null;   // fallback viewBox when a question doesn'
 let CIRCUIT_REF_EXTRA = null;         // optional (id, loadTerminal, ammeter) => void, called after the base circuit/viewBox swap — for pages with their own ammeter/load-terminal badges (each file's own dispatch is genuinely different, so this stays a per-page hook rather than a generic config shape)
 let SUMMARY_CIRCUIT_REF = null;       // optional { id, label, viewBox } — if set, showSummary() shows this specific circuit instead of hiding the panel via swapLeftPanel('none')
 let RENDER_EXTRA = null;              // optional () => void, called at the end of every renderQuestion() — for per-file "runs on every render" logic quiz-engine.js can't know about, e.g. progressive-reveal value badges (re′/Zb/Zin/Zout) that persist once their own question is answered, independent of which question is currently on screen
-let RESET_EXTRA = null;               // optional () => void, called at the very START of every resetQuiz() (including on "Restart" clicks, not just the first load) — e.g. digital_gate_identification.html's own `shuffle(QUESTIONS)`, which shuffles the QUESTIONS array's ORDER itself (each of the 7 gates appears in a fixed slot, one per gate) rather than each question's own options, so every playthrough covers all 7 exactly once in a random order
+let RESET_EXTRA = null;               // optional () => void, called at the very START of every resetQuiz() (including on "Restart" clicks, not just the first load) — e.g. digital_gate_identification.html's own `shuffle(QUESTIONS)`, which shuffles the QUESTIONS array's ORDER itself (each of the 7 gates appears in a fixed slot, one per gate) rather than each question's own options, so every playthrough covers all 7 exactly once in a random order. When RESET_EXTRA reorders QUESTIONS like this, resetQuiz() itself automatically SKIPS calling it whenever the URL already has a ?q=N param (see resetQuiz()'s own comment) — no per-page opt-in needed, it's a plain "is ?q= present" check done once in the shared engine — so ?q=N stays a reliable, repeatable deep-link to "the Nth question as written" for debugging/sharing, while a plain load/Restart still shuffles normally
 
 // For leftPanel:'circuit' questions that reference a DIFFERENT circuit per
 // question (rather than always the same static one) — swaps which <use>
@@ -1016,7 +1016,18 @@ function goToQuestion(n) { // 1-based, for URL/jump compatibility
 }
 
 function resetQuiz() {
-  if (RESET_EXTRA) RESET_EXTRA();
+  // A URL that already carries ?q=N is a deliberate deep-link — debugging
+  // one specific question, or a link someone shared pointing at it — so
+  // RESET_EXTRA (almost always `() => shuffle(QUESTIONS)`, reordering the
+  // whole array) is skipped in that case, leaving QUESTIONS in its own
+  // original fixed order: ?q=N then reliably means "the Nth question as
+  // written," the same thing every load, rather than whatever a random
+  // shuffle happened to put in that position. A plain load/Restart with no
+  // ?q= in the URL still shuffles normally. Every other RESET_EXTRA use
+  // (a per-question reset, a mode-specific setup) is unaffected — this
+  // only changes behaviour for pages whose RESET_EXTRA reorders QUESTIONS.
+  const fixedOrderRequested = new URLSearchParams(location.search).has('q');
+  if (RESET_EXTRA && !fixedOrderRequested) RESET_EXTRA();
   Q = QUESTIONS.map(data => {
     if (isTruth(data)) {
       // 'truth' questions may offer an input-count toggle (see
