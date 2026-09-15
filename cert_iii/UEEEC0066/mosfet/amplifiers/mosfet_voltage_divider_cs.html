@@ -1,0 +1,798 @@
+<!--
+  MOSFET Amplifiers — Voltage-Divider Bias, Common Source. New lesson quiz
+  covering the teacher's "MOSFET amplifiers" objectives sheet (UEEEC0066):
+  symbols, junction bias conditions, terminal current/voltage direction,
+  operating principles, transfer characteristics, MOSFET-vs-JFET biasing and
+  amp-config similarities/differences, DC bias calculation, gain/Zin/Zout for
+  a Common Source stage, phase relationship, maximum peak-to-peak output
+  swing, and low-frequency response. This is the first dedicated MOSFET
+  amplifier lesson in this course (mosfet/ is a brand-new topic folder,
+  alongside bjt/ and jfet/) — there is no prior MOSFET biasing_circuits or
+  ac_parameters file to split this across the way the BJT/JFET topics do, so
+  one file carries the whole lesson, built directly on the shared engine,
+  assets/quiz-engine.js.
+
+  Architecture is a deliberate merge of two existing patterns rather than a
+  straight clone of either:
+    - The DC voltage-divider bias chain (VG -> IDS -> VS -> VD) follows
+      ../../bjt/biasing_circuits/bjt_npn_voltage_divider.html's own
+      progressive-reveal-meter convention (a meter badge on the diagram,
+      hidden until its own question is answered).
+    - The AC parameters (gm, Zin, Zout, Av) and the coupling-cap/Zin-Zout
+      diagram layout follow ../../jfet/ac_parameters/jfet_self_bias_ac_params.html
+      almost directly — the drain/source column (VDD-RD-Q1-RS-Common) is
+      structurally identical to that file's own self-bias column.
+
+  The ONE deliberate topology difference from the JFET file, and the whole
+  reason this lesson needed a NEW circuit rather than reusing that one: this
+  is an ENHANCEMENT-mode N-channel MOSFET. It conducts ZERO current at
+  VGS = 0 — there is no channel at all until VGS is pushed above the
+  threshold VTH. A JFET's self-bias trick (RG straight to ground, letting
+  IDS-through-RS bootstrap its own negative VGS) relies on the JFET already
+  conducting fully at VGS = 0; that mechanism simply cannot start an
+  enhancement MOSFET at all. So this circuit uses a real R1/R2 voltage
+  divider to force VG positive, exactly like a BJT — this is a genuine,
+  teachable structural difference between JFET and MOSFET bias networks
+  (see Q5 and the closing Q18), not a cosmetic relabelling.
+
+  One worked N-channel enhancement MOSFET stage is used throughout — chosen
+  so every derived number comes out clean AND the two output-swing headroom
+  calculations land on the SAME value (see Q17), which is a genuine, welcome
+  property of this component set, not a contrived coincidence hidden from
+  the student:
+    VDD=12V, R1=600kΩ, R2=300kΩ, RD=5.0kΩ, RS=1.0kΩ (unbypassed),
+    2N7000-style device: VTH=2.0V typ, k=1.0 mA/V² typ, CIN=1.0µF, COUT=2.0µF.
+    VG=4V -> (solving ID=k(VGS-VTH)² with VGS=VG-ID·RS simultaneously,
+    rejecting the non-physical root) -> IDS=1.0mA, VS=1.0V, VGS=3.0V,
+    VD=7.0V, VDS=6.0V (saturation confirmed: VDS ≥ VGS-VTH = 1V).
+    gm=2k(VGS-VTH)=2.0mA/V, Zin=R1∥R2=200kΩ, Zout≈RD=5.0kΩ,
+    Av=gm·RD/(1+gm·RS)=10/3≈3.33, f1=1/(2π·Zin·CIN)≈0.8Hz,
+    max symmetrical output swing ≈10Vpp (both headroom calculations in Q17
+    happen to give exactly 5V — a clean teaching example, not fudged).
+
+  MOSFET symbol (mosfet-n-e-shape) is a new shape, built for this file (no
+  MOSFET symbol existed anywhere in assets/shapes/ before now) — it deliberately
+  draws the channel as THREE BROKEN segments (enhancement mode: no channel
+  exists until induced) rather than JFET-style one continuous bar, with the
+  substrate arrow drawn pointing IN toward the channel (N-channel convention,
+  same reading as the arrow already taught in
+  ../../reviews/mosfet_review_quiz.html's own substrate-arrow question).
+  Simplified schematic, consistent with this project's existing simplified
+  BJT/JFET symbol shapes — not pixel-exact to any single textbook standard.
+
+  Deliberately scoped to Common Source only. A Common Drain (source-
+  follower) sibling, mirroring how jfet_self_bias_ac_params_cd.html sits
+  beside its own CS file, is a natural next file but not built here — the
+  amp-config/biasing objectives this lesson needs are already exercised via
+  the CS stage, and Q18 closes the loop on the MOSFET-vs-JFET bias-network
+  difference without needing a second full circuit.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../assets/theme-init.js"></script>
+  <title>MOSFET Knowledge Quiz — Voltage-Divider Bias, Common Source</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../assets/quiz-common.css">
+  <script src="../../../assets/breadcrumb.js" defer></script>
+  <script src="../../../assets/quiz-engine.js"></script>
+  <style>
+    .progress-wrap { display: flex; gap: .4rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; }
+    @media (max-width: 480px) {
+      .frac-option { font-size: .82em; }
+    }
+    @media(min-width:900px) {
+      .quiz-wrap { display: grid;
+        grid-template-columns: minmax(340px, 720px) 1fr;
+        gap: 1.2rem;
+        align-items: start; }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Hidden defs: voltage-divider-bias N-channel enhancement MOSFET Common Source AC amplifier. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <filter id="glow">
+        <feGaussianBlur stdDeviation="2" result="b" />
+        <feMerge>
+          <feMergeNode in="b" />
+          <feMergeNode in="SourceGraphic" />
+        </feMerge>
+      </filter>
+
+      <!-- ══ N-CHANNEL ENHANCEMENT MOSFET SHAPE — new, built for this file. Broken
+           channel (3 segments, gaps) = enhancement mode: no channel exists until
+           induced. Substrate arrow points IN toward the channel = N-channel. ══ -->
+      <g id="mosfet-base-shape">
+        <circle cx="7" cy="5" r="30" fill="var(--colour-panel)" style="stroke: var(--colour-mosfet)" stroke-width="2" filter="url(#glow)" />
+        <!-- gate lead -->
+        <line x1="-30" y1="24" x2="-3" y2="24" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <!-- gate plate — insulated, a small gap separates it from the channel bars -->
+        <rect x="-4" y="-18" width="3" height="43" style="fill: var(--colour-mosfet)" />
+        <!-- 3 broken channel segments -->
+        <line x1="6" y1="-18" x2="6" y2="-7" style="stroke: var(--colour-mosfet)" stroke-width="3" />
+        <line x1="6" y1="-2" x2="6" y2="9" style="stroke: var(--colour-mosfet)" stroke-width="3" />
+        <line x1="6" y1="14" x2="6" y2="25" style="stroke: var(--colour-mosfet)" stroke-width="3" />
+        <!-- drain lead -->
+        <line x1="6" y1="-12" x2="25" y2="-12" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <line x1="25" y1="-11" x2="25" y2="-32" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <!-- source lead -->
+        <line x1="6" y1="20" x2="25" y2="20" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <line x1="24" y1="3" x2="25" y2="40" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <!-- substrate/body line + arrow (N-channel: points IN toward the channel) -->
+        <line x1="6" y1="3" x2="25" y2="3" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <polygon points="14,-3 14,9 6,3" style="fill: var(--colour-mosfet)" />
+      </g>
+
+      <!-- Enhancement Mode MOSFET (3 dash Channel) -->
+      <g id="mosfet-n-e-shape">
+        <use href="#mosfet-base-shape" />
+        <!-- 3 broken channel segments -->
+        <line x1="6" y1="-18" x2="6" y2="-7" style="stroke: var(--colour-mosfet)" stroke-width="3" />
+        <line x1="6" y1="-2" x2="6" y2="9" style="stroke: var(--colour-mosfet)" stroke-width="3" />
+        <line x1="6" y1="14" x2="6" y2="25" style="stroke: var(--colour-mosfet)" stroke-width="3" />
+      </g>
+
+      <!-- Depletion Mode MOSFET (Solid Channel) -->
+      <g id="mosfet-n-d-shape">
+        <use href="#mosfet-base-shape" />
+        <line x1="6" y1="-18" x2="6" y2="25" style="stroke: var(--colour-mosfet)" stroke-width="3" />
+      </g>
+  </defs>
+
+      <!-- ══ AC SIGNAL SOURCE SHAPE — circle with one sine cycle ══ -->
+      <g id="ac-source-shape">
+        <circle cx="0" cy="0" r="24" fill="none" style="stroke: var(--colour-signal)" stroke-width="2" filter="url(#glow)" />
+        <path d="M -16,0 C -11,-14 -5,-14 0,0 C 5,14 11,14 16,0" fill="none" style="stroke: var(--colour-signal)" stroke-width="2.5" stroke-linecap="round" />
+      </g>
+
+      <!-- ══ AMMETER BADGE ══ -->
+      <g id="ammeter-shape">
+        <circle cx="0" cy="0" r="30" style="fill: var(--colour-ammeter-fill); stroke: var(--colour-current)" stroke-width="1.5" filter="url(#glow)" />
+      </g>
+
+      <!-- ══ Z-VALUE METER BADGE ══ -->
+      <g id="z-meter-shape">
+        <circle cx="0" cy="0" r="25" style="fill: var(--colour-meter-fill); stroke: var(--colour-gain)" stroke-width="1.5" filter="url(#glow)" />
+      </g>
+
+      <!-- ══ VOLTMETER SHAPE ══ -->
+      <g id="meter-shape">
+        <circle cx="0" cy="0" r="28" style="fill: var(--colour-meter-fill); stroke: var(--colour-red)" stroke-width="1.5" filter="url(#glow)" />
+        <line x1="-14" y1="-18" x2="14" y2="-18" style="stroke: var(--colour-red)" stroke-width="1.5" />
+        <line x1="-14" y1="-13" x2="14" y2="-13" style="stroke: var(--colour-red)" stroke-width="1.5" stroke-dasharray="3,2" />
+      </g>
+
+      <!-- ══ COUPLING CAPACITOR SHAPE ══ -->
+      <g id="cap-shape">
+        <rect x="-4" y="-12" width="8" height="24" style="fill: var(--colour-panel)" />
+        <line x1="-4" y1="-12" x2="-4" y2="12" style="stroke: var(--colour-capacitor)" stroke-width="2.5" />
+        <line x1="4" y1="-12" x2="4" y2="12" style="stroke: var(--colour-capacitor)" stroke-width="2.5" />
+      </g>
+
+      <g id="mosfet-divider-cs">
+
+        <!-- ════════════════════ PRETEND DATASHEET ════════════════════ -->
+        <g id="datasheetTableMosfet" transform="translate(10,5)">
+          <rect x="0" y="0" width="155" height="62" rx="4" style="fill: rgba(0,0,0,.25)" stroke="var(--colour-mosfet)" stroke-width="1" />
+          <text x="6" y="13" style="fill: var(--colour-text)" text-anchor="start" font-size="9" font-weight="bold" letter-spacing=".03em">2N7000 — TYPICAL RATINGS</text>
+          <line x1="6" y1="19" x2="149" y2="19" style="stroke: var(--colour-border)" stroke-width="1" />
+
+          <text x="6" y="35" style="fill: var(--colour-mosfet)" font-size="12">V<tspan baseline-shift="sub" font-size="7">th</tspan></text>
+          <text x="149" y="35" style="fill: var(--colour-text)" text-anchor="end" font-size="12">2.0 V typ</text>
+
+          <text x="6" y="52" style="fill: var(--colour-mosfet)" font-size="12">k</text>
+          <text x="149" y="52" style="fill: var(--colour-text)" text-anchor="end" font-size="12">1.0 mA/V² typ</text>
+        </g>
+
+        <!-- ════════════════════ WIRES ════════════════════ -->
+
+        <!-- ── LEFT VERTICAL (Gate) ── -->
+        <line x1="200" y1="30" x2="200" y2="540" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VDD rail down to Common -->
+
+        <!-- ── DRAIN/SOURCE VERTICAL (x=440) ── -->
+        <line x1="451" y1="30" x2="451" y2="540" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VDD down to Drain, through Source, down to RS -->
+
+        <!-- ── TOP HORIZONTAL (VDD rail) ── -->
+        <line x1="180" y1="30" x2="560" y2="30" style="stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="200" cy="30" r="5" style="fill: var(--colour-series)" />
+        <circle cx="451" cy="30" r="5" style="fill: var(--colour-series)" />
+
+        <!-- ── BOTTOM HORIZONTAL (Common rail) ── -->
+        <line x1="10" y1="540" x2="620" y2="540" style="stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="200" cy="540" r="5" style="fill: var(--colour-series)" />
+        <circle cx="451" cy="540" r="5" style="fill: var(--colour-series)" />
+
+        <!-- ── CENTRE HORIZONTAL — AC source, through CIN, to the gate node ── -->
+        <line x1="30" y1="304" x2="396" y2="304" style="stroke: var(--colour-series)" stroke-width="2" />
+
+        <!-- ── OUTPUT HORIZONTAL — Drain pin, through COUT, to output ── -->
+        <line x1="451" y1="220" x2="600" y2="220" style="stroke: var(--colour-series)" stroke-width="2" />
+
+        <!-- ════════════════════ NODES ════════════════════ -->
+
+        <!-- ── NODE G — Zin is looked up from here, rightward into the gate ── -->
+        <circle cx="200" cy="304" r="5" style="fill: var(--colour-series)" />
+        <text x="170" y="289" style="fill: var(--colour-gain)" font-size="16" text-anchor="middle" font-weight="bold">Z<tspan baseline-shift="sub" font-size="13">in &#10145;</tspan></text>
+        <g id="zinBadgeMosfet" display="none" transform="translate(140,232)">
+          <use href="#z-meter-shape" />
+          <text x="0" y="2" style="fill: var(--colour-text)" text-anchor="middle" font-size="14" font-weight="bold">200</text>
+          <text x="0" y="19" style="fill: var(--colour-gain)" text-anchor="middle" font-size="12">k&#937;</text>
+        </g>
+
+        <!-- ── NODE D — Zout is looked up from here, leftward into the drain ── -->
+        <circle cx="451" cy="220" r="5" style="fill: var(--colour-series)" />
+        <text x="490" y="200" style="fill: var(--colour-gain)" font-size="16" text-anchor="middle" font-weight="bold"><tspan baseline-shift="-70%">&#11013;</tspan> Z<tspan baseline-shift="sub" font-size="13">out</tspan></text>
+        <g id="zoutBadgeMosfet" display="none" transform="translate(510,160)">
+          <use href="#z-meter-shape" />
+          <text x="0" y="2" style="fill: var(--colour-text)" text-anchor="middle" font-size="14" font-weight="bold">5.0</text>
+          <text x="0" y="19" style="fill: var(--colour-gain)" text-anchor="middle" font-size="12">k&#937;</text>
+        </g>
+
+        <!-- ── NODE S — source pin marker (between Q1 and RS) ── -->
+        <circle cx="451" cy="330" r="5" style="fill: var(--colour-series)" />
+
+        <!-- ════════════════════ AC INPUT COMPONENTS ════════════════════ -->
+        <g id="outputTerminalPlain">
+          <circle cx="30" cy="304" r="5" style="fill: var(--colour-signal)" />
+          <polygon points="24,324,36,324 30,314" style="fill: var(--colour-series)" />
+          <line x1="30" y1="315" x2="30" y2="390" style="stroke: var(--colour-series)" stroke-width="2" />
+          <text x="5" y="403" style="fill: var(--colour-signal)" text-anchor="start" font-size="16" font-weight="bold">input</text>
+          <line x1="30" y1="410" x2="30" y2="520" style="stroke: var(--colour-series)" stroke-width="2" />
+          <polygon points="24,520 36,520 30,530" style="fill: var(--colour-series)" />
+          <circle cx="30" cy="540" r="5" style="fill: var(--colour-signal)" />
+        </g>
+        <g transform="translate(80,304)">
+          <use href="#cap-shape" />
+          <text x="0" y="-25" fill="var(--colour-capacitor-labels)" text-anchor="middle" font-size="16" font-weight="bold">C<tspan baseline-shift="sub" font-size="13">IN</tspan></text>
+        </g>
+
+        <!-- ════════════════════ AC OUTPUT COMPONENTS ════════════════════ -->
+        <g transform="translate(570,220)">
+          <use href="#cap-shape" />
+          <text x="0" y="-25" fill="var(--colour-capacitor-labels)" text-anchor="middle" font-size="16" font-weight="bold">C<tspan baseline-shift="sub" font-size="13">OUT</tspan></text>
+        </g>
+        <g id="outputTerminalPlain">
+          <circle cx="600" cy="220" r="5" style="fill: var(--colour-signal)" />
+          <text x="580" y="383" style="fill: var(--colour-signal)" text-anchor="start" font-size="16" font-weight="bold">output</text>
+          <circle cx="600" cy="540" r="5" style="fill: var(--colour-signal)" />
+          <line x1="600" y1="230" x2="600" y2="370" style="stroke: var(--colour-series)" stroke-width="2" />
+          <polygon points="594,240 606,240 600,230" style="fill: var(--colour-series)" />
+          <line x1="600" y1="390" x2="600" y2="530" style="stroke: var(--colour-series)" stroke-width="2" />
+          <polygon points="594,520 606,520 600,530" style="fill: var(--colour-series)" />
+        </g>
+
+        <!-- ════════════════════ VDD ════════════════════ -->
+        <g transform="translate(280,-1)">
+          <text x="120" y="15" style="fill: var(--colour-voltage-label)" text-anchor="start" font-size="15" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">DD</tspan></text>
+          <text x="160" y="20" style="fill: var(--colour-text)" text-anchor="start" font-size="14" font-weight="bold">+12 V</text>
+        </g>
+
+        <!-- ════════════════════ COMMON LABEL ════════════════════ -->
+        <text x="120" y="555" fill="var(--colour-gnd)" text-anchor="middle" font-size="14" font-weight="bold">Common</text>
+
+        <!-- ════════════════════ Q1 — N-CHANNEL ENHANCEMENT MOSFET ════════════════════ -->
+        <g transform="translate(426,280)">
+          <use href="#mosfet-n-e-shape" />
+          <text x="-15" y="-38" fill="var(--colour-mosfet-labels)" text-anchor="middle" font-size="14" font-weight="bold">Q1</text>
+          <text id="gmRevealMosfet" display="none" x="45" y="3" fill="var(--colour-mosfet-labels)" text-anchor="start" font-size="13" font-weight="bold">g<tspan baseline-shift="sub" font-size="9">m</tspan> ≈ 2 mA/V</text>
+        </g>
+
+        <!-- ════════════════════ RESISTORS ════════════════════ -->
+
+        <!-- ── R1 (top, VDD to gate node) ── -->
+        <g transform="translate(185,100)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="30" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R1</text>
+          <text x="65" y="30" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16">600 kΩ</text>
+        </g>
+
+        <!-- ── R2 (bottom, gate node to Common) ── -->
+        <g transform="translate(185,360)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="60" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R2</text>
+          <text x="65" y="60" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16">300 kΩ</text>
+        </g>
+
+        <!-- ── RD ── -->
+        <g transform="translate(436,80)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="30" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">RD</text>
+          <text x="60" y="30" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16">5.0 kΩ</text>
+        </g>
+
+        <!-- ── RS ── -->
+        <g transform="translate(436,360)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="60" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">RS</text>
+          <text x="60" y="60" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16">1.0 kΩ</text>
+        </g>
+
+        <!-- ════════════════════ AMMETER ════════════════════ -->
+        <g id="idsIndMosfetTop" transform="translate(451,60)">
+          <circle cx="0" cy="0" r="8" style="fill: var(--colour-current)" />
+          <text x="25" y="0" style="fill: var(--colour-current)" text-anchor="middle" font-size="14" font-weight="bold">I<tspan baseline-shift="sub" font-size="10">D</tspan></text>
+        </g>
+        <g id="idsIndMosfet" display="none" transform="translate(451,485)">
+          <use href="#ammeter-shape" />
+          <text x="45" y="0" style="fill: var(--colour-current)" text-anchor="middle" font-size="14" font-weight="bold">I<tspan baseline-shift="sub" font-size="10">D</tspan></text>
+          <text id="idsValueMosfet" x="0" y="-2" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">—</text>
+          <text x="0" y="15" style="fill: var(--colour-current)" text-anchor="middle" font-size="12">mA</text>
+        </g>
+
+        <!-- ════════════════════ VOLTAGE METERS (progressive reveal) ════════════════════ -->
+
+        <!-- ── VG — revealed after Q6 ── -->
+        <g id="meterVG" display="none" transform="translate(115,335)">
+          <use href="#meter-shape" />
+          <text x="0" y="-38" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">G</tspan></text>
+          <text x="0" y="2" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">4.0</text>
+          <text x="0" y="18" style="fill: var(--colour-red)" text-anchor="middle" font-size="12">V</text>
+        </g>
+
+        <!-- ── VD — revealed after Q9, placed left of Q1 ── -->
+        <g id="meterVD" display="none" transform="translate(350,190)">
+          <use href="#meter-shape" />
+          <text x="0" y="-38" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">D</tspan></text>
+          <text x="0" y="2" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">7.0</text>
+          <text x="0" y="18" style="fill: var(--colour-red)" text-anchor="middle" font-size="12">V</text>
+        </g>
+
+        <!-- ── VS — revealed after Q8, placed right of Q1/RS ── -->
+        <g id="meterVS" display="none" transform="translate(510,335)">
+          <use href="#meter-shape" />
+          <text x="0" y="-38" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">S</tspan></text>
+          <text x="0" y="2" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">1.0</text>
+          <text x="0" y="18" style="fill: var(--colour-red)" text-anchor="middle" font-size="12">V</text>
+        </g>
+
+      </g>
+    </defs>
+  </svg>
+
+  <div class="crumb" id="crumb" data-current="Voltage-Divider Bias — Common Source"></div>
+  <header>
+    <h1>MOSFET Amplifiers: Voltage-Divider Bias, Common Source</h1>
+    <p>Symbols · Biasing · DC Analysis · Voltage Gain · Input &amp; Output Resistance</p>
+  </header>
+
+  <div class="quiz-wrap">
+
+    <!-- LEFT: circuit diagram -->
+    <div class="circuit-col">
+      <div class="circuit-panel" onclick="openModal()" title="Click to zoom">
+        <div class="panel-label" id="circuitRefLabel">Reference Circuit</div>
+        <div class="zoom-hint">
+          <svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.8" fill="none" />
+            <line x1="12.5" y1="12.5" x2="17" y2="17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            <line x1="6" y1="8" x2="10" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+            <line x1="8" y1="6" x2="8" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+          </svg>
+          Zoom
+        </div>
+        <svg id="circuitRefSvg" viewBox="-10 -10 680 590" xmlns="http://www.w3.org/2000/svg">
+          <use id="circuitRefUse" href="#mosfet-divider-cs" />
+          <g id="xyRuler" display="none"></g>
+        </svg>
+      </div>
+    </div>
+
+    <!-- RIGHT: question -->
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+          <div class="options" id="qOptions"></div>
+          <div class="match-wrap" id="qMatch" style="display:none">
+            <div class="match-pool-row" id="matchPoolRow">
+              <div class="match-pool-arrow">▶</div>
+              <div class="match-pool" id="matchPool"></div>
+            </div>
+            <div class="match-columns" id="matchColumns"></div>
+          </div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Zoom modal -->
+    <div class="diagram-modal" id="diagramModal" onclick="handleModalClick(event)">
+      <div class="modal-inner" id="modalInner">
+        <div class="modal-header">
+          <span class="modal-title" id="modalTitle">Reference Circuit</span>
+          <button class="modal-close" onclick="closeModal()">✕ Close</button>
+        </div>
+        <svg id="modalSvg" viewBox="-10 -10 680 590" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const DEFAULT_VIEWBOX = '-10 -10 680 590';
+
+    CIRCUIT_SVG_ID = 'circuitRefSvg';
+    DEFAULT_CIRCUIT_VIEWBOX = DEFAULT_VIEWBOX;
+    SUMMARY_CIRCUIT_REF = { id: 'mosfet-divider-cs', label: 'Voltage-Divider Bias, Common Source', viewBox: DEFAULT_VIEWBOX };
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS — symbols, bias conditions, terminal current/polarity,
+    // transfer characteristic, MOSFET-vs-JFET biasing, DC bias chain
+    // (VG -> IDS -> VS -> VD -> saturation check), gm/Zin/Zout/Av, phase,
+    // low-frequency cutoff, max peak-to-peak output swing, and a closing
+    // MOSFET-vs-JFET bias-network capstone question.
+    // ══════════════════════════════════════════════════════════════════════
+
+    const QUESTIONS = [
+      {
+        circuitId: 'mosfet-divider-cs',
+        circuitLabel: 'Voltage-Divider Bias, Common Source',
+        text: () => `This <b class="colour-mosfet">MOSFET</b>'s schematic symbol draws the channel between drain and source as <b>three separate broken segments</b>, rather than one continuous bar. What does that break in the line represent?`,
+        hint: () => `Compare it to a depletion-mode symbol, which draws that same channel line as one continuous, unbroken bar.`,
+        options: () => shuffle([
+          { label: `No channel physically exists between drain and source until a gate-source voltage above the threshold <b class="colour-voltage">V<sub>th</sub></b> actually induces one`, type: 'correct' },
+          { label: `The MOSFET is damaged or open-circuit`, type: 'wrong' },
+          { label: `It represents the device's internal body diode`, type: 'wrong' },
+          { label: `It distinguishes N-channel from P-channel (that's actually the substrate arrow's job, not the broken line)`, type: 'wrong' },
+        ]),
+        correctExplain: () => `The broken channel line means <b>no channel exists until V<sub>GS</sub> exceeds V<sub>th</sub></b>`,
+        working: () => `
+    <div class="working-line">A depletion-mode MOSFET is manufactured WITH a channel already there — its symbol draws that channel as one continuous bar, because it conducts at V<sub>GS</sub>=0.</div>
+    <div class="working-line" style="margin-top:.4rem">This <b class="colour-mosfet">enhancement-mode</b> device has no channel at all until a gate-source voltage above <b class="colour-voltage">V<sub>th</sub></b> induces one — the broken, three-segment channel line is a direct visual reminder of that "nothing conducts yet" starting state, not a cosmetic style choice.</div>`
+      },
+      {
+        circuitId: 'mosfet-divider-cs',
+        circuitLabel: 'Voltage-Divider Bias, Common Source',
+        text: () => `For this N-channel enhancement <b class="colour-mosfet">MOSFET</b> to operate as a linear amplifier, what bias condition must be satisfied at its gate-source and drain-source terminals?`,
+        hint: () => `Unlike a JFET's reverse-biased gate junction, a MOSFET's gate is fully insulated — think about what has to happen to VGS itself (not a junction) to turn the channel on.`,
+        options: () => shuffle([
+          { label: `<b class="colour-voltage">V<sub>GS</sub></b> held ABOVE the threshold <b class="colour-voltage">V<sub>th</sub></b> (positive, for N-channel), and <b class="colour-voltage">V<sub>DS</sub></b> large enough to keep the device in saturation (<b class="colour-voltage">V<sub>DS</sub></b> ≥ V<sub>GS</sub> − V<sub>th</sub>)`, type: 'correct' },
+          { label: `<b class="colour-voltage">V<sub>GS</sub></b> held below zero, the same as a JFET`, type: 'wrong' },
+          { label: `<b class="colour-voltage">V<sub>GS</sub></b> must equal zero for normal operation`, type: 'wrong' },
+          { label: `Only <b class="colour-voltage">V<sub>DS</sub></b> matters — <b class="colour-voltage">V<sub>GS</sub></b> has no effect once the device is turned on`, type: 'wrong' },
+        ]),
+        correctExplain: () => `<b class="colour-voltage">V<sub>GS</sub></b> > V<sub>th</sub> (positive), and <b class="colour-voltage">V<sub>DS</sub></b> ≥ V<sub>GS</sub> − V<sub>th</sub> for saturation`,
+        working: () => `
+    <div class="working-line">There's no forward-biased junction to satisfy here at all — the gate is insulated by oxide. The "bias condition" for an N-channel enhancement MOSFET is simply keeping <b class="colour-voltage">V<sub>GS</sub></b> positive and above <b class="colour-voltage">V<sub>th</sub></b>, so a channel actually exists.</div>
+    <div class="working-line" style="margin-top:.4rem">Separately, <b class="colour-voltage">V<sub>DS</sub></b> must be large enough that the channel has pinched off at the drain end (<b class="colour-voltage">V<sub>DS</sub></b> ≥ V<sub>GS</sub> − V<sub>th</sub>) — this is the saturation/active region, the only region where I<sub>D</sub> is controlled by V<sub>GS</sub> the way a linear amplifier needs.</div>`
+      },
+      {
+        circuitId: 'mosfet-divider-cs',
+        circuitLabel: 'Voltage-Divider Bias, Common Source',
+        text: () => `For this N-channel <b class="colour-mosfet">MOSFET</b>, in which direction does conventional drain current <b class="colour-current">I<sub>D</sub></b> actually flow, and what is the polarity of <b class="colour-voltage">V<sub>DS</sub></b>?`,
+        hint: () => `Conventional current flows from the more positive terminal to the more negative one — check which of drain or source sits at the higher potential in an N-channel device.`,
+        options: () => shuffle([
+          { label: `<b class="colour-current">I<sub>D</sub></b> flows INTO the drain and OUT of the source; <b class="colour-voltage">V<sub>DS</sub></b> is positive (drain more positive than source)`, type: 'correct' },
+          { label: `<b class="colour-current">I<sub>D</sub></b> flows INTO the source and OUT of the drain; <b class="colour-voltage">V<sub>DS</sub></b> is positive`, type: 'wrong' },
+          { label: `<b class="colour-current">I<sub>D</sub></b> flows INTO the drain and OUT of the source; <b class="colour-voltage">V<sub>DS</sub></b> is negative`, type: 'wrong' },
+          { label: `Current flows through the gate lead into the channel`, type: 'wrong' },
+        ]),
+        correctExplain: () => `<b class="colour-current">I<sub>D</sub></b> flows drain→source; <b class="colour-voltage">V<sub>DS</sub></b> is <b>positive</b>`,
+        working: () => `
+    <div class="working-line">The drain sits at the RD/VDD end of the channel, held at a higher potential than the source (which sits closer to Common through RS) — conventional current flows from the more positive terminal to the less positive one, so <b class="colour-current">I<sub>D</sub></b> flows into the drain lead and out of the source lead, and <b class="colour-voltage">V<sub>DS</sub></b> is positive.</div>
+    <div class="working-line" style="margin-top:.4rem">No current at all flows through the gate lead (see Q1's own reasoning) — the gate only controls the channel electrostatically, it never carries the amplifier's working current.</div>`
+      },
+      {
+        circuitId: 'mosfet-divider-cs',
+        circuitLabel: 'Voltage-Divider Bias, Common Source',
+        text: () => `Which statement best describes the shape of this <b class="colour-mosfet">MOSFET</b>'s transfer characteristic — a graph of <b class="colour-current">I<sub>D</sub></b> against <b class="colour-voltage">V<sub>GS</sub></b>?`,
+        hint: () => `Think about what the square-law equation ID = k(VGS − Vth)² predicts happens right at VGS = Vth, and how ID grows as VGS increases past it.`,
+        options: () => shuffle([
+          { label: `<b class="colour-current">I<sub>D</sub></b> stays at zero until <b class="colour-voltage">V<sub>GS</sub></b> reaches <b class="colour-voltage">V<sub>th</sub></b>, then rises with a curved, square-law shape (not a straight line) as <b class="colour-voltage">V<sub>GS</sub></b> increases further`, type: 'correct' },
+          { label: `<b class="colour-current">I<sub>D</sub></b> rises in a straight line proportional to <b class="colour-voltage">V<sub>GS</sub></b>, starting from <b class="colour-voltage">V<sub>GS</sub></b> = 0`, type: 'wrong' },
+          { label: `<b class="colour-current">I<sub>D</sub></b> is constant regardless of <b class="colour-voltage">V<sub>GS</sub></b>, once above threshold`, type: 'wrong' },
+          { label: `<b class="colour-current">I<sub>D</sub></b> decreases as <b class="colour-voltage">V<sub>GS</sub></b> increases past <b class="colour-voltage">V<sub>th</sub></b>`, type: 'wrong' },
+        ]),
+        correctExplain: () => `Zero until <b class="colour-voltage">V<sub>th</sub></b>, then a <b>curved, square-law</b> rise`,
+        working: () => `
+    <div class="working-line"><b class="colour-current">I<sub>D</sub></b> = k(<b class="colour-voltage">V<sub>GS</sub></b> − <b class="colour-voltage">V<sub>th</sub></b>)² is a squared relationship, not a linear one — doubling the "overdrive" (V<sub>GS</sub>−V<sub>th</sub>) quadruples I<sub>D</sub>, not just doubles it. Below <b class="colour-voltage">V<sub>th</sub></b>, the equation doesn't apply at all: there's no channel, so I<sub>D</sub> is exactly zero, not just small.</div>`
+      },
+      {
+        kind: 'match',
+        circuitId: 'mosfet-divider-cs',
+        circuitLabel: 'Voltage-Divider Bias, Common Source',
+        columns: () => ['Similarity', 'Difference'],
+        text: () => `Each statement below compares a <b class="colour-mosfet">MOSFET</b> amplifier's biasing to a <b class="colour-jfet">JFET</b> amplifier's biasing. <b style="color:var(--colour-ui-primary)">Place</b> each one under Similarity or Difference.`,
+        hint: () => `A JFET already conducts fully at VGS=0 — an enhancement MOSFET conducts nothing at all at VGS=0. Think through what that means for how each device's own bias network has to be built.`,
+        options: () => shuffle([
+          { label: `Gate current is essentially zero in both — neither device's bias network is ever loaded by gate current`, col: 0 },
+          { label: `Voltage-divider bias gives the most stable Q-point in both device families, for the same stiff-divider reasoning`, col: 0 },
+          { label: `A JFET's self-bias works because I<sub>DS</sub> already flows at V<sub>GS</sub>=0, letting R<sub>S</sub> alone develop the needed negative V<sub>GS</sub> — an enhancement MOSFET conducts ZERO current at V<sub>GS</sub>=0, so self-bias alone cannot start it at all`, col: 1 },
+          { label: `A JFET's V<sub>GS</sub> is pushed NEGATIVE from 0 to control the channel; an enhancement MOSFET's V<sub>GS</sub> must be pushed POSITIVE past a threshold before any channel even exists`, col: 1 },
+        ]),
+        correctExplain: (st) => {
+          const wrongCount = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).length;
+          return wrongCount === 0 ? 'All 4 correctly matched' : `${st.opts.length - wrongCount} of ${st.opts.length} correctly matched`;
+        },
+        working: () => `
+    <div class="working-line"><b style="color:var(--colour-ui-correct)">Similarities</b>: essentially zero gate current, and the same "stiff divider resists device-to-device spread" reasoning behind voltage-divider bias, apply to both families equally.</div>
+    <div class="working-line" style="margin-top:.4rem"><b style="color:var(--colour-ui-correct)">Differences</b>: the two families sit on opposite sides of V<sub>GS</sub>=0. A JFET conducts its MAXIMUM current at V<sub>GS</sub>=0 and needs V<sub>GS</sub> pushed negative to reduce it — that's exactly what self-bias (RG to ground, VGS set by IDS·RS) achieves. An enhancement MOSFET conducts ZERO current at V<sub>GS</sub>=0 and needs V<sub>GS</sub> pushed positive past V<sub>th</sub> just to start conducting at all — self-bias has nothing to bootstrap from, which is exactly why this circuit needs a real R1/R2 divider instead (see Q18).</div>`
+      },
+      {
+        circuitId: 'mosfet-divider-cs',
+        circuitLabel: 'Voltage-Divider Bias, Common Source',
+        text: () => `What is the gate voltage <b class="colour-voltage">V<sub>G</sub></b> at the R1/R2 divider junction?`,
+        hint: () => `Gate current is essentially zero — same reasoning as Q1/Q3 — so R1 and R2 form a simple, unloaded voltage divider from VDD.`,
+        options: () => shuffle([
+          { label: `<b class="colour-voltage">V<sub>G</sub></b> = <b class="colour-supply">V<sub>DD</sub></b> × ${frac('<b class="colour-resistor">R2</b>', '<b class="colour-resistor">R1</b> + <b class="colour-resistor">R2</b>')} = 12 × ${frac('300', '600 + 300')} = 12 × ${frac('1', '3')} = <b>4.0 V</b>`, type: 'correct' },
+          { label: `<b class="colour-voltage">V<sub>G</sub></b> = <b class="colour-supply">V<sub>DD</sub></b> × ${frac('<b class="colour-resistor">R1</b>', '<b class="colour-resistor">R1</b> + <b class="colour-resistor">R2</b>')} = 12 × ${frac('600', '900')} = <b>8.0 V</b>`, type: 'wrong' },
+          { label: `<b class="colour-voltage">V<sub>G</sub></b> = ${frac('<b class="colour-supply">V<sub>DD</sub></b>', '2')} = ${frac('12 V', '2')} = <b>6.0 V</b>`, type: 'wrong' },
+          { label: `<b class="colour-voltage">V<sub>G</sub></b> = <b class="colour-supply">V<sub>DD</sub></b> = <b>12 V</b> (forgot the divider entirely)`, type: 'wrong' },
+        ]),
+        correctExplain: () => `<b class="colour-voltage">V<sub>G</sub></b> = V<sub>DD</sub> × R2/(R1+R2) = <b>4.0 V</b>`,
+        working: () => `
+    <div class="working-formula-row"><b class="colour-voltage">V<sub>G</sub></b> = <b class="colour-supply">V<sub>DD</sub></b> × ${frac('<b class="colour-resistor">R2</b>', '<b class="colour-resistor">R1</b> + <b class="colour-resistor">R2</b>')} = 12 V × ${frac('300 kΩ', '900 kΩ')}</div>
+    <div class="working-total"><b class="colour-voltage">V<sub>G</sub></b> = 4.0 V. Because the gate draws no current, R1 and R2 see nothing but each other and VDD — this VG is exact, not an approximation.</div>`
+      },
+      {
+        circuitId: 'mosfet-divider-cs',
+        circuitLabel: 'Voltage-Divider Bias, Common Source',
+        text: () => `Using <b class="colour-voltage">V<sub>GS</sub></b> = V<sub>G</sub> − I<sub>D</sub>·R<sub>S</sub> together with the square-law equation <b class="colour-current">I<sub>D</sub></b> = k(V<sub>GS</sub> − V<sub>th</sub>)², solve for the Q-point drain current <b class="colour-current">I<sub>D</sub></b>.`,
+        hint: () => `Substitute VGS = VG − ID·RS into the square-law equation to get one quadratic in ID alone. It has two roots — reject whichever one makes VGS drop to or below Vth, since that root would mean the MOSFET isn't even conducting.`,
+        options: () => shuffle([
+          { label: `Substituting gives I<sub>D</sub>² − 5I<sub>D</sub> + 4 = 0, so I<sub>D</sub> = 1 mA or 4 mA. The 4 mA root gives V<sub>GS</sub> = 4−4 = 0 V (below V<sub>th</sub>, not physical) — so <b class="colour-current">I<sub>D</sub></b> = <b>1.0 mA</b>`, type: 'correct' },
+          { label: `Same quadratic, I<sub>D</sub>² − 5I<sub>D</sub> + 4 = 0 — but kept the OTHER root without checking it: <b class="colour-current">I<sub>D</sub></b> = <b>4.0 mA</b>`, type: 'wrong' },
+          { label: `Ignored the R<sub>S</sub> feedback and forgot to square the overdrive: <b class="colour-current">I<sub>D</sub></b> = (V<sub>G</sub> − V<sub>th</sub>) = (4−2) = <b>2.0 mA</b>`, type: 'wrong' },
+          { label: `Added V<sub>th</sub> instead of subtracting it: <b class="colour-current">I<sub>D</sub></b> = k(V<sub>G</sub> + V<sub>th</sub>)² = 1×(4+2)² = <b>36 mA</b>`, type: 'wrong' },
+        ]),
+        correctExplain: () => `<b class="colour-current">I<sub>D</sub></b> = <b>1.0 mA</b> (the physically valid root)`,
+        working: () => `
+    <div class="working-line">Substitute V<sub>GS</sub> = V<sub>G</sub> − I<sub>D</sub>R<sub>S</sub> = 4 − I<sub>D</sub> (with I<sub>D</sub> in mA, R<sub>S</sub> in kΩ) into I<sub>D</sub> = k(V<sub>GS</sub>−V<sub>th</sub>)² = (4−I<sub>D</sub>−2)² = (2−I<sub>D</sub>)²:</div>
+    <div class="working-formula-row">I<sub>D</sub> = (2 − I<sub>D</sub>)² &nbsp;→&nbsp; I<sub>D</sub>² − 5I<sub>D</sub> + 4 = 0 &nbsp;→&nbsp; (I<sub>D</sub>−1)(I<sub>D</sub>−4) = 0</div>
+    <div class="working-line">Two mathematical roots: I<sub>D</sub>=1 mA or I<sub>D</sub>=4 mA. Checking each against V<sub>GS</sub>=4−I<sub>D</sub>: the 4 mA root gives V<sub>GS</sub>=0 V, which is BELOW V<sub>th</sub>=2 V — the device wouldn't even be conducting, so this root is not physically possible and must be rejected.</div>
+    <div class="working-total"><b class="colour-current">I<sub>D</sub></b> = <b>1.0 mA</b>, giving V<sub>GS</sub> = 4−1 = 3.0 V (above V<sub>th</sub>, consistent). This "solve, then reject the non-physical root" step is a genuinely common pattern in JFET Q-point problems too — MOSFET and JFET self-consistent bias problems are both quadratics in disguise.</div>`
+      },
+      {
+        circuitId: 'mosfet-divider-cs',
+        circuitLabel: 'Voltage-Divider Bias, Common Source',
+        text: () => `What is the source voltage <b class="colour-voltage">V<sub>S</sub></b>?`,
+        hint: () => `Simple Ohm's law on RS, using the ID found in Q7.`,
+        options: () => shuffle([
+          { label: `<b class="colour-voltage">V<sub>S</sub></b> = <b class="colour-current">I<sub>D</sub></b> × <b class="colour-resistor">R<sub>S</sub></b> = 1.0 mA × 1.0 kΩ = <b>1.0 V</b>`, type: 'correct' },
+          { label: `<b class="colour-voltage">V<sub>S</sub></b> = <b class="colour-current">I<sub>D</sub></b> × <b class="colour-resistor">R<sub>D</sub></b> = 1.0 mA × 5.0 kΩ = <b>5.0 V</b>`, type: 'wrong' },
+          { label: `<b class="colour-voltage">V<sub>S</sub></b> = <b class="colour-voltage">V<sub>G</sub></b> = <b>4.0 V</b>`, type: 'wrong' },
+          { label: `<b class="colour-voltage">V<sub>S</sub></b> = <b class="colour-voltage">V<sub>G</sub></b> + <b class="colour-current">I<sub>D</sub></b>×<b class="colour-resistor">R<sub>S</sub></b> = 4.0 + 1.0 = <b>5.0 V</b>`, type: 'wrong' },
+        ]),
+        correctExplain: () => `<b class="colour-voltage">V<sub>S</sub></b> = I<sub>D</sub>×R<sub>S</sub> = <b>1.0 V</b>`,
+        working: () => `
+    <div class="working-formula-row"><b class="colour-voltage">V<sub>S</sub></b> = <b class="colour-current">I<sub>D</sub></b> × <b class="colour-resistor">R<sub>S</sub></b> = 1.0 mA × 1.0 kΩ = 1.0 V</div>
+    <div class="working-total">Check: V<sub>GS</sub> = V<sub>G</sub> − V<sub>S</sub> = 4.0 − 1.0 = 3.0 V, matching Q7's own self-consistent answer.</div>`
+      },
+      {
+        circuitId: 'mosfet-divider-cs',
+        circuitLabel: 'Voltage-Divider Bias, Common Source',
+        text: () => `What is the drain voltage <b class="colour-voltage">V<sub>D</sub></b>?`,
+        hint: () => `VDD minus the drop across RD.`,
+        options: () => shuffle([
+          { label: `<b class="colour-voltage">V<sub>D</sub></b> = <b class="colour-supply">V<sub>DD</sub></b> − (<b class="colour-current">I<sub>D</sub></b>×<b class="colour-resistor">R<sub>D</sub></b>) = 12 − (1.0×5.0) = <b>7.0 V</b>`, type: 'correct' },
+          { label: `<b class="colour-voltage">V<sub>D</sub></b> = <b class="colour-current">I<sub>D</sub></b>×<b class="colour-resistor">R<sub>D</sub></b> = 1.0×5.0 = <b>5.0 V</b>`, type: 'wrong' },
+          { label: `<b class="colour-voltage">V<sub>D</sub></b> = <b class="colour-supply">V<sub>DD</sub></b> − (<b class="colour-current">I<sub>D</sub></b>×<b class="colour-resistor">R<sub>S</sub></b>) = 12 − 1.0 = <b>11.0 V</b>`, type: 'wrong' },
+          { label: `<b class="colour-voltage">V<sub>D</sub></b> = <b class="colour-supply">V<sub>DD</sub></b> + (<b class="colour-current">I<sub>D</sub></b>×<b class="colour-resistor">R<sub>D</sub></b>) = 12 + 5.0 = <b>17.0 V</b>`, type: 'wrong' },
+        ]),
+        correctExplain: () => `<b class="colour-voltage">V<sub>D</sub></b> = V<sub>DD</sub> − I<sub>D</sub>R<sub>D</sub> = <b>7.0 V</b>`,
+        working: () => `
+    <div class="working-formula-row"><b class="colour-voltage">V<sub>D</sub></b> = <b class="colour-supply">V<sub>DD</sub></b> − (<b class="colour-current">I<sub>D</sub></b> × <b class="colour-resistor">R<sub>D</sub></b>) = 12 V − (1.0 mA × 5.0 kΩ)</div>
+    <div class="working-total"><b class="colour-voltage">V<sub>D</sub></b> = 7.0 V.</div>`
+      },
+      {
+        circuitId: 'mosfet-divider-cs',
+        circuitLabel: 'Voltage-Divider Bias, Common Source',
+        text: () => `With <b class="colour-voltage">V<sub>D</sub></b>=7.0V, <b class="colour-voltage">V<sub>S</sub></b>=1.0V, <b class="colour-voltage">V<sub>GS</sub></b>=3.0V and <b class="colour-voltage">V<sub>th</sub></b>=2.0V, is this <b class="colour-mosfet">MOSFET</b> actually operating in saturation — the region a linear amplifier needs?`,
+        hint: () => `Saturation needs VDS ≥ VGS − Vth. Work out VDS = VD − VS first.`,
+        options: () => shuffle([
+          { label: `Yes — <b class="colour-voltage">V<sub>DS</sub></b> = 7.0−1.0 = 6.0 V, well above V<sub>GS</sub>−V<sub>th</sub> = 3.0−2.0 = 1.0 V, so the channel has pinched off at the drain and I<sub>D</sub> is controlled by V<sub>GS</sub> as required`, type: 'correct' },
+          { label: `No — V<sub>DS</sub> (6.0 V) is less than V<sub>DD</sub> (12 V), so the device must still be in the triode region`, type: 'wrong' },
+          { label: `No — saturation requires V<sub>DS</sub> = V<sub>GS</sub> exactly, and 6.0 V ≠ 3.0 V`, type: 'wrong' },
+          { label: `It can't be determined without knowing k`, type: 'wrong' },
+        ]),
+        correctExplain: () => `Yes — <b class="colour-voltage">V<sub>DS</sub></b> (6.0 V) ≥ V<sub>GS</sub>−V<sub>th</sub> (1.0 V), so it's in <b>saturation</b>`,
+        working: () => `
+    <div class="working-formula-row"><b class="colour-voltage">V<sub>DS</sub></b> = V<sub>D</sub> − V<sub>S</sub> = 7.0 − 1.0 = 6.0 V</div>
+    <div class="working-total">6.0 V is comfortably above the 1.0 V needed (V<sub>GS</sub>−V<sub>th</sub>) — this stage sits well inside saturation, with plenty of headroom either side (see Q17's own output-swing calculation).</div>`
+      },
+      {
+        circuitId: 'mosfet-divider-cs',
+        circuitLabel: 'Voltage-Divider Bias, Common Source',
+        text: () => `What is <b class="colour-mosfet">g<sub>m</sub></b> at this stage's own Q-point?`,
+        hint: () => `A MOSFET's transconductance, like a JFET's, isn't a fixed device constant — it depends on where the Q-point sits. gm = 2k(VGS − Vth), using k, VGS and Vth already established.`,
+        options: () => shuffle([
+          { label: `<b class="colour-mosfet">g<sub>m</sub></b> = 2k(<b class="colour-voltage">V<sub>GS</sub></b>−<b class="colour-voltage">V<sub>th</sub></b>) = 2×1×(3−2) = <b>2.0 mA/V</b>`, type: 'correct' },
+          { label: `<b class="colour-mosfet">g<sub>m</sub></b> = k(<b class="colour-voltage">V<sub>GS</sub></b>−<b class="colour-voltage">V<sub>th</sub></b>) = 1×(3−2) = <b>1.0 mA/V</b> (forgot the factor of 2)`, type: 'wrong' },
+          { label: `<b class="colour-mosfet">g<sub>m</sub></b> = ${frac('<b class="colour-current">I<sub>D</sub></b>', '<b class="colour-voltage">V<sub>GS</sub></b>')} = ${frac('1.0 mA', '3.0 V')} ≈ <b>0.33 mA/V</b>`, type: 'wrong' },
+          { label: `<b class="colour-mosfet">g<sub>m</sub></b> = k = <b>1.0 mA/V²</b> (wrong units, and k isn't gm)`, type: 'wrong' },
+        ]),
+        correctExplain: () => `<b class="colour-mosfet">g<sub>m</sub></b> = 2k(V<sub>GS</sub>−V<sub>th</sub>) = <b>2.0 mA/V</b>`,
+        working: () => `
+    <div class="working-line">Differentiating I<sub>D</sub>=k(V<sub>GS</sub>−V<sub>th</sub>)² with respect to V<sub>GS</sub> gives g<sub>m</sub>=2k(V<sub>GS</sub>−V<sub>th</sub>) — the factor of 2 comes directly from the square-law shape, exactly the way it would for any x² function.</div>
+    <div class="working-formula-row"><b class="colour-mosfet">g<sub>m</sub></b> = 2 × 1.0 mA/V² × (3.0 V − 2.0 V) = 2.0 mA/V</div>
+    <div class="working-total">Keep this value — every AC parameter from here on uses it.</div>`
+      },
+      {
+        circuitId: 'mosfet-divider-cs',
+        circuitLabel: 'Voltage-Divider Bias, Common Source',
+        text: () => `What is the <b style="color:var(--colour-ui-primary)">AC</b> input resistance <b class="colour-resistor">Z<sub>in</sub></b> seen by the signal source?`,
+        hint: () => `The gate draws no current — but unlike a JFET self-bias stage's single RG, THIS bias network puts two resistors (R1 to the AC-grounded VDD rail, R2 to Common) between the gate node and ground.`,
+        options: () => shuffle([
+          { label: `<b class="colour-gain">Zin</b> = R1 ∥ R2 = ${frac('1', `${frac('1', '600 kΩ')} + ${frac('1', '300 kΩ')}`)} = <b>200 kΩ</b>`, type: 'correct' },
+          { label: `<b class="colour-gain">Zin</b> = R1 + R2 = 600 + 300 = <b>900 kΩ</b>`, type: 'wrong' },
+          { label: `<b class="colour-gain">Zin</b> = R1 = <b>600 kΩ</b> (treating it like a JFET self-bias stage's single RG)`, type: 'wrong' },
+          { label: `<b class="colour-gain">Zin</b> = R2 = <b>300 kΩ</b>`, type: 'wrong' },
+        ]),
+        correctExplain: () => `<b class="colour-resistor">Z<sub>in</sub></b> = R1 ∥ R2 = <b>200 kΩ</b>`,
+        working: () => `
+    <div class="working-line">The gate itself still draws no current — but that's not the whole story here. AC-wise, VDD is a solid ground (a stiff supply looks like a short to AC signals), so R1 actually runs from the gate node to AC ground too, in parallel with R2.</div>
+    <div class="working-formula-row"><b class="colour-resistor">Z<sub>in</sub></b> = R1 ∥ R2 = ${frac('600 kΩ × 300 kΩ', '600 kΩ + 300 kΩ')} = 200 kΩ</div>
+    <div class="working-total">This is the genuine difference from the JFET self-bias file's Zin=RG alone — that stage has nothing at all wired between its gate node and VDD, so only one resistor ever appears in its Zin. A voltage-divider network always costs some Zin this way, which is part of the real trade-off for the stability a divider buys (see Q5).</div>`
+      },
+      {
+        circuitId: 'mosfet-divider-cs',
+        circuitLabel: 'Voltage-Divider Bias, Common Source',
+        text: () => `What is the approximate <b style="color:var(--colour-ui-primary)">AC</b> output resistance <b class="colour-resistor">Z<sub>out</sub></b>, looking back into the drain terminal?`,
+        hint: () => `Zero the source and look back into the drain node — the transistor's own internal drain resistance is assumed very high compared to RD, so it's ignored.`,
+        options: () => shuffle([
+          { label: `<b class="colour-gain">Zout</b> ≈ <b class="colour-resistor">RD</b> = <b>5.0 kΩ</b>`, type: 'correct' },
+          { label: `<b class="colour-gain">Zout</b> ≈ <b class="colour-resistor">RS</b> = <b>1.0 kΩ</b>`, type: 'wrong' },
+          { label: `<b class="colour-gain">Zout</b> ≈ <b class="colour-gain">Zin</b> = <b>200 kΩ</b>`, type: 'wrong' },
+          { label: `<b class="colour-gain">Zout</b> ≈ <b class="colour-resistor">RD</b> ∥ <b class="colour-resistor">RS</b> = ${frac('1', `${frac('1', '5.0 kΩ')} + ${frac('1', '1.0 kΩ')}`)} ≈ <b>0.83 kΩ</b>`, type: 'wrong' },
+        ]),
+        correctExplain: () => `<b class="colour-resistor">Z<sub>out</sub></b> ≈ <b class="colour-resistor">R<sub>D</sub></b> = <b>5.0 kΩ</b>`,
+        working: () => `
+    <div class="working-line">With the source zeroed, the only thing directly wired to the drain node — besides the transistor's own very-high internal resistance, ignored here — is <b class="colour-resistor">R<sub>D</sub></b>, running up to the AC-grounded V<sub>DD</sub> rail. Exactly the same idealisation used for a BJT's Z<sub>out</sub>≈R<sub>C</sub> and a JFET's Z<sub>out</sub>≈R<sub>D</sub>.</div>
+    <div class="working-total"><b class="colour-resistor">Z<sub>out</sub></b> ≈ 5.0 kΩ.</div>`
+      },
+      {
+        circuitId: 'mosfet-divider-cs',
+        circuitLabel: 'Voltage-Divider Bias, Common Source',
+        text: () => `What is the voltage gain <b class="colour-gain">|A<sub>v</sub>|</b> of this stage?`,
+        hint: () => `|Av| = gm×RD / (1 + gm×RS) for a common-source stage with an unbypassed source resistor — the same degeneration shape as a JFET self-bias stage's Av.`,
+        options: () => shuffle([
+          { label: `<b class="colour-gain">|Av|</b> = ${frac('g<sub>m</sub>×<b class="colour-resistor">RD</b>', '1 + g<sub>m</sub>×<b class="colour-resistor">RS</b>')} = ${frac('2×5', '1 + 2×1')} = ${frac('10', '3')} ≈ <b>3.33</b>`, type: 'correct' },
+          { label: `<b class="colour-gain">|Av|</b> = g<sub>m</sub> × <b class="colour-resistor">RD</b> = 2×5 = <b>10.0</b> (ignored RS degeneration)`, type: 'wrong' },
+          { label: `<b class="colour-gain">|Av|</b> = ${frac('<b class="colour-resistor">RD</b>', 'g<sub>m</sub>×<b class="colour-resistor">RS</b>')} = ${frac('5', '2×1')} = <b>2.5</b>`, type: 'wrong' },
+          { label: `<b class="colour-gain">|Av|</b> = ${frac('1 + g<sub>m</sub>×<b class="colour-resistor">RS</b>', 'g<sub>m</sub>×<b class="colour-resistor">RD</b>')} = ${frac('3', '10')} = <b>0.30</b>`, type: 'wrong' },
+        ]),
+        correctExplain: () => `<b class="colour-gain">|A<sub>v</sub>|</b> = g<sub>m</sub>R<sub>D</sub> / (1 + g<sub>m</sub>R<sub>S</sub>) ≈ <b>3.33</b>`,
+        working: () => `
+    <div class="working-formula-row"><b class="colour-gain">|A<sub>v</sub>|</b> = ${frac('g<sub>m</sub> × <b class="colour-resistor">R<sub>D</sub></b>', '1 + g<sub>m</sub> × <b class="colour-resistor">R<sub>S</sub></b>')} = ${frac('2.0 mA/V × 5.0 kΩ', '1 + 2.0 mA/V × 1.0 kΩ')} = ${frac('10', '3')}</div>
+    <div class="working-total"><b class="colour-gain">|A<sub>v</sub>|</b> ≈ 3.33 — the same "degeneration" formula shape as a JFET self-bias stage's Av=gmRD/(1+gmRS), because an unbypassed source/emitter resistor reduces gain the same way regardless of device family.</div>`
+      },
+      {
+        circuitId: 'mosfet-divider-cs',
+        circuitLabel: 'Voltage-Divider Bias, Common Source',
+        text: () => `What is the phase relationship between the input and output signals of this common-source stage?`,
+        hint: () => `Think about what happens at the drain when a rising gate voltage increases ID.`,
+        options: () => shuffle([
+          { label: `Inverted — 180° out of phase`, type: 'correct' },
+          { label: `In phase — 0°`, type: 'wrong' },
+          { label: `90° phase shift`, type: 'wrong' },
+          { label: `It depends on frequency`, type: 'wrong' },
+        ]),
+        correctExplain: () => `<b>Inverted (180°)</b>`,
+        working: () => `
+    <div class="working-line">A rising gate voltage increases <b class="colour-current">I<sub>D</sub></b>, which increases the voltage DROPPED across <b class="colour-resistor">R<sub>D</sub></b> — pulling the drain node DOWN, toward Common. A rising input therefore produces a falling output: the output is inverted, 180° out of phase with the input, exactly like a BJT or JFET common-source/common-emitter stage.</div>`
+      },
+      {
+        circuitId: 'mosfet-divider-cs',
+        circuitLabel: 'Voltage-Divider Bias, Common Source',
+        text: () => `Using <b class="colour-capacitor">C<sub>IN</sub></b>=1.0µF and the <b class="colour-gain">Z<sub>in</sub></b> found earlier, what is this stage's approximate low-frequency cutoff <b>f<sub>1</sub></b>?`,
+        hint: () => `f1 = 1/(2π×Zin×Cin) — the same RC-highpass reasoning as any coupling-capacitor cutoff.`,
+        options: () => shuffle([
+          { label: `f<sub>1</sub> = ${frac('1', '2π×<b class="colour-gain">Zin</b>×<b class="colour-capacitor">Cin</b>')} = ${frac('1', '2π×200 kΩ×1.0 µF')} ≈ <b>0.80 Hz</b>`, type: 'correct' },
+          { label: `f<sub>1</sub> = ${frac('1', '<b class="colour-gain">Zin</b>×<b class="colour-capacitor">Cin</b>')} = ${frac('1', '200 kΩ×1.0 µF')} = <b>5.0 Hz</b> (forgot the 2π)`, type: 'wrong' },
+          { label: `f<sub>1</sub> = 2π×<b class="colour-gain">Zin</b>×<b class="colour-capacitor">Cin</b> ≈ <b>1.26 Hz</b> (inverted the formula)`, type: 'wrong' },
+          { label: `f<sub>1</sub> = ${frac('1', '2π×<b class="colour-gain">Zout</b>×<b class="colour-capacitor">Cin</b>')} = ${frac('1', '2π×5.0 kΩ×1.0 µF')} ≈ <b>31.8 Hz</b> (used Zout instead of Zin)`, type: 'wrong' },
+        ]),
+        correctExplain: () => `f<sub>1</sub> = 1/(2π×Z<sub>in</sub>×C<sub>IN</sub>) ≈ <b>0.80 Hz</b>`,
+        working: () => `
+    <div class="working-formula-row">f<sub>1</sub> = ${frac('1', '2π × <b class="colour-gain">Z<sub>in</sub></b> × <b class="colour-capacitor">C<sub>IN</sub></b>')} = ${frac('1', '2π × 200,000 Ω × 0.000001 F')}</div>
+    <div class="working-total">f<sub>1</sub> ≈ 0.80 Hz. This stage's very high Zin (200 kΩ) is exactly why such a small coupling cap already pushes the low-frequency cutoff well below the audio band — a smaller Zin (e.g. a JFET source-follower's Zout, if this cap were on an output instead) would need a much bigger capacitor to reach the same cutoff.</div>`
+      },
+      {
+        circuitId: 'mosfet-divider-cs',
+        circuitLabel: 'Voltage-Divider Bias, Common Source',
+        text: () => `Before the output clips, what is the maximum <b style="color:var(--colour-ui-primary)">symmetrical peak-to-peak</b> output voltage swing at the drain of this stage?`,
+        hint: () => `Work out the headroom available for VD to swing UP (toward VDD, cutoff) and DOWN (toward the edge of saturation, VD=VS+(VGS−Vth)) — then take twice the SMALLER of the two.`,
+        options: () => shuffle([
+          { label: `Up: 12−7=5.0 V. Down: VD can fall to VS+(VGS−Vth)=1.0+1.0=2.0 V, so 7−2=5.0 V. Both sides match, so max swing = 2×5.0 = <b>10.0 V<sub>pp</sub></b>`, type: 'correct' },
+          { label: `Only considered the upward headroom: <b>5.0 V<sub>pp</sub></b>`, type: 'wrong' },
+          { label: `Assumed the full supply rail is available: <b>12.0 V<sub>pp</sub></b>`, type: 'wrong' },
+          { label: `Used VD's lower limit as VS alone (forgetting the VGS−Vth saturation margin): down-headroom 7−1.0=6.0 V, giving 2×6.0=<b>12.0 V<sub>pp</sub></b>`, type: 'wrong' },
+        ]),
+        correctExplain: () => `Max swing = 2 × 5.0 V = <b>10.0 V<sub>pp</sub></b>`,
+        working: () => `
+    <div class="working-line"><b>Upward headroom</b> (toward cutoff, ID→0, VD→VDD): V<sub>DD</sub>−V<sub>D</sub> = 12−7 = 5.0 V.</div>
+    <div class="working-line" style="margin-top:.4rem"><b>Downward headroom</b> (toward the edge of saturation): VD can only fall until V<sub>DS</sub>=V<sub>GS</sub>−V<sub>th</sub>=1.0 V, i.e. until V<sub>D</sub>=V<sub>S</sub>+1.0=2.0 V. That's V<sub>D</sub>−2.0 = 7−2 = 5.0 V of downward room.</div>
+    <div class="working-total">Both headrooms happen to be exactly 5.0 V — a nicely centred Q-point — so the largest undistorted swing is symmetrical: 2×5.0 = <b>10.0 V<sub>pp</sub></b> (±5.0 V peak). Exactly the same "smaller of the two headrooms, doubled" logic used for a BJT's maximum symmetrical swing.</div>`
+      },
+      {
+        circuitId: 'mosfet-divider-cs',
+        circuitLabel: 'Voltage-Divider Bias, Common Source',
+        text: () => `This <b class="colour-mosfet">MOSFET</b> stage needed a real R1/R2 voltage divider to set its Q-point, while a <b class="colour-jfet">JFET</b> common-source stage elsewhere in this course got away with self-bias (just RG straight to ground). What's the real reason for that structural difference?`,
+        hint: () => `Think back to Q5's "Difference" column — what does VGS have to do, starting from 0, for each device to reach its own working Q-point?`,
+        options: () => shuffle([
+          { label: `An enhancement MOSFET conducts zero current at V<sub>GS</sub>=0, so there's no I<sub>D</sub> to develop a self-bias voltage across a source resistor — an external divider is the only way to force V<sub>GS</sub> positive enough to turn it on. A JFET already conducts fully at V<sub>GS</sub>=0, so I<sub>DS</sub> flowing through R<sub>S</sub> alone can develop the negative V<sub>GS</sub> a self-biased JFET needs`, type: 'correct' },
+          { label: `MOSFETs simply have higher input impedance, which requires a divider`, type: 'wrong' },
+          { label: `The divider is only there to reduce manufacturing cost`, type: 'wrong' },
+          { label: `Both device families always need a divider — the JFET file elsewhere in this course was just a simplification`, type: 'wrong' },
+        ]),
+        correctExplain: () => `Enhancement-mode conducts <b>nothing</b> at V<sub>GS</sub>=0 — self-bias has nothing to bootstrap from`,
+        working: () => `
+    <div class="working-line">Self-bias is really just "let the device's own current through R<sub>S</sub> build the V<sub>GS</sub> it needs." That only works if the device already conducts SOME current at V<sub>GS</sub>=0 — true for a JFET (I<sub>DS</sub>=I<sub>DSS</sub> at V<sub>GS</sub>=0, its maximum), completely false for an enhancement MOSFET (I<sub>D</sub>=0 at V<sub>GS</sub>=0, by definition of "enhancement").</div>
+    <div class="working-total">With zero current to start from, there is nothing for a source resistor to bootstrap — an enhancement MOSFET genuinely NEEDS an external voltage divider (or another bias scheme that forces V<sub>GS</sub> positive some other way) just to begin conducting. This is the direct, mechanistic reason this file's circuit looks structurally like a BJT's voltage-divider bias rather than the JFET file's self-bias, not an arbitrary design choice.</div>`
+      },
+    ];
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUIZ ENGINE — shared: assets/quiz-engine.js. Only this file's own
+    // progressive-reveal badge function remains inline below.
+    // ══════════════════════════════════════════════════════════════════════
+
+    /* Progressive reveal of the diagram's own DC/AC value badges, tied to
+       specific question indices (0-based) — mirrors both
+       bjt_npn_voltage_divider.html's meter-reveal convention and
+       jfet_self_bias_ac_params.html's gm/Zin/Zout badge convention. */
+    function updateReveals() {
+      document.getElementById('meterVG').setAttribute('display', Q[5].ans ? 'inline' : 'none');   // Q6: VG
+      document.getElementById('idsIndMosfet').setAttribute('display', Q[6].ans ? 'inline' : 'none'); // Q7: ID
+      if (Q[6].ans) document.getElementById('idsValueMosfet').textContent = '1.0';
+      document.getElementById('meterVS').setAttribute('display', Q[7].ans ? 'inline' : 'none');   // Q8: VS
+      document.getElementById('meterVD').setAttribute('display', Q[8].ans ? 'inline' : 'none');   // Q9: VD
+      document.getElementById('gmRevealMosfet').setAttribute('display', Q[10].ans ? 'inline' : 'none'); // Q11: gm
+      document.getElementById('zinBadgeMosfet').setAttribute('display', Q[11].ans ? 'inline' : 'none'); // Q12: Zin
+      document.getElementById('zoutBadgeMosfet').setAttribute('display', Q[12].ans ? 'inline' : 'none'); // Q13: Zout
+    }
+
+    RENDER_EXTRA = updateReveals;
+
+    // Randomise question ORDER on every load and every Restart — same
+    // pattern as the review quizzes; automatically skipped whenever the URL
+    // carries ?q=N, so ?q=N stays a reliable fixed-order debugging link.
+    RESET_EXTRA = () => shuffle(QUESTIONS);
+
+    initQuizNav();
+    resetQuiz();
+    initQuizFromURL();
+  </script>
+</body>
+
+</html>

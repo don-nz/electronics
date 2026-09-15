@@ -1,0 +1,482 @@
+<!--
+  MOSFET counterpart to ../../jfet/basics/jfet_knowledge_basics.html — same
+  4-question structure (Q1 shapeGrid symbol-ID, Q2/Q3 kind:'fill' terminal
+  labelling, Q4 kind:'match' device comparison), same shared engine
+  (assets/quiz-engine.js), rebuilt content where the electronics genuinely
+  differs rather than a search-and-replace of that file:
+
+    - Q1's validity rule is different from the JFET version. A JFET symbol
+      has ONE rule (one arrow, on the gate lead). A MOSFET symbol has TWO
+      independent things going on: the CHANNEL LINE (broken=enhancement,
+      solid=depletion — always a valid reading either way, never a
+      validity error) and the ARROW (exactly one, on the substrate/body
+      lead only, in=N-channel/out=P-channel — THIS is the rule the error
+      variants break, same "wrong lead / too many arrows" error family as
+      the JFET quiz's own Q1, just moved from the gate lead to the
+      substrate lead). See ../../../assets/shapes/mosfet-symbols.svg's own
+      header comment for the full shape set (edit there first).
+    - Q2/Q3 use a FIXED terminal layout (Drain always top, Source always
+      bottom, Gate always left) rather than the JFET quiz's flipped
+      top/bottom variant per question — the MOSFET base shape only has one
+      gate-position geometry (no "gate near top" mirror was ever drawn),
+      so there's nothing to flip. Q2/Q3 differ only in shapeId (N-channel
+      enhancement vs P-channel enhancement), which is enough to exercise
+      both channel-type readings without needing a second circuit layout.
+    - Q4 compares MOSFET against JFET (not BJT) — the natural next
+      comparison once a student already knows JFET basics, and the one
+      this course's own folder structure (mosfet/ sitting beside jfet/)
+      invites. Genuinely different content from the JFET quiz's own
+      JFET-vs-BJT Q4: insulated gate vs reverse-biased junction gate,
+      near-zero-but-real leakage current vs even-closer-to-zero-but-ESD-
+      fragile, and the JFET's single depletion-only behaviour vs a
+      MOSFET's two distinct enhancement/depletion modes.
+
+  Built on the shared engine, assets/quiz-engine.js.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../assets/theme-init.js"></script>
+  <script src="../../../assets/quiz-engine.js"></script>
+  <title>MOSFET Knowledge Quiz 1</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../assets/quiz-common.css">
+  <script src="../../../assets/breadcrumb.js" defer></script>
+  <style>
+    /* Q2/Q3 (kind:'fill') — click-a-name-then-click-a-terminal, same
+       pool/slot-box styling as jfet_knowledge_basics.html's own copy
+       (itself ported from digital_circuit_derivation_ab.html). */
+    .circuit-panel { cursor: default; }
+    .fill-pool-wrap { margin-top: .8rem; }
+    .fill-pool-row { display: flex; align-items: center; gap: .5rem; }
+    .fill-pool-arrow { font-size: 1rem; color: var(--colour-ui-primary); opacity: 0; transition: opacity .15s; }
+    .fill-pool-row.needs-pick .fill-pool-arrow { opacity: 1; animation: fillArrowBounce .8s ease-in-out infinite; }
+    @keyframes fillArrowBounce { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(3px); } }
+    .fill-pool {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: .5rem;
+      padding: .8rem;
+      border: 2px dashed var(--colour-border);
+      border-radius: var(--radius-lg);
+      background: rgba(var(--colour-label-rgb), .05);
+      min-height: 3rem;
+      transition: border-color .15s, background .15s;
+    }
+    .fill-pool.needs-pick {
+      border-color: var(--colour-ui-primary);
+      border-style: solid;
+      background: rgba(var(--colour-ui-primary-rgb), .06);
+      animation: matchPoolPulse 1.1s ease-in-out infinite;
+    }
+    .fill-pool .match-chip { min-width: 84px; text-align: center; }
+    .circuit-slot-box { fill: var(--colour-panel); stroke: var(--colour-ui-primary); stroke-width: 1.5px; stroke-dasharray: 4,3; cursor: pointer; }
+    .circuit-slot-box.filled { stroke-dasharray: none; }
+    .circuit-slot-box.correct { stroke: var(--colour-ui-correct); }
+    .circuit-slot-box.wrong { stroke: #ff3d66; }
+    .circuit-slot-box.correct, .circuit-slot-box.wrong { cursor: default; }
+    .mosfet-slot-html {
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-body); font-size: 15px; font-weight: 700;
+      color: var(--colour-ui-primary); text-align: center; line-height: 1;
+      pointer-events: none; width: 100%; height: 100%;
+    }
+    .mosfet-slot-html.correct { color: var(--colour-ui-correct); }
+    .mosfet-slot-html.wrong { color: #ff3d66; }
+  </style>
+</head>
+
+<body>
+  <!-- Hidden defs: MOSFET schematic symbols used by Q1's shapeGrid and
+       Q2/Q3's terminal diagram — copied from
+       ../../../assets/shapes/mosfet-symbols.svg, edit there first. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur stdDeviation="2" result="b" />
+        <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+      </filter>
+
+      <g id="mosfet-base-shape">
+        <circle cx="7" cy="5" r="30" fill="var(--colour-panel)" style="stroke: var(--colour-mosfet)" stroke-width="2" filter="url(#glow)" />
+        <line x1="-30" y1="24" x2="-3" y2="24" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <rect x="-4" y="-18" width="3" height="43" style="fill: var(--colour-mosfet)" />
+        <line x1="6" y1="-18" x2="6" y2="-7" style="stroke: var(--colour-mosfet)" stroke-width="3" />
+        <line x1="6" y1="-2" x2="6" y2="9" style="stroke: var(--colour-mosfet)" stroke-width="3" />
+        <line x1="6" y1="14" x2="6" y2="25" style="stroke: var(--colour-mosfet)" stroke-width="3" />
+        <line x1="6" y1="-12" x2="25" y2="-12" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <line x1="25" y1="-11" x2="25" y2="-32" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <line x1="6" y1="20" x2="25" y2="20" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <line x1="24" y1="3" x2="25" y2="40" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <line x1="6" y1="3" x2="25" y2="3" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <polygon points="14,-3 14,9 6,3" style="fill: var(--colour-mosfet)" />
+      </g>
+      <g id="mosfet-base-shape-p">
+        <circle cx="7" cy="5" r="30" fill="var(--colour-panel)" style="stroke: var(--colour-mosfet)" stroke-width="2" filter="url(#glow)" />
+        <line x1="-30" y1="24" x2="-3" y2="24" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <rect x="-4" y="-18" width="3" height="43" style="fill: var(--colour-mosfet)" />
+        <line x1="6" y1="-18" x2="6" y2="-7" style="stroke: var(--colour-mosfet)" stroke-width="3" />
+        <line x1="6" y1="-2" x2="6" y2="9" style="stroke: var(--colour-mosfet)" stroke-width="3" />
+        <line x1="6" y1="14" x2="6" y2="25" style="stroke: var(--colour-mosfet)" stroke-width="3" />
+        <line x1="6" y1="-12" x2="25" y2="-12" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <line x1="25" y1="-11" x2="25" y2="-32" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <line x1="6" y1="20" x2="25" y2="20" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <line x1="24" y1="3" x2="25" y2="40" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <line x1="6" y1="3" x2="25" y2="3" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <polygon points="17,-3 17,9 25,3" style="fill: var(--colour-mosfet)" />
+      </g>
+
+      <g id="mosfet-n-e-shape">
+        <use href="#mosfet-base-shape" />
+        <line x1="6" y1="-18" x2="6" y2="-7" style="stroke: var(--colour-mosfet)" stroke-width="3" />
+        <line x1="6" y1="-2" x2="6" y2="9" style="stroke: var(--colour-mosfet)" stroke-width="3" />
+        <line x1="6" y1="14" x2="6" y2="25" style="stroke: var(--colour-mosfet)" stroke-width="3" />
+      </g>
+      <g id="mosfet-p-e-shape">
+        <use href="#mosfet-base-shape-p" />
+        <line x1="6" y1="-18" x2="6" y2="-7" style="stroke: var(--colour-mosfet)" stroke-width="3" />
+        <line x1="6" y1="-2" x2="6" y2="9" style="stroke: var(--colour-mosfet)" stroke-width="3" />
+        <line x1="6" y1="14" x2="6" y2="25" style="stroke: var(--colour-mosfet)" stroke-width="3" />
+      </g>
+      <g id="mosfet-n-d-shape">
+        <use href="#mosfet-base-shape" />
+        <line x1="6" y1="-18" x2="6" y2="25" style="stroke: var(--colour-mosfet)" stroke-width="3" />
+      </g>
+      <g id="mosfet-p-d-shape">
+        <use href="#mosfet-base-shape-p" />
+        <line x1="6" y1="-18" x2="6" y2="25" style="stroke: var(--colour-mosfet)" stroke-width="3" />
+      </g>
+
+      <g id="mosfet-error-wronglead-in">
+        <circle cx="7" cy="5" r="30" fill="var(--colour-panel)" style="stroke: var(--colour-mosfet)" stroke-width="2" filter="url(#glow)" />
+        <line x1="-30" y1="24" x2="-3" y2="24" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <rect x="-4" y="-18" width="3" height="43" style="fill: var(--colour-mosfet)" />
+        <line x1="6" y1="-18" x2="6" y2="-7" style="stroke: var(--colour-mosfet)" stroke-width="3" />
+        <line x1="6" y1="-2" x2="6" y2="9" style="stroke: var(--colour-mosfet)" stroke-width="3" />
+        <line x1="6" y1="14" x2="6" y2="25" style="stroke: var(--colour-mosfet)" stroke-width="3" />
+        <line x1="6" y1="-12" x2="25" y2="-12" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <line x1="25" y1="-11" x2="25" y2="-32" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <line x1="6" y1="20" x2="25" y2="20" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <line x1="24" y1="3" x2="25" y2="40" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <line x1="6" y1="3" x2="25" y2="3" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <polygon points="14,-16 14,-8 6,-12" style="fill: var(--colour-mosfet)" />
+      </g>
+      <g id="mosfet-error-wronglead-out">
+        <circle cx="7" cy="5" r="30" fill="var(--colour-panel)" style="stroke: var(--colour-mosfet)" stroke-width="2" filter="url(#glow)" />
+        <line x1="-30" y1="24" x2="-3" y2="24" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <rect x="-4" y="-18" width="3" height="43" style="fill: var(--colour-mosfet)" />
+        <line x1="6" y1="-18" x2="6" y2="-7" style="stroke: var(--colour-mosfet)" stroke-width="3" />
+        <line x1="6" y1="-2" x2="6" y2="9" style="stroke: var(--colour-mosfet)" stroke-width="3" />
+        <line x1="6" y1="14" x2="6" y2="25" style="stroke: var(--colour-mosfet)" stroke-width="3" />
+        <line x1="6" y1="-12" x2="25" y2="-12" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <line x1="25" y1="-11" x2="25" y2="-32" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <line x1="6" y1="20" x2="25" y2="20" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <line x1="24" y1="3" x2="25" y2="40" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <line x1="6" y1="3" x2="25" y2="3" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <polygon points="17,-16 17,-8 25,-12" style="fill: var(--colour-mosfet)" />
+      </g>
+      <g id="mosfet-error-double-in">
+        <circle cx="7" cy="5" r="30" fill="var(--colour-panel)" style="stroke: var(--colour-mosfet)" stroke-width="2" filter="url(#glow)" />
+        <line x1="-30" y1="24" x2="-3" y2="24" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <rect x="-4" y="-18" width="3" height="43" style="fill: var(--colour-mosfet)" />
+        <line x1="6" y1="-18" x2="6" y2="-7" style="stroke: var(--colour-mosfet)" stroke-width="3" />
+        <line x1="6" y1="-2" x2="6" y2="9" style="stroke: var(--colour-mosfet)" stroke-width="3" />
+        <line x1="6" y1="14" x2="6" y2="25" style="stroke: var(--colour-mosfet)" stroke-width="3" />
+        <line x1="6" y1="-12" x2="25" y2="-12" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <line x1="25" y1="-11" x2="25" y2="-32" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <line x1="6" y1="20" x2="25" y2="20" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <line x1="24" y1="3" x2="25" y2="40" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <line x1="6" y1="3" x2="25" y2="3" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <polygon points="14,-16 14,-8 6,-12" style="fill: var(--colour-mosfet)" />
+        <polygon points="14,17 14,23 6,20" style="fill: var(--colour-mosfet)" />
+      </g>
+      <g id="mosfet-error-double-out">
+        <circle cx="7" cy="5" r="30" fill="var(--colour-panel)" style="stroke: var(--colour-mosfet)" stroke-width="2" filter="url(#glow)" />
+        <line x1="-30" y1="24" x2="-3" y2="24" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <rect x="-4" y="-18" width="3" height="43" style="fill: var(--colour-mosfet)" />
+        <line x1="6" y1="-18" x2="6" y2="-7" style="stroke: var(--colour-mosfet)" stroke-width="3" />
+        <line x1="6" y1="-2" x2="6" y2="9" style="stroke: var(--colour-mosfet)" stroke-width="3" />
+        <line x1="6" y1="14" x2="6" y2="25" style="stroke: var(--colour-mosfet)" stroke-width="3" />
+        <line x1="6" y1="-12" x2="25" y2="-12" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <line x1="25" y1="-11" x2="25" y2="-32" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <line x1="6" y1="20" x2="25" y2="20" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <line x1="24" y1="3" x2="25" y2="40" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <line x1="6" y1="3" x2="25" y2="3" style="stroke: var(--colour-mosfet)" stroke-width="2" />
+        <polygon points="17,-16 17,-8 25,-12" style="fill: var(--colour-mosfet)" />
+        <polygon points="17,17 17,23 25,20" style="fill: var(--colour-mosfet)" />
+      </g>
+    </defs>
+  </svg>
+
+  <div class="crumb" id="crumb" data-current="Fundamentals"></div>
+  <header>
+    <h1>MOSFET Knowledge</h1>
+    <p>Conceptual Questions · N-Channel &amp; P-Channel MOSFETs</p>
+  </header>
+
+  <div class="quiz-wrap" id="quizWrap">
+
+    <!-- LEFT: shape grid (leftPanel:'shapeGrid') or static circuit
+         (leftPanel:'circuit', default display:none). -->
+    <div class="circuit-col">
+      <div id="qShapeGridPanel" style="display:none">
+        <div class="panel-label">Click the shapes to select your answer</div>
+        <div class="shape-grid" id="shapeGridCells"></div>
+      </div>
+
+      <!-- Q2/Q3's terminal-labelling diagram (kind:'fill') — ONE shared
+           circuit. Layout is FIXED here (Drain always top, Source always
+           bottom, Gate always left) — unlike the JFET quiz's version,
+           there's no "gate near top" mirror shape to flip to, so only the
+           symbol's own href changes between Q2 and Q3 (see
+           applyMosfetCircuitConfig() below). -->
+      <div class="circuit-panel" id="circuitPanelFill" style="display:none">
+        <div class="panel-label">Click a name below, then click a terminal</div>
+        <svg viewBox="0 0 440 300" xmlns="http://www.w3.org/2000/svg">
+          <use id="mosfetTerminalUse" href="#mosfet-n-e-shape" transform="translate(230,150)" />
+
+          <!-- Leader lines — fixed, matching the base shape's own lead tips
+               (gate (-30,24), drain (25,-32), source (25,40) relative to
+               the translate(230,150) above). -->
+          <line x1="255" y1="118" x2="255" y2="64" style="stroke: var(--colour-mosfet)" stroke-width="1.5" stroke-dasharray="3,2" />
+          <line x1="255" y1="190" x2="255" y2="236" style="stroke: var(--colour-mosfet)" stroke-width="1.5" stroke-dasharray="3,2" />
+          <line x1="200" y1="174" x2="130" y2="174" style="stroke: var(--colour-mosfet)" stroke-width="1.5" stroke-dasharray="3,2" />
+
+          <!-- Click handlers attached in JS (see SLOT_COL below). -->
+          <g id="slotBoxTop" class="circuit-slot-box" transform="translate(195,30)">
+            <rect width="120" height="34" rx="4" />
+            <foreignObject x="0" y="0" width="120" height="34">
+              <div xmlns="http://www.w3.org/1999/xhtml" id="slotBoxTopText" class="mosfet-slot-html"></div>
+            </foreignObject>
+          </g>
+          <g id="slotBoxG" class="circuit-slot-box" transform="translate(10,157)">
+            <rect width="120" height="34" rx="4" />
+            <foreignObject x="0" y="0" width="120" height="34">
+              <div xmlns="http://www.w3.org/1999/xhtml" id="slotBoxGText" class="mosfet-slot-html"></div>
+            </foreignObject>
+          </g>
+          <g id="slotBoxBottom" class="circuit-slot-box" transform="translate(195,236)">
+            <rect width="120" height="34" rx="4" />
+            <foreignObject x="0" y="0" width="120" height="34">
+              <div xmlns="http://www.w3.org/1999/xhtml" id="slotBoxBottomText" class="mosfet-slot-html"></div>
+            </foreignObject>
+          </g>
+        </svg>
+      </div>
+    </div>
+
+    <!-- RIGHT: question -->
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+
+          <div class="fill-pool-wrap" id="fillPoolWrap" style="display:none">
+            <div class="fill-pool-row" id="fillPoolRow">
+              <div class="fill-pool-arrow">▶</div>
+              <div class="fill-pool" id="fillPool"></div>
+            </div>
+          </div>
+
+          <div class="options" id="qOptions"></div>
+          <div class="match-wrap" id="qMatch" style="display:none">
+            <div class="match-pool-row" id="matchPoolRow">
+              <div class="match-pool-arrow">▶</div>
+              <div class="match-pool" id="matchPool"></div>
+            </div>
+            <div class="match-columns" id="matchColumns"></div>
+          </div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS — see quiz-engine.js's own header comment for the full field
+    // reference.
+    // ══════════════════════════════════════════════════════════════════════
+
+    const QUESTIONS = [
+      {
+        // Mirrors jfet_knowledge_basics.html's own Q1 structurally — 8
+        // shapes, 4 valid — but the validity RULE is MOSFET-specific: one
+        // arrow, on the SUBSTRATE lead (not gate), in=N/out=P. See
+        // ../../../assets/shapes/mosfet-symbols.svg's own header comment.
+        leftPanel: 'shapeGrid',
+        kind: 'multi',
+        shapeViewBox: '-55 -55 110 110',
+        text: () => `<b style="color:var(--colour-ui-primary)">Click</b> every shape below that is a <b class="colour-mosfet">valid</b> MOSFET transistor symbol. There are <b style="color:var(--colour-ui-correct)">4 correct</b> shapes among the 8 shown.`,
+        hint: () => `A valid symbol has exactly one arrow, on the substrate/body lead (never the drain or source lead). Pointing IN toward the channel means N-channel; pointing OUT means P-channel. Whether the channel line is broken or solid is NEVER a validity error — it just tells you enhancement or depletion.`,
+        options: () => shuffle([
+          { label: 'N-channel, enhancement (broken channel)', type: 'correct', shapeId: 'mosfet-n-e-shape' },
+          { label: 'N-channel, depletion (solid channel)',    type: 'correct', shapeId: 'mosfet-n-d-shape' },
+          { label: 'P-channel, enhancement (broken channel)', type: 'correct', shapeId: 'mosfet-p-e-shape' },
+          { label: 'P-channel, depletion (solid channel)',    type: 'correct', shapeId: 'mosfet-p-d-shape' },
+          { label: 'Arrow on drain lead, pointing in',  type: 'wrong', shapeId: 'mosfet-error-wronglead-in' },
+          { label: 'Arrow on drain lead, pointing out', type: 'wrong', shapeId: 'mosfet-error-wronglead-out' },
+          { label: 'Two arrows (drain &amp; source), both pointing in',  type: 'wrong', shapeId: 'mosfet-error-double-in' },
+          { label: 'Two arrows (drain &amp; source), both pointing out', type: 'wrong', shapeId: 'mosfet-error-double-out' }
+        ]),
+        correctExplain: (st) => {
+          const nums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(n => n).join(', ');
+          return `Shapes <b>${nums}</b> are the valid MOSFET symbols`;
+        },
+        working: (st) => {
+          const correctNums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join(', ');
+          const wrongNums = st.opts.map((o, i) => o.type === 'wrong' ? i + 1 : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-step">Valid symbols — shapes ${correctNums}:</div>
+    <div class="working-line">Each has exactly one arrow, on the <b style="color:var(--colour-ui-correct)">substrate/body lead</b>. The arrow points <b style="color:var(--colour-ui-correct)">into</b> the channel for N-channel, or <b style="color:var(--colour-ui-correct)">out of</b> the channel for P-channel. Whether the channel line is drawn broken (enhancement — no channel until V<sub>GS</sub> induces one) or solid (depletion — already conducts at V<sub>GS</sub>=0) is a separate, independent choice — it never affects whether the symbol is valid.</div>
+    <div class="working-step" style="margin-top:.6rem">Invalid symbols — shapes ${wrongNums}:</div>
+    <div class="working-line">Each breaks the one-arrow-on-the-substrate rule: two of them put their single arrow on a <b style="color:var(--colour-ui-wrong)">drain/source lead</b> instead — an arrow never belongs there — and the other two put <b style="color:var(--colour-ui-wrong)">two arrows</b> on the symbol at once (also on the wrong leads), when a real MOSFET symbol only ever has one, on the substrate.</div>`;
+        }
+      },
+      {
+        leftPanel: 'circuit',
+        kind: 'fill',
+        circuitConfig: { shapeId: 'mosfet-n-e-shape' },
+        slotIds: ['slotBoxTop', 'slotBoxG', 'slotBoxBottom'],
+        text: () => `This is an <b style="color:var(--colour-ui-primary)">N-channel MOSFET</b> (enhancement mode). <b style="color:var(--colour-ui-primary)">Click</b> a name below, then <b style="color:var(--colour-ui-primary)">click</b> the terminal it belongs to.`,
+        hint: () => `A MOSFET's usable terminals here are Gate, Drain and Source. Three of the names below belong to a different transistor family entirely — they won't fit anywhere on this diagram.`,
+        options: () => shuffle(mosfetFillOptions()),
+        correctExplain: mosfetFillCorrectExplain,
+        working: mosfetFillWorking
+      },
+      {
+        // Same fixed layout as Q2 — only the symbol changes (P-channel
+        // enhancement instead of N-channel). Drain is still top, Source
+        // still bottom; only the substrate arrow direction differs, which
+        // doesn't move any terminal's position.
+        leftPanel: 'circuit',
+        kind: 'fill',
+        circuitConfig: { shapeId: 'mosfet-p-e-shape' },
+        slotIds: ['slotBoxTop', 'slotBoxG', 'slotBoxBottom'],
+        text: () => `This is a <b style="color:var(--colour-ui-primary)">P-channel MOSFET</b> (enhancement mode). <b style="color:var(--colour-ui-primary)">Click</b> a name below, then <b style="color:var(--colour-ui-primary)">click</b> the terminal it belongs to.`,
+        hint: () => `Same 3 terminals as the N-channel device — only the substrate arrow direction differs, which doesn't change where Gate, Drain or Source sit. Three of the names below still belong to a different transistor family entirely.`,
+        options: () => shuffle(mosfetFillOptions()),
+        correctExplain: mosfetFillCorrectExplain,
+        working: mosfetFillWorking
+      },
+      {
+        // Objective: MOSFET vs JFET — the genuine differences once a
+        // student already knows JFET basics (gate construction, gate
+        // current/ESD sensitivity, enhancement-vs-depletion availability).
+        // No circuit panel needed — leftPanel left unset, defaults to
+        // 'none'.
+        kind: 'match',
+        columns: () => ['JFET', 'MOSFET'],
+        text: () => `Each feature below describes either a <b class="colour-jfet">JFET</b> or a <b class="colour-mosfet">MOSFET</b>. <b style="color:var(--colour-ui-primary)">Place</b> each one under the correct device.`,
+        hint: () => `Think about what physically separates the gate from the channel in each device — a reverse-biased junction, or an insulating layer with no junction at all?`,
+        options: () => shuffle([
+          { label: 'Gate is a reverse-biased PN junction', col: 0 },
+          { label: 'Gate is insulated by a layer of oxide, with no PN junction at all', col: 1 },
+          { label: 'Gate current is extremely small but technically non-zero (reverse-junction leakage)', col: 0 },
+          { label: 'Gate current is even closer to zero — but the gate oxide is fragile and can be destroyed by static discharge (ESD)', col: 1 },
+          { label: 'Only one type exists — always conducts fully at VGS=0, only ever turned further OFF as VGS increases in magnitude', col: 0 },
+          { label: 'Comes in two distinct types — enhancement (OFF at VGS=0, needs a threshold voltage to turn on) and depletion (ON at VGS=0, like a JFET)', col: 1 },
+        ]),
+        correctExplain: (st) => {
+          const wrongCount = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).length;
+          return wrongCount === 0 ? 'All 6 features correctly matched' : `${st.opts.length - wrongCount} of ${st.opts.length} features correctly matched`;
+        },
+        working: () => `
+    <div class="working-line">A <b class="colour-jfet">JFET</b>'s gate is a reverse-biased PN junction — current flow is blocked, but a real (tiny) leakage current still technically flows across it.</div>
+    <div class="working-line">A <b class="colour-mosfet">MOSFET</b>'s gate sits on top of a thin insulating oxide layer — there is no junction at all, so gate current is even closer to true zero. The trade-off is physical fragility: that thin oxide layer can be punctured by static electricity, which is why MOSFETs need ESD-safe handling that JFETs don't.</div>
+    <div class="working-total">The enhancement/depletion split is a MOSFET-only concept: a <b class="colour-jfet">JFET</b> is inherently depletion-only (built with a channel already there, only ever narrowed by V<sub>GS</sub>), while a <b class="colour-mosfet">MOSFET</b> can be manufactured either way — enhancement (the far more common type in real circuits) or depletion.</div>`
+      }
+    ];
+
+    // ── Fixed terminal-labelling click routing (Q2/Q3 share one layout) ──
+    const SLOT_COL = { slotBoxTop: 0, slotBoxG: 1, slotBoxBottom: 2 };
+    ['slotBoxTop', 'slotBoxG', 'slotBoxBottom'].forEach(id => {
+      document.getElementById(id).addEventListener('click', () => slotClicked(SLOT_COL[id]));
+    });
+
+    // Shared by Q2 (N-channel) and Q3 (P-channel) — the terminal names, and
+    // what counts as correct/mislabelled, don't depend on channel type.
+    function mosfetFillOptions() {
+      return [
+        { label: 'Drain',     poolHtml: 'Drain',     col: 0 },
+        { label: 'Gate',      poolHtml: 'Gate',      col: 1 },
+        { label: 'Source',    poolHtml: 'Source',    col: 2 },
+        { label: 'Base',      poolHtml: 'Base' },
+        { label: 'Emitter',   poolHtml: 'Emitter' },
+        { label: 'Collector', poolHtml: 'Collector' }
+      ];
+    }
+    function mosfetFillCorrectExplain(st) {
+      const wrongCount = st.slotPlaced.filter((p, slot) => p !== st.cor[slot]).length;
+      return wrongCount === 0 ? 'All 3 terminals correctly labelled' : `${st.slotPlaced.length - wrongCount} of ${st.slotPlaced.length} terminals correctly labelled`;
+    }
+    function mosfetFillWorking(st) {
+      const mistakes = st.slotPlaced
+        .map((p, slot) => p !== st.cor[slot] ? st.opts[p]?.label ?? '(left blank)' : null)
+        .filter(Boolean);
+      const mistakeLine = mistakes.length
+        ? `<div class="working-step" style="margin-top:.6rem">Mislabelled:</div><div class="working-line">${mistakes.join(', ')}</div>`
+        : '';
+      return `
+    <div class="working-step">A MOSFET's 3 usable terminals:</div>
+    <div class="working-line"><b style="color:var(--colour-ui-correct)">Drain</b> and <b style="color:var(--colour-ui-correct)">Source</b> are the two ends of the channel current flows through. <b style="color:var(--colour-ui-correct)">Gate</b> is the insulated control terminal — the voltage between gate and source is what controls how much current flows through the channel.</div>
+    <div class="working-step" style="margin-top:.6rem">Why Base, Emitter and Collector don't belong:</div>
+    <div class="working-line">Those are BJT terminal names, not MOSFET ones. A MOSFET is controlled by a <em>voltage</em> at an insulated gate, with no equivalent to a BJT's forward-biased base-emitter junction at all.</div>
+    ${mistakeLine}`;
+    }
+
+    function applyMosfetCircuitConfig(cfg) {
+      document.getElementById('mosfetTerminalUse').setAttribute('href', '#' + cfg.shapeId);
+    }
+
+    RENDER_EXTRA = () => {
+      document.getElementById('fillPoolWrap').style.display = isFill(QUESTIONS[cur]) ? '' : 'none';
+      const cfg = QUESTIONS[cur].circuitConfig;
+      if (cfg) applyMosfetCircuitConfig(cfg);
+    };
+
+    initQuizNav();
+    resetQuiz();
+    initQuizFromURL();
+  </script>
+</body>
+</html>
