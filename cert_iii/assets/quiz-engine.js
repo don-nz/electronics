@@ -238,7 +238,12 @@ function truthMistakeLine(labels, st) {
 function isAnswerCorrect(data, st) {
   if (isBits(data)) return st.clicks.every((row, r) => row.every((n, c) => bitFromClicks(n) === st.cor[r][c]));
   if (isTruth(data)) return st.clicks.every((n, r) => zFromClicks(n) === st.cor[r]);
-  if (isFill(data)) return st.slotPlaced.every((p, slot) => p === st.cor[slot]);
+  // cor[slot] === -1 means no pool option targets that slot at all — a
+  // slot that should CORRECTLY stay empty (e.g. a segment that's OFF for
+  // a given digit), not an unanswered one. Every existing kind:'fill'
+  // question provides one option per slot, so cor[slot] is never -1 for
+  // them and this branch never changes their behaviour.
+  if (isFill(data)) return st.slotPlaced.every((p, slot) => st.cor[slot] === -1 ? p === null : p === st.cor[slot]);
   if (isMatch(data)) {
     if (data.reusablePool) return st.assign.every((_, c) => isColumnCorrectReusable(st, c));
     if (data.matchByLabel) return st.corLabel.every((_, c) => matchColumnCorrect(st, c));
@@ -290,7 +295,7 @@ function fillCorrectSelection(i) {
   const data = QUESTIONS[i], st = Q[i];
   if (isBits(data)) st.clicks = st.cor.map(row => row.map(bit => bit + 1)); // clicks bit+1 -> bitFromClicks() lands on 0/1 (0 would land on blank)
   else if (isTruth(data)) st.clicks = st.cor.map(z => z + 1); // same +1 trick as bits: zFromClicks(z+1) lands back on z
-  else if (isFill(data)) st.slotPlaced = st.cor.slice();
+  else if (isFill(data)) st.slotPlaced = st.cor.map(c => c === -1 ? null : c); // -1 = correctly-empty slot, not a real pool-item index
   else if (isMatch(data)) {
     if (data.reusablePool) st.assign = st.assign.map((_, c) => st.opts.findIndex(o => o.cols.includes(c)));
     else st.place = st.cor.slice();
@@ -762,7 +767,7 @@ function setTruthInputCount(n) {
 function renderFill() {
   const st = Q[cur], data = QUESTIONS[cur];
   const picking = st.sel !== null;
-  const needsPick = !st.ans && !picking && st.slotPlaced.some(p => p === null);
+  const needsPick = !st.ans && !picking && st.slotPlaced.some((p, slot) => p === null && st.cor[slot] !== -1);
   const circuitNeedsPick = !st.ans && picking;
   const poolRowEl = document.getElementById('fillPoolRow');
   if (poolRowEl) poolRowEl.classList.toggle('needs-pick', needsPick);
@@ -922,7 +927,7 @@ function checkAnswer() {
     isMatch(data) ? (data.reusablePool ? st.assign.every(a => a !== null) : st.opts.every((o, i) => o.col === null || st.place[i] !== null)) :
     isBits(data) ? st.clicks.every(row => row.every(n => bitFromClicks(n) !== null)) :
     isTruth(data) ? st.clicks.every(n => zFromClicks(n) !== null) :
-    isFill(data) ? st.slotPlaced.every(p => p !== null) :
+    isFill(data) ? st.slotPlaced.every((p, slot) => p !== null || st.cor[slot] === -1) :
     (isMulti(data) ? st.sel.length > 0 : st.sel !== null);
   if (!complete) fillCorrectSelection(cur);
   st.ans = true;

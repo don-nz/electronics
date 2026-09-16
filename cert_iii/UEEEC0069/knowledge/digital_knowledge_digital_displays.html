@@ -124,6 +124,8 @@
     .circuit-slot-box.correct { stroke: var(--colour-ui-correct); }
     .circuit-slot-box.wrong { stroke: #ff3d66; }
     .circuit-slot-box.correct, .circuit-slot-box.wrong { cursor: default; }
+    .segment-bar { fill: var(--colour-border); transition: fill 0.15s; }
+    .segment-bar.placed { fill: var(--colour-ui-primary); }
     .segment-slot-html {
       display: flex; align-items: center; justify-content: center;
       font-family: var(--font-body); font-size: 18px; font-weight: 700;
@@ -150,17 +152,20 @@
          leftPanel:'none' (the default), matching this file's own
          "no circuit panel needed" convention everywhere else. -->
     <div class="circuit-col">
-      <div class="circuit-panel" id="circuitPanelFill" style="display:none">
+      <div class="circuit-panel" id="circuitPanel" style="display:none">
         <div class="panel-label">Click a letter below, then click a segment</div>
         <svg viewBox="-15 -25 235 330" xmlns="http://www.w3.org/2000/svg">
-          <!-- Dim background bars — the unlit "8," purely visual -->
-          <rect x="70" y="20" width="60" height="15" rx="6" style="fill: var(--colour-border)" />
-          <rect x="55" y="40" width="15" height="95" rx="6" style="fill: var(--colour-border)" />
-          <rect x="130" y="40" width="15" height="95" rx="6" style="fill: var(--colour-border)" />
-          <rect x="70" y="142" width="60" height="15" rx="6" style="fill: var(--colour-border)" />
-          <rect x="55" y="163" width="15" height="95" rx="6" style="fill: var(--colour-border)" />
-          <rect x="130" y="163" width="15" height="95" rx="6" style="fill: var(--colour-border)" />
-          <rect x="70" y="265" width="60" height="15" rx="6" style="fill: var(--colour-border)" />
+          <!-- Dim background bars — the unlit "8," purely visual. Each one
+               carries the id of the segment it represents (barA..barG) so
+               RENDER_EXTRA below can light it up blue once that letter has
+               been placed on its matching slot. -->
+          <rect id="barA" class="segment-bar" x="70" y="20" width="60" height="15" rx="6" />
+          <rect id="barF" class="segment-bar" x="55" y="40" width="15" height="95" rx="6" />
+          <rect id="barB" class="segment-bar" x="130" y="40" width="15" height="95" rx="6" />
+          <rect id="barG" class="segment-bar" x="70" y="142" width="60" height="15" rx="6" />
+          <rect id="barE" class="segment-bar" x="55" y="163" width="15" height="95" rx="6" />
+          <rect id="barC" class="segment-bar" x="130" y="163" width="15" height="95" rx="6" />
+          <rect id="barD" class="segment-bar" x="70" y="265" width="60" height="15" rx="6" />
 
           <!-- 7 slot boxes, one per segment, positioned the same way the
                teacher's own Figure 14 places its a-g labels (top, upper-
@@ -435,25 +440,34 @@
     <div class="working-total"><b>g</b> is the odd one out — the single segment across the middle, not part of the outer ring at all. This exact letter allocation is worth memorising outright: datasheets and decoder ICs both assume you already know it.</div>`
       },
       {
-        kind: 'multi',
+        leftPanel: 'circuit',
+        kind: 'fill',
+        slotIds: SLOT_IDS,
         // Objective: state each segment's condition for digits 0-9 (forward: digit -> segments).
-        text: () => 'To display the digit <b style="color:var(--colour-ui-primary)">4</b> on a seven-segment display, <b style="color:var(--colour-ui-primary)">select</b> every segment that must be ON.',
-        hint: () => 'A "4" is drawn from two vertical strokes on the right plus the middle bar — no top, no bottom.',
+        // Same click-a-letter/click-a-segment diagram as Q7, but now ALL
+        // 7 letters sit in the pool — a, d and e are genuine distractors
+        // (no `col` field at all, same convention as the Base/Emitter/
+        // Collector distractors in jfet_knowledge_basics.html's own fill
+        // question), so the CORRECT answer is placing b/c/f/g on their
+        // segments AND leaving a/d/e unplaced, not placing them anywhere.
+        // Relies on quiz-engine.js's own kind:'fill' support for slots
+        // with no matching option (cor=-1) being correctly-empty rather
+        // than unanswered — see that file's own isAnswerCorrect()/
+        // fillCorrectSelection() comments.
+        text: () => 'To display the digit <b style="color:var(--colour-ui-primary)">4</b>, <b style="color:var(--colour-ui-primary)">click</b> a letter below, then <b style="color:var(--colour-ui-primary)">click</b> every segment that must be ON. Only 4 of the 7 letters belong on the display — leave the other segments empty.',
+        hint: () => 'A "4" is drawn from two vertical strokes on the right plus the middle bar — no top, no bottom, no lower-left. Not every letter in the pool has a home.',
         options: () => shuffle([
-          { label: 'b (upper-right)', type: 'correct' },
-          { label: 'c (lower-right)', type: 'correct' },
-          { label: 'f (upper-left)', type: 'correct' },
-          { label: 'g (middle)', type: 'correct' },
-          { label: 'a (top)', type: 'wrong' },
-          { label: 'd (bottom)', type: 'wrong' },
-          { label: 'e (lower-left)', type: 'wrong' },
+          { label: 'b', poolHtml: 'b', col: 1 },
+          { label: 'c', poolHtml: 'c', col: 2 },
+          { label: 'f', poolHtml: 'f', col: 5 },
+          { label: 'g', poolHtml: 'g', col: 6 },
+          { label: 'a', poolHtml: 'a' },
+          { label: 'd', poolHtml: 'd' },
+          { label: 'e', poolHtml: 'e' },
         ]),
-        correctExplain: (st) => {
-          const nums = st.opts.map((o, i) => o.type === 'correct' ? LETTERS[i] : null).filter(Boolean).join(', ');
-          return `Options <b>${nums}</b> — segments b, c, f, g`;
-        },
+        correctExplain: () => 'Segments <b>b, c, f, g</b> ON — a, d and e stay OFF (empty).',
         working: () => `
-    <div class="working-total">A "4" is drawn from the upper-left stroke (<b>f</b>), the middle bar (<b>g</b>), and the full right-hand vertical (<b>b</b>+<b>c</b>) — the top (a), bottom (d) and lower-left (e) segments all stay off, since a "4" has no top bar, no bottom bar, and no stroke down the lower-left.</div>`
+    <div class="working-total">A "4" is drawn from the upper-left stroke (<b>f</b>), the middle bar (<b>g</b>), and the full right-hand vertical (<b>b</b>+<b>c</b>) — the top (a), bottom (d) and lower-left (e) segments all stay off, since a "4" has no top bar, no bottom bar, and no stroke down the lower-left. <b>a</b>, <b>d</b> and <b>e</b> are genuine distractors here — leaving them unplaced IS the correct answer, not a sign something's missing.</div>`
       },
       {
         // Objective: state each segment's condition for digits 0-9 (reverse: segments -> digit).
@@ -617,7 +631,15 @@
     // does. No circuitConfig swap needed (unlike the JFET/MOSFET terminal-
     // labelling files): this quiz only ever shows the one static diagram.
     RENDER_EXTRA = () => {
-      document.getElementById('fillPoolWrap').style.display = isFill(QUESTIONS[cur]) ? '' : 'none';
+      const fill = isFill(QUESTIONS[cur]);
+      document.getElementById('fillPoolWrap').style.display = fill ? '' : 'none';
+      if (fill) {
+        const placed = Q[cur].slotPlaced;
+        SLOT_IDS.forEach((slotId, i) => {
+          const bar = document.getElementById('bar' + slotId.slice(4));
+          if (bar) bar.classList.toggle('placed', placed[i] !== null);
+        });
+      }
     };
 
     initQuizNav();
