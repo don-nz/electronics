@@ -1,0 +1,629 @@
+<!--
+  Section 8 — "Digital displays" lesson objectives (photographed textbook
+  pages, 17 objectives): draw the LED schematic symbol and identify anode/
+  cathode; explain the series resistor's purpose; calculate a series
+  resistor's value given LED operating parameters and supply EMF; explain
+  the circuit operating an LED from a logic gate; explain why an LED must
+  be current-SUNK not sourced by a logic gate; list equipment using LED
+  seven-segment displays; label the segments in a seven-segment display;
+  state each segment's condition for digits 0-9; explain common-anode vs
+  common-cathode displays; explain decoder/driver ICs; list LED
+  seven-segment advantages/disadvantages; list equipment using LCDs;
+  explain reflective vs transmissive LCD operation; state the electrical
+  requirement to turn on an LCD segment; explain the circuit operating an
+  LCD segment from an XOR gate; list LCD advantages/disadvantages; use a
+  DMM/logic probe to test displays.
+
+  The final objective (DMM/logic-probe bench measurement) is deliberately
+  DEFERRED — needs physical hardware, matching the exact same split
+  already established by digital_knowledge_logic_families.html (and
+  digital_knowledge_logic_combos.html/boolean_algebra.html before it) for
+  their own bench-measurement objectives. The remaining 16 objectives are
+  all genuinely testable as knowledge/calculation/data-interpretation
+  questions, covered across Q1-17 (the segments-condition objective gets
+  2 questions — one forward lookup digit→segments, one reverse
+  segments→digit — since it's explicitly a two-directional skill).
+
+  Resistor calculation (Q3) reuses the teacher's own worked example
+  verbatim (VS=5V, LED forward voltage=1.8V, ILED=7mA → R=(5−1.8)/0.007≈
+  457Ω, not an E12 preferred value, so 390Ω or 470Ω is used in practice)
+  from the photographed Section 8-6 page, including that page's own
+  reasoning for why either nearby preferred value is an acceptable
+  substitute (the resulting current/brightness difference is too small
+  for the human eye to perceive).
+
+  Seven-segment lettering (Q7) reuses the teacher's own Figure 14
+  convention exactly: segments labelled a-g starting from the top,
+  clockwise (a=top, b=upper-right, c=lower-right, d=bottom,
+  e=lower-left, f=upper-left, g=middle) — this is the specific
+  "letter allocation to remember" the user flagged from that photo.
+  Segment-pattern questions (Q8/Q9) use the standard textbook 7-segment
+  truth table for a common font (the same widely-taught figures as
+  Floyd's Digital Fundamentals), not a specific manufacturer's datasheet.
+
+  UNLIKE most digital_knowledge_*.html files, this quiz mostly has no
+  circuit diagrams or gate shapes needing the full circuit-panel/
+  leftPanel apparatus — matching digital_knowledge_logic_families.html's
+  own precedent (see that file's header comment for the same reasoning).
+  Two exceptions:
+    - Q1 embeds a small self-contained inline <svg> directly in that
+      question's own text() string — light enough not to need any of the
+      shared circuit-panel machinery, but still genuinely visual for an
+      objective that literally says "draw the schematic symbol."
+    - Q7 (segment lettering) DOES use the full leftPanel:'circuit' +
+      kind:'fill' apparatus — originally built as a kind:'match' with
+      the letters a-g as fixed columns and position descriptions as pool
+      items, then inverted at the user's own request so the seven-
+      segment "8" itself is the visual target and the letters a-g are
+      the pool items being placed onto it, matching how the teacher's
+      own Figure 14 photo actually presents this (labels placed onto a
+      drawing of the display, not a table). Reuses the exact slot-box/
+      fill-pool mechanic already proven in jfet_knowledge_basics.html/
+      mosfet_knowledge_basics.html's own terminal-labelling questions —
+      see this file's own SLOT_IDS/RENDER_EXTRA for the (much simpler,
+      single fixed diagram, no circuitConfig swap needed) wiring.
+
+  Data-driven QUESTIONS[] engine, using 'multi', 'match' and one 'fill'
+  (Q7) — no 'truth'/'bits', nothing here produces a table of 0s/1s to
+  fill in.
+
+  Migrated to the shared cert_iii/assets/quiz-engine.js engine from the
+  start (project convention for all new quizzes) — just the standard
+  QUESTIONS[] data, Q7's own small SLOT_IDS/RENDER_EXTRA wiring, and the
+  trailing initQuizNav()/resetQuiz()/initQuizFromURL() bootstrap.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../assets/theme-init.js"></script>
+  <script src="../../assets/quiz-engine.js"></script>
+  <title>Digital Electronics Knowledge Quiz — Displays</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../assets/quiz-common.css">
+  <script src="../../assets/breadcrumb.js" defer></script>
+  <style>
+    .progress-wrap { display: flex; gap: .4rem; align-items: center; margin-bottom: 1rem; }
+    .led-symbol-wrap { display: flex; justify-content: center; margin: .6rem 0; }
+
+    /* Q7 (kind:'fill') — click a letter, then click a segment on the
+       seven-segment diagram. Same pool/slot-box styling convention as
+       jfet_knowledge_basics.html/mosfet_knowledge_basics.html's own
+       terminal-labelling fill questions. */
+    .circuit-panel { cursor: default; }
+    .fill-pool-wrap { margin-top: .8rem; }
+    .fill-pool-row { display: flex; align-items: center; gap: .5rem; }
+    .fill-pool-arrow { font-size: 1rem; color: var(--colour-ui-primary); opacity: 0; transition: opacity .15s; }
+    .fill-pool-row.needs-pick .fill-pool-arrow { opacity: 1; animation: fillArrowBounce .8s ease-in-out infinite; }
+    @keyframes fillArrowBounce { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(3px); } }
+    .fill-pool {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: .5rem;
+      padding: .8rem;
+      border: 2px dashed var(--colour-border);
+      border-radius: var(--radius-lg);
+      background: rgba(var(--colour-label-rgb), .05);
+      min-height: 3rem;
+      transition: border-color .15s, background .15s;
+    }
+    .fill-pool.needs-pick {
+      border-color: var(--colour-ui-primary);
+      border-style: solid;
+      background: rgba(var(--colour-ui-primary-rgb), .06);
+      animation: matchPoolPulse 1.1s ease-in-out infinite;
+    }
+    .fill-pool .match-chip { min-width: 56px; text-align: center; }
+    .circuit-slot-box { fill: var(--colour-panel); stroke: var(--colour-ui-primary); stroke-width: 1.5px; stroke-dasharray: 4,3; cursor: pointer; }
+    .circuit-slot-box.filled { stroke-dasharray: none; }
+    .circuit-slot-box.correct { stroke: var(--colour-ui-correct); }
+    .circuit-slot-box.wrong { stroke: #ff3d66; }
+    .circuit-slot-box.correct, .circuit-slot-box.wrong { cursor: default; }
+    .segment-slot-html {
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-body); font-size: 18px; font-weight: 700;
+      color: var(--colour-ui-primary); text-align: center; line-height: 1;
+      pointer-events: none; width: 100%; height: 100%;
+    }
+    .segment-slot-html.correct { color: var(--colour-ui-correct); }
+    .segment-slot-html.wrong { color: #ff3d66; }
+  </style>
+</head>
+
+<body>
+  <div class="crumb" id="crumb" data-current="Digital Displays"></div>
+  <header>
+    <h1>Digital Electronics</h1>
+    <p>Conceptual Questions · LED &amp; LCD Displays · Seven-Segment · Decoder/Driver ICs</p>
+  </header>
+
+  <div class="quiz-wrap single-col" id="quizWrap">
+
+    <!-- Q7's seven-segment diagram (leftPanel:'circuit', kind:'fill') —
+         hidden by default, shown only for Q7 via quiz-engine.js's own
+         swapLeftPanel(). Every other question in this quiz uses
+         leftPanel:'none' (the default), matching this file's own
+         "no circuit panel needed" convention everywhere else. -->
+    <div class="circuit-col">
+      <div class="circuit-panel" id="circuitPanelFill" style="display:none">
+        <div class="panel-label">Click a letter below, then click a segment</div>
+        <svg viewBox="-15 -25 235 330" xmlns="http://www.w3.org/2000/svg">
+          <!-- Dim background bars — the unlit "8," purely visual -->
+          <rect x="70" y="20" width="60" height="15" rx="6" style="fill: var(--colour-border)" />
+          <rect x="55" y="40" width="15" height="95" rx="6" style="fill: var(--colour-border)" />
+          <rect x="130" y="40" width="15" height="95" rx="6" style="fill: var(--colour-border)" />
+          <rect x="70" y="142" width="60" height="15" rx="6" style="fill: var(--colour-border)" />
+          <rect x="55" y="163" width="15" height="95" rx="6" style="fill: var(--colour-border)" />
+          <rect x="130" y="163" width="15" height="95" rx="6" style="fill: var(--colour-border)" />
+          <rect x="70" y="265" width="60" height="15" rx="6" style="fill: var(--colour-border)" />
+
+          <!-- 7 slot boxes, one per segment, positioned the same way the
+               teacher's own Figure 14 places its a-g labels (top, upper-
+               right, lower-right, bottom, lower-left, upper-left, and
+               middle sitting to the left). Click handlers wired in JS
+               below (see SLOT_IDS/slotClicked). -->
+          <g id="slotA" class="circuit-slot-box" transform="translate(78,-18)">
+            <rect width="44" height="30" rx="4" />
+            <foreignObject x="0" y="0" width="44" height="30">
+              <div xmlns="http://www.w3.org/1999/xhtml" id="slotAText" class="segment-slot-html"></div>
+            </foreignObject>
+          </g>
+          <g id="slotB" class="circuit-slot-box" transform="translate(155,72)">
+            <rect width="44" height="30" rx="4" />
+            <foreignObject x="0" y="0" width="44" height="30">
+              <div xmlns="http://www.w3.org/1999/xhtml" id="slotBText" class="segment-slot-html"></div>
+            </foreignObject>
+          </g>
+          <g id="slotC" class="circuit-slot-box" transform="translate(155,195)">
+            <rect width="44" height="30" rx="4" />
+            <foreignObject x="0" y="0" width="44" height="30">
+              <div xmlns="http://www.w3.org/1999/xhtml" id="slotCText" class="segment-slot-html"></div>
+            </foreignObject>
+          </g>
+          <g id="slotD" class="circuit-slot-box" transform="translate(78,230)">
+            <rect width="44" height="30" rx="4" />
+            <foreignObject x="0" y="0" width="44" height="30">
+              <div xmlns="http://www.w3.org/1999/xhtml" id="slotDText" class="segment-slot-html"></div>
+            </foreignObject>
+          </g>
+          <g id="slotE" class="circuit-slot-box" transform="translate(1,195)">
+            <rect width="44" height="30" rx="4" />
+            <foreignObject x="0" y="0" width="44" height="30">
+              <div xmlns="http://www.w3.org/1999/xhtml" id="slotEText" class="segment-slot-html"></div>
+            </foreignObject>
+          </g>
+          <g id="slotF" class="circuit-slot-box" transform="translate(1,72)">
+            <rect width="44" height="30" rx="4" />
+            <foreignObject x="0" y="0" width="44" height="30">
+              <div xmlns="http://www.w3.org/1999/xhtml" id="slotFText" class="segment-slot-html"></div>
+            </foreignObject>
+          </g>
+          <g id="slotG" class="circuit-slot-box" transform="translate(78,105)">
+            <rect width="44" height="30" rx="4" />
+            <foreignObject x="0" y="0" width="44" height="30">
+              <div xmlns="http://www.w3.org/1999/xhtml" id="slotGText" class="segment-slot-html"></div>
+            </foreignObject>
+          </g>
+        </svg>
+      </div>
+    </div>
+
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <!-- Single reusable question panel — populated from QUESTIONS[cur] by renderQuestion() -->
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+          <!-- Fill-in pool — shown only for kind:'fill' questions (Q7),
+               toggled via RENDER_EXTRA below. -->
+          <div class="fill-pool-wrap" id="fillPoolWrap" style="display:none">
+            <div class="fill-pool-row" id="fillPoolRow">
+              <div class="fill-pool-arrow">▶</div>
+              <div class="fill-pool" id="fillPool"></div>
+            </div>
+          </div>
+
+          <div class="options" id="qOptions"></div>
+          <div class="match-wrap" id="qMatch" style="display:none">
+            <div class="match-pool-row" id="matchPoolRow">
+              <div class="match-pool-arrow">▶</div>
+              <div class="match-pool" id="matchPool"></div>
+            </div>
+            <div class="match-columns" id="matchColumns"></div>
+          </div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Summary -->
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // Small self-contained LED symbol for Q1 — NOT a master-shape copy
+    // (this quiz has no circuit-panel apparatus at all), just a one-off
+    // inline diagram sized to sit inside a question card. Terminal X is
+    // the flat/wide (anode) side, terminal Y is the bar (cathode) side.
+    const LED_SYMBOL_SVG = `
+    <div class="led-symbol-wrap">
+      <svg width="180" height="90" viewBox="0 0 180 90" xmlns="http://www.w3.org/2000/svg">
+        <line x1="10" y1="45" x2="55" y2="45" style="stroke: var(--colour-diode)" stroke-width="3" stroke-linecap="round" />
+        <polygon points="55,25 55,65 95,45" style="fill: var(--colour-diode)" />
+        <line x1="95" y1="25" x2="95" y2="65" style="stroke: var(--colour-diode)" stroke-width="4" />
+        <line x1="95" y1="45" x2="140" y2="45" style="stroke: var(--colour-diode)" stroke-width="3" stroke-linecap="round" />
+        <path d="M 72,20 L 87,5 M 87,5 L 79,5 M 87,5 L 87,13" style="stroke: var(--colour-diode)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+        <path d="M 85,30 L 100,15 M 100,15 L 92,15 M 100,15 L 100,23" style="stroke: var(--colour-diode)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+        <text x="10" y="75" fill="var(--colour-text)" font-size="16" font-weight="bold" text-anchor="start">X</text>
+        <text x="140" y="75" fill="var(--colour-text)" font-size="16" font-weight="bold" text-anchor="end">Y</text>
+      </svg>
+    </div>`;
+
+    // Q7's seven-segment fill diagram — 7 fixed slot ids, one per segment
+    // (a-g), in the same order the teacher's own Figure 14 letters them.
+    // Click routing: each slot box calls slotClicked() with its own LOCAL
+    // index into SLOT_IDS (quiz-engine.js's own kind:'fill' contract),
+    // wired once here rather than inline per-element, same pattern as
+    // jfet_knowledge_basics.html/mosfet_knowledge_basics.html's own
+    // SLOT_COL wiring.
+    const SLOT_IDS = ['slotA', 'slotB', 'slotC', 'slotD', 'slotE', 'slotF', 'slotG'];
+    SLOT_IDS.forEach((id, i) => {
+      document.getElementById(id).addEventListener('click', () => slotClicked(i));
+    });
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS — LED symbol/resistor/gate-drive, seven-segment displays,
+    // decoder/driver ICs, LCDs. 'multi', 'match' and one 'fill' (Q7).
+    // ══════════════════════════════════════════════════════════════════════
+
+    const QUESTIONS = [
+      {
+        // Objective: draw the LED schematic symbol and identify anode/cathode.
+        text: () => `Here is a standard <b class="colour-diode">LED</b> schematic symbol.${LED_SYMBOL_SVG}Which terminal is the <b class="colour-diode">anode</b>, and which is the <b class="colour-diode">cathode</b>?`,
+        hint: () => 'The two small arrows escaping the triangle represent emitted light — that\'s what marks this as an LED rather than a plain diode. The triangle itself still follows the same rule as any diode symbol: it points from anode to cathode.',
+        options: () => shuffle([
+          { label: 'X is the anode (flat/wide side of the triangle); Y is the cathode (the bar)', type: 'correct' },
+          { label: 'X is the cathode; Y is the anode', type: 'wrong' },
+          { label: 'Both X and Y are anodes — an LED has two anode leads', type: 'wrong' },
+          { label: 'The light-ray arrows mark the cathode, not the bar', type: 'wrong' },
+        ]),
+        correctExplain: () => 'X = <b class="colour-diode">anode</b> (triangle base); Y = <b class="colour-diode">cathode</b> (bar).',
+        working: () => `
+    <div class="working-line">An <b class="colour-diode">LED</b> symbol is a standard diode triangle-and-bar with two small arrows added to show light being emitted — the arrows are purely decorative markers for "this diode glows," they don't change how the terminals are read.</div>
+    <div class="working-total">Reading the diode symbol itself: the triangle's flat/wide side is the <b class="colour-diode">anode</b>, and the bar it points into is the <b class="colour-diode">cathode</b> — current flows (and the LED lights) from anode to cathode, exactly like any other forward-biased diode.</div>`
+      },
+      {
+        // Objective: explain the purpose of the series resistor.
+        text: () => 'What is the purpose of the <b class="colour-resistor">resistor</b> connected in series with an <b class="colour-diode">LED</b>?',
+        hint: () => 'An LED\'s own forward voltage barely changes once it\'s conducting — think about what happens to current if nothing else in the circuit limits it.',
+        options: () => shuffle([
+          { label: 'To limit the <b class="colour-current">current</b> through the <b class="colour-diode">LED</b> to a safe value, protecting it from damage', type: 'correct' },
+          { label: 'To increase the LED\'s brightness beyond what it could otherwise produce', type: 'wrong' },
+          { label: 'To reverse-bias the LED so it doesn\'t light continuously', type: 'wrong' },
+          { label: 'To convert the LED\'s light output into an electrical signal', type: 'wrong' },
+        ]),
+        correctExplain: () => `It limits the <b class="colour-current">current</b> through the <b class="colour-diode">LED</b> to a safe value.`,
+        working: () => `
+    <div class="working-total">An <b class="colour-diode">LED</b>'s forward voltage stays almost constant once conducting — without something else in the circuit to set the current, an LED wired directly across a supply would draw an ever-increasing, ultimately destructive <b class="colour-current">current</b>. A series <b class="colour-resistor">resistor</b> is what actually sets — and limits — how much current flows.</div>`
+      },
+      {
+        // Objective: calculate a series resistor's value given LED operating
+        // parameters and supply EMF — the teacher's own worked example.
+        text: () => 'A <b class="colour-supply">5 V</b> supply drives an <b class="colour-diode">LED</b> with a forward voltage of <b class="colour-diode">1.8 V</b> and a nominal operating <b class="colour-current">current</b> of <b class="colour-current">7 mA</b>. Using R = V<sub>R</sub>/I<sub>LED</sub>, what series <b class="colour-resistor">resistor</b> value should be used?',
+        hint: () => 'First find VR, the voltage actually dropped across the resistor — the supply voltage minus the LED\'s own forward voltage — then divide by the LED current.',
+        options: () => shuffle([
+          { label: `<b class="colour-resistor">R</b> = ${frac('<b class="colour-resistor">V<sub>R</sub></b>', '<b class="colour-current">I<sub>LED</sub></b>')} = ${frac('<b class="colour-supply">5V</b> − <b class="colour-diode">1.8V</b>', '<b class="colour-current">7mA</b>')} = ${frac('3.2V', '7mA')} ≈ <b class="colour-resistor">457 Ω</b>`, type: 'correct' },
+          { label: `<b class="colour-resistor">R</b> = ${frac('<b class="colour-supply">V<sub>S</sub></b>', '<b class="colour-current">I<sub>LED</sub></b>')} = ${frac('<b class="colour-supply">5V</b>', '<b class="colour-current">7mA</b>')} ≈ <b>714 Ω</b> (forgot to subtract the LED's own forward voltage)`, type: 'wrong' },
+          { label: `<b class="colour-resistor">R</b> = ${frac('<b class="colour-resistor">V<sub>R</sub></b>', '<b class="colour-current">I<sub>LED</sub></b>')} = ${frac('<b class="colour-supply">5V</b> + <b class="colour-diode">1.8V</b>', '<b class="colour-current">7mA</b>')} = ${frac('6.8V', '7mA')} ≈ <b>971 Ω</b>`, type: 'wrong' },
+          { label: `<b class="colour-resistor">R</b> = <b class="colour-resistor">V<sub>R</sub></b> × <b class="colour-current">I<sub>LED</sub></b> = 3.2V × 7mA ≈ <b>0.0224 Ω</b> (multiplied instead of dividing)`, type: 'wrong' },
+        ]),
+        correctExplain: () => `<b class="colour-resistor">R</b> = (<b class="colour-supply">5V</b> − <b class="colour-diode">1.8V</b>) / <b class="colour-current">7mA</b> ≈ <b class="colour-resistor">457 Ω</b>`,
+        working: () => `
+    <div class="working-formula-row"><b class="colour-resistor">V<sub>R</sub></b> = <b class="colour-supply">V<sub>S</sub></b> − <b class="colour-diode">V<sub>LED</sub></b> = 5 V − 1.8 V = 3.2 V</div>
+    <div class="working-formula-row"><b class="colour-resistor">R</b> = ${frac('<b class="colour-resistor">V<sub>R</sub></b>', '<b class="colour-current">I<sub>LED</sub></b>')} = ${frac('3.2 V', '7 mA')}</div>
+    <div class="working-total"><b class="colour-resistor">R</b> ≈ 457 Ω. 457 Ω isn't an E12 preferred value, so <b class="colour-resistor">390 Ω</b> or <b class="colour-resistor">470 Ω</b> would be used in practice — 390 Ω pushes the current (and brightness) a little higher, 470 Ω a little lower, but the resulting difference in LED brightness either way is too small for the human eye to actually notice.</div>`
+      },
+      {
+        // Objective: explain the circuit operating an LED from a logic gate.
+        text: () => 'What does a typical circuit for driving an <b class="colour-diode">LED</b> from a logic gate output consist of?',
+        hint: () => 'Think about what\'s needed on top of the gate itself — the gate alone can\'t safely drive an LED with no other components at all.',
+        options: () => shuffle([
+          { label: 'The gate output, a series current-limiting <b class="colour-resistor">resistor</b>, and the <b class="colour-diode">LED</b>, all connected in one loop between the supply rail and the gate output pin', type: 'correct' },
+          { label: 'The LED connected directly across the gate\'s output pins with no other components', type: 'wrong' },
+          { label: 'A separate LED power supply, entirely disconnected from the logic gate', type: 'wrong' },
+          { label: 'Two logic gates wired directly to each terminal of the LED, with no resistor', type: 'wrong' },
+        ]),
+        correctExplain: () => `The gate output, a series <b class="colour-resistor">resistor</b>, and the <b class="colour-diode">LED</b> — one loop, resistor included.`,
+        working: () => `
+    <div class="working-total">Exactly the same current-limiting reasoning as the earlier resistor question applies here — a logic gate output is still just a voltage source from the <b class="colour-diode">LED</b>'s point of view, so it still needs a series <b class="colour-resistor">resistor</b> to set a safe operating current. The complete loop runs from the supply rail, through the LED, through the resistor, to (or from) the gate's own output pin.</div>`
+      },
+      {
+        // Objective: explain why an LED must be current-sunk, not sourced.
+        text: () => 'Why is an <b class="colour-diode">LED</b> typically wired so the logic gate SINKS its current, rather than SOURCES it?',
+        hint: () => 'Compare a standard gate\'s IOL (sinking) rating against its IOH (sourcing) rating — they\'re usually not the same size.',
+        options: () => shuffle([
+          { label: 'A gate\'s sinking <b class="colour-current">current</b> capability (I<sub>OL</sub>) is usually much higher than its sourcing capability (I<sub>OH</sub>), so sinking comfortably supplies the current an LED needs', type: 'correct' },
+          { label: 'Logic gates are physically unable to source any current at all', type: 'wrong' },
+          { label: 'Sourcing current would reverse-bias the LED, so it would never light', type: 'wrong' },
+          { label: 'There is no real difference — either method works exactly the same', type: 'wrong' },
+        ]),
+        correctExplain: () => `<b class="colour-current">I<sub>OL</sub></b> (sink) is usually far higher than <b class="colour-current">I<sub>OH</sub></b> (source) on standard logic outputs.`,
+        working: () => `
+    <div class="working-line">Sinking means the <b class="colour-diode">LED</b>'s cathode side connects (through the resistor) toward the gate's output pin, with the anode toward the supply rail — the gate output going LOW is what turns the LED on, pulling current IN to the pin.</div>
+    <div class="working-total">Standard TTL and CMOS outputs are typically specified to sink far more current (<b class="colour-current">I<sub>OL</sub></b>) than they can source (<b class="colour-current">I<sub>OH</sub></b>) — so wiring the LED to be sunk, rather than sourced, gets comfortably more current headroom from the same gate.</div>`
+      },
+      {
+        kind: 'multi',
+        // Objective: list equipment using LED seven-segment displays.
+        text: () => '<b style="color:var(--colour-ui-primary)">Select</b> every piece of equipment likely to use an <b class="colour-diode">LED</b> seven-segment display.',
+        hint: () => 'Seven-segment displays are simple, cheap, and only ever show digits (and a handful of letters) — think of equipment that just needs a small numeric readout.',
+        options: () => shuffle([
+          { label: 'Digital alarm clock', type: 'correct' },
+          { label: 'Microwave oven timer display', type: 'correct' },
+          { label: 'Basic calculator', type: 'correct' },
+          { label: 'Smartphone touchscreen', type: 'wrong' },
+        ]),
+        correctExplain: (st) => {
+          const nums = st.opts.map((o, i) => o.type === 'correct' ? LETTERS[i] : null).filter(Boolean).join(', ');
+          return `Options <b>${nums}</b> — alarm clock, microwave timer, basic calculator`;
+        },
+        working: () => `
+    <div class="working-total">Seven-segment displays are a natural fit anywhere only digits (plus a few letters) need to be shown — clocks, timers, and simple calculators are classic examples. A smartphone touchscreen needs full graphics and colour, far beyond what a handful of fixed segments can produce.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        kind: 'fill',
+        slotIds: SLOT_IDS,
+        // Objective: label the segments in a seven-segment display — the
+        // teacher's own Figure 14 lettering (a-g, from the top, clockwise).
+        // Inverted from a text-description match into a click-a-letter,
+        // click-a-segment exercise on an actual seven-segment "8" — the
+        // letters a-g are the pool items now, and the segments themselves
+        // (not text descriptions) are what they get placed onto.
+        text: () => 'A seven-segment display\'s segments are labelled a-g starting from the top. <b style="color:var(--colour-ui-primary)">Click</b> a letter below, then <b style="color:var(--colour-ui-primary)">click</b> the segment it belongs to.',
+        hint: () => 'Starting at the top segment and working clockwise around the outside gives a, b, c, d, e, f — leaving g for the one segment in the middle.',
+        options: () => shuffle([
+          { label: 'a', poolHtml: 'a', col: 0 },
+          { label: 'b', poolHtml: 'b', col: 1 },
+          { label: 'c', poolHtml: 'c', col: 2 },
+          { label: 'd', poolHtml: 'd', col: 3 },
+          { label: 'e', poolHtml: 'e', col: 4 },
+          { label: 'f', poolHtml: 'f', col: 5 },
+          { label: 'g', poolHtml: 'g', col: 6 },
+        ]),
+        correctExplain: (st) => {
+          const wrongCount = st.slotPlaced.filter((p, slot) => p !== st.cor[slot]).length;
+          return wrongCount === 0 ? 'All 7 correctly matched' : `${st.slotPlaced.length - wrongCount} of ${st.slotPlaced.length} correctly matched`;
+        },
+        working: () => `
+    <div class="working-line">Starting at the top and going clockwise around the OUTSIDE of the display: <b>a</b>=top, <b>b</b>=upper-right, <b>c</b>=lower-right, <b>d</b>=bottom, <b>e</b>=lower-left, <b>f</b>=upper-left.</div>
+    <div class="working-total"><b>g</b> is the odd one out — the single segment across the middle, not part of the outer ring at all. This exact letter allocation is worth memorising outright: datasheets and decoder ICs both assume you already know it.</div>`
+      },
+      {
+        kind: 'multi',
+        // Objective: state each segment's condition for digits 0-9 (forward: digit -> segments).
+        text: () => 'To display the digit <b style="color:var(--colour-ui-primary)">4</b> on a seven-segment display, <b style="color:var(--colour-ui-primary)">select</b> every segment that must be ON.',
+        hint: () => 'A "4" is drawn from two vertical strokes on the right plus the middle bar — no top, no bottom.',
+        options: () => shuffle([
+          { label: 'b (upper-right)', type: 'correct' },
+          { label: 'c (lower-right)', type: 'correct' },
+          { label: 'f (upper-left)', type: 'correct' },
+          { label: 'g (middle)', type: 'correct' },
+          { label: 'a (top)', type: 'wrong' },
+          { label: 'd (bottom)', type: 'wrong' },
+          { label: 'e (lower-left)', type: 'wrong' },
+        ]),
+        correctExplain: (st) => {
+          const nums = st.opts.map((o, i) => o.type === 'correct' ? LETTERS[i] : null).filter(Boolean).join(', ');
+          return `Options <b>${nums}</b> — segments b, c, f, g`;
+        },
+        working: () => `
+    <div class="working-total">A "4" is drawn from the upper-left stroke (<b>f</b>), the middle bar (<b>g</b>), and the full right-hand vertical (<b>b</b>+<b>c</b>) — the top (a), bottom (d) and lower-left (e) segments all stay off, since a "4" has no top bar, no bottom bar, and no stroke down the lower-left.</div>`
+      },
+      {
+        // Objective: state each segment's condition for digits 0-9 (reverse: segments -> digit).
+        text: () => 'Segments <b style="color:var(--colour-ui-primary)">a, f, g, c, d</b> are ON; b and e are OFF. Which digit is being displayed?',
+        hint: () => 'Sketch it: top bar, upper-left stroke, middle bar, lower-right stroke, bottom bar — no upper-right, no lower-left.',
+        options: () => shuffle([
+          { label: '5', type: 'correct' },
+          { label: '2', type: 'wrong' },
+          { label: '6', type: 'wrong' },
+          { label: '9', type: 'wrong' },
+        ]),
+        correctExplain: () => 'Digit <b>5</b> — a, f, g, c, d ON; b, e OFF.',
+        working: () => `
+    <div class="working-total">Top bar (a) + upper-left stroke (f) + middle bar (g) + lower-right stroke (c) + bottom bar (d), with the upper-right (b) and lower-left (e) strokes both off, traces exactly the shape of a "5". "2" instead needs b and e ON with c and f OFF — the mirror-image pattern.</div>`
+      },
+      {
+        kind: 'match',
+        // Objective: explain common-anode vs common-cathode displays.
+        columns: () => ['Common anode', 'Common cathode'],
+        text: () => 'Each statement below describes a seven-segment display wiring style. <b style="color:var(--colour-ui-primary)">Place</b> each one under the correct type.',
+        hint: () => 'The "common" pin is the one internal connection shared by all 7 (or 8, with decimal point) segment LEDs — think about which terminal that is, and what that means for how each segment gets turned on.',
+        options: () => shuffle([
+          { label: 'All segment LEDs share a common <b class="colour-diode">ANODE</b> pin, tied to the supply rail', col: 0 },
+          { label: 'Individual segments are turned ON by driving their own pin LOW (active-LOW)', col: 0 },
+          { label: 'All segment LEDs share a common <b class="colour-diode">CATHODE</b> pin, tied to ground', col: 1 },
+          { label: 'Individual segments are turned ON by driving their own pin HIGH (active-HIGH)', col: 1 },
+        ]),
+        correctExplain: (st) => {
+          const wrongCount = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).length;
+          return wrongCount === 0 ? 'All 4 correctly matched' : `${st.opts.length - wrongCount} of ${st.opts.length} correctly matched`;
+        },
+        working: () => `
+    <div class="working-line">A <b>common-anode</b> display ties every segment <b class="colour-diode">LED</b>'s <b class="colour-diode">anode</b> together to the supply rail — an individual segment lights when ITS OWN pin is pulled LOW, sinking current away through it (matching the sinking-is-preferred reasoning from earlier in this quiz).</div>
+    <div class="working-total">A <b>common-cathode</b> display ties every segment's <b class="colour-diode">cathode</b> together to ground instead — a segment lights when its own pin is driven HIGH, sourcing current into it. The two types need opposite driver logic (active-LOW vs active-HIGH) even though they display exactly the same digits.</div>`
+      },
+      {
+        // Objective: explain the function of display decoder/driver ICs.
+        text: () => 'What is the function of a BCD-to-seven-segment decoder/driver IC?',
+        hint: () => 'Think about what has to happen between "a binary/BCD number arrives on 4 input pins" and "the correct pattern of segments lights up."',
+        options: () => shuffle([
+          { label: 'It converts a BCD (or binary) input code into the correct combination of segment-drive outputs needed to display that digit', type: 'correct' },
+          { label: 'It converts a seven-segment display\'s light output back into a BCD code', type: 'wrong' },
+          { label: 'It amplifies the seven-segment display\'s own light output', type: 'wrong' },
+          { label: 'It stores previously-displayed digits in memory', type: 'wrong' },
+        ]),
+        correctExplain: () => 'It converts a BCD/binary input into the right pattern of segment outputs.',
+        working: () => `
+    <div class="working-total">Rather than a designer working out and wiring up which individual segments need to be a/b/c/d/e/f/g for every possible digit, a decoder/driver IC (e.g. the classic 7447/7448/4511 family) takes a 4-bit BCD input and internally does that translation, producing the correct 7-segment output pattern directly — and often supplying enough drive current to run the segments directly too, hence "driver" as well as "decoder."</div>`
+      },
+      {
+        kind: 'match',
+        // Objective: list LED seven-segment display advantages/disadvantages.
+        columns: () => ['Advantage', 'Disadvantage'],
+        text: () => 'Each statement below describes a property of <b class="colour-diode">LED</b> seven-segment displays. <b style="color:var(--colour-ui-primary)">Place</b> each one under Advantage or Disadvantage.',
+        hint: () => 'LEDs are their own light source — think about what that buys you, and what it costs you, compared with a display that doesn\'t generate its own light.',
+        options: () => shuffle([
+          { label: 'Bright and clearly visible even in low ambient light or darkness', col: 0 },
+          { label: 'Fast switching speed, with no perceptible lag', col: 0 },
+          { label: 'Relatively high current/power consumption, since every lit segment is its own small light source', col: 1 },
+          { label: 'Harder to read in very bright ambient light (e.g. direct sunlight) than a reflective display', col: 1 },
+        ]),
+        correctExplain: (st) => {
+          const wrongCount = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).length;
+          return wrongCount === 0 ? 'All 4 correctly matched' : `${st.opts.length - wrongCount} of ${st.opts.length} correctly matched`;
+        },
+        working: () => `
+    <div class="working-line">Because each segment generates its own light, LED displays are bright, sharp, and fast — genuinely strong <b>advantages</b>, especially in dim environments.</div>
+    <div class="working-total">That same "generates its own light" property is also the source of its <b>disadvantages</b>: every lit segment draws real current (adding up across a multi-digit display), and in very bright ambient light the display's own light output can be washed out — the opposite problem to a reflective display, which actually gets easier to read in bright light.</div>`
+      },
+      {
+        kind: 'multi',
+        // Objective: list equipment using LCDs.
+        text: () => '<b style="color:var(--colour-ui-primary)">Select</b> every piece of equipment likely to use an LCD display.',
+        hint: () => 'LCDs are prized for extremely low power consumption — think of small, often battery-powered equipment meant to run for a long time.',
+        options: () => shuffle([
+          { label: 'Digital wristwatch', type: 'correct' },
+          { label: 'Handheld multimeter', type: 'correct' },
+          { label: 'Laptop screen', type: 'correct' },
+          { label: 'Incandescent light bulb', type: 'wrong' },
+        ]),
+        correctExplain: (st) => {
+          const nums = st.opts.map((o, i) => o.type === 'correct' ? LETTERS[i] : null).filter(Boolean).join(', ');
+          return `Options <b>${nums}</b> — wristwatch, multimeter, laptop screen`;
+        },
+        working: () => `
+    <div class="working-total">LCDs range from tiny reflective segment displays (watches, multimeters — chosen specifically for their extremely low power draw) up to large backlit transmissive panels (laptop and monitor screens). An incandescent bulb isn't a display technology at all, let alone an LCD.</div>`
+      },
+      {
+        kind: 'match',
+        // Objective: explain reflective vs transmissive LCD operation.
+        columns: () => ['Reflective', 'Transmissive'],
+        text: () => 'Each statement below describes an LCD operating mode. <b style="color:var(--colour-ui-primary)">Place</b> each one under Reflective or Transmissive.',
+        hint: () => 'One mode relies on light that\'s already there in the room; the other brings its own light source built in.',
+        options: () => shuffle([
+          { label: 'Relies on ambient light passing through the display and reflecting off a mirror-like backing layer', col: 0 },
+          { label: 'Has no backlight — unreadable in complete darkness', col: 0 },
+          { label: 'Uses its own backlight, shining through the display from behind', col: 1 },
+          { label: 'Fully readable even in complete darkness, but consumes more power than a reflective display', col: 1 },
+        ]),
+        correctExplain: (st) => {
+          const wrongCount = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).length;
+          return wrongCount === 0 ? 'All 4 correctly matched' : `${st.opts.length - wrongCount} of ${st.opts.length} correctly matched`;
+        },
+        working: () => `
+    <div class="working-line">A <b>reflective</b> LCD (a basic watch or calculator display) has a mirrored backing layer — it uses whatever ambient light is already available, passing through the liquid crystal twice (in, reflect, out), and needs no power at all just to be visible. It goes dark in a genuinely dark room, the same way a printed page does.</div>
+    <div class="working-total">A <b>transmissive</b> LCD (a laptop or phone screen) instead has its own backlight behind the panel, shining light THROUGH it toward the viewer — fully usable in the dark, but that backlight is a real, continuous power cost a reflective display never pays.</div>`
+      },
+      {
+        // Objective: state the electrical requirement to turn on an LCD segment.
+        text: () => 'What kind of voltage must be applied across an LCD segment to turn it on?',
+        hint: () => 'Think about what happens to a liquid crystal material — and to the display itself — if it\'s left under a steady, unchanging DC voltage for a long time.',
+        options: () => shuffle([
+          { label: 'An AC voltage — a sustained DC voltage would chemically damage the liquid crystal material over time', type: 'correct' },
+          { label: 'A steady DC voltage, the higher the better', type: 'wrong' },
+          { label: 'No voltage at all — LCD segments switch using light alone', type: 'wrong' },
+          { label: 'A single, momentary DC pulse, with no voltage needed afterward', type: 'wrong' },
+        ]),
+        correctExplain: () => 'An <b>AC</b> voltage — sustained DC would degrade the liquid crystal.',
+        working: () => `
+    <div class="working-total">A continuous DC voltage across a liquid crystal segment drives an electrochemical (electrolysis-like) process that permanently damages the material — visible as a "ghost" image burned into the display over time. Driving the segment with AC instead (equal time spent with the voltage each way round) achieves the same electric-field effect needed to turn the segment on, with zero net DC component over time.</div>`
+      },
+      {
+        // Objective: explain the circuit operating an LCD segment from an XOR gate.
+        text: () => 'An LCD segment is driven from an XOR gate, with one input tied to the display\'s common "backplane" square-wave signal and the other input carrying the segment\'s ON/OFF data. How does this actually turn the segment on or off?',
+        hint: () => 'Work through XOR\'s own truth table: when do the two inputs genuinely differ, and when do they match?',
+        options: () => shuffle([
+          { label: 'When segment data and backplane DIFFER, the XOR output is the opposite of the backplane — creating a genuine voltage difference across the segment (ON). When they MATCH, the XOR output tracks the backplane exactly, leaving no voltage difference (OFF)', type: 'correct' },
+          { label: 'The XOR gate simply passes the backplane signal straight through, unaffected by the data input', type: 'wrong' },
+          { label: 'The segment lights whenever the backplane signal alone is HIGH, regardless of the data input', type: 'wrong' },
+          { label: 'XOR permanently disables the segment whenever the data input is HIGH', type: 'wrong' },
+        ]),
+        correctExplain: () => 'Data≠backplane → segment ON (real voltage difference); data=backplane → segment OFF.',
+        working: () => `
+    <div class="working-line">The backplane is a continuously alternating square wave, common to every segment. XORing it with a segment's own ON/OFF data bit produces an output that either EXACTLY MATCHES the backplane (when data=0) or is EXACTLY INVERTED from it (when data=1).</div>
+    <div class="working-total">When the segment's own drive output matches the backplane, both sides of the segment sit at the same voltage at every instant — zero voltage difference, segment OFF. When XOR inverts it (data=1), the segment electrode is always the OPPOSITE polarity to the backplane — a genuine, continuously-alternating voltage difference across the segment, which is what turns it visibly ON. This gives proper AC drive (satisfying the previous question) with a simple single gate per segment.</div>`
+      },
+      {
+        kind: 'match',
+        // Objective: list LCD advantages/disadvantages.
+        columns: () => ['Advantage', 'Disadvantage'],
+        text: () => 'Each statement below describes a property of LCDs. <b style="color:var(--colour-ui-primary)">Place</b> each one under Advantage or Disadvantage.',
+        hint: () => 'LCDs don\'t generate their own light (unless backlit) — think about what that saves, and what it costs, compared with a display that does.',
+        options: () => shuffle([
+          { label: 'Extremely low power consumption, especially in reflective mode', col: 0 },
+          { label: 'Good readability in bright ambient light or direct sunlight (reflective mode)', col: 0 },
+          { label: 'Slower switching response than an LED display', col: 1 },
+          { label: 'A reflective LCD is difficult or impossible to read in the dark without an added backlight', col: 1 },
+        ]),
+        correctExplain: (st) => {
+          const wrongCount = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).length;
+          return wrongCount === 0 ? 'All 4 correctly matched' : `${st.opts.length - wrongCount} of ${st.opts.length} correctly matched`;
+        },
+        working: () => `
+    <div class="working-line">LCDs don't generate their own light (in reflective mode) — that's exactly why they draw so little power and stay easily readable in bright light, the mirror-image <b>advantages</b> to an LED display's own weak points.</div>
+    <div class="working-total">The same lack of a built-in light source is the source of the <b>disadvantages</b>: a reflective LCD is hard to read in the dark without adding a backlight (which then costs power, eroding the low-power advantage), and the liquid crystal material itself physically reorients more slowly than an LED can switch, giving LCDs a visibly slower response.</div>`
+      },
+    ];
+
+    // Q7 is the only kind:'fill' question in this quiz — show/hide its
+    // pool the same way every other fill-mechanic file in this project
+    // does. No circuitConfig swap needed (unlike the JFET/MOSFET terminal-
+    // labelling files): this quiz only ever shows the one static diagram.
+    RENDER_EXTRA = () => {
+      document.getElementById('fillPoolWrap').style.display = isFill(QUESTIONS[cur]) ? '' : 'none';
+    };
+
+    initQuizNav();
+    resetQuiz();
+    initQuizFromURL();
+  </script>
+</body>
+
+</html>
