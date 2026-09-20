@@ -107,12 +107,20 @@ function wbGridSVG(cols, colWidth = WB_COL_WIDTH) {
   return s;
 }
 
+// `opts.progressCols` (optional) shades [0, progressCols) the same way
+// renderQTrackSVG shades the built portion of Q — used so S/R show the
+// same "how far along we are" indicator as the track the student is
+// actually building, even though S/R themselves are always fully drawn.
 function renderReadOnlyTrackSVG(svgEl, levels, opts = {}) {
   const colWidth = opts.colWidth || WB_COL_WIDTH;
   svgEl.setAttribute('viewBox', `0 0 ${wbSvgWidth(levels.length, colWidth)} ${wbSvgHeight()}`);
   const cls = opts.className || 'wb-track-path';
-  svgEl.innerHTML = wbGridSVG(levels.length, colWidth)
-    + `<path class="${cls}" d="${wbFullTrackPathD(levels, colWidth)}" />`;
+  let html = wbGridSVG(levels.length, colWidth);
+  if (opts.progressCols > 0) {
+    html += `<rect class="wb-progress-shade" x="0" y="0" width="${opts.progressCols * colWidth}" height="${wbSvgHeight()}" />`;
+  }
+  html += `<path class="${cls}" d="${wbFullTrackPathD(levels, colWidth)}" />`;
+  svgEl.innerHTML = html;
 }
 
 // ── piece placement state ──

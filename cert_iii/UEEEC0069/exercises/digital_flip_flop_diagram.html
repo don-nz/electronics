@@ -1,10 +1,32 @@
 <!--
   SR-latch Q-output construction drill. Shows a randomly-generated, always
-  VALID S/R timing diagram (S and R are never both 1 in the same column —
-  an unclocked SR latch has no defined output for that combination, so it's
-  never generated) and asks the student to build the resulting Q waveform
-  themselves, one piece at a time, from a small palette: flat runs (1/2/3
-  columns wide, for speed) plus single-column rise/fall steps.
+  VALID S/R timing diagram and asks the student to build the resulting Q
+  waveform themselves, one piece at a time, from a small palette: flat runs
+  (1/2/3 columns wide, for speed) plus single-column rise/fall steps.
+
+  "Valid" here means two separate constraints, both enforced by
+  generateSRPair(): (1) S and R are never both 1 in the same column — an
+  unclocked SR latch has no defined output for that combination; (2) S and R
+  never CHANGE in the same column either, even when the result would
+  otherwise be well-defined (e.g. S falling exactly as R rises) — per the
+  teacher's own explicit feedback after trialling this exercise, simultaneous
+  S/R transitions are deliberately never shown in the workbook or tests,
+  since a real cross-coupled NAND/NOR latch's output can genuinely race when
+  both inputs change at the same instant (gate propagation delay makes the
+  actual result depend on which input's edge physically arrives first) —
+  not just a drawing-clarity preference. generateSRPair() enforces this by
+  construction: it picks a single random EVENT column at a time and toggles
+  exactly one of S/R there (never both), rather than generating S and R as
+  two independent pulse trains and reconciling collisions afterwards (the
+  original approach here, which could still produce a same-column S/R edge
+  even after its own "never both 1" fix).
+
+  generateSRPair() also biases which signal rises next (see its own comment
+  and MIN_Q_TRANSITIONS) toward whichever one actually flips Q, and retries
+  the whole draw if Q still ends up close to flat — a busy-looking S/R pair
+  can otherwise spend most of its length on R re-asserting Reset while Q is
+  already 0 (or S re-asserting Set while Q is already 1), leaving Q almost a
+  straight line despite S/R themselves changing constantly.
 
   Genuinely different interaction shape from every other quiz/exercise in
   this project — one continuous, persistent, sequentially built diagram,
@@ -13,8 +35,8 @@
   waveform rendering, piece placement/undo, progress shading, per-column
   checking) lives in the shared assets/waveform-builder.js — see that
   file's own header comment for the shared/page-local split. Only the
-  SR-latch-specific bits stay here: generateSRPair()'s mutual-exclusion
-  constraint and deriveQ()'s Set/Reset/Hold rule.
+  SR-latch-specific bits stay here: generateSRPair()'s one-signal-at-a-time
+  event constraint and deriveQ()'s Set/Reset/Hold rule.
 
   Still loads theme-init.js/nav-common.css-equivalent chrome (breadcrumb.js,
   quiz-common.css) and reuses its .card/.btn/.btn-row/.result-banner
@@ -111,15 +133,49 @@
 
     // ── SR-latch domain logic (page-local — see this file's own header
     // comment for why this stays out of the shared waveform-builder.js) ──
+    // A "fall" (S or R dropping to 0) never changes Q — it just returns to
+    // the Hold state. Only a "rise" can move Q, and only when it's the
+    // OPPOSITE of Q's current value (raising S while Q is already 1, or R
+    // while Q is already 0, is a redundant re-assertion that leaves Q
+    // flat). Left fully random, a run can spend most of its length on
+    // exactly that kind of redundant R-while-already-Reset (or S-while-
+    // already-Set) churn — S/R stay busy while Q barely moves. MIN_Q_
+    // TRANSITIONS + the 75%-biased pick below fix that: whenever there's a
+    // free choice of which signal rises next (both currently 0), bias
+    // toward the one that actually flips Q, and retry the whole draw if Q
+    // still ends up close to flat despite that bias.
+    const MIN_Q_TRANSITIONS = 4;
     function generateSRPair(n) {
-      let S, R, tries = 0;
-      do {
-        S = randomPulseTrack(n, { minPulse: 1, maxPulse: 3, minGap: 1, maxGap: 3 });
-        R = randomPulseTrack(n, { minPulse: 1, maxPulse: 3, minGap: 1, maxGap: 3 });
-        tries++;
-      } while (S.some((v, i) => v === 1 && R[i] === 1) && tries < 50);
-      for (let i = 0; i < n; i++) { if (S[i] === 1 && R[i] === 1) R[i] = 0; }
-      return { S, R };
+      const randInt = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
+      let best = null, bestTransitions = -1;
+      for (let attempt = 0; attempt < 30; attempt++) {
+        const S = new Array(n).fill(0), R = new Array(n).fill(0);
+        let sLevel = 0, rLevel = 0, qLevel = 0, qTransitions = 0;
+        let col = randInt(1, 3); // leading gap before the first change
+        while (col < n) {
+          // Falling is always safe; rising is only safe while the OTHER
+          // signal is low — this is what keeps S/R mutually exclusive by
+          // construction, one single-signal event at a time.
+          const canToggleS = sLevel === 1 || rLevel === 0;
+          const canToggleR = rLevel === 1 || sLevel === 0;
+          let pick;
+          if (canToggleS && canToggleR) {
+            const preferred = qLevel === 0 ? 'S' : 'R';
+            pick = Math.random() < 0.75 ? preferred : (preferred === 'S' ? 'R' : 'S');
+          } else {
+            pick = canToggleS ? 'S' : 'R';
+          }
+          if (pick === 'S') sLevel = sLevel ? 0 : 1; else rLevel = rLevel ? 0 : 1;
+          const newQ = sLevel === 1 ? 1 : (rLevel === 1 ? 0 : qLevel);
+          if (newQ !== qLevel) qTransitions++;
+          qLevel = newQ;
+          for (let i = col; i < n; i++) { S[i] = sLevel; R[i] = rLevel; }
+          col += randInt(1, 3); // gap until the next single-signal change — kept short so the diagram stays busy
+        }
+        if (qTransitions >= MIN_Q_TRANSITIONS) return { S, R };
+        if (qTransitions > bestTransitions) { best = { S, R }; bestTransitions = qTransitions; }
+      }
+      return best; // astronomically unlikely fallback — the busiest of the 30 attempts tried
     }
 
     function deriveQ(S, R) {
@@ -176,8 +232,9 @@
     }
 
     function render() {
-      renderReadOnlyTrackSVG(document.getElementById('sTrack'), S, { className: 'wb-track-path wb-track-s' });
-      renderReadOnlyTrackSVG(document.getElementById('rTrack'), R, { className: 'wb-track-path wb-track-r' });
+      const progressCols = wbCursor(builder).col;
+      renderReadOnlyTrackSVG(document.getElementById('sTrack'), S, { className: 'wb-track-path wb-track-s', progressCols });
+      renderReadOnlyTrackSVG(document.getElementById('rTrack'), R, { className: 'wb-track-path wb-track-r', progressCols });
       renderQTrackSVG(document.getElementById('qTrack'), builder, N, checked ? { results: lastResult.results } : {});
 
       renderPiecePalette(document.getElementById('palette'), {
