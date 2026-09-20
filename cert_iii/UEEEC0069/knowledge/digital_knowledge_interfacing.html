@@ -1,0 +1,572 @@
+<!--
+  Section 9 — "Interfacing techniques" lesson objectives (photographed
+  textbook pages, 10 objectives): describe the need for interfacing
+  circuitry; identify BJT/MOSFET buffer/driver circuits and explain their
+  operation; choose suitable replacement components for a faulty buffer/
+  driver circuit; state two devices providing electrical isolation; identify
+  isolation circuits and describe their operation; identify switch-to-input
+  circuits; describe switch bounce; identify RC debounce circuits with
+  hysteresis; identify comparator circuits for transducer interfacing; use a
+  DMM to test interfacing circuits.
+
+  The final objective (DMM bench measurement) is deliberately DEFERRED —
+  needs physical hardware, matching the exact same split already established
+  by digital_knowledge_logic_families.html/digital_knowledge_digital_
+  displays.html for their own bench-measurement objectives. The remaining 9
+  objectives are covered across Q1-19.
+
+  Q2-Q12 all reference ONE persistent circuit diagram — Figure 3 from the
+  photographed Section 9-4/9-5 pages (a 74LS NAND gate driving a BC547 BJT,
+  which switches a 12V/360mW lamp) — reusing the teacher's own worked
+  example verbatim: IC=IL=PL/VL=30mA, IB(min)=IC/β=300µA (β=100, a
+  deliberately worst-case low figure for the BC547's 110-800 range),
+  IR1=(VOH−VBE)/R1=309µA (confirming R1=6k8 is appropriate since
+  IR1>IB(min)), the 74LS's own IOH=400µA capability check, and
+  PQ1=IC×VCE(sat)=30mA×0.6V=18mW against the BC547's 500mW rating. Q7
+  (worst-case design philosophy) and Q10 (VCE(sat)/suitability) both quote
+  the source text's own explicit reasoning for why VOH/β=100/VCE(sat) were
+  chosen over "typical" figures, rather than inventing new content.
+
+  The circuit's symbols are copied directly from this project's own master
+  shape files (self-contained per-file, since cross-file <use>/fetch() is
+  blocked under file://): gate-nand-trad from logic-gates.svg, bjt-npn-shape
+  from bjt-symbols.svg, resistor-box-shape/ground-shape from circuit-
+  components.svg. Two genuinely new shapes — lamp-shape and switch-spst-
+  shape — were added to circuit-components.svg itself first (reusable,
+  generic passive components, same footing as the existing battery/resistor/
+  ground shapes there) rather than staying one-off.
+
+  Q14/Q15 (relay/optocoupler operation) and Q17 (comparator) each use a
+  small self-contained inline <svg> built fresh directly in that question's
+  own text() string — same "prove it once before promoting" precedent as
+  digital_knowledge_digital_displays.html's own Q1 LED symbol: these
+  compound symbols (coil+isolated-contacts, LED+phototransistor+isolation
+  boundary, op-amp comparator triangle) are specific to this one topic and
+  not yet proven to recur, unlike lamp/switch which are generic enough to
+  earn a shared home immediately.
+
+  Data-driven QUESTIONS[] engine, using 'multi' (Q7, Q13) — no 'match'/
+  'fill'/'bits'/'truth', nothing here needs those mechanics.
+
+  Migrated to the shared cert_iii/assets/quiz-engine.js engine from the
+  start (project convention for all new quizzes) — just the standard
+  QUESTIONS[] data and the trailing initQuizNav()/resetQuiz()/
+  initQuizFromURL() bootstrap. leftPanel:'circuit' is static throughout
+  (no per-question circuit swapping — one diagram serves Q2-Q12).
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../assets/theme-init.js"></script>
+  <script src="../../assets/quiz-engine.js"></script>
+  <title>Digital Electronics Knowledge Quiz — Interfacing</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../assets/quiz-common.css">
+  <script src="../../assets/breadcrumb.js" defer></script>
+  <style>
+    .progress-wrap { display: flex; gap: .4rem; align-items: center; margin-bottom: 1rem; }
+  </style>
+</head>
+
+<body>
+  <div class="crumb" id="crumb" data-current="Interfacing"></div>
+  <header>
+    <h1>Digital Electronics</h1>
+    <p>Interfacing Techniques · BJT/MOSFET Drivers · Isolation · Switch Debounce · Comparators</p>
+  </header>
+
+  <div class="quiz-wrap" id="quizWrap">
+
+    <!-- LEFT: Figure 3 circuit diagram (74LS NAND -> R1 -> BC547 -> lamp) -->
+    <div class="circuit-col">
+      <div class="circuit-panel" onclick="openModal()" title="Click to zoom">
+        <div class="panel-label">Figure 3 — Lamp Driver Circuit</div>
+        <div class="zoom-hint">
+          <svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.8" fill="none" />
+            <line x1="12.5" y1="12.5" x2="17" y2="17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            <line x1="6" y1="8" x2="10" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+            <line x1="8" y1="6" x2="8" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+          </svg>
+          Zoom
+        </div>
+
+        <svg id="circuitSvg" viewBox="-10 -10 470 300" xmlns="http://www.w3.org/2000/svg" font-family="'Share Tech Mono',monospace">
+          <defs>
+            <filter id="glow">
+              <feGaussianBlur stdDeviation="2" result="b" />
+              <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+
+            <!-- gate (copied from assets/shapes/logic-gates.svg) -->
+            <g id="gate-lead-in2">
+              <line x1="-24" y1="-8" x2="-8" y2="-8" style="stroke: var(--colour-bjt)" stroke-width="2" />
+              <line x1="-24" y1="8" x2="-8" y2="8" style="stroke: var(--colour-bjt)" stroke-width="2" />
+            </g>
+            <path id="gate-and-body" d="M -8,-16 L 8,-16 A 16,16 0 0 1 8,16 L -8,16 Z"
+              fill="var(--colour-panel)" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+            <g id="gate-lead-out-inv">
+              <circle cx="28" cy="0" r="4" fill="var(--colour-panel)" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+              <line x1="32" y1="0" x2="44" y2="0" style="stroke: var(--colour-bjt)" stroke-width="2" />
+            </g>
+            <g id="gate-nand-trad"><use href="#gate-lead-in2" /><use href="#gate-and-body" /><use href="#gate-lead-out-inv" /></g>
+
+            <!-- BJT (copied from assets/shapes/bjt-symbols.svg) -->
+            <g id="bjt-npn-shape">
+              <circle cx="7" cy="0" r="24" fill="var(--colour-panel)" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+              <line x1="-17" y1="0" x2="0" y2="0" style="stroke: var(--colour-bjt)" stroke-width="2" />
+              <line x1="0" y1="-12" x2="0" y2="12" style="stroke: var(--colour-bjt)" stroke-width="2.5" />
+              <polyline points="14,-34 14,-20 0,-8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+              <polyline points="14,34 14,20 0,8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+              <polygon points="12,18 1,14 6,8" style="fill: var(--colour-bjt)" />
+            </g>
+
+            <!-- resistor + lamp + ground (copied from assets/shapes/circuit-components.svg) -->
+            <g id="resistor-box-shape">
+              <rect x="-15" y="-40" width="30" height="80" rx="3" fill="var(--colour-panel)" style="stroke: var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+            </g>
+            <g id="lamp-shape">
+              <circle cx="0" cy="0" r="18" fill="var(--colour-panel)" style="stroke: var(--colour-signal)" stroke-width="2" filter="url(#glow)" />
+              <line x1="-13" y1="-13" x2="13" y2="13" style="stroke: var(--colour-signal)" stroke-width="1.5" />
+              <line x1="-13" y1="13" x2="13" y2="-13" style="stroke: var(--colour-signal)" stroke-width="1.5" />
+            </g>
+            <g id="ground-shape">
+              <line x1="0" y1="0" x2="0" y2="15" style="stroke: var(--colour-gnd)" stroke-width="2" />
+              <line x1="-14" y1="15" x2="14" y2="15" style="stroke: var(--colour-gnd)" stroke-width="2" />
+              <line x1="-9" y1="20" x2="9" y2="20" style="stroke: var(--colour-gnd)" stroke-width="1.5" />
+              <line x1="-4" y1="25" x2="4" y2="25" style="stroke: var(--colour-gnd)" stroke-width="1.5" />
+            </g>
+          </defs>
+
+          <!-- wires, drawn first full-length; opaque components paint over them -->
+          <line x1="340" y1="8" x2="340.4" y2="105.6" style="stroke: var(--colour-text)" stroke-width="1.5" />
+          <line x1="160.4" y1="160" x2="290.8" y2="160" style="stroke: var(--colour-text)" stroke-width="1.5" />
+
+          <!-- gate + R1 + BJT + lamp + ground -->
+          <g transform="translate(90,160) scale(1.6)"><use href="#gate-nand-trad" /></g>
+          <text x="55" y="164" text-anchor="end" font-size="12" fill="var(--colour-bjt)">74LS</text>
+
+          <g transform="translate(225,160) scale(0.65) rotate(90)"><use href="#resistor-box-shape" /></g>
+          <text x="225" y="132" text-anchor="middle" font-size="12" fill="var(--colour-resistor)">R1  6k8</text>
+
+          <g transform="translate(318,160) scale(1.6)"><use href="#bjt-npn-shape" /></g>
+          <text x="368" y="155" font-size="12" fill="var(--colour-bjt)">Q1</text>
+          <text x="368" y="169" font-size="12" fill="var(--colour-bjt)">BC547</text>
+
+          <g transform="translate(340,70) scale(1)"><use href="#lamp-shape" /></g>
+          <text x="365" y="66" font-size="12" fill="var(--colour-signal)">12V</text>
+          <text x="365" y="80" font-size="12" fill="var(--colour-signal)">360mW</text>
+          <text x="340" y="2" text-anchor="middle" font-size="12" fill="var(--colour-supply)">+12V</text>
+
+          <g transform="translate(340.4,215)"><use href="#ground-shape" /></g>
+        </svg>
+      </div>
+    </div>
+
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+          <div class="options" id="qOptions"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <footer>Electronics // Cert III // UEEEC0069</footer>
+
+  <script>
+    // ══════════════════════════════════════════════════════════════════════
+    // Small one-off inline SVGs — relay/optocoupler/switch-input/comparator.
+    // Specific to this one topic, not yet proven to recur — see this file's
+    // own header comment for why these stay page-local rather than joining
+    // circuit-components.svg (unlike lamp-shape/switch-spst-shape, which did).
+    // ══════════════════════════════════════════════════════════════════════
+    const RELAY_SYMBOL_SVG = `
+    <svg viewBox="0 0 220 100" xmlns="http://www.w3.org/2000/svg" style="width:230px;display:block;margin:.7rem auto">
+      <line x1="0" y1="50" x2="10" y2="50" style="stroke:var(--colour-bjt)" stroke-width="2" />
+      <rect x="10" y="30" width="60" height="40" rx="4" fill="none" style="stroke:var(--colour-bjt)" stroke-width="2" />
+      <text x="40" y="55" text-anchor="middle" font-size="11" fill="var(--colour-bjt)">COIL</text>
+      <line x1="70" y1="50" x2="80" y2="50" style="stroke:var(--colour-bjt)" stroke-width="2" />
+      <line x1="110" y1="8" x2="110" y2="92" style="stroke:var(--colour-ui-summary)" stroke-width="1.5" stroke-dasharray="4,3" />
+      <circle cx="150" cy="35" r="3" fill="var(--colour-switch)" />
+      <circle cx="190" cy="35" r="3" fill="var(--colour-switch)" />
+      <line x1="150" y1="35" x2="182" y2="20" style="stroke:var(--colour-switch)" stroke-width="2" stroke-linecap="round" />
+      <text x="170" y="72" text-anchor="middle" font-size="10" fill="var(--colour-text)">separate load circuit</text>
+    </svg>`;
+
+    const OPTOCOUPLER_SYMBOL_SVG = `
+    <svg viewBox="0 0 220 110" xmlns="http://www.w3.org/2000/svg" style="width:230px;display:block;margin:.7rem auto">
+      <rect x="30" y="10" width="160" height="90" rx="6" fill="none" style="stroke:var(--colour-ui-summary)" stroke-width="1.5" stroke-dasharray="4,3" />
+      <line x1="0" y1="55" x2="55" y2="55" style="stroke:var(--colour-diode)" stroke-width="2" />
+      <polygon points="55,40 55,70 80,55" fill="none" style="stroke:var(--colour-diode)" stroke-width="2" />
+      <line x1="80" y1="40" x2="80" y2="70" style="stroke:var(--colour-diode)" stroke-width="2" />
+      <line x1="95" y1="55" x2="100" y2="55" style="stroke:var(--colour-diode)" stroke-width="2" />
+      <line x1="102" y1="45" x2="130" y2="35" style="stroke:var(--colour-signal)" stroke-width="1.5" stroke-dasharray="3,2" />
+      <line x1="102" y1="55" x2="130" y2="55" style="stroke:var(--colour-signal)" stroke-width="1.5" stroke-dasharray="3,2" />
+      <line x1="102" y1="65" x2="130" y2="75" style="stroke:var(--colour-signal)" stroke-width="1.5" stroke-dasharray="3,2" />
+      <circle cx="150" cy="55" r="20" fill="none" style="stroke:var(--colour-bjt)" stroke-width="2" />
+      <line x1="150" y1="43" x2="150" y2="67" style="stroke:var(--colour-bjt)" stroke-width="2.5" />
+      <polyline points="164,37 164,49 150,55" style="stroke:var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+      <polyline points="164,73 164,61 150,55" style="stroke:var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+      <polygon points="162,61 151,57 156,51" style="fill:var(--colour-bjt)" />
+      <line x1="190" y1="43" x2="210" y2="43" style="stroke:var(--colour-bjt)" stroke-width="2" />
+      <line x1="190" y1="73" x2="210" y2="73" style="stroke:var(--colour-bjt)" stroke-width="2" />
+    </svg>`;
+
+    const SWITCH_INPUT_SVG = `
+    <svg viewBox="0 0 220 150" xmlns="http://www.w3.org/2000/svg" style="width:210px;display:block;margin:.7rem auto">
+      <text x="60" y="12" text-anchor="middle" font-size="11" style="fill:var(--colour-supply)">+5V</text>
+      <line x1="60" y1="18" x2="60" y2="130" style="stroke:var(--colour-text)" stroke-width="1.5" />
+      <rect x="45" y="30" width="30" height="15" rx="2" fill="var(--colour-panel)" style="stroke:var(--colour-resistor)" stroke-width="2" />
+      <circle cx="60" cy="80" r="3" fill="var(--colour-text)" />
+      <line x1="60" y1="80" x2="130" y2="80" style="stroke:var(--colour-text)" stroke-width="1.5" />
+      <text x="135" y="84" font-size="10" fill="var(--colour-text)">to logic input</text>
+      <circle cx="60" cy="100" r="2.5" fill="var(--colour-switch)" />
+      <circle cx="60" cy="130" r="2.5" fill="var(--colour-switch)" />
+      <line x1="60" y1="100" x2="90" y2="112" style="stroke:var(--colour-switch)" stroke-width="2" stroke-linecap="round" />
+      <line x1="60" y1="130" x2="60" y2="140" style="stroke:var(--colour-gnd)" stroke-width="2" />
+      <line x1="46" y1="140" x2="74" y2="140" style="stroke:var(--colour-gnd)" stroke-width="2" />
+      <line x1="51" y1="145" x2="69" y2="145" style="stroke:var(--colour-gnd)" stroke-width="1.5" />
+    </svg>`;
+
+    const COMPARATOR_SYMBOL_SVG = `
+    <svg viewBox="-15 0 295 120" xmlns="http://www.w3.org/2000/svg" style="width:280px;display:block;margin:.7rem auto">
+      <polygon points="70,20 70,100 150,60" fill="none" style="stroke:var(--colour-bjt)" stroke-width="2" />
+      <text x="80" y="38" font-size="14" style="fill:var(--colour-bjt)">+</text>
+      <text x="80" y="90" font-size="14" style="fill:var(--colour-bjt)">−</text>
+      <line x1="20" y1="30" x2="70" y2="30" style="stroke:var(--colour-signal)" stroke-width="2" />
+      <text x="18" y="26" text-anchor="end" font-size="10" fill="var(--colour-signal)">sensor</text>
+      <line x1="20" y1="90" x2="70" y2="90" style="stroke:var(--colour-supply)" stroke-width="2" />
+      <text x="18" y="94" text-anchor="end" font-size="10" fill="var(--colour-supply)">Vref</text>
+      <line x1="150" y1="60" x2="200" y2="60" style="stroke:var(--colour-bjt)" stroke-width="2" />
+      <text x="205" y="64" font-size="10" fill="var(--colour-text)">to logic input</text>
+    </svg>`;
+
+    const QUESTIONS = [
+      {
+        text: () => 'Why can\'t a logic gate\'s output usually drive a lamp, motor, or relay coil DIRECTLY?',
+        hint: () => 'Think about what a logic gate output can actually provide, in terms of both current and voltage, compared to what a typical DC load needs.',
+        options: () => shuffle([
+          { label: 'A logic gate\'s output can only source/sink a small current at a fixed low voltage — nowhere near enough for a typical DC load\'s current or voltage requirements', type: 'correct' },
+          { label: 'Logic gates can only output AC signals, never a steady DC level', type: 'wrong' },
+          { label: 'A logic gate has no output at all until an external transistor is added', type: 'wrong' },
+          { label: 'Connecting any load directly to a logic gate immediately destroys it', type: 'wrong' },
+        ]),
+        correctExplain: () => 'Logic outputs can\'t supply the current/voltage a typical DC load needs',
+        working: () => `
+    <div class="working-line">Digital control systems (logic gates, microprocessors) are designed to switch other <em>logic-level</em> signals — small currents, low voltages. Real-world loads like lamps, motors, solenoids and relay coils typically need far more current, and sometimes a completely different supply voltage, than a logic output was ever designed to provide.</div>
+    <div class="working-total">Interfacing circuitry bridges that gap: it lets a small, safe logic-level signal control a much larger load current/voltage without exceeding the logic device's own ratings.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        text: () => 'In Figure 3, what is the role of <b class="colour-resistor">R1</b>?',
+        hint: () => 'R1 sits directly in the path of the current flowing INTO the BJT\'s base.',
+        options: () => shuffle([
+          { label: 'It limits the <b class="colour-current">base current</b> flowing into <b class="colour-bjt">Q1</b> to a safe, controlled value', type: 'correct' },
+          { label: 'It limits the current flowing through the <b style="color:var(--colour-signal)">lamp</b>', type: 'wrong' },
+          { label: 'It sets the <b class="colour-bjt">BJT\'s</b> voltage gain', type: 'wrong' },
+          { label: 'It protects the <b>74LS</b> gate\'s output from the 12 V rail', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b class="colour-resistor">R1</b> limits the <b class="colour-current">base current</b> into <b class="colour-bjt">Q1</b>',
+        working: () => `
+    <div class="working-line">R1 sits between the logic gate's output and <b class="colour-bjt">Q1</b>'s base. If R1 were too small, excessive base current could flow and stress both the gate output and the BJT; if it's too big, it won't let enough base current flow to fully turn Q1 on — which in turn limits how much <b class="colour-current">collector current</b> the lamp can draw. Checking R1's value is exactly how this circuit is verified in the following questions.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        text: () => 'Why does the <b style="color:var(--colour-signal)">lamp</b> itself NOT need its own series current-limiting resistor, the way an LED would?',
+        hint: () => 'Think about what determines a DC load\'s own operating current, compared to an LED.',
+        options: () => shuffle([
+          { label: 'DC loads like lamps, motors and relays have their own internal resistance and are self-limiting in terms of their own operating current — a series resistor is unnecessary', type: 'correct' },
+          { label: 'The lamp is rated for an unlimited current', type: 'wrong' },
+          { label: 'The <b class="colour-bjt">BJT</b> itself acts as the lamp\'s current-limiting resistor', type: 'wrong' },
+          { label: 'A 12 V lamp never actually draws any current', type: 'wrong' },
+        ]),
+        correctExplain: () => 'DC loads are <b>self-limiting</b> — they set their own operating current',
+        working: () => `
+    <div class="working-line">An LED is a very low-resistance junction device — without an external series resistor, it would try to draw far more current than it can survive. A lamp, motor or relay coil is different: it has its own real operating resistance, so its own current is already set by its own construction and its rated supply voltage. That's also why these DC loads don't need to be connected to the logic device's own supply rail at all — they can run from any convenient supply voltage.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        text: () => 'The lamp is rated <b style="color:var(--colour-signal)">360 mW</b> at <b style="color:var(--colour-signal)">12 V</b>. Using <b class="colour-current">I<sub>C</sub></b> = <b class="colour-current">I<sub>L</sub></b> = P<sub>L</sub>/V<sub>L</sub>, what is <b class="colour-current">I<sub>C</sub></b>?',
+        hint: () => 'Just Ohm\'s-law-style power/voltage division — no BJT properties needed yet.',
+        options: () => shuffle([
+          { label: `<b class="colour-current">I<sub>C</sub></b> = ${frac('360 mW', '12 V')} = <b>30 mA</b>`, type: 'correct' },
+          { label: `<b class="colour-current">I<sub>C</sub></b> = ${frac('12 V', '360 mW')} ≈ <b>33.3 mA<sup>-1</sup></b>`, type: 'wrong' },
+          { label: `<b class="colour-current">I<sub>C</sub></b> = 360 mW × 12 V = <b>4.32 W</b>`, type: 'wrong' },
+          { label: `<b class="colour-current">I<sub>C</sub></b> = ${frac('360 mW', '12 V')} = <b>3 mA</b>`, type: 'wrong' },
+        ]),
+        correctExplain: () => '<b class="colour-current">I<sub>C</sub></b> = <b class="colour-current">I<sub>L</sub></b> = P<sub>L</sub>/V<sub>L</sub> = <b>30 mA</b>',
+        working: () => `
+    <div class="working-formula-row"><b class="colour-current">I<sub>C</sub></b> = <b class="colour-current">I<sub>L</sub></b> = ${frac('P<sub>L</sub>', 'V<sub>L</sub>')}</div>
+    <div class="working-label">Substituting the lamp's own rated values:</div>
+    <div class="working-formula-row"><b class="colour-current">I<sub>C</sub></b> = <b class="colour-current">I<sub>L</sub></b> = ${frac('360 mW', '12 V')}</div>
+    <div class="working-total"><b class="colour-current">I<sub>C</sub></b> = <b class="colour-current">I<sub>L</sub></b> = <span class="colour-result">30 mA</span> — the lamp's electrical specs fix the collector current <b class="colour-bjt">Q1</b> must be able to switch.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        text: () => 'Using β = 100 and <b class="colour-current">I<sub>C</sub></b> = 30 mA, what is the MINIMUM <b class="colour-current">base current</b> (<b class="colour-current">I<sub>B</sub></b>) required?',
+        hint: () => 'I<sub>B</sub> = I<sub>C</sub> / β.',
+        options: () => shuffle([
+          { label: `<b class="colour-current">I<sub>B</sub></b> = ${frac('30 mA', '100')} = <b>300 µA</b>`, type: 'correct' },
+          { label: `<b class="colour-current">I<sub>B</sub></b> = 30 mA × 100 = <b>3 A</b>`, type: 'wrong' },
+          { label: `<b class="colour-current">I<sub>B</sub></b> = ${frac('100', '30 mA')} ≈ <b>3.33 A<sup>-1</sup></b>`, type: 'wrong' },
+          { label: `<b class="colour-current">I<sub>B</sub></b> = ${frac('30 mA', '100')} = <b>3 mA</b>`, type: 'wrong' },
+        ]),
+        correctExplain: () => '<b class="colour-current">I<sub>B</sub></b> = <b class="colour-current">I<sub>C</sub></b>/β = <b>300 µA</b>',
+        working: () => `
+    <div class="working-formula-row"><b class="colour-current">I<sub>B</sub></b> = ${frac('<b class="colour-current">I<sub>C</sub></b>', 'β')} = ${frac('30 mA', '100')}</div>
+    <div class="working-total"><b class="colour-current">I<sub>B</sub></b> = <span class="colour-result">300 µA</span> minimum — importantly, I<sub>B</sub> is allowed to be LARGER than this (that's exactly what drives <b class="colour-bjt">Q1</b> into saturation), just never smaller.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        text: () => 'The <b>74LS</b> gate\'s minimum guaranteed logic-1 output is <b>V<sub>OH</sub> = 2.7 V</b>. Using <b class="colour-current">I<sub>R1</sub></b> = (V<sub>OH</sub> − V<sub>BE</sub>)/R1, what current does <b class="colour-resistor">R1 = 6k8</b> actually allow?',
+        hint: () => 'Take V<sub>BE</sub> ≈ 0.6 V, then it\'s just Ohm\'s Law across R1.',
+        options: () => shuffle([
+          { label: `<b class="colour-current">I<sub>R1</sub></b> = ${frac('2.7V − 0.6V', '6k8')} ≈ <b>309 µA</b>`, type: 'correct' },
+          { label: `<b class="colour-current">I<sub>R1</sub></b> = ${frac('2.7V + 0.6V', '6k8')} ≈ <b>485 µA</b>`, type: 'wrong' },
+          { label: `<b class="colour-current">I<sub>R1</sub></b> = ${frac('2.7V', '6k8')} ≈ <b>397 µA</b>`, type: 'wrong' },
+          { label: `<b class="colour-current">I<sub>R1</sub></b> = 6k8 × (2.7V − 0.6V) ≈ <b>14,280 A</b>`, type: 'wrong' },
+        ]),
+        correctExplain: () => '<b class="colour-current">I<sub>R1</sub></b> ≈ <b>309 µA</b> — R1 is appropriate, since this is above the 300 µA minimum I<sub>B</sub> needed',
+        working: () => `
+    <div class="working-formula-row"><b class="colour-current">I<sub>R1</sub></b> = ${frac('V<sub>R1</sub>', 'R1')} = ${frac('V<sub>OH</sub> − V<sub>BE</sub>', 'R1')}</div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><b class="colour-current">I<sub>R1</sub></b> = ${frac('2.7 V − 0.6 V', '6k8')}</div>
+    <div class="working-total"><b class="colour-current">I<sub>R1</sub></b> ≈ <span class="colour-result">309 µA</span> — just above the 300 µA minimum <b class="colour-current">I<sub>B</sub></b> found in the previous question, confirming <b class="colour-resistor">R1 = 6k8</b> is an appropriate value.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        kind: 'multi',
+        text: () => 'This calculation deliberately used <b>V<sub>OH</sub></b> (2.7 V, the gate\'s minimum GUARANTEED logic-1 output) rather than a typical logic-1 voltage, and β = 100 rather than the BC547\'s typical (much higher) β. <b style="color:var(--colour-ui-primary)">Select</b> every choice below that is an example of this same "design for the worst case" philosophy.',
+        hint: () => 'Worst case means: whichever figure makes the circuit HARDEST to work, not easiest.',
+        options: () => shuffle([
+          { label: 'Using <b>V<sub>OH</sub></b> (minimum guaranteed) instead of a typical logic-1 voltage', type: 'correct' },
+          { label: 'Using β = 100 instead of the BC547\'s typical, much higher β', type: 'correct' },
+          { label: 'Using the lamp\'s rated 360 mW figure to find I<sub>C</sub>', type: 'wrong' },
+          { label: 'Assuming the gate can source its absolute MAXIMUM possible <b>I<sub>OH</sub></b>', type: 'wrong' },
+        ]),
+        correctExplain: () => 'Using minimum V<sub>OH</sub> and the lowest realistic β are both worst-case design choices',
+        working: () => `
+    <div class="working-line">If a design still works using the WORST realistic figures for every uncertain value, it's guaranteed to work with better-than-worst-case real components too. V<sub>OH</sub> = 2.7 V is the gate's own datasheet-guaranteed MINIMUM — a real gate might output more, but never less. β = 100 was deliberately chosen well below the BC549/BC547 family's typical range (110–800) for exactly the same reason: if the real transistor has a higher β than assumed, less base current than calculated would actually be needed, which is a safe direction to be wrong in.</div>
+    <div class="working-step" style="margin-top:.6rem">Why the others are wrong:</div>
+    <div class="working-line">The lamp's 360 mW rating isn't a "worst case" assumption — it's simply the component's own fixed, given specification. And assuming the gate's absolute MAXIMUM I<sub>OH</sub> would be the OPPOSITE of worst-case design — a real gate might deliver less than its maximum, so relying on the maximum figure is an optimistic assumption, not a safe one.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        text: () => 'A quick check of the <b>74LS</b> family\'s own datasheet shows it can source up to <b>I<sub>OH</sub> = 400 µA</b>. Is the gate\'s own output current adequate for this circuit?',
+        hint: () => 'Compare I<sub>OH</sub> (what the gate CAN supply) against I<sub>R1</sub> (what the circuit actually NEEDS it to supply).',
+        options: () => shuffle([
+          { label: 'Yes — the gate can source 400 µA, comfortably more than the 309 µA this circuit actually draws through R1', type: 'correct' },
+          { label: 'No — 400 µA is less than the 309 µA required', type: 'wrong' },
+          { label: 'It can\'t be determined without knowing the gate\'s supply voltage', type: 'wrong' },
+          { label: 'No — I<sub>OH</sub> only applies to a logic-0 output, not logic-1', type: 'wrong' },
+        ]),
+        correctExplain: () => 'Yes — I<sub>OH</sub>(400 µA) comfortably exceeds I<sub>R1</sub>(309 µA)',
+        working: () => `
+    <div class="working-line">Every part of this design gets checked, not just R1's own value. I<sub>OH</sub> is the maximum current a logic gate can SOURCE while its output sits at a valid logic-1 — that's exactly the current R1 draws from the gate in this circuit. Since the 74LS family can source up to 400 µA and this circuit only asks it for 309 µA, the gate itself is not the limiting factor here.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        text: () => 'Using P = <b class="colour-current">I<sub>C</sub></b> × V<sub>CE</sub>, with <b class="colour-bjt">Q1</b> driven into saturation (V<sub>CE</sub> ≈ 0.6 V max), what is <b class="colour-bjt">Q1\'s</b> power dissipation <b>P<sub>Q1</sub></b>?',
+        hint: () => 'Both figures needed here — 30 mA and 0.6 V — were already established in earlier questions.',
+        options: () => shuffle([
+          { label: '<b>P<sub>Q1</sub></b> = 30 mA × 0.6 V = <b>18 mW</b>', type: 'correct' },
+          { label: `<b>P<sub>Q1</sub></b> = ${frac('30 mA', '0.6 V')} ≈ <b>50 A</b>`, type: 'wrong' },
+          { label: '<b>P<sub>Q1</sub></b> = 30 mA × 12 V = <b>360 mW</b>', type: 'wrong' },
+          { label: '<b>P<sub>Q1</sub></b> = 300 µA × 0.6 V = <b>180 µW</b>', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b>P<sub>Q1</sub></b> = <b class="colour-current">I<sub>C</sub></b> × V<sub>CE</sub> = <b>18 mW</b>',
+        working: () => `
+    <div class="working-formula-row"><b>P<sub>Q1</sub></b> = <b class="colour-current">I<sub>C</sub></b> × V<sub>CE</sub></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><b>P<sub>Q1</sub></b> = 30 mA × 0.6 V</div>
+    <div class="working-total"><b>P<sub>Q1</sub></b> = <span class="colour-result">18 mW</span></div>`
+      },
+      {
+        leftPanel: 'circuit',
+        text: () => 'V<sub>CE</sub> was assumed at its worst-case saturation value of 0.6 V (not some lower "typical" figure) to find <b>P<sub>Q1</sub> = 18 mW</b>. What does this tell us about the <b class="colour-bjt">BC547\'s</b> suitability (rated 500 mW max)?',
+        hint: () => 'Compare the worst-case calculated figure against the datasheet maximum rating.',
+        options: () => shuffle([
+          { label: 'Using the worst-case (maximum) saturation voltage still gives only 18 mW — comfortably inside the BC547\'s 500 mW rating, so it\'s a suitable choice', type: 'correct' },
+          { label: '18 mW exceeds what a BC547 can safely dissipate, so a higher-power transistor is required', type: 'wrong' },
+          { label: 'V<sub>CE</sub> = 0.6 V was chosen because that\'s the transistor\'s typical value when fully OFF', type: 'wrong' },
+          { label: 'The power calculation is irrelevant, since BJTs don\'t dissipate power when switching a DC load', type: 'wrong' },
+        ]),
+        correctExplain: () => 'Yes, suitable — even the worst-case 18 mW is well under the BC547\'s 500 mW rating',
+        working: () => `
+    <div class="working-line">When a saturated BJT switches a DC load, it still has a small residual voltage across it (V<sub>CE(sat)</sub>) even while fully ON — 0.6 V is used here as the worst-case (highest realistic) saturation voltage, again following the same "design for the worst case" approach as V<sub>OH</sub> and β earlier in this circuit.</div>
+    <div class="working-total">Even using that worst-case figure, P<sub>Q1</sub> = 18 mW is a small fraction of the BC547's 500 mW maximum rating — confirming the transistor is comfortably suitable for this application, with plenty of margin.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        text: () => 'If <b class="colour-bjt">Q1</b> were replaced with an equivalent <b class="colour-mosfet">MOSFET</b> instead of a BJT, would <b class="colour-resistor">R1</b> still need to be sized the same way?',
+        hint: () => 'What kind of terminal is a MOSFET\'s gate — current-controlled, like a BJT\'s base, or something else?',
+        options: () => shuffle([
+          { label: 'No — a <b class="colour-mosfet">MOSFET\'s</b> gate is voltage-controlled and draws virtually no continuous current, so R1 is no longer sized to guarantee a minimum base current the way it is for a BJT', type: 'correct' },
+          { label: 'Yes — a <b class="colour-mosfet">MOSFET</b> needs exactly the same base-current-limiting resistor as a BJT', type: 'wrong' },
+          { label: 'No — a <b class="colour-mosfet">MOSFET</b> never needs any gate resistor at all, under any circumstances', type: 'wrong' },
+          { label: 'Yes — a <b class="colour-mosfet">MOSFET</b> requires an even LARGER current-limiting resistor than a BJT', type: 'wrong' },
+        ]),
+        correctExplain: () => 'No — a MOSFET gate draws virtually no current, unlike a BJT\'s current-controlled base',
+        working: () => `
+    <div class="working-line">A BJT is a <em>current</em>-controlled device — its base genuinely needs a calculated minimum current (I<sub>B</sub>) to turn it on, which is exactly what R1 is sized to guarantee here. A <b class="colour-mosfet">MOSFET</b> gate is different: it's essentially a capacitor, controlled by VOLTAGE rather than a continuous current, and draws almost no current once charged. R1's whole purpose in this BJT circuit — guaranteeing enough base current — simply doesn't apply the same way to a MOSFET gate.</div>
+    <div class="working-line" style="margin-top:.5rem">A small series gate resistor is still sometimes included with a MOSFET in practice (e.g. to limit switching-edge ringing) — but that's a different design consideration entirely, not a base-current calculation like R1 here.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        text: () => '<b class="colour-bjt">Q1</b> has failed and needs replacing. The circuit needs an NPN able to sink <b class="colour-current">I<sub>C</sub></b> = 30 mA, with the full 12 V rail appearing across it while OFF. Which of these is a suitable substitute?',
+        hint: () => 'Check THREE things: correct polarity, enough current rating, and enough voltage rating.',
+        options: () => shuffle([
+          { label: 'NPN, I<sub>C</sub>(max) = 800 mA, V<sub>CEO</sub> = 30 V', type: 'correct' },
+          { label: 'PNP, I<sub>C</sub>(max) = 200 mA, V<sub>CEO</sub> = 40 V', type: 'wrong' },
+          { label: 'NPN, I<sub>C</sub>(max) = 20 mA, V<sub>CEO</sub> = 45 V', type: 'wrong' },
+          { label: 'NPN, I<sub>C</sub>(max) = 500 mA, V<sub>CEO</sub> = 8 V', type: 'wrong' },
+        ]),
+        correctExplain: () => 'The 800 mA / 30 V NPN — correct polarity, with ample current and voltage margin',
+        working: () => `
+    <div class="working-line">A suitable replacement needs to pass all three checks: <b>Polarity</b> — this circuit needs an NPN (it sinks current from the lamp down to ground when switched on); a PNP is wired the wrong way round for this role. <b>Current rating</b> — the replacement's I<sub>C</sub>(max) must comfortably exceed the 30 mA the lamp draws; 20 mA is not enough. <b>Voltage rating</b> — when <b class="colour-bjt">Q1</b> is OFF, its collector sits close to the full +12 V rail, so V<sub>CEO</sub> must comfortably exceed 12 V; 8 V is not enough.</div>
+    <div class="working-total">Only the 800 mA / 30 V NPN option passes all three checks with healthy margin.</div>`
+      },
+      {
+        kind: 'multi',
+        text: () => 'Which TWO of these devices provide genuine ELECTRICAL ISOLATION between a logic circuit\'s output and a high-voltage/current load?',
+        hint: () => 'Isolation means: no shared electrical connection at all between the two sides — not just "can switch a big load."',
+        options: () => shuffle([
+          { label: 'Relay', type: 'correct' },
+          { label: 'Optocoupler', type: 'correct' },
+          { label: 'BJT driver', type: 'wrong' },
+          { label: 'MOSFET driver', type: 'wrong' },
+        ]),
+        correctExplain: () => 'Relay and optocoupler — both let the load circuit run on a completely separate, unconnected supply',
+        working: () => `
+    <div class="working-line">A BJT or MOSFET driver — like Q1 in Figure 3 — still shares a common ground/reference with the logic circuit driving it; the load circuit and the logic circuit are electrically connected, even though the BJT/MOSFET lets a small signal control a larger current. A relay and an optocoupler are different: a relay links its coil to its switched contacts only MECHANICALLY, and an optocoupler links its LED to its phototransistor only OPTICALLY (via light) — in both cases, there is no electrical connection at all between the control side and the load side, so the load circuit can run from a completely separate, unrelated supply.</div>`
+      },
+      {
+        text: () => `Here's a relay driving a separate load circuit.${RELAY_SYMBOL_SVG}How does energising the coil actually switch the load?`,
+        hint: () => 'The coil doesn\'t connect electrically to anything on the load side at all.',
+        options: () => shuffle([
+          { label: 'The coil\'s magnetic field mechanically pulls a set of contacts open or closed — those contacts belong to a completely separate circuit, with no electrical connection to the coil', type: 'correct' },
+          { label: 'Current flows directly from the coil winding into the load', type: 'wrong' },
+          { label: 'The coil acts like a transformer, inducing a voltage directly in the load circuit', type: 'wrong' },
+          { label: 'The relay amplifies the logic signal\'s voltage before passing it on to the load', type: 'wrong' },
+        ]),
+        correctExplain: () => 'The coil\'s magnetic field mechanically operates a fully separate set of contacts',
+        working: () => `
+    <div class="working-line">Energising the relay's coil creates a magnetic field that physically pulls a movable armature, mechanically opening or closing a separate set of contacts. Those contacts are just a plain mechanical switch — wired into a completely different circuit, with its own supply, that never touches the coil's own electrical circuit at all. That mechanical-only link is exactly what gives a relay genuine electrical isolation.</div>`
+      },
+      {
+        text: () => `Here's an optocoupler.${OPTOCOUPLER_SYMBOL_SVG}How does it pass a signal across the isolation barrier without an electrical connection?`,
+        hint: () => 'One half of the device emits something; the other half detects it.',
+        options: () => shuffle([
+          { label: 'An internal <b class="colour-diode">LED</b> converts the logic signal into light; a phototransistor on the other side of the gap detects that light and switches accordingly — the two sides share no electrical connection at all', type: 'correct' },
+          { label: 'A thin wire runs through the package to carry the signal across', type: 'wrong' },
+          { label: 'It works exactly like a relay, using a magnetic field', type: 'wrong' },
+          { label: 'It uses capacitive coupling to pass the signal across the gap', type: 'wrong' },
+        ]),
+        correctExplain: () => 'An internal LED emits light; a phototransistor on the far side detects it — a purely optical link',
+        working: () => `
+    <div class="working-line">An optocoupler packages an <b class="colour-diode">LED</b> and a phototransistor facing each other, separated by a transparent gap and an opaque, isolating package. When the logic circuit drives current through the LED, it emits light; that light crosses the gap and switches the phototransistor on the load side. Since light — not a wire — carries the signal across, the two sides can be powered from completely separate, unrelated supplies with zero electrical connection between them.</div>`
+      },
+      {
+        text: () => `Here's a switch connected to a logic gate's input.${SWITCH_INPUT_SVG}Why is the resistor needed?`,
+        hint: () => 'Think about what state the input would be in whenever the switch is OPEN.',
+        options: () => shuffle([
+          { label: 'Without it, the input would be left "floating" (an undefined logic level) whenever the switch is open — the resistor guarantees a well-defined logic level at all times', type: 'correct' },
+          { label: 'It protects the switch from excess current', type: 'wrong' },
+          { label: 'It limits the logic gate\'s own output current', type: 'wrong' },
+          { label: 'It\'s needed to debounce the switch', type: 'wrong' },
+        ]),
+        correctExplain: () => 'It prevents the input from "floating" (undefined) when the switch is open',
+        working: () => `
+    <div class="working-line">When the switch is CLOSED, it pulls the input firmly to a defined level (here, to ground/logic-0). But when the switch is OPEN, if there were nothing else connected, the input would be left "floating" — not firmly pulled to either logic level, and highly susceptible to noise. This resistor (a pull-up, since it's tied to +5 V here) guarantees the input sits at a clean, defined logic-1 whenever the switch is open, and is pulled to logic-0 only when the switch is actually closed.</div>
+    <div class="working-line" style="margin-top:.5rem">Note this is a different job entirely from debouncing (the next objective) — this resistor is about defining a logic level, not about cleaning up a noisy transition.</div>`
+      },
+      {
+        text: () => 'What is "switch bounce", and why is it a problem for digital inputs?',
+        hint: () => 'This is a purely MECHANICAL effect, happening over just a few milliseconds.',
+        options: () => shuffle([
+          { label: 'Mechanical contacts don\'t make one single clean connection — they physically bounce, momentarily opening and closing several times over a few milliseconds, which a fast digital input can misread as several separate presses', type: 'correct' },
+          { label: 'The switch\'s resistance slowly changes over time as it wears out', type: 'wrong' },
+          { label: 'Electrical noise from nearby motors interferes with the switch signal', type: 'wrong' },
+          { label: 'The switch takes several seconds to fully close', type: 'wrong' },
+        ]),
+        correctExplain: () => 'Mechanical contacts bounce open/closed rapidly for a few ms, which a fast input reads as multiple presses',
+        working: () => `
+    <div class="working-line">A mechanical switch's metal contacts don't meet perfectly cleanly — as they physically touch, they tend to bounce apart and re-touch several times in rapid succession before finally settling, all within a few milliseconds. A slow human eye or a mechanical relay never notices this. A fast digital input, however, is easily quick enough to register each of those bounces as a separate, genuine transition — turning one single button press into what looks like several rapid presses to the digital circuit.</div>`
+      },
+      {
+        text: () => 'How do a simple RC circuit and a logic input with hysteresis (a Schmitt trigger) work TOGETHER to debounce a switch?',
+        hint: () => 'The RC circuit changes the SHAPE of the edge; hysteresis changes how that shape gets turned into a clean digital transition.',
+        options: () => shuffle([
+          { label: 'The RC circuit slows the switch\'s sharp edge into a smooth ramp, smoothing over the rapid bounce; the Schmitt-trigger input\'s hysteresis then converts that slow ramp into one single, clean digital transition instead of chattering partway through it', type: 'correct' },
+          { label: 'The RC circuit removes bounce completely on its own — the Schmitt trigger input isn\'t actually required', type: 'wrong' },
+          { label: 'The resistor and capacitor amplify the switch signal so the logic gate can detect it', type: 'wrong' },
+          { label: 'Hysteresis works by ignoring the input for a fixed time after every transition', type: 'wrong' },
+        ]),
+        correctExplain: () => 'RC smooths the bounce into a ramp; hysteresis turns that ramp into one clean transition',
+        working: () => `
+    <div class="working-line">On its own, the RC circuit doesn't eliminate the bounce — it just slows it down, turning the switch's fast, jagged bouncing edge into a much slower, smoother ramp. That alone would still risk a false transition if a normal logic input happened to sit right in the middle of that slow ramp during a bounce.</div>
+    <div class="working-total">A Schmitt-trigger input adds hysteresis — two separate switching thresholds instead of one — so once the slow ramp crosses the first threshold, the input won't switch back until the signal moves all the way past the SECOND threshold. That gap is wide enough to ignore the remaining bounce riding on the ramp, producing one single, clean digital transition.</div>`
+      },
+      {
+        text: () => `Here's a comparator interfacing an analog sensor to a logic input.${COMPARATOR_SYMBOL_SVG}How does it produce a clean logic-level signal from the sensor's analog voltage?`,
+        hint: () => 'A comparator has two inputs — what does it do with the difference between them?',
+        options: () => shuffle([
+          { label: 'It continuously compares the sensor voltage against a fixed reference voltage — the output swings fully to one logic level or the other, depending on which input is higher, giving a clean digital transition right at the threshold', type: 'correct' },
+          { label: 'It amplifies the sensor\'s analog voltage until it\'s large enough to read directly', type: 'wrong' },
+          { label: 'It converts the analog voltage into a binary number the logic circuit can read', type: 'wrong' },
+          { label: 'It filters noise out of the sensor signal, then passes it through unchanged', type: 'wrong' },
+        ]),
+        correctExplain: () => 'It compares sensor vs. reference voltage and outputs a clean logic-1/logic-0 depending on which is higher',
+        working: () => `
+    <div class="working-line">A comparator's output isn't proportional to its inputs the way an amplifier's is — it's a simple decision: whichever input is higher wins, and the output slams fully to one logic level or the other. By feeding the analog transducer's (sensor's) output into one input and a fixed reference/threshold voltage into the other, the comparator's output cleanly flips between logic-0 and logic-1 exactly at the point where the sensor voltage crosses that reference — turning a slowly-varying analog signal into a clean digital one a logic circuit can read directly.</div>
+    <div class="working-line" style="margin-top:.5rem">This is a different job from an ADC (which converts an analog voltage into a multi-bit binary NUMBER) — a comparator only ever produces a single ON/OFF decision.</div>`
+      },
+    ];
+
+    initQuizNav();
+    resetQuiz();
+    initQuizFromURL();
+  </script>
+</body>
+
+</html>
