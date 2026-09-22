@@ -1,0 +1,669 @@
+<!--
+  BJT internal-fault CURRENT-FLOW SIMULATOR — a companion to
+  bjt_fault_finding/bjt_fault_interactive_internal.html's quiz testbed, not
+  a quiz itself. Same circuit (CE voltage-divider bias, RE unbypassed),
+  same healthy/fault VB/VC/VE/IC/IE values (that file's own QUESTIONS[]
+  meterOverride entries — copied here as plain data, Python-verified
+  there), same BJT symbol + fault-x/short-arc overlays. Pick Normal or one
+  of the 6 internal faults from the button row; the meters update and 5
+  overlay "flow" lines animate along the DC bias wires at a speed scaled
+  to how much current that specific path carries.
+
+  DC-only — the AC input/output path (C1, C2, the scope icons) is dropped
+  entirely, since current flow at the operating point is the whole point
+  here, and C1/C2 block DC anyway.
+
+  5 animated path segments, each a dashed overlay line on top of the
+  existing static wire, covering just its own sub-range:
+    IR1  VCC rail -> node B   (x=200, y -70..245, through R1)
+    IB   node B -> base lead  (x 200..384, y=245) -- drawn fresh, no
+                               original wire covered this on its own
+                               (the source file's equivalent segment also
+                               carried the AC input, which isn't here)
+    IR2  node B -> GND rail   (x=200, y 245..535, through R2)
+    IC   VCC rail -> node C   (x=440, y -70..165, through RC)
+    IE   node E -> GND rail   (x=440, y 310..535, through RE)
+  Per-segment current computed once in STATES below via plain Ohm's
+  law/KCL from the already-verified VB (IR1=(12-VB)/R1, IR2=VB/R2,
+  IB=IR1-IR2) — IC/IE segments use the source file's own given IC/IE
+  directly rather than re-deriving from VC/VE (those are rounded to 2dp,
+  re-deriving from them drifts a percent or two off the verified figures).
+
+  Speed is scaled per-segment relative to THAT segment's own healthy
+  value (not absolute mA) -- IB is ~10uA, IC/IE are ~2-6mA, so a linear/
+  absolute scale would make the base path look permanently frozen next to
+  the collector/emitter paths. Tiers (|I_fault / I_healthy|):
+    <5% stopped, 5-40% slow, 40-200% normal, >200% fast.
+  IB is the only segment whose sign ever flips (the two faults that short
+  the base to another lead) -- when it does, the same tier logic applies
+  to its magnitude, but the flow direction visually reverses (current
+  genuinely gets pushed backward through the base lead once it's shorted
+  to C or E) -- see STATES' own ibReversed flag.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../assets/theme-init.js"></script>
+  <title>BJT Internal Fault — Current Flow Simulator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../assets/quiz-common.css">
+  <script src="../../assets/breadcrumb.js" defer></script>
+  <style>
+    .sim-wrap { width: 100%; max-width: 640px; margin: 0 auto; }
+    .circuit-panel { cursor: default; }
+
+    .intro { color: var(--colour-label); font-size: .85rem; line-height: 1.5; text-align: center; margin-bottom: 1rem; }
+
+    /* Flow overlay lines — dashed, drawn on top of the existing static
+       wire (var(--colour-series)) in the current-flow colour so moving
+       dashes read as "flow", not a second wire. */
+    .flow-line {
+      fill: none;
+      stroke: var(--colour-flow);
+      stroke-width: 4;
+      stroke-linecap: round;
+      stroke-dasharray: 2, 11;
+      opacity: .9;
+    }
+    /* Tiers — duration only, all share the same 13px dash period so the
+       animation stays visually continuous across a tier change. */
+    .flow-stopped { animation: none; stroke-dashoffset: 0; opacity: .35; }
+    .flow-slow { animation: flow-fwd 1.8s linear infinite; }
+    .flow-normal { animation: flow-fwd .8s linear infinite; }
+    .flow-fast { animation: flow-fwd .35s linear infinite; }
+    .flow-reverse.flow-slow { animation-name: flow-rev; }
+    .flow-reverse.flow-normal { animation-name: flow-rev; }
+    .flow-reverse.flow-fast { animation-name: flow-rev; }
+    @keyframes flow-fwd { to { stroke-dashoffset: -13; } }
+    @keyframes flow-rev { to { stroke-dashoffset: 13; } }
+
+    .fault-caption { text-align: center; font-size: .85rem; color: var(--colour-label); margin-top: .6rem; min-height: 1.2em; }
+    .fault-caption b { color: var(--colour-ui-primary); }
+  </style>
+</head>
+
+<body>
+  <!-- Hidden defs — copied verbatim from bjt_fault_interactive_internal.html
+       (same ids): BJT symbol, meter/ammeter/node shapes, glow filter. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <filter id="glow">
+        <feGaussianBlur stdDeviation="2" result="b" />
+        <feMerge>
+          <feMergeNode in="b" />
+          <feMergeNode in="SourceGraphic" />
+        </feMerge>
+      </filter>
+
+      <g id="bjt-npn-shape-large">
+        <circle cx="7" cy="0" r="48" fill="var(--colour-panel)" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+        <line id="bjt-base" x1="-42" y1="0" x2="0" y2="0" style="stroke: var(--colour-bjt)" stroke-width="2" />
+        <line x1="0" y1="-12" x2="0" y2="12" style="stroke: var(--colour-bjt)" stroke-width="2.5" />
+        <polyline id="bjt-collector" points="14,-48 14,-20 0,-8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+        <polyline id="bjt-emitter" points="14,48 14,20 0,8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+        <polygon points="12,18 1,14 6,8" style="fill: var(--colour-bjt)" />
+      </g>
+
+      <g id="meter-shape">
+        <circle cx="0" cy="0" r="30" style="fill: var(--colour-meter-fill); stroke: var(--colour-red)" stroke-width="1.5" filter="url(#glow)" />
+        <line x1="-15" y1="-20" x2="15" y2="-20" style="stroke: var(--colour-red)" stroke-width="1.5"/>
+        <line x1="-15" y1="-14" x2="15" y2="-14" style="stroke: var(--colour-red)" stroke-width="1.5" stroke-dasharray="3,2"/>
+      </g>
+
+      <g id="ammeter-shape">
+        <circle cx="0" cy="0" r="30" style="fill: var(--colour-ammeter-fill); stroke: var(--colour-current)"
+          stroke-width="1.5" filter="url(#glow)" />
+      </g>
+
+      <g id="node-shape">
+        <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5" />
+      </g>
+    </defs>
+  </svg>
+
+  <div class="crumb" id="crumb" data-current="Current Flow Simulator"></div>
+  <header>
+    <h1>BJT Internal Fault — Current Flow</h1>
+    <p>Common Emitter · Voltage-Divider Bias · Interactive Simulator</p>
+  </header>
+
+  <p class="intro">Pick a fault below — the meters update and the animated current show where (and how fast) current is really flowing, scaled to each path's own healthy value.</p>
+
+  <div class="sim-wrap">
+    <!-- id="faultSeg" moved up to wrap both rows (was on the single
+         .mode-seg) — setFault()'s own `#faultSeg button` query still
+         finds all 7 buttons in the same DOM order this relies on for its
+         index-into-STATES lookup, so nothing else needed changing. -->
+    <div id="faultSeg">
+      <div class="mode-toggle" style="justify-content:center; flex-wrap:wrap">
+        <div class="mode-seg">
+          <button class="active" onclick="setFault('healthy')">Normal</button>
+        </div>
+        <div class="mode-seg">
+          <button onclick="setFault('base-open')">Base Open</button>
+          <button onclick="setFault('emitter-open')">Emitter Open</button>
+          <button onclick="setFault('collector-open')">Collector Open</button>
+        </div>
+      </div>
+      <div class="mode-toggle" style="justify-content:center">
+        <div class="mode-seg">
+          <button onclick="setFault('be-short')">B-E Short</button>
+          <button onclick="setFault('cb-short')">C-B Short</button>
+          <button onclick="setFault('ce-short')">C-E Short</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="circuit-panel">
+      <svg id="circuitSvg" viewBox="-10 -100 690 670" xmlns="http://www.w3.org/2000/svg">
+        <g id="ce-fault-circuit">
+
+          <!-- ════════════════════ WIRES (static) ════════════════════ -->
+          <line x1="200" y1="-70" x2="200" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+          <line x1="440" y1="-70" x2="440" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+          <line x1="160" y1="-70" x2="480" y2="-70" style="stroke: var(--colour-series)" stroke-width="2" />
+          <circle cx="200" cy="-70" r="5" style="fill: var(--colour-series)" />
+          <circle cx="440" cy="-70" r="5" style="fill: var(--colour-series)" />
+          <line x1="30" y1="535" x2="600" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+          <circle cx="200" cy="535" r="5" style="fill: var(--colour-series)" />
+          <circle cx="440" cy="535" r="5" style="fill: var(--colour-series)" />
+          <!-- Base lead wire — node B straight across to the base pin; no
+               AC input/C1 here (DC-only simulator), so this is simpler
+               than the source file's equivalent (54..410) left horizontal. -->
+          <line x1="200" y1="245" x2="384" y2="246" style="stroke: var(--colour-series)" stroke-width="2" />
+
+          <!-- ════════════════════ FLOW OVERLAYS (animated) ════════════════════ -->
+          <line id="flow-IR1" class="flow-line" x1="200" y1="-70" x2="200" y2="245" />
+          <line id="flow-IB" class="flow-line" x1="200" y1="245" x2="384" y2="246" />
+          <line id="flow-IR2" class="flow-line" x1="200" y1="245" x2="200" y2="535" />
+          <line id="flow-IC" class="flow-line" x1="440" y1="-70" x2="440" y2="185" />
+          <line id="flow-IE" class="flow-line" x1="440" y1="310" x2="440" y2="535" />
+
+          <!-- ════════════════════ NODES ════════════════════ -->
+          <circle cx="200" cy="245" r="5" style="fill: var(--colour-series)" />
+          <g transform="translate(180,250)">
+            <use href="#node-shape" />
+            <text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14" font-weight="bold">B</text>
+          </g>
+          <circle cx="440" cy="185" r="5" style="fill: var(--colour-series)" />
+          <g transform="translate(465,185)">
+            <use href="#node-shape" />
+            <text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14" font-weight="bold">C</text>
+          </g>
+          <circle cx="440" cy="310" r="5" style="fill: var(--colour-series)" />
+          <g transform="translate(465,310)">
+            <use href="#node-shape" />
+            <text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14" font-weight="bold">E</text>
+          </g>
+
+          <!-- ════════════════════ METERS ════════════════════
+               Ghost sub-groups (meter*Ghost, hidden until setFault()'s
+               addGhost() reveals them) — same up/down-arrow + delta
+               convention as the source quiz's own addGhost(), ported
+               verbatim: voltage meters get theirs below (translate(0,55)),
+               ammeters to the right (translate(40,4), not enough headroom
+               below there before the GND/VCC rails). -->
+          <g id="meterVB" transform="translate(105,250)">
+            <use href="#meter-shape" />
+            <text x="45" y="0" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">B</tspan></text>
+            <text id="meterVBValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">1.2</text>
+            <text id="meterVBUnit" x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle" font-size="14">V</text>
+            <g id="meterVBGhost" display="none" transform="translate(0,55)">
+              <text id="meterVBGhostText" text-anchor="middle" font-weight="bold" font-family="'Share Tech Mono',monospace">
+                <tspan id="meterVBGhostArrow" font-size="18"></tspan>
+                <tspan id="meterVBGhostDelta" font-size="13" dx="-3"></tspan>
+              </text>
+            </g>
+          </g>
+
+          <g id="meterVC" transform="translate(535,165)">
+            <use href="#meter-shape" />
+            <text x="-45" y="0" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">C</tspan></text>
+            <text id="meterVCValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">8.1</text>
+            <text id="meterVCUnit" x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle" font-size="14">V</text>
+            <g id="meterVCGhost" display="none" transform="translate(65,0)">
+              <text id="meterVCGhostText" text-anchor="middle" font-weight="bold" font-family="'Share Tech Mono',monospace">
+                <tspan id="meterVCGhostArrow" font-size="18"></tspan>
+                <tspan id="meterVCGhostDelta" font-size="13" dx="-3"></tspan>
+              </text>
+            </g>
+          </g>
+
+          <g id="meterVE" transform="translate(535,310)">
+            <use href="#meter-shape" />
+            <text x="-45" y="0" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">E</tspan></text>
+            <text id="meterVEValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">0.6</text>
+            <text id="meterVEUnit" x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle" font-size="14">V</text>
+            <g id="meterVEGhost" display="none" transform="translate(65,0)">
+              <text id="meterVEGhostText" text-anchor="middle" font-weight="bold" font-family="'Share Tech Mono',monospace">
+                <tspan id="meterVEGhostArrow" font-size="18"></tspan>
+                <tspan id="meterVEGhostDelta" font-size="13" dx="-3"></tspan>
+              </text>
+            </g>
+          </g>
+
+          <g id="meterVCB" transform="translate(340,175)">
+            <use href="#meter-shape" />
+            <text x="45" y="25" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">CB</tspan></text>
+            <text id="meterVCBValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">6.9</text>
+            <text id="meterVCBUnit" x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle" font-size="14">V</text>
+            <g id="meterVCBGhost" display="none" transform="translate(0,-45)">
+              <text id="meterVCBGhostText" text-anchor="middle" font-weight="bold" font-family="'Share Tech Mono',monospace">
+                <tspan id="meterVCBGhostArrow" font-size="18"></tspan>
+                <tspan id="meterVCBGhostDelta" font-size="13" dx="-3"></tspan>
+              </text>
+            </g>
+          </g>
+
+          <g id="meterVBE" transform="translate(340,310)">
+            <use href="#meter-shape" />
+            <text x="40" y="-25" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">BE</tspan></text>
+            <text id="meterVBEValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">0.6</text>
+            <text id="meterVBEUnit" x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle" font-size="14">V</text>
+            <g id="meterVBEGhost" display="none" transform="translate(0,55)">
+              <text id="meterVBEGhostText" text-anchor="middle" font-weight="bold" font-family="'Share Tech Mono',monospace">
+                <tspan id="meterVBEGhostArrow" font-size="18"></tspan>
+                <tspan id="meterVBEGhostDelta" font-size="13" dx="-3"></tspan>
+              </text>
+            </g>
+          </g>
+
+          <!-- ════════════════════ AMMETERS ════════════════════ -->
+          <g id="ammeterICGroup" transform="translate(440,-10)">
+            <use href="#ammeter-shape" />
+            <text x="-45" y="-10" style="fill: var(--colour-current)" text-anchor="middle" font-size="14" font-weight="bold">I<tspan baseline-shift="sub" font-size="10">C</tspan></text>
+            <text id="ammeterICValue" x="0" y="-2" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">2.17</text>
+            <text id="ammeterICUnit" x="0" y="15" style="fill: var(--colour-current)" text-anchor="middle" font-size="12">mA</text>
+            <g id="ammeterICGroupGhost" display="none" transform="translate(40,4)">
+              <text id="ammeterICGroupGhostText" text-anchor="start" font-weight="bold" font-family="'Share Tech Mono',monospace">
+                <tspan id="ammeterICGroupGhostArrow" font-size="18"></tspan>
+                <tspan id="ammeterICGroupGhostDelta" font-size="13" dx="-3"></tspan>
+              </text>
+            </g>
+          </g>
+          <g id="ammeterIEGroup" transform="translate(440,480)">
+            <use href="#ammeter-shape" />
+            <text x="-45" y="-10" style="fill: var(--colour-current)" text-anchor="middle" font-size="14" font-weight="bold">I<tspan baseline-shift="sub" font-size="10">E</tspan></text>
+            <text id="ammeterValue" x="0" y="-2" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">2.18</text>
+            <text id="ammeterUnit" x="0" y="15" style="fill: var(--colour-current)" text-anchor="middle" font-size="12">mA</text>
+            <g id="ammeterIEGroupGhost" display="none" transform="translate(40,4)">
+              <text id="ammeterIEGroupGhostText" text-anchor="start" font-weight="bold" font-family="'Share Tech Mono',monospace">
+                <tspan id="ammeterIEGroupGhostArrow" font-size="18"></tspan>
+                <tspan id="ammeterIEGroupGhostDelta" font-size="13" dx="-3"></tspan>
+              </text>
+            </g>
+          </g>
+
+          <!-- ════════════════════ VCC / COMMON ════════════════════ -->
+          <g transform="translate(490,-80)">
+            <text x="0" y="15" style="fill: var(--colour-voltage-label)" text-anchor="start" font-size="15" font-weight="bold">
+              V<tspan baseline-shift="sub" font-size="10">CC</tspan>
+               <tspan style="fill: var(--colour-text)" font-size="14">+ 12 V</tspan>
+            </text>
+          </g>
+          <text x="120" y="560" fill="var(--colour-gnd)" text-anchor="middle" font-size="14" font-weight="bold">Common</text>
+
+          <!-- ════════════════════ Q1 — NPN, with fault overlays ════════════════════ -->
+          <g transform="translate(426,246)">
+            <use href="#bjt-npn-shape-large" />
+            <text x="70" y="-25" fill="var(--colour-bjt-labels)" text-anchor="middle" font-size="14" font-weight="bold">Q1</text>
+            <text x="60" y="0" fill="var(--colour-bjt-labels)" text-anchor="start" font-size="14" font-weight="bold">β = 200</text>
+            <g id="fault-x-bjt-base" transform="translate(-21,0)" display="none">
+              <line x1="-8" y1="-8" x2="8" y2="8" style="stroke: var(--colour-ui-wrong)" stroke-width="3" stroke-linecap="round" />
+              <line x1="-8" y1="8" x2="8" y2="-8" style="stroke: var(--colour-ui-wrong)" stroke-width="3" stroke-linecap="round" />
+            </g>
+            <g id="fault-x-bjt-collector" transform="translate(14,-34)" display="none">
+              <line x1="-8" y1="-8" x2="8" y2="8" style="stroke: var(--colour-ui-wrong)" stroke-width="3" stroke-linecap="round" />
+              <line x1="-8" y1="8" x2="8" y2="-8" style="stroke: var(--colour-ui-wrong)" stroke-width="3" stroke-linecap="round" />
+            </g>
+            <g id="fault-x-bjt-emitter" transform="translate(14,34)" display="none">
+              <line x1="-8" y1="-8" x2="8" y2="8" style="stroke: var(--colour-ui-wrong)" stroke-width="3" stroke-linecap="round" />
+              <line x1="-8" y1="8" x2="8" y2="-8" style="stroke: var(--colour-ui-wrong)" stroke-width="3" stroke-linecap="round" />
+            </g>
+            <path id="short-CB" d="M -30 0 A 40 40 0 0 1 14 -38"
+              style="stroke: var(--colour-ui-wrong)" stroke-width="2.5" fill="none" display="none" />
+            <path id="short-BE" d="M -30 0 A 40 40 0 0 0 14 38"
+              style="stroke: var(--colour-ui-wrong)" stroke-width="2.5" fill="none" display="none" />
+            <path id="short-CE" d="M 14 -38 A 40 40 0 0 1 14 38"
+              style="stroke: var(--colour-ui-wrong)" stroke-width="2.5" fill="none" display="none" />
+
+            <!-- ════════════════════ INTERNAL FLOW ════════════════════
+                 Current through the package itself, not just the external
+                 wires. flow-lead-B/C/E trace the BJT symbol's OWN base/
+                 collector/emitter lines (bjt-npn-shape-large's own "d"
+                 points, reused here) — the physical lead between the
+                 external pin and the die, always carrying the same
+                 current as that side's external IB/IC/IE (true in every
+                 state, shorted or not: current still has to travel down
+                 the actual lead to reach wherever the short is). Without
+                 flow-lead-B, the base flow stopped dead at the package
+                 edge (x=-42) instead of continuing the last stretch to
+                 the actual junction (x=0, where the vertical E-C bar
+                 sits) — same tier/reverse as the external flow-IB segment
+                 it continues from.
+                 flow-short-CB/BE/CE trace the SAME arcs as short-CB/BE/CE
+                 above, only shown for that one active fault. Their current
+                 is whatever's NOT behaving normally on the base lead —
+                 |IB| (see the base-lead flow segment's own calc) for the
+                 two base-involving shorts, since by KCL that's exactly
+                 the amount taking the shortcut instead of a normal path;
+                 IC(=IE, they're equal in this one fault) for C-E, since
+                 the source file's own derivation has the transistor
+                 contributing nothing there — 100% of the current crosses
+                 straight through the short. -->
+            <path id="flow-lead-B" class="flow-line" d="M -42,0 L 0,0" />
+            <path id="flow-lead-C" class="flow-line" d="M 14,-48 L 14,-20 L 0,-8" />
+            <path id="flow-lead-E" class="flow-line" d="M 0,8 L 14,20 L 14,48" />
+            <path id="flow-short-CB" class="flow-line" d="M -30 0 A 40 40 0 0 1 14 -38" display="none" />
+            <path id="flow-short-BE" class="flow-line" d="M -30 0 A 40 40 0 0 0 14 38" display="none" />
+            <path id="flow-short-CE" class="flow-line" d="M 14 -38 A 40 40 0 0 1 14 38" display="none" />
+          </g>
+
+          <!-- ════════════════════ RESISTORS ════════════════════ -->
+          <g transform="translate(185,10)">
+            <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+            <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R1</text>
+            <text x="65" y="40" text-anchor="middle" font-size="16"><tspan fill="var(--colour-text)">120</tspan><tspan fill="var(--colour-resistor-labels)"> kΩ</tspan></text>
+          </g>
+          <g transform="translate(185,385)">
+            <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+            <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R2</text>
+            <text x="65" y="40" text-anchor="middle" font-size="16"><tspan fill="var(--colour-text)">15</tspan><tspan fill="var(--colour-resistor-labels)"> kΩ</tspan></text>
+          </g>
+          <g transform="translate(425,50)">
+            <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+            <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">RC</text>
+            <text x="65" y="40" text-anchor="middle" font-size="16"><tspan fill="var(--colour-text)">1.8</tspan><tspan fill="var(--colour-resistor-labels)"> kΩ</tspan></text>
+          </g>
+          <g transform="translate(425,345)">
+            <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+            <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">RE</text>
+            <text x="65" y="40" text-anchor="middle" font-size="16"><tspan fill="var(--colour-text)">270</tspan><tspan fill="var(--colour-resistor-labels)"> Ω</tspan></text>
+          </g>
+
+        </g>
+      </svg>
+    </div>
+    <div class="fault-caption" id="faultCaption"></div>
+  </div>
+
+  <footer>Electronics // Cert III // UEEEC0066 // Resources</footer>
+
+  <script>
+    // ══════════════════════════════════════════════════════════════════════
+    // STATES — Healthy + 6 internal faults. VB/VC/VE/IC/IE are the SAME
+    // Python-verified values already in bjt_fault_interactive_internal.
+    // html's own QUESTIONS[].meterOverride (see that file for the full
+    // derivation of each). IR1/IR2/IB are NOT given there — derived here
+    // via plain Ohm's law/KCL from VB (R1=120k, R2=15k): IR1=(12-VB)/R1,
+    // IR2=VB/R2, IB=IR1-IR2. IC/IE segment currents reuse the given IC/IE
+    // directly (not re-derived from VC/VE, which are rounded to 2dp and
+    // drift a percent or two off if you work backward from them).
+    // ══════════════════════════════════════════════════════════════════════
+    const R1 = 120e3, R2 = 15e3, VCC = 12;
+    const STATES = {
+      'healthy': {
+        label: 'Normal (healthy)', fault: null, short: null,
+        VB: '1.2', VC: '8.1', VE: '0.6', IC: 2.17, IE: 2.18,
+        caption: 'Healthy circuit — every current at its normal value.',
+      },
+      'base-open': {
+        label: 'Base lead open', fault: 'bjt-base', short: null,
+        VB: '1.2', VC: '12.0', VE: '0.0', IC: 0.00, IE: 0.00, blockBase: true,
+        caption: '<b>Base open</b> — IB forced to zero, transistor fully cut off. The R1/R2 divider still runs normally; only IC/IE collapse.',
+      },
+      'emitter-open': {
+        label: 'Emitter lead open', fault: 'bjt-emitter', short: null,
+        VB: '1.2', VC: '12.0', VE: '0.0', IC: 0.00, IE: 0.00, blockBase: true,
+        caption: '<b>Emitter open</b> — no path out of the device at all, so IB is blocked just as completely as a base-open fault. DC-identical to it.',
+      },
+      'collector-open': {
+        label: 'Collector lead open', fault: 'bjt-collector', short: null,
+        VB: '1.2', VC: '12.0', VE: '0.6', IC: 0.00, IE: 2.18,
+        caption: '<b>Collector open</b> — the base-emitter loop never needed the collector at all, so IB/IE keep flowing normally; only IC dies.',
+      },
+      'be-short': {
+        label: 'Base-emitter short', fault: null, short: 'BE',
+        VB: '0.03', VC: '12.0', VE: '0.03', IC: 0.00, IE: 0.10,
+        caption: '<b>B-E short</b> — VBE forced to 0V, no β-controlled IC left. A trickle still flows base→short→RE, so IE isn\'t quite zero.',
+      },
+      'cb-short': {
+        label: 'Collector-base short', fault: null, short: 'CB',
+        VB: '2.07', VC: '2.07', VE: '1.47', IC: 5.51, IE: 5.46,
+        caption: '<b>C-B short</b> — RC now feeds the base node directly. Every current surges up, and IB is actually pushed BACKWARD out of the base.',
+      },
+      'ce-short': {
+        label: 'Collector-emitter short', fault: null, short: 'CE',
+        VB: '1.2', VC: '1.57', VE: '1.57', IC: 5.80, IE: 5.80, blockBase: true,
+        // blockBase here for a DIFFERENT reason than base-open/emitter-
+        // open's broken wire: VBE = VB−VE = 1.2−1.57 = −0.37V, genuinely
+        // reverse-biased (not just "small") — the junction blocks current
+        // the same way an open circuit does, so the stiff-divider IB
+        // figure is just as much a non-flowing artefact here as it is on
+        // an actually-broken lead. Contrast be-short, which stays
+        // animated: there the base lead's current is real, flowing
+        // through the literal short wire itself, not blocked by a
+        // junction at all.
+        caption: '<b>C-E short</b> — VCE forced to 0V, the B-E junction ends up reverse-biased (IB≈0). RC/RE just divide VCC directly.',
+      },
+    };
+
+    // Derived junction voltages — VBE (forward/reverse bias, the number
+    // behind every "does it take the normal route" answer above) and VCB
+    // (0V is the C-B-short tell: B and C are then literally the same
+    // node). Computed from VB/VC/VE, not independently given anywhere.
+    Object.values(STATES).forEach(s => {
+      s.VBE = (parseFloat(s.VB) - parseFloat(s.VE)).toFixed(2);
+      s.VCB = (parseFloat(s.VC) - parseFloat(s.VB)).toFixed(2);
+    });
+
+    // Pre-compute IR1/IR2/IB + tiers for every state.
+    const healthyRef = {};
+    function segCurrents(s) {
+      const VB = parseFloat(s.VB);
+      const IR1 = (VCC - VB) / R1 * 1000; // mA
+      const IR2 = VB / R2 * 1000;
+      const IB = IR1 - IR2;
+      return { IR1, IR2, IB, IC: s.IC, IE: s.IE };
+    }
+    Object.assign(healthyRef, segCurrents(STATES.healthy));
+
+    // "stopped" means genuinely ~0 current (a truly broken/blocked path —
+    // base-open's IC=0.00mA exactly), NOT "small compared to this
+    // segment's own healthy value". Those are different things: be-short's
+    // IE=0.10mA is only 4.6% of its 2.18mA healthy baseline (would have
+    // rounded down into the same "stopped" bucket as a true zero on a
+    // ratio-only check) but it's real, non-zero current — it's genuinely
+    // flowing into RE, just a lot less than usual. Checking the absolute
+    // value first keeps "stopped" reserved for the real zeros and lets
+    // small-but-real currents land in "slow" instead, so they still show
+    // some visible movement rather than looking identical to a dead path.
+    function tier(value, healthy) {
+      if (Math.abs(value) < 0.0005) return 'stopped';
+      const ratio = healthy === 0 ? Infinity : Math.abs(value / healthy) * 100;
+      if (ratio < 40) return 'slow';
+      if (ratio <= 200) return 'normal';
+      return 'fast';
+    }
+
+    Object.values(STATES).forEach(s => {
+      s.seg = segCurrents(s);
+      s.tiers = {
+        IR1: tier(s.seg.IR1, healthyRef.IR1),
+        IB: tier(s.seg.IB, healthyRef.IB),
+        IR2: tier(s.seg.IR2, healthyRef.IR2),
+        IC: tier(s.seg.IC, healthyRef.IC),
+        IE: tier(s.seg.IE, healthyRef.IE),
+      };
+      // blockBase: the "IB=IR1-IR2" figure is only ever an artefact of
+      // the stiff-divider approximation (VB treated as unchanged) — it
+      // is NOT current that's actually going anywhere, in 3 of the 7
+      // states, for 2 different physical reasons:
+      //  - base-open: the base lead itself is a dead end. By KCL at
+      //    node B, ALL of R1's current has to exit through R2 instead —
+      //    none can flow toward a dead end, not right up to the break,
+      //    not one bit further.
+      //  - emitter-open: the base lead is physically fine, but nothing
+      //    sustains a flow into it without a complete circuit back out
+      //    — same zero result, different cause.
+      //  - ce-short: NOT a broken wire at all — VBE = VB−VE = 1.2−1.57 =
+      //    −0.37V, genuinely reverse-biased, so the junction itself
+      //    blocks current the same way an open circuit would. (be-short
+      //    is deliberately NOT in this list — there the base lead's
+      //    current is real, flowing through the literal short wire,
+      //    never blocked by a junction at all.)
+      // Whichever the cause, overrides BOTH the external node-B-to-pin
+      // segment (IB) and the internal pin-to-junction one (lead-B)
+      // together, not just whichever one a fault marker happens to sit on.
+      if (s.blockBase) { s.tiers.IB = 'stopped'; s.tiers['lead-B'] = 'stopped'; }
+      else { s.tiers['lead-B'] = s.tiers.IB; }
+      // The internal leads always carry the same current as their own
+      // external ammeter — true whether or not a short exists (see the
+      // markup's own comment on flow-lead-B/C/E).
+      s.tiers['lead-C'] = s.tiers.IC;
+      s.tiers['lead-E'] = s.tiers.IE;
+      s.ibReversed = s.seg.IB < 0;
+    });
+
+    const FLOW_IDS = ['IR1', 'IB', 'IR2', 'IC', 'IE', 'lead-B', 'lead-C', 'lead-E'];
+    const FAULT_LEAD_IDS = ['bjt-base', 'bjt-collector', 'bjt-emitter'];
+    const SHORT_IDS = ['CB', 'BE', 'CE'];
+
+    // Path-length duration scaling — ONLY applied for be-short. That's
+    // the one state where the effect was actually needed (the short-BE
+    // arc, at 65px, looked noticeably busier than the 184px base lead
+    // feeding it, purely from being a shorter path at the same tuned
+    // duration — see chat). Scaling every state's every segment against
+    // the same reference also touched the plain healthy circuit's own
+    // long-tuned feel, which wasn't the ask — gated to be-short only so
+    // every other state keeps the original, unscaled .flow-slow/normal/
+    // fast durations exactly as tuned.
+    const REFERENCE_LENGTH = 200; // px — close to the external wires' own typical length
+    const TIER_DURATION = { slow: 1.8, normal: 0.8, fast: 0.35 }; // seconds, at REFERENCE_LENGTH — same numbers .flow-slow/normal/fast already used
+    const PATH_LENGTHS = {};
+    [...FLOW_IDS, ...SHORT_IDS.map(id => 'short-' + id)].forEach(id => {
+      const el = document.getElementById('flow-' + id);
+      if (el) PATH_LENGTHS[id] = el.getTotalLength();
+    });
+    function scaledDuration(id, tierName, active) {
+      const base = TIER_DURATION[tierName];
+      // '' (not null — style.animationDuration=null stringifies to the
+      // literal text "null", an invalid CSS value) whenever scaling
+      // doesn't apply: 'stopped' has no animation to scale, and every
+      // state other than be-short just uses the plain tuned duration.
+      if (!active || !base || !PATH_LENGTHS[id]) return '';
+      return (base * REFERENCE_LENGTH / PATH_LENGTHS[id]).toFixed(2) + 's';
+    }
+
+    // Up/down ghost — arrow + delta shown beside a meter once it differs
+    // from the healthy baseline, same convention (and colour tokens) as
+    // bjt_fault_interactive_internal.html's own addGhost(). That file
+    // computes deltas from curated per-question meterOverride entries;
+    // here every meter (including the 2 derived junction ones) compares
+    // itself against STATES.healthy directly, so one generic loop covers
+    // all 7 rather than repeating this per meter.
+    function addGhost(groupId, wentUp, deltaStr) {
+      const g = document.getElementById(groupId + 'Ghost'); if (!g) return;
+      const clr = wentUp ? 'var(--colour-up)' : 'var(--colour-down)';
+      document.getElementById(groupId + 'GhostText').setAttribute('fill', clr);
+      document.getElementById(groupId + 'GhostArrow').textContent = wentUp ? '⬆' : '⬇';
+      document.getElementById(groupId + 'GhostDelta').textContent = deltaStr;
+      g.setAttribute('display', 'inline');
+    }
+    function removeGhost(groupId) {
+      const g = document.getElementById(groupId + 'Ghost'); if (g) g.setAttribute('display', 'none');
+    }
+    const GHOST_METERS = [
+      { group: 'meterVB', key: 'VB', unit: 'V', isStr: true },
+      { group: 'meterVC', key: 'VC', unit: 'V', isStr: true },
+      { group: 'meterVE', key: 'VE', unit: 'V', isStr: true },
+      { group: 'ammeterICGroup', key: 'IC', unit: 'mA', isStr: false },
+      { group: 'ammeterIEGroup', key: 'IE', unit: 'mA', isStr: false },
+      { group: 'meterVBE', key: 'VBE', unit: 'V', isStr: true },
+      { group: 'meterVCB', key: 'VCB', unit: 'V', isStr: true },
+    ];
+
+    function setFault(key) {
+      const s = STATES[key];
+
+      // Meters
+      document.getElementById('meterVBValue').textContent = s.VB;
+      document.getElementById('meterVCValue').textContent = s.VC;
+      document.getElementById('meterVEValue').textContent = s.VE;
+      document.getElementById('ammeterICValue').textContent = s.IC.toFixed(2);
+      document.getElementById('ammeterValue').textContent = s.IE.toFixed(2);
+      document.getElementById('meterVBEValue').textContent = s.VBE;
+      document.getElementById('meterVCBValue').textContent = s.VCB;
+
+      // Ghosts — arrow+delta vs the healthy baseline, hidden when unchanged
+      GHOST_METERS.forEach(m => {
+        const cur = m.isStr ? parseFloat(s[m.key]) : s[m.key];
+        const base = m.isStr ? parseFloat(STATES.healthy[m.key]) : STATES.healthy[m.key];
+        const delta = cur - base;
+        if (Math.abs(delta) < 0.005) { removeGhost(m.group); return; }
+        addGhost(m.group, delta > 0, `${delta > 0 ? '+' : '−'}${Math.abs(delta).toFixed(2)}${m.unit}`);
+      });
+
+      // Fault indicators on the BJT symbol
+      FAULT_LEAD_IDS.forEach(id => {
+        const el = document.getElementById('fault-x-' + id);
+        if (el) el.setAttribute('display', id === s.fault ? 'inline' : 'none');
+      });
+      SHORT_IDS.forEach(id => {
+        const el = document.getElementById('short-' + id);
+        if (el) el.setAttribute('display', id === s.short ? 'inline' : 'none');
+
+        // The matching flow-short-* overlay: only the ACTIVE short (if
+        // any) is shown/animated. Its tier is |IB| for the two shorts
+        // that involve the base (CB/BE — that's exactly the current
+        // taking the shortcut instead of a normal path, see markup
+        // comment), or IC(=IE, they're equal here) for CE, since the
+        // source file's own derivation has 100% of the current crossing
+        // straight through that short. CB is the only one that ever
+        // reverses (reuses the same ibReversed flag as the base lead).
+        const flowEl = document.getElementById('flow-short-' + id);
+        if (!flowEl) return;
+        flowEl.classList.remove('flow-stopped', 'flow-slow', 'flow-normal', 'flow-fast', 'flow-reverse');
+        flowEl.style.animationDuration = '';
+        if (id === s.short) {
+          flowEl.setAttribute('display', 'inline');
+          const shortTier = id === 'CE' ? s.tiers.IC : s.tiers.IB;
+          flowEl.classList.add('flow-' + shortTier);
+          flowEl.style.animationDuration = scaledDuration('short-' + id, shortTier, key === 'be-short');
+          if (id === 'CB' && s.ibReversed) flowEl.classList.add('flow-reverse');
+        } else {
+          flowEl.setAttribute('display', 'none');
+        }
+      });
+
+      // Flow animation — reset classes then apply this state's tiers,
+      // with each element's own duration scaled by its own path length
+      // (see scaledDuration/PATH_LENGTHS above) so short internal
+      // segments don't read as artificially busier than long external
+      // ones at the same tier.
+      FLOW_IDS.forEach(id => {
+        const el = document.getElementById('flow-' + id);
+        if (!el) return;
+        el.classList.remove('flow-stopped', 'flow-slow', 'flow-normal', 'flow-fast', 'flow-reverse');
+        el.classList.add('flow-' + s.tiers[id]);
+        el.style.animationDuration = scaledDuration(id, s.tiers[id], key === 'be-short');
+        if ((id === 'IB' || id === 'lead-B') && s.ibReversed) el.classList.add('flow-reverse');
+      });
+
+      // Caption + active button
+      document.getElementById('faultCaption').innerHTML = s.caption;
+      document.querySelectorAll('#faultSeg button').forEach(btn => btn.classList.remove('active'));
+      const idx = Object.keys(STATES).indexOf(key);
+      document.querySelectorAll('#faultSeg button')[idx].classList.add('active');
+    }
+
+    setFault('healthy');
+  </script>
+</body>
+
+</html>
