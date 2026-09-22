@@ -61,7 +61,17 @@
 
     /* Flow overlay lines — dashed, drawn on top of the existing static
        wire (var(--colour-series)) in the current-flow colour so moving
-       dashes read as "flow", not a second wire. */
+       dashes read as "flow", not a second wire. Motion itself comes from
+       an SVG SMIL <animate> child (see JS's applyFlow()), NOT a CSS
+       @keyframes animation — confirmed on an actual iPhone (Arc Search)
+       that the CSS-animation version's Animation object was correctly
+       created/running (checked via the Web Animations API) but never
+       visibly repainted; will-change didn't fix it either. SMIL is a
+       completely different rendering code path from CSS animations and
+       is the long-established, purpose-built technique for exactly this
+       "flowing dashes along a path" effect, with a much more reliable
+       WebKit track record. Only the static look (colour/width/opacity)
+       stays here now. */
     .flow-line {
       fill: none;
       stroke: var(--colour-flow);
@@ -69,27 +79,8 @@
       stroke-linecap: round;
       stroke-dasharray: 2, 11;
       opacity: .9;
-      /* Known WebKit/mobile-Safari issue: an animated element sharing a
-         stacking context with an SVG filter (the glow on the BJT/meter
-         shapes here) can stop visually repainting even while the
-         animation keeps running underneath — confirmed the animation
-         itself IS correctly created/running via the Web Animations API,
-         so if it's invisible on a phone this is the most likely cause.
-         will-change hints the browser to give this its own compositing
-         layer, the standard fix for that class of bug. */
-      will-change: stroke-dashoffset;
     }
-    /* Tiers — duration only, all share the same 13px dash period so the
-       animation stays visually continuous across a tier change. */
-    .flow-stopped { animation: none; stroke-dashoffset: 0; opacity: .35; }
-    .flow-slow { animation: flow-fwd 1.8s linear infinite; }
-    .flow-normal { animation: flow-fwd .8s linear infinite; }
-    .flow-fast { animation: flow-fwd .35s linear infinite; }
-    .flow-reverse.flow-slow { animation-name: flow-rev; }
-    .flow-reverse.flow-normal { animation-name: flow-rev; }
-    .flow-reverse.flow-fast { animation-name: flow-rev; }
-    @keyframes flow-fwd { to { stroke-dashoffset: -13; } }
-    @keyframes flow-rev { to { stroke-dashoffset: 13; } }
+    .flow-stopped { opacity: .35; }
 
     .fault-caption { text-align: center; font-size: .85rem; color: var(--colour-label); margin-top: .6rem; min-height: 1.2em; }
     .fault-caption b { color: var(--colour-ui-primary); }
@@ -558,14 +549,36 @@
       const el = document.getElementById('flow-' + id);
       if (el) PATH_LENGTHS[id] = el.getTotalLength();
     });
-    function scaledDuration(id, tierName, active) {
+    function flowDuration(id, tierName, scaleActive) {
       const base = TIER_DURATION[tierName];
-      // '' (not null — style.animationDuration=null stringifies to the
-      // literal text "null", an invalid CSS value) whenever scaling
-      // doesn't apply: 'stopped' has no animation to scale, and every
-      // state other than be-short just uses the plain tuned duration.
-      if (!active || !base || !PATH_LENGTHS[id]) return '';
-      return (base * REFERENCE_LENGTH / PATH_LENGTHS[id]).toFixed(2) + 's';
+      if (!base || !PATH_LENGTHS[id]) return base; // 'stopped' (no base) never reaches here anyway
+      return scaleActive ? (base * REFERENCE_LENGTH / PATH_LENGTHS[id]) : base;
+    }
+
+    const SVGNS = 'http://www.w3.org/2000/svg';
+    // Drives the actual motion via an SVG SMIL <animate> child, NOT a CSS
+    // @keyframes animation — see the markup's own comment on .flow-line
+    // for why (confirmed on an iPhone: the CSS version's Animation object
+    // was correctly created/running per the Web Animations API, but never
+    // visibly repainted in Arc Search/WebKit; will-change didn't help
+    // either). Always removes and recreates the <animate> element rather
+    // than mutating one in place — SMIL implementations are inconsistent
+    // about whether changing an already-running animation's attributes
+    // actually restarts it, so a fresh element sidesteps that ambiguity
+    // entirely rather than relying on beginElement()/endElement() timing.
+    function applyFlow(el, tierName, reversed, scaleActive) {
+      const old = el.querySelector('animate');
+      if (old) old.remove();
+      el.classList.toggle('flow-stopped', tierName === 'stopped');
+      if (tierName === 'stopped') { el.setAttribute('stroke-dashoffset', '0'); return; }
+      const dur = flowDuration(el.id.replace('flow-', ''), tierName, scaleActive);
+      const anim = document.createElementNS(SVGNS, 'animate');
+      anim.setAttribute('attributeName', 'stroke-dashoffset');
+      anim.setAttribute('values', reversed ? '0;13' : '0;-13');
+      anim.setAttribute('dur', dur.toFixed(2) + 's');
+      anim.setAttribute('repeatCount', 'indefinite');
+      anim.setAttribute('calcMode', 'linear');
+      el.appendChild(anim);
     }
 
     // Up/down ghost — arrow + delta shown beside a meter once it differs
@@ -636,31 +649,24 @@
         // reverses (reuses the same ibReversed flag as the base lead).
         const flowEl = document.getElementById('flow-short-' + id);
         if (!flowEl) return;
-        flowEl.classList.remove('flow-stopped', 'flow-slow', 'flow-normal', 'flow-fast', 'flow-reverse');
-        flowEl.style.animationDuration = '';
         if (id === s.short) {
           flowEl.setAttribute('display', 'inline');
           const shortTier = id === 'CE' ? s.tiers.IC : s.tiers.IB;
-          flowEl.classList.add('flow-' + shortTier);
-          flowEl.style.animationDuration = scaledDuration('short-' + id, shortTier, key === 'be-short');
-          if (id === 'CB' && s.ibReversed) flowEl.classList.add('flow-reverse');
+          applyFlow(flowEl, shortTier, id === 'CB' && s.ibReversed, key === 'be-short');
         } else {
           flowEl.setAttribute('display', 'none');
         }
       });
 
-      // Flow animation — reset classes then apply this state's tiers,
-      // with each element's own duration scaled by its own path length
-      // (see scaledDuration/PATH_LENGTHS above) so short internal
-      // segments don't read as artificially busier than long external
-      // ones at the same tier.
+      // Flow animation — apply this state's tiers, with each element's
+      // own duration scaled by its own path length for be-short only
+      // (see flowDuration/PATH_LENGTHS above) so short internal segments
+      // don't read as artificially busier than long external ones there.
       FLOW_IDS.forEach(id => {
         const el = document.getElementById('flow-' + id);
         if (!el) return;
-        el.classList.remove('flow-stopped', 'flow-slow', 'flow-normal', 'flow-fast', 'flow-reverse');
-        el.classList.add('flow-' + s.tiers[id]);
-        el.style.animationDuration = scaledDuration(id, s.tiers[id], key === 'be-short');
-        if ((id === 'IB' || id === 'lead-B') && s.ibReversed) el.classList.add('flow-reverse');
+        const reversed = (id === 'IB' || id === 'lead-B') && s.ibReversed;
+        applyFlow(el, s.tiers[id], reversed, key === 'be-short');
       });
 
       // Caption + active button
