@@ -1,0 +1,860 @@
+<!--
+  IC/component pinout reference sheet — digitised from the teacher's own
+  photographed lab reference page (7400/7402/7404/7408/7432/7486 basic TTL
+  gates, 7447 BCD-to-7-segment decoder, 7474 dual D flip-flop, 7476 dual JK
+  flip-flop, 4011 CMOS quad NAND, 4N25 optocoupler, LSD5365 7-segment
+  display). Not a quiz — a static click-to-zoom gallery, since the whole
+  point is a quick lab lookup, not testing.
+
+  Deliberately its own small page, not built on assets/quiz-engine.js —
+  there are no questions, no QUESTIONS[] state, nothing to check. It DOES
+  reuse quiz-common.css wholesale for shared tokens/chrome (crumb, header,
+  buttons) and specifically the .diagram-modal/.modal-inner/.modal-header/
+  .modal-title/.modal-close rules already used as the "zoom modal" on every
+  quiz page's circuit panel — see quiz-engine.js's own openModal()/
+  closeModal() for the pattern this page's small hand-rolled openIcModal()/
+  closeModal() below copies (can't reuse those functions directly: they're
+  wired to a single per-question CIRCUIT_SVG_ID, not a click-any-of-N
+  gallery).
+
+  Each IC is one <g id="ic-xxxx"> in the hidden defs below: a numbered DIP
+  outline (see dipPins() in the one-off Python generator this was authored
+  with — not part of the page, just how the repetitive pin-stub markup was
+  produced) plus either the real gate symbols (copied from
+  assets/shapes/logic-gates.svg — cross-file <use> doesn't work under
+  file://, so this is a local copy, same convention as every other page's
+  shapeGrid defs) or full per-pin text labels for the ICs where every pin
+  matters (7447/7474/7476). The simple gate ICs (7400/7402/7404/7408/7432/
+  7486/4011) deliberately only number the 4 corner pins (1/7/8/14, +5V/GND)
+  and leave the other 10 as bare stubs — matching the source photo's own
+  level of detail, which shows package layout, not full per-pin wiring.
+
+  7447's BCD input pins are labelled A0-A3 (not the datasheet's B/C/D/A) —
+  this matches the teacher's own photographed sheet, treating the 4-bit BCD
+  input as a binary word A3 A2 A1 A0 (A0 = LSB), consistent with this
+  course's own number-systems teaching. Segment outputs (a-g) are the
+  standard 7447 pin order, unchanged.
+
+  4N25 and LSD5365 pin reads (pins 2/5 on the 4N25, pin 3 on the LSD5365)
+  were less certain from the source photo than the rest — flagged to the
+  teacher for a direct check against the photo/datasheet rather than
+  guessed silently, since a wrong pinout here is a real lab-hardware risk,
+  not just a typo.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../assets/theme-init.js"></script>
+  <title>IC &amp; Component Reference — UEEEC0069</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../assets/quiz-common.css">
+  <script src="../../assets/breadcrumb.js" defer></script>
+  <style>
+    /* Package-outline colour — its own token (not a reuse of --colour-bjt,
+       which stays on the gate symbols) so the DIP body reads as "the chip"
+       and the gates read as "what's inside it". Dark-mode default (this
+       project's usual :root) is a cool silver, evoking black-plastic-
+       package-with-printed-markings without literally being black on a
+       dark page; light mode overrides to a near-black, matching a real
+       IC's actual body colour — same override pattern quiz-common.css
+       itself documents (dark in :root, light under
+       :root[data-theme="light"]). */
+    :root { --colour-ic-outline: #c7d2e0; }
+    :root[data-theme="light"] { --colour-ic-outline: #0f172a; }
+
+    .intro {
+      color: var(--colour-label);
+      font-size: .85rem;
+      line-height: 1.5;
+      max-width: 640px;
+      margin: 0 auto 1.2rem;
+      text-align: center;
+    }
+
+    .ic-grid {
+      width: 100%;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: .8rem;
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    .ic-card {
+      position: relative;
+      background: rgba(var(--colour-label-rgb), .08);
+      border: 2px solid var(--colour-border);
+      border-radius: var(--radius-lg);
+      cursor: zoom-in;
+      padding: .6rem .5rem .5rem;
+      transition: border-color .15s, background .15s;
+      text-align: center;
+    }
+
+    .ic-card:hover {
+      border-color: rgba(var(--colour-ui-primary-rgb), .5);
+    }
+
+    .ic-card svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .ic-card-part {
+      font-family: var(--font-display);
+      font-size: .8rem;
+      font-weight: bold;
+      color: var(--colour-ui-primary);
+      margin-top: .3rem;
+    }
+
+    .ic-card-desc {
+      font-size: .62rem;
+      color: var(--colour-label);
+      margin-top: .1rem;
+      line-height: 1.3;
+    }
+
+    /* Shared IC-diagram styling — every ic-* <g> in the defs below draws
+       with these classes so light/dark theming is automatic, same pattern
+       as quiz-common.css's own token convention. */
+    .ic-body {
+      fill: none;
+      stroke: var(--colour-ic-outline);
+      stroke-width: 2;
+    }
+
+    .ic-pin {
+      fill: var(--colour-ic-outline);
+      opacity: .55;
+    }
+
+    .ic-pin-num {
+      font-size: 9px;
+      fill: var(--colour-label);
+    }
+
+    .ic-pin-label {
+      font-size: 9px;
+      font-weight: bold;
+      fill: var(--colour-text);
+    }
+
+    .ic-barrier {
+      stroke: rgba(var(--colour-label-rgb), .4);
+      stroke-width: 1.5;
+      stroke-dasharray: 4, 3;
+    }
+
+    .ovl {
+      text-decoration: overline;
+      text-decoration-thickness: .09em;
+    }
+
+    .modal-inner svg {
+      max-height: calc(92vh - 5rem);
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Hidden defs: gate symbols copied from assets/shapes/logic-gates.svg
+       (master reference — edit there first, then re-copy here; cross-file
+       <use> doesn't work under file://, see that file's own header) plus
+       every ic-xxxx pinout diagram used by the gallery below. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <g id="lazer-light">
+        <!-- Arrowhead Marker -->
+        <marker id="arrowhead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="12" markerHeight="12"
+          orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 L 3 5 Z" fill="var(--colour-bjt)" />
+        </marker>
+
+        <!-- Zigzag Path -->
+        <path d="M 25 35 
+          C 65 40, 100 55, 115 70 
+          L 60 115 
+          C 85 135, 110 145, 130 155" fill="none" stroke="var(--colour-bjt)" stroke-width="4" stroke-linecap="round"
+          stroke-linejoin="round" marker-end="url(#arrowhead)" />
+      </g>
+
+    <g id="ic-common-body">
+      <path d="M -52,-126 L -8,-126 A 8,8 0 0 0 8,-126 L 52,-126 L 52,126 L -52,126 Z" class="ic-body" />
+      <rect x="-62" y="-110" width="10" height="4" class="ic-pin" />
+      <text x="-66" y="-104.8" text-anchor="end" class="ic-pin-num">1</text>
+      <rect x="-62" y="-74" width="10" height="4" class="ic-pin" />
+      <rect x="-62" y="-38" width="10" height="4" class="ic-pin" />
+      <rect x="-62" y="-2" width="10" height="4" class="ic-pin" />
+      <rect x="-62" y="34" width="10" height="4" class="ic-pin" />
+      <rect x="-62" y="70" width="10" height="4" class="ic-pin" />
+      <rect x="-62" y="106" width="10" height="4" class="ic-pin" />
+      <text x="-46" y="111.2" text-anchor="start" class="ic-pin-label">GND</text>
+      <text x="-66" y="111.2" text-anchor="end" class="ic-pin-num">7</text>
+      <rect x="52" y="106" width="10" height="4" class="ic-pin" />
+      <text x="66" y="111.2" text-anchor="start" class="ic-pin-num">8</text>
+      <rect x="52" y="70" width="10" height="4" class="ic-pin" />
+      <rect x="52" y="34" width="10" height="4" class="ic-pin" />
+      <rect x="52" y="-2" width="10" height="4" class="ic-pin" />
+      <rect x="52" y="-38" width="10" height="4" class="ic-pin" />
+      <rect x="52" y="-74" width="10" height="4" class="ic-pin" />
+      <rect x="52" y="-110" width="10" height="4" class="ic-pin" />
+      <text x="46" y="-104.8" text-anchor="end" class="ic-pin-label">+5V</text>
+      <text x="66" y="-104.8" text-anchor="start" class="ic-pin-num">14</text>
+    </g>
+    <!-- ══ gate primitives (verbatim copy from logic-gates.svg) ══ -->
+    <g id="gate-lead-in2">
+      <line x1="-24" y1="-8" x2="-8" y2="-8" stroke="var(--colour-bjt)" stroke-width="2" />
+      <line x1="-24" y1="8" x2="-8" y2="8" stroke="var(--colour-bjt)" stroke-width="2" />
+    </g>
+    <g id="gate-lead-in1">
+      <line x1="-24" y1="0" x2="-8" y2="0" stroke="var(--colour-bjt)" stroke-width="2" />
+    </g>
+    <g id="gate-lead-in2-or">
+      <line x1="-24" y1="-8" x2="-4.6" y2="-8" stroke="var(--colour-bjt)" stroke-width="2" />
+      <line x1="-24" y1="8" x2="-4.6" y2="8" stroke="var(--colour-bjt)" stroke-width="2" />
+    </g>
+    <g id="gate-lead-in2-xor">
+      <line x1="-24" y1="-8" x2="-9.9" y2="-8" stroke="var(--colour-bjt)" stroke-width="2" />
+      <line x1="-24" y1="8" x2="-9.9" y2="8" stroke="var(--colour-bjt)" stroke-width="2" />
+    </g>
+    <g id="gate-lead-out">
+      <line x1="24" y1="0" x2="44" y2="0" stroke="var(--colour-bjt)" stroke-width="2" />
+    </g>
+    <g id="gate-lead-out-inv">
+      <circle cx="28" cy="0" r="4" fill="none" stroke="var(--colour-bjt)" stroke-width="2" />
+      <line x1="32" y1="0" x2="44" y2="0" stroke="var(--colour-bjt)" stroke-width="2" />
+    </g>
+    <path id="gate-and-body" d="M -8,-16 L 8,-16 A 16,16 0 0 1 8,16 L -8,16 Z" fill="none" stroke="var(--colour-bjt)"
+      stroke-width="2" />
+    <path id="gate-or-body" d="M -8,-16 Q 8,-16 24,0 Q 8,16 -8,16 Q 1,0 -8,-16 Z" fill="none" stroke="var(--colour-bjt)"
+      stroke-width="2" />
+    <path id="gate-xor-extra" d="M -14,-16 Q -3,0 -14,16" fill="none" stroke="var(--colour-bjt)" stroke-width="2" />
+    <path id="gate-tri-body" d="M -8,-16 L -8,16 L 24,0 Z" fill="none" stroke="var(--colour-bjt)" stroke-width="2" />
+
+    <g id="gate-and-trad" transform="rotate(90) scale(0.85)">
+      <use href="#gate-lead-in2" />
+      <use href="#gate-and-body" />
+      <use href="#gate-lead-out" />
+    </g>
+    <g id="gate-nand-trad" transform="rotate(90) scale(0.85)">
+      <use href="#gate-lead-in2" />
+      <use href="#gate-and-body" />
+      <use href="#gate-lead-out-inv" />
+    </g>
+    <g id="gate-or-trad" transform="rotate(90) scale(0.85)">
+      <use href="#gate-lead-in2-or" />
+      <use href="#gate-or-body" />
+      <use href="#gate-lead-out" />
+    </g>
+    <g id="gate-nor-trad" transform="rotate(270) scale(0.85)">
+      <use href="#gate-lead-in2-or" />
+      <use href="#gate-or-body" />
+      <use href="#gate-lead-out-inv" />
+    </g>
+    <g id="gate-xor-trad" transform="rotate(90) scale(0.85)">
+      <use href="#gate-lead-in2-xor" />
+      <use href="#gate-xor-extra" />
+      <use href="#gate-or-body" />
+      <use href="#gate-lead-out" />
+    </g>
+    <g id="gate-not-trad" transform="rotate(90) scale(0.53)">
+      <use href="#gate-lead-in1" />
+      <use href="#gate-tri-body" />
+      <use href="#gate-lead-out-inv" />
+    </g>
+
+    <!-- Vertical mirror of gate-lines-out-top (every y negated) — NAND/
+           AND/XOR gates use rotate(90) so their output ends up at the
+           BOTTOM, the opposite of NOR/OR's rotate(270). Same routing
+           shape, reflected to start from the opposite side of the gate. -->
+    <g id="gate-lines-out-bottom">
+      <!-- Gate 1 -->
+      <line x1="37.8" y1="38" x2="37.8" y2="20" stroke="var(--colour-bjt)" stroke-width="1.5" />
+      <line x1="0" y1="20" x2="38" y2="20" stroke="var(--colour-bjt)" stroke-width="1.5" />
+      <!-- Gate 2 -->
+      <line x1="0" y1="56" x2="9" y2="56" stroke="var(--colour-bjt)" stroke-width="1.5" />
+      <line x1="8" y1="31" x2="8" y2="55.3" stroke="var(--colour-bjt)" stroke-width="1.5" />
+      <line x1="8" y1="32" x2="25" y2="32" stroke="var(--colour-bjt)" stroke-width="1.5" />
+      <!-- Output-->
+      <line x1="31" y1="92" x2="31" y2="88" stroke="var(--colour-bjt)" stroke-width="1.5" />
+      <line x1="0" y1="92" x2="31.6" y2="92" stroke="var(--colour-bjt)" stroke-width="1.5" />
+    </g>
+
+    <g id="gate-lines-out-top">
+      <line x1="0" y1="0" x2="31.8" y2="0" stroke="var(--colour-bjt)" stroke-width="1.5" />
+      <line x1="7.3" y1="58" x2="25" y2="58" stroke="var(--colour-bjt)" stroke-width="1.5" />
+      <line x1="8" y1="58" x2="8" y2="35.3" stroke="var(--colour-bjt)" stroke-width="1.5" />
+      <line x1="0" y1="36" x2="8.4" y2="36" stroke="var(--colour-bjt)" stroke-width="1.5" />
+      <line x1="38" y1="58" x2="38" y2="72" stroke="var(--colour-bjt)" stroke-width="1.5" />
+      <line x1="0" y1="72" x2="38.4" y2="72" stroke="var(--colour-bjt)" stroke-width="1.5" />
+    </g>
+
+    <g id="gate-lines-out-not">
+      <line x1="0" y1="-16" x2="31.5" y2="-16" stroke="var(--colour-bjt)" stroke-width="0.75" />
+      <line x1="0" y1="20" x2="31.5" y2="20" stroke="var(--colour-bjt)" stroke-width="0.75" />
+    </g>
+
+    <g id="nand-common-ic">
+      <use href="#ic-common-body" />
+      <g id="nand-gate-1-3">
+        <use href="#gate-nand-trad" transform="translate(-21,-76)" />
+        <use href="#gate-lines-out-bottom" transform="translate(-52,-128)" />
+      </g>
+      <g id="nand-gate-4-6">
+        <use href="#gate-nand-trad" transform="translate(-21,32)" />
+        <use href="#gate-lines-out-bottom" transform="translate(-52,-20)" />
+      </g>
+      <g id="nand-gate-11-13">
+        <use href="#gate-nand-trad" transform="translate(21,-39)" />
+        <use href="#gate-lines-out-bottom" transform="translate(52,-92) scale(-1, 1)" />
+      </g>
+      <g id="nand-gate-8-10">
+        <use href="#gate-nand-trad" transform="translate(21,68)" />
+        <use href="#gate-lines-out-bottom" transform="translate(52,16) scale(-1, 1)" />
+      </g>
+    </g>
+
+    <g id="not-common-ic">
+      <use href="#gate-not-trad" transform="translate(0,0)" />
+      <use href="#gate-lines-out-not" transform="translate(-31,3)" />
+    </g>
+
+
+    <!-- ══ 4N25 internals — vertical LED (anode top/pin1, cathode
+           bottom/pin3) and a phototransistor with no base LEAD (light
+           replaces the base electrically), collector top/pin6, emitter
+           bottom/pin4, 2 light-ray arrows standing in for the optical
+           link across the isolation barrier. ══ -->
+    <g id="diode-right">
+      <line x1="-25" y1="0" x2="-10" y2="0" style="stroke: var(--colour-diode)" stroke-width="2"
+        stroke-linecap="round" />
+      <polygon points="-10,-12 -10,12 10,0" style="fill: var(--colour-diode)" filter="url(#glow)" />
+      <line x1="10" y1="-12" x2="10" y2="12" style="stroke: var(--colour-diode)" stroke-width="2.5" />
+      <line x1="10" y1="0" x2="25" y2="0" style="stroke: var(--colour-diode)" stroke-width="2" stroke-linecap="round" />
+    </g>
+    <g id="diode-down" transform="rotate(90)">
+      <use href="#diode-right" />
+    </g>
+
+    <g id="bjt-base-frame">
+      <line x1="-17" y1="0" x2="0" y2="0" style="stroke: var(--colour-bjt)" stroke-width="2" />
+      <line x1="0" y1="-12" x2="0" y2="12" style="stroke: var(--colour-bjt)" stroke-width="2.5" />
+      <polyline points="14,-34 14,-20 0,-8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none"
+        stroke-linejoin="round" />
+      <polyline points="14,34 14,20 0,8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none"
+        stroke-linejoin="round" />
+    </g>
+    <circle id="bjt-circle" cx="7" cy="0" r="24" fill="none" stroke="var(--colour-bjt)" stroke-width="2"
+      filter="url(#glow)" />
+
+    <g id="bjt-npn-standard-nocircle">
+      <use href="#bjt-base-frame" />
+      <polygon points="12,18 1,14 6,8" style="fill: var(--colour-bjt)" />
+    </g>
+
+
+    <!-- ══ 7400 — Quad 2-input NAND ══ -->
+    <g id="ic-7400">
+      <use href="#nand-common-ic" />
+    </g>
+
+    <!-- ══ 7402 — Quad 2-input NOR ══ -->
+    <!-- ══ 7402 — Quad 2-input NOR ══ -->
+    <g id="ic-7402">
+      <use href="#ic-common-body" />
+      <g id="nor-common-ic">
+        <use href="#ic-common-body" />
+        <g id="nor-gate-1-3">
+          <use href="#gate-nor-trad" transform="translate(-21,-70)" />
+          <use href="#gate-lines-out-top" transform="translate(-52,-108)" />
+        </g>
+        <g id="nor-gate-4-6">
+          <use href="#gate-nor-trad" transform="translate(-21,38)" />
+          <use href="#gate-lines-out-top" transform="translate(-52,0)" />
+        </g>
+        <g id="nor-gate-11-13">
+          <use href="#gate-nor-trad" transform="translate(21,-34)" />
+          <use href="#gate-lines-out-top" transform="translate(52,-72) scale(-1, 1)" />
+        </g>
+        <g id="nor-gate-8-10">
+          <use href="#gate-nor-trad" transform="translate(21,74)" />
+          <use href="#gate-lines-out-top" transform="translate(52,36) scale(-1, 1)" />
+        </g>
+      </g>
+    </g>
+
+    <!-- ══ 7404 — Hex inverter (6 gates, not 4 — the odd one out) ══ -->
+    <g id="ic-7404">
+      <use href="#ic-common-body" />
+      <g id="not-gate-1-2">
+        <use href="#not-common-ic" transform="translate(-21,-95)" />
+      </g>
+      <g id="not-gate-3-4">
+        <use href="#not-common-ic" transform="translate(-21,-23)" />
+      </g>
+      <g id="not-gate-5-6">
+        <use href="#not-common-ic" transform="translate(-21,49)" />
+      </g>
+      <g id="not-gate-9-10">
+        <use href="#not-common-ic" transform="translate(21,-59)  scale(-1, 1)" />
+      </g>
+      <g id="not-gate-11-12">
+        <use href="#not-common-ic" transform="translate(21,13)  scale(-1, 1)" />
+      </g>
+      <g id="not-gate-13-14">
+        <use href="#not-common-ic" transform="translate(21,85)  scale(-1, 1)" />
+      </g>
+    </g>
+
+    <!-- ══ 7408 — Quad 2-input AND ══ -->
+    <g id="ic-7408">
+      <use href="#ic-common-body" />
+      <g id="nand-gate-1-3">
+        <use href="#gate-and-trad" transform="translate(-21,-76)" />
+        <use href="#gate-lines-out-bottom" transform="translate(-52,-128)" />
+      </g>
+      <g id="nand-gate-4-6">
+        <use href="#gate-and-trad" transform="translate(-21,32)" />
+        <use href="#gate-lines-out-bottom" transform="translate(-52,-20)" />
+      </g>
+      <g id="nand-gate-11-13">
+        <use href="#gate-and-trad" transform="translate(21,-39)" />
+        <use href="#gate-lines-out-bottom" transform="translate(52,-92) scale(-1, 1)" />
+      </g>
+      <g id="nand-gate-8-10">
+        <use href="#gate-and-trad" transform="translate(21,68)" />
+        <use href="#gate-lines-out-bottom" transform="translate(52,16) scale(-1, 1)" />
+      </g>
+    </g>
+
+    <!-- ══ 7432 — Quad 2-input OR ══ -->
+    <g id="ic-7432">
+      <use href="#ic-common-body" />
+      <g id="nand-gate-1-3">
+        <use href="#gate-or-trad" transform="translate(-21,-76)" />
+        <use href="#gate-lines-out-bottom" transform="translate(-52,-128)" />
+      </g>
+      <g id="nand-gate-4-6">
+        <use href="#gate-or-trad" transform="translate(-21,32)" />
+        <use href="#gate-lines-out-bottom" transform="translate(-52,-20)" />
+      </g>
+      <g id="nand-gate-11-13">
+        <use href="#gate-or-trad" transform="translate(21,-39)" />
+        <use href="#gate-lines-out-bottom" transform="translate(52,-92) scale(-1, 1)" />
+      </g>
+      <g id="nand-gate-8-10">
+        <use href="#gate-or-trad" transform="translate(21,68)" />
+        <use href="#gate-lines-out-bottom" transform="translate(52,16) scale(-1, 1)" />
+      </g>
+    </g>
+
+    <!-- ══ 7486 — Quad 2-input XOR ══ -->
+    <g id="ic-7486">
+      <use href="#ic-common-body" />
+      <g id="nand-gate-1-3">
+        <use href="#gate-xor-trad" transform="translate(-21,-76)" />
+        <use href="#gate-lines-out-bottom" transform="translate(-52,-128)" />
+      </g>
+      <g id="nand-gate-4-6">
+        <use href="#gate-xor-trad" transform="translate(-21,32)" />
+        <use href="#gate-lines-out-bottom" transform="translate(-52,-20)" />
+      </g>
+      <g id="nand-gate-11-13">
+        <use href="#gate-xor-trad" transform="translate(21,-39)" />
+        <use href="#gate-lines-out-bottom" transform="translate(52,-92) scale(-1, 1)" />
+      </g>
+      <g id="nand-gate-8-10">
+        <use href="#gate-xor-trad" transform="translate(21,68)" />
+        <use href="#gate-lines-out-bottom" transform="translate(52,16) scale(-1, 1)" />
+      </g>
+    </g>
+
+    <!-- ══ 4011 — CMOS Quad 2-input NAND ══ -->
+    <g id="ic-4011">
+      <use href="#nand-common-ic" />
+    </g>
+
+    <!-- ══ 7447 — BCD-to-7-segment decoder/driver (16-pin). BCD inputs
+           labelled A0-A3, not datasheet B/C/D/A — see file header. ══ -->
+    <g id="ic-7447">
+      <path d="M -58,-144 L -8,-144 A 8,8 0 0 0 8,-144 L 58,-144 L 58,144 L -58,144 Z" class="ic-body" />
+      <rect x="-68" y="-128" width="10" height="4" class="ic-pin" />
+      <text x="-52" y="-122.8" text-anchor="start" class="ic-pin-label">A1</text>
+      <text x="-72" y="-122.8" text-anchor="end" class="ic-pin-num">1</text>
+      <rect x="-68" y="-92" width="10" height="4" class="ic-pin" />
+      <text x="-52" y="-86.8" text-anchor="start" class="ic-pin-label">A2</text>
+      <text x="-72" y="-86.8" text-anchor="end" class="ic-pin-num">2</text>
+      <rect x="-68" y="-56" width="10" height="4" class="ic-pin" />
+      <text x="-52" y="-50.8" text-anchor="start" class="ic-pin-label">
+        <tspan class="ovl">LT</tspan>
+      </text>
+      <text x="-72" y="-50.8" text-anchor="end" class="ic-pin-num">3</text>
+      <rect x="-68" y="-20" width="10" height="4" class="ic-pin" />
+      <text x="-52" y="-14.8" text-anchor="start" class="ic-pin-label">
+        <tspan class="ovl">RBO</tspan>
+      </text>
+      <text x="-72" y="-14.8" text-anchor="end" class="ic-pin-num">4</text>
+      <rect x="-68" y="16" width="10" height="4" class="ic-pin" />
+      <text x="-52" y="21.2" text-anchor="start" class="ic-pin-label">
+        <tspan class="ovl">RBI</tspan>
+      </text>
+      <text x="-72" y="21.2" text-anchor="end" class="ic-pin-num">5</text>
+      <rect x="-68" y="52" width="10" height="4" class="ic-pin" />
+      <text x="-52" y="57.2" text-anchor="start" class="ic-pin-label">A3</text>
+      <text x="-72" y="57.2" text-anchor="end" class="ic-pin-num">6</text>
+      <rect x="-68" y="88" width="10" height="4" class="ic-pin" />
+      <text x="-52" y="93.2" text-anchor="start" class="ic-pin-label">A0</text>
+      <text x="-72" y="93.2" text-anchor="end" class="ic-pin-num">7</text>
+      <rect x="-68" y="124" width="10" height="4" class="ic-pin" />
+      <text x="-52" y="129.2" text-anchor="start" class="ic-pin-label">GND</text>
+      <text x="-72" y="129.2" text-anchor="end" class="ic-pin-num">8</text>
+      <rect x="58" y="124" width="10" height="4" class="ic-pin" />
+      <text x="52" y="129.2" text-anchor="end" class="ic-pin-label">e</text>
+      <text x="72" y="129.2" text-anchor="start" class="ic-pin-num">9</text>
+      <rect x="58" y="88" width="10" height="4" class="ic-pin" />
+      <text x="52" y="93.2" text-anchor="end" class="ic-pin-label">d</text>
+      <text x="72" y="93.2" text-anchor="start" class="ic-pin-num">10</text>
+      <rect x="58" y="52" width="10" height="4" class="ic-pin" />
+      <text x="52" y="57.2" text-anchor="end" class="ic-pin-label">c</text>
+      <text x="72" y="57.2" text-anchor="start" class="ic-pin-num">11</text>
+      <rect x="58" y="16" width="10" height="4" class="ic-pin" />
+      <text x="52" y="21.2" text-anchor="end" class="ic-pin-label">b</text>
+      <text x="72" y="21.2" text-anchor="start" class="ic-pin-num">12</text>
+      <rect x="58" y="-20" width="10" height="4" class="ic-pin" />
+      <text x="52" y="-14.8" text-anchor="end" class="ic-pin-label">a</text>
+      <text x="72" y="-14.8" text-anchor="start" class="ic-pin-num">13</text>
+      <rect x="58" y="-56" width="10" height="4" class="ic-pin" />
+      <text x="52" y="-50.8" text-anchor="end" class="ic-pin-label">g</text>
+      <text x="72" y="-50.8" text-anchor="start" class="ic-pin-num">14</text>
+      <rect x="58" y="-92" width="10" height="4" class="ic-pin" />
+      <text x="52" y="-86.8" text-anchor="end" class="ic-pin-label">f</text>
+      <text x="72" y="-86.8" text-anchor="start" class="ic-pin-num">15</text>
+      <rect x="58" y="-128" width="10" height="4" class="ic-pin" />
+      <text x="52" y="-122.8" text-anchor="end" class="ic-pin-label">+5V</text>
+      <text x="72" y="-122.8" text-anchor="start" class="ic-pin-num">16</text>
+    </g>
+
+    <!-- ══ 7474 — Dual D flip-flop (14-pin) ══ -->
+    <g id="ic-7474">
+      <path d="M -58,-126 L -8,-126 A 8,8 0 0 0 8,-126 L 58,-126 L 58,126 L -58,126 Z" class="ic-body" />
+      <rect x="-68" y="-110" width="10" height="4" class="ic-pin" />
+      <text x="-52" y="-104.8" text-anchor="start" class="ic-pin-label">
+        <tspan class="ovl">C</tspan>1
+      </text>
+      <text x="-72" y="-104.8" text-anchor="end" class="ic-pin-num">1</text>
+      <rect x="-68" y="-74" width="10" height="4" class="ic-pin" />
+      <text x="-52" y="-68.8" text-anchor="start" class="ic-pin-label">D1</text>
+      <text x="-72" y="-68.8" text-anchor="end" class="ic-pin-num">2</text>
+      <rect x="-68" y="-38" width="10" height="4" class="ic-pin" />
+      <text x="-52" y="-32.8" text-anchor="start" class="ic-pin-label">CLK1</text>
+      <text x="-72" y="-32.8" text-anchor="end" class="ic-pin-num">3</text>
+      <rect x="-68" y="-2" width="10" height="4" class="ic-pin" />
+      <text x="-52" y="3.2" text-anchor="start" class="ic-pin-label">
+        <tspan class="ovl">P</tspan>1
+      </text>
+      <text x="-72" y="3.2" text-anchor="end" class="ic-pin-num">4</text>
+      <rect x="-68" y="34" width="10" height="4" class="ic-pin" />
+      <text x="-52" y="39.2" text-anchor="start" class="ic-pin-label">Q1</text>
+      <text x="-72" y="39.2" text-anchor="end" class="ic-pin-num">5</text>
+      <rect x="-68" y="70" width="10" height="4" class="ic-pin" />
+      <text x="-52" y="75.2" text-anchor="start" class="ic-pin-label">
+        <tspan class="ovl">Q</tspan>1
+      </text>
+      <text x="-72" y="75.2" text-anchor="end" class="ic-pin-num">6</text>
+      <rect x="-68" y="106" width="10" height="4" class="ic-pin" />
+      <text x="-52" y="111.2" text-anchor="start" class="ic-pin-label">GND</text>
+      <text x="-72" y="111.2" text-anchor="end" class="ic-pin-num">7</text>
+      <rect x="58" y="106" width="10" height="4" class="ic-pin" />
+      <text x="52" y="111.2" text-anchor="end" class="ic-pin-label">
+        <tspan class="ovl">Q</tspan>2
+      </text>
+      <text x="72" y="111.2" text-anchor="start" class="ic-pin-num">8</text>
+      <rect x="58" y="70" width="10" height="4" class="ic-pin" />
+      <text x="52" y="75.2" text-anchor="end" class="ic-pin-label">Q2</text>
+      <text x="72" y="75.2" text-anchor="start" class="ic-pin-num">9</text>
+      <rect x="58" y="34" width="10" height="4" class="ic-pin" />
+      <text x="52" y="39.2" text-anchor="end" class="ic-pin-label">
+        <tspan class="ovl">P</tspan>2
+      </text>
+      <text x="72" y="39.2" text-anchor="start" class="ic-pin-num">10</text>
+      <rect x="58" y="-2" width="10" height="4" class="ic-pin" />
+      <text x="52" y="3.2" text-anchor="end" class="ic-pin-label">CLK2</text>
+      <text x="72" y="3.2" text-anchor="start" class="ic-pin-num">11</text>
+      <rect x="58" y="-38" width="10" height="4" class="ic-pin" />
+      <text x="52" y="-32.8" text-anchor="end" class="ic-pin-label">D2</text>
+      <text x="72" y="-32.8" text-anchor="start" class="ic-pin-num">12</text>
+      <rect x="58" y="-74" width="10" height="4" class="ic-pin" />
+      <text x="52" y="-68.8" text-anchor="end" class="ic-pin-label">
+        <tspan class="ovl">C</tspan>2
+      </text>
+      <text x="72" y="-68.8" text-anchor="start" class="ic-pin-num">13</text>
+      <rect x="58" y="-110" width="10" height="4" class="ic-pin" />
+      <text x="52" y="-104.8" text-anchor="end" class="ic-pin-label">+5V</text>
+      <text x="72" y="-104.8" text-anchor="start" class="ic-pin-num">14</text>
+    </g>
+
+    <!-- ══ 7476 — Dual JK flip-flop (16-pin) ══ -->
+    <g id="ic-7476">
+      <path d="M -58,-144 L -8,-144 A 8,8 0 0 0 8,-144 L 58,-144 L 58,144 L -58,144 Z" class="ic-body" />
+      <rect x="-68" y="-128" width="10" height="4" class="ic-pin" />
+      <text x="-52" y="-122.8" text-anchor="start" class="ic-pin-label">CLK1</text>
+      <text x="-72" y="-122.8" text-anchor="end" class="ic-pin-num">1</text>
+      <rect x="-68" y="-92" width="10" height="4" class="ic-pin" />
+      <text x="-52" y="-86.8" text-anchor="start" class="ic-pin-label">
+        <tspan class="ovl">P</tspan>1
+      </text>
+      <text x="-72" y="-86.8" text-anchor="end" class="ic-pin-num">2</text>
+      <rect x="-68" y="-56" width="10" height="4" class="ic-pin" />
+      <text x="-52" y="-50.8" text-anchor="start" class="ic-pin-label">
+        <tspan class="ovl">C</tspan>1
+      </text>
+      <text x="-72" y="-50.8" text-anchor="end" class="ic-pin-num">3</text>
+      <rect x="-68" y="-20" width="10" height="4" class="ic-pin" />
+      <text x="-52" y="-14.8" text-anchor="start" class="ic-pin-label">J1</text>
+      <text x="-72" y="-14.8" text-anchor="end" class="ic-pin-num">4</text>
+      <rect x="-68" y="16" width="10" height="4" class="ic-pin" />
+      <text x="-52" y="21.2" text-anchor="start" class="ic-pin-label">+5V</text>
+      <text x="-72" y="21.2" text-anchor="end" class="ic-pin-num">5</text>
+      <rect x="-68" y="52" width="10" height="4" class="ic-pin" />
+      <text x="-52" y="57.2" text-anchor="start" class="ic-pin-label">CLK2</text>
+      <text x="-72" y="57.2" text-anchor="end" class="ic-pin-num">6</text>
+      <rect x="-68" y="88" width="10" height="4" class="ic-pin" />
+      <text x="-52" y="93.2" text-anchor="start" class="ic-pin-label">
+        <tspan class="ovl">P</tspan>2
+      </text>
+      <text x="-72" y="93.2" text-anchor="end" class="ic-pin-num">7</text>
+      <rect x="-68" y="124" width="10" height="4" class="ic-pin" />
+      <text x="-52" y="129.2" text-anchor="start" class="ic-pin-label">
+        <tspan class="ovl">C</tspan>2
+      </text>
+      <text x="-72" y="129.2" text-anchor="end" class="ic-pin-num">8</text>
+      <rect x="58" y="124" width="10" height="4" class="ic-pin" />
+      <text x="52" y="129.2" text-anchor="end" class="ic-pin-label">J2</text>
+      <text x="72" y="129.2" text-anchor="start" class="ic-pin-num">9</text>
+      <rect x="58" y="88" width="10" height="4" class="ic-pin" />
+      <text x="52" y="93.2" text-anchor="end" class="ic-pin-label">
+        <tspan class="ovl">Q</tspan>2
+      </text>
+      <text x="72" y="93.2" text-anchor="start" class="ic-pin-num">10</text>
+      <rect x="58" y="52" width="10" height="4" class="ic-pin" />
+      <text x="52" y="57.2" text-anchor="end" class="ic-pin-label">Q2</text>
+      <text x="72" y="57.2" text-anchor="start" class="ic-pin-num">11</text>
+      <rect x="58" y="16" width="10" height="4" class="ic-pin" />
+      <text x="52" y="21.2" text-anchor="end" class="ic-pin-label">K2</text>
+      <text x="72" y="21.2" text-anchor="start" class="ic-pin-num">12</text>
+      <rect x="58" y="-20" width="10" height="4" class="ic-pin" />
+      <text x="52" y="-14.8" text-anchor="end" class="ic-pin-label">GND</text>
+      <text x="72" y="-14.8" text-anchor="start" class="ic-pin-num">13</text>
+      <rect x="58" y="-56" width="10" height="4" class="ic-pin" />
+      <text x="52" y="-50.8" text-anchor="end" class="ic-pin-label">
+        <tspan class="ovl">Q</tspan>1
+      </text>
+      <text x="72" y="-50.8" text-anchor="start" class="ic-pin-num">14</text>
+      <rect x="58" y="-92" width="10" height="4" class="ic-pin" />
+      <text x="52" y="-86.8" text-anchor="end" class="ic-pin-label">Q1</text>
+      <text x="72" y="-86.8" text-anchor="start" class="ic-pin-num">15</text>
+      <rect x="58" y="-128" width="10" height="4" class="ic-pin" />
+      <text x="52" y="-122.8" text-anchor="end" class="ic-pin-label">K1</text>
+      <text x="72" y="-122.8" text-anchor="start" class="ic-pin-num">16</text>
+    </g>
+
+    <!-- ══ 4N25 — Optocoupler (6-pin; pins 2/5 NC, not numbered — see
+           file header re: confidence on this one) ══ -->
+    <g id="ic-4n25">
+      <path d="M -40,-63 L -8,-63 A 8,8 0 0 0 8,-63 L 40,-63 L 40,63 L -40,63 Z" class="ic-body" />
+      <rect x="-50" y="-44" width="10" height="4" class="ic-pin" />
+      <text x="-54" y="-38.8" text-anchor="end" class="ic-pin-num">1</text>
+      <rect x="-50" y="-2" width="10" height="4" class="ic-pin" />
+      <rect x="-50" y="40" width="10" height="4" class="ic-pin" />
+      <text x="-54" y="45.2" text-anchor="end" class="ic-pin-num">3</text>
+      <rect x="40" y="-44" width="10" height="4" class="ic-pin" />
+      <text x="54" y="-38.8" text-anchor="start" class="ic-pin-num">6</text>
+      <rect x="40" y="-2" width="10" height="4" class="ic-pin" />
+      <rect x="40" y="40" width="10" height="4" class="ic-pin" />
+      <text x="54" y="45.2" text-anchor="start" class="ic-pin-num">4</text>
+      <line x1="0" y1="-50" x2="0" y2="50" class="ic-barrier" />
+      <g transform="translate(-18,-21) scale(0.82)">
+        <use href="#diode-down" />
+      </g>
+      <line x1="-40" y1="-42" x2="-18" y2="-42" stroke="var(--colour-bjt)" stroke-width="1.5" />
+      <line x1="-40" y1="0" x2="-18" y2="0" stroke="var(--colour-bjt)" stroke-width="1.5" />
+
+      <g transform="translate(-14,-24) scale(0.15)">
+        <use href="#lazer-light" /> 
+      </g>
+
+      <g transform="translate(18,21) scale(0.62)">
+        <use href="#bjt-npn-standard-nocircle" />
+      </g>
+      <line x1="40" y1="-42" x2="8" y2="-42" stroke="var(--colour-bjt)" stroke-width="1.5" />
+      <line x1="8" y1="-42" x2="8" y2="21" stroke="var(--colour-bjt)" stroke-width="1.5" />
+      <line x1="40" y1="0" x2="26" y2="0" stroke="var(--colour-bjt)" stroke-width="1.5" />
+      <line x1="40" y1="42" x2="26" y2="42" stroke="var(--colour-bjt)" stroke-width="1.5" />
+    </g>
+
+    <!-- ══ LSD5365 — single-digit 7-segment display (10-pin, single
+           common at pin 8 — see file header re: confidence on pin 3) ══ -->
+    <g id="ic-lsd5365">
+      <rect x="-45" y="-58" width="90" height="116" rx="4" class="ic-body" />
+      <rect x="-15" y="-45" width="30" height="8" rx="2" style="fill: var(--colour-border)" />
+      <rect x="-21" y="-40" width="8" height="34" rx="2" style="fill: var(--colour-border)" />
+      <rect x="13" y="-40" width="8" height="34" rx="2" style="fill: var(--colour-border)" />
+      <rect x="-15" y="-4" width="30" height="8" rx="2" style="fill: var(--colour-border)" />
+      <rect x="-21" y="4" width="8" height="34" rx="2" style="fill: var(--colour-border)" />
+      <rect x="13" y="4" width="8" height="34" rx="2" style="fill: var(--colour-border)" />
+      <rect x="-15" y="41" width="30" height="8" rx="2" style="fill: var(--colour-border)" />
+      <circle cx="29" cy="45" r="4" style="fill: var(--colour-border)" />
+      <!-- top row, pins 10..6 left to right -->
+      <rect x="-38" y="-68" width="4" height="10" class="ic-pin" />
+      <text x="-36" y="-72" text-anchor="middle" class="ic-pin-num">10</text>
+      <text x="-36" y="-48" text-anchor="middle" class="ic-pin-label">g</text>
+      <rect x="-20" y="-68" width="4" height="10" class="ic-pin" />
+      <text x="-18" y="-72" text-anchor="middle" class="ic-pin-num">9</text>
+      <text x="-18" y="-48" text-anchor="middle" class="ic-pin-label">f</text>
+      <rect x="-2" y="-68" width="4" height="10" class="ic-pin" />
+      <text x="0" y="-72" text-anchor="middle" class="ic-pin-num">8</text>
+      <text x="0" y="-48" text-anchor="middle" class="ic-pin-label">Com</text>
+      <rect x="16" y="-68" width="4" height="10" class="ic-pin" />
+      <text x="18" y="-72" text-anchor="middle" class="ic-pin-num">7</text>
+      <text x="18" y="-48" text-anchor="middle" class="ic-pin-label">a</text>
+      <rect x="34" y="-68" width="4" height="10" class="ic-pin" />
+      <text x="36" y="-72" text-anchor="middle" class="ic-pin-num">6</text>
+      <text x="36" y="-48" text-anchor="middle" class="ic-pin-label">b</text>
+      <!-- bottom row, pins 1..5 left to right (pin 3 unlabelled — see header) -->
+      <rect x="-38" y="58" width="4" height="10" class="ic-pin" />
+      <text x="-36" y="76" text-anchor="middle" class="ic-pin-num">1</text>
+      <text x="-36" y="52" text-anchor="middle" class="ic-pin-label">e</text>
+      <rect x="-20" y="58" width="4" height="10" class="ic-pin" />
+      <text x="-18" y="76" text-anchor="middle" class="ic-pin-num">2</text>
+      <text x="-18" y="52" text-anchor="middle" class="ic-pin-label">d</text>
+      <rect x="-2" y="58" width="4" height="10" class="ic-pin" />
+      <text x="0" y="76" text-anchor="middle" class="ic-pin-num">3</text>
+      <rect x="16" y="58" width="4" height="10" class="ic-pin" />
+      <text x="18" y="76" text-anchor="middle" class="ic-pin-num">4</text>
+      <text x="18" y="52" text-anchor="middle" class="ic-pin-label">c</text>
+      <rect x="34" y="58" width="4" height="10" class="ic-pin" />
+      <text x="36" y="76" text-anchor="middle" class="ic-pin-num">5</text>
+      <text x="36" y="52" text-anchor="middle" class="ic-pin-label">DP</text>
+    </g>
+    </defs>
+  </svg>
+
+  <div class="crumb" id="crumb" data-current="IC Reference"></div>
+  <header>
+    <h1>IC &amp; Component Reference</h1>
+    <p>Lab Pinouts · TTL / CMOS Logic · Flip-Flops · Displays · Optocoupler</p>
+  </header>
+
+  <p class="intro">Tap any chip to zoom in. Tap again to close. (Or click the ✕ Close button.)
+  </p>
+
+  <div class="ic-grid" id="icGrid"></div>
+
+  <!-- Zoom modal — same markup/CSS as every quiz page's circuit-panel
+       zoom (see quiz-common.css .diagram-modal), driven by this page's own
+       small openIcModal()/closeModal() below instead of quiz-engine.js's
+       (which assumes a single per-question circuit, not click-any-of-N). -->
+  <div class="diagram-modal" id="diagramModal" onclick="handleModalClick(event)">
+    <div class="modal-inner">
+      <div class="modal-header">
+        <span class="modal-title" id="modalTitle">IC</span>
+        <button class="modal-close" onclick="closeModal()">✕ Close</button>
+      </div>
+      <svg id="modalSvg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+  </div>
+
+  <footer>Electronics // Cert III // UEEEC0069 // Resources</footer>
+
+  <script>
+    // Single source of truth for the gallery: id -> the matching ic-xxxx
+    // <g>, part -> card title, desc -> subtitle, vb -> that shape's own
+    // viewBox (each diagram was authored in its own local coordinate
+    // frame, same convention as every shapeGrid shape elsewhere in this
+    // project — see quiz-engine.js's SHAPE_VIEWBOX / data.shapeViewBox).
+    const ICS = [
+      { id: 'ic-7400', part: '7400', desc: 'Quad 2-Input NAND Gate', vb: '-84 -138 168 276' },
+      { id: 'ic-7402', part: '7402', desc: 'Quad 2-Input NOR Gate', vb: '-84 -138 168 276' },
+      { id: 'ic-7404', part: '7404', desc: 'Hex Inverter (NOT Gate)', vb: '-84 -138 168 276' },
+      { id: 'ic-7408', part: '7408', desc: 'Quad 2-Input AND Gate', vb: '-84 -138 168 276' },
+      { id: 'ic-7432', part: '7432', desc: 'Quad 2-Input OR Gate', vb: '-84 -138 168 276' },
+      { id: 'ic-7486', part: '7486', desc: 'Quad 2-Input XOR Gate', vb: '-84 -138 168 276' },
+      { id: 'ic-4011', part: '4011', desc: 'CMOS Quad 2-Input NAND Gate', vb: '-84 -138 168 276' },
+      { id: 'ic-7447', part: '7447', desc: 'BCD-to-7-Segment Decoder/Driver', vb: '-90 -156 180 312' },
+      { id: 'ic-7474', part: '7474', desc: 'Dual D Flip-Flop', vb: '-90 -138 180 276' },
+      { id: 'ic-7476', part: '7476', desc: 'Dual JK Flip-Flop', vb: '-90 -156 180 312' },
+      { id: 'ic-4n25', part: '4N25', desc: 'Optocoupler (LED + Phototransistor)', vb: '-62 -75 124 150' },
+      { id: 'ic-lsd5365', part: 'LSD5365', desc: '7-Segment LED Display, Common Anode/Cathode', vb: '-58 -80 116 160' },
+    ];
+
+    const grid = document.getElementById('icGrid');
+    ICS.forEach(ic => {
+      const card = document.createElement('div');
+      card.className = 'ic-card';
+      card.title = 'Click to zoom';
+      card.onclick = () => openIcModal(ic);
+      card.innerHTML =
+        `<svg viewBox="${ic.vb}"><use href="#${ic.id}" /></svg>` +
+        `<div class="ic-card-part">${ic.part}</div>` +
+        `<div class="ic-card-desc">${ic.desc}</div>`;
+      grid.appendChild(card);
+    });
+
+    // DEV: ?xy=1 overlays a magenta coordinate ruler on the zoomed IC —
+    // same look/behaviour as quiz-engine.js's own xyRuler (see that file's
+    // buildXYRuler), reimplemented here rather than reused because it's
+    // wired to a single page-wide CIRCUIT_SVG_ID/#xyRuler, not a click-
+    // any-of-N gallery whose viewBox changes with whichever IC is open.
+    // Rebuilt fresh on every openIcModal() call (viewBox differs per IC)
+    // rather than cached — this is a rarely-used dev-only overlay, not
+    // worth optimising.
+    const xyOn = new URLSearchParams(location.search).get('xy') === '1';
+    // Ticks are anchored to absolute multiples of 10 (not viewBox-relative
+    // offsets like quiz-engine.js's own buildXYRuler does) — these IC
+    // viewBoxes don't start on a round number (e.g. "-84 -138 168 276"),
+    // so stepping from offX/offY directly would never land on a multiple
+    // of 50 and no major-tick label would ever appear.
+    function buildXYRulerSVG(vbStr) {
+      const [offX, offY, W, H] = vbStr.split(' ').map(Number);
+      const hy = offY + H - 10, vx = offX + 10, col = '#ff00ff';
+      let svg = `<line x1="${offX}" y1="${hy}" x2="${offX + W}" y2="${hy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+      for (let gx = Math.ceil(offX / 10) * 10; gx <= offX + W; gx += 10) {
+        const major = (gx % 50 === 0), len = major ? 10 : 5;
+        svg += `<line x1="${gx}" y1="${hy - len}" x2="${gx}" y2="${hy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+        if (major) svg += `<text x="${gx}" y="${hy - 13}" fill="${col}" font-size="8" text-anchor="middle">${gx}</text>`;
+      }
+      svg += `<line x1="${vx}" y1="${offY}" x2="${vx}" y2="${offY + H}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+      for (let gy = Math.ceil(offY / 10) * 10; gy <= offY + H; gy += 10) {
+        const major = (gy % 50 === 0), len = major ? 10 : 5;
+        svg += `<line x1="${vx}" y1="${gy}" x2="${vx + len}" y2="${gy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+        if (major) svg += `<text x="${vx + 13}" y="${gy + 3}" fill="${col}" font-size="8" text-anchor="start">${gy}</text>`;
+      }
+      return svg;
+    }
+
+    function openIcModal(ic) {
+      const dst = document.getElementById('modalSvg');
+      dst.innerHTML = `<use href="#${ic.id}" />` + (xyOn ? buildXYRulerSVG(ic.vb) : '');
+      dst.setAttribute('viewBox', ic.vb);
+      document.getElementById('modalTitle').textContent = `${ic.part} — ${ic.desc}`;
+      document.getElementById('diagramModal').classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeModal() {
+      document.getElementById('diagramModal').classList.remove('open');
+      document.getElementById('modalSvg').innerHTML = '';
+      document.body.style.overflow = '';
+    }
+    function handleModalClick(e) { if (e.target.closest('.modal-close')) return; closeModal(); }
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+  </script>
+</body>
+
+</html>
