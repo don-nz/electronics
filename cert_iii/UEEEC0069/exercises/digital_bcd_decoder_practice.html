@@ -1,0 +1,367 @@
+<!--
+  7447 BCD-to-7-segment decoder practice — given a target digit, set the
+  4-bit BCD input on a bank of toggle switches (A3 A2 A1 A0, A0=LSB, same
+  labelling convention as UEEEC0066/resources/digital_resources_ics.html's
+  own 7447 pinout), then Check reveals what the decoder actually drives
+  onto the display for whatever code was left on the switches — which
+  only matches the target if the right BCD value was set. Tests recall of
+  the binary encoding, not shape-matching: the "actual output" display
+  stays blank until Check, so a student can't just visually nudge switches
+  toward matching a live-updating shape.
+
+  10 questions, one per digit 0-9, each question slot permanently tied to
+  its own digit (QUESTIONS[n].digit = n) — RESET_EXTRA shuffles the
+  QUESTIONS array's own order (not each question's digit), same "every
+  playthrough covers all of them exactly once, just reordered" convention
+  as digital_gate_identification.html's own 7-gates coverage.
+
+  New engine kind — this is the first file to need `kind:'switches'`
+  (added this same session, generalised into cert_iii/assets/quiz-
+  engine.js: a bank of individual toggle switches, one per bit, each
+  starting OFF and flipping 0<->1 on click; correctness is purely
+  per-bit). The engine itself has no idea these switches are a BCD code —
+  the 7-segment decode/display logic below is entirely local to this
+  file, wired in via RENDER_EXTRA (same "per-file visualisation the
+  engine doesn't know about" pattern as e.g. bjt_knowledge_ac_params_
+  ce.html's own re′/Zb/Zin/Zout badges).
+
+  Deliberately excludes what a real 7447 also has, to keep this a focused
+  "read the target, encode the BCD" drill rather than a full IC-behaviour
+  exercise: LT/RBI/RBO (lamp test/ripple blanking) are not modelled —
+  every question behaves as if they're tied inactive, same as a normal
+  running display — and only digits 0-9 are ever asked as targets. A
+  student who leaves the switches on an invalid code (BCD 10-15) still
+  sees an honest result though: decodeSegments() blanks the display for
+  those, the same simplified "invalid BCD -> blank" convention most intro
+  courses teach (the real 74LS47's own datasheet shows specific malformed
+  patterns for 10-15, not a clean blank, but that's a separate, more
+  advanced lesson this file isn't trying to teach).
+
+  Segment bar geometry (barA..barG, viewBox, the scale(0.7) wrapper) is
+  copied verbatim from digital_knowledge_digital_displays.html's own Q7
+  diagram — same segment shapes/positions as everywhere else in the
+  project, just re-themed here with a `.lit` class (amber, var(--colour-
+  diode) — reads as an actual lit LED segment) instead of that file's own
+  `.placed` (blue, a "this letter has been assigned here" UI meaning that
+  doesn't apply here).
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../assets/theme-init.js"></script>
+  <script src="../../assets/quiz-engine.js"></script>
+  <title>Digital Electronics — BCD to 7-Segment Decoder Practice</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../assets/quiz-common.css">
+  <script src="../../assets/breadcrumb.js" defer></script>
+  <style>
+    .progress-wrap { display: flex; gap: .4rem; align-items: center; margin-bottom: 1rem; }
+
+    .decoder-panel {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: .4rem;
+      margin: 1rem 0;
+    }
+
+    .decoder-label {
+      font-family: var(--font-mono);
+      font-size: .68rem;
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: var(--colour-label);
+    }
+
+    .decoder-display-wrap { width: 110px; }
+    .decoder-display-wrap svg { width: 100%; height: auto; display: block; }
+
+    /* Same dim/lit convention as digital_knowledge_digital_displays.html's
+       own .segment-bar, re-themed: amber (var(--colour-diode)) for "lit",
+       not that file's blue "placed" (a different UI meaning there). */
+    .segment-bar { fill: var(--colour-border); transition: fill .15s; }
+    .segment-bar.lit { fill: var(--colour-diode); }
+    /* Actual-output-only, once answered — green if the switches were set
+       to the correct BCD code, red otherwise (same tokens as every other
+       correct/wrong indicator in this engine, e.g. .switch-btn.correct/
+       .wrong). The Target display never uses these, always plain .lit. */
+    .segment-bar.lit-correct { fill: var(--colour-ui-correct); }
+    .segment-bar.lit-wrong { fill: var(--colour-ui-wrong); }
+
+    /* Target (left) and switches+segments (right, stacked) side by side —
+       tighter than stacking everything in one long column. Wraps to a
+       single centered column below ~480px, same breakpoint-free
+       flex-wrap approach used elsewhere in this project. */
+    .decoder-top-row {
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      gap: 1.8rem;
+      flex-wrap: wrap;
+      margin: 1rem 0;
+    }
+
+    .decoder-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: .5rem;
+    }
+
+    /* Slightly tighter than the shared .switch-btn/.segment-bit-cell
+       defaults so the switch row and the a-g row below it line up at a
+       similar overall width in this narrower right-hand column. */
+    .decoder-col .switch-btn { min-width: 42px; padding: .45rem .3rem; }
+    .decoder-col .switch-btn .switch-value { font-size: 1.1rem; }
+    .decoder-col .segment-bit-cell { min-width: 26px; padding: .3rem .2rem; }
+    .decoder-col .switch-row, .decoder-col .segment-bits-row { gap: .35rem; }
+
+    .decoder-switches-wrap { margin: 0 0 .5rem; }
+
+    /* Live a-g segment readout — decoded from the current switch state on
+       every toggle (see RENDER_EXTRA), NOT gated behind Check like the
+       "Actual Output" glyph is. Deliberately a different, lower-level view
+       than that glyph: reading off raw 0/1s per segment still takes
+       translating them back into a digit shape mentally, so it's a
+       smaller reveal than showing the shape itself outright. */
+    .segment-bits-row {
+      display: flex;
+      justify-content: center;
+      gap: .5rem;
+      flex-wrap: wrap;
+    }
+
+    .segment-bit-cell {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: .2rem;
+      min-width: 34px;
+      padding: .4rem .3rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--colour-border);
+      background: rgba(var(--colour-label-rgb), .04);
+      font-family: var(--font-mono);
+    }
+
+    .segment-bit-label {
+      font-size: .62rem;
+      font-weight: 700;
+      letter-spacing: .04em;
+      color: var(--colour-label);
+      text-transform: uppercase;
+    }
+
+    .segment-bit-value {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--colour-text);
+      transition: color .15s;
+    }
+
+    .segment-bit-value.on { color: var(--colour-diode); }
+  </style>
+</head>
+
+<body>
+  <div class="crumb" id="crumb" data-current="BCD Decoder Practice"></div>
+  <header>
+    <h1>Digital Electronics</h1>
+    <p>7447 BCD-to-7-Segment Decoder · Set the BCD Switches</p>
+  </header>
+
+  <div class="quiz-wrap single-col" id="quizWrap">
+
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+
+          <div class="decoder-top-row">
+            <div class="decoder-col">
+              <div class="decoder-label">Target</div>
+              <div class="decoder-display-wrap">
+                <svg viewBox="-15 -25 175 240" xmlns="http://www.w3.org/2000/svg">
+                  <g transform="scale(0.7)">
+                    <rect id="targetA" class="segment-bar" x="70" y="20" width="60" height="15" rx="6" />
+                    <rect id="targetF" class="segment-bar" x="55" y="40" width="15" height="95" rx="6" />
+                    <rect id="targetB" class="segment-bar" x="130" y="40" width="15" height="95" rx="6" />
+                    <rect id="targetG" class="segment-bar" x="70" y="142" width="60" height="15" rx="6" />
+                    <rect id="targetE" class="segment-bar" x="55" y="163" width="15" height="95" rx="6" />
+                    <rect id="targetC" class="segment-bar" x="130" y="163" width="15" height="95" rx="6" />
+                    <rect id="targetD" class="segment-bar" x="70" y="265" width="60" height="15" rx="6" />
+                  </g>
+                </svg>
+              </div>
+            </div>
+
+            <div class="decoder-col">
+              <div class="decoder-switches-wrap">
+                <div id="qSwitches" class="switch-row"></div>
+              </div>
+              <div class="segment-bits-row" id="segmentBitsRow">
+                <div class="segment-bit-cell"><span class="segment-bit-label">a</span><span class="segment-bit-value" id="segBitA">0</span></div>
+                <div class="segment-bit-cell"><span class="segment-bit-label">b</span><span class="segment-bit-value" id="segBitB">0</span></div>
+                <div class="segment-bit-cell"><span class="segment-bit-label">c</span><span class="segment-bit-value" id="segBitC">0</span></div>
+                <div class="segment-bit-cell"><span class="segment-bit-label">d</span><span class="segment-bit-value" id="segBitD">0</span></div>
+                <div class="segment-bit-cell"><span class="segment-bit-label">e</span><span class="segment-bit-value" id="segBitE">0</span></div>
+                <div class="segment-bit-cell"><span class="segment-bit-label">f</span><span class="segment-bit-value" id="segBitF">0</span></div>
+                <div class="segment-bit-cell"><span class="segment-bit-label">g</span><span class="segment-bit-value" id="segBitG">0</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="decoder-panel">
+            <div class="decoder-label" id="actualLabel">Actual Output — press Check</div>
+            <div class="decoder-display-wrap">
+              <svg viewBox="-15 -25 175 240" xmlns="http://www.w3.org/2000/svg">
+                <g transform="scale(0.7)">
+                  <rect id="actualA" class="segment-bar" x="70" y="20" width="60" height="15" rx="6" />
+                  <rect id="actualF" class="segment-bar" x="55" y="40" width="15" height="95" rx="6" />
+                  <rect id="actualB" class="segment-bar" x="130" y="40" width="15" height="95" rx="6" />
+                  <rect id="actualG" class="segment-bar" x="70" y="142" width="60" height="15" rx="6" />
+                  <rect id="actualE" class="segment-bar" x="55" y="163" width="15" height="95" rx="6" />
+                  <rect id="actualC" class="segment-bar" x="130" y="163" width="15" height="95" rx="6" />
+                  <rect id="actualD" class="segment-bar" x="70" y="265" width="60" height="15" rx="6" />
+                </g>
+              </svg>
+            </div>
+          </div>
+
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()">Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ══════════════════════════════════════════════════════════════════════
+    // SEGMENTS — standard common-cathode-font 7-segment patterns for 0-9,
+    // same lettering convention as digital_knowledge_digital_displays.html
+    // (a=top, b=upper-right, c=lower-right, d=bottom, e=lower-left,
+    // f=upper-left, g=middle).
+    // ══════════════════════════════════════════════════════════════════════
+    const SEGMENTS = {
+      0: ['a', 'b', 'c', 'd', 'e', 'f'],
+      1: ['b', 'c'],
+      2: ['a', 'b', 'd', 'e', 'g'],
+      3: ['a', 'b', 'c', 'd', 'g'],
+      4: ['b', 'c', 'f', 'g'],
+      5: ['a', 'c', 'd', 'f', 'g'],
+      6: ['a', 'c', 'd', 'e', 'f', 'g'],
+      7: ['a', 'b', 'c'],
+      8: ['a', 'b', 'c', 'd', 'e', 'f', 'g'],
+      9: ['a', 'b', 'c', 'd', 'f', 'g'],
+    };
+    const BAR_LETTERS = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
+
+    function bcdBits(n) { return [8, 4, 2, 1].map(w => (n & w) ? 1 : 0); } // MSB first: A3 A2 A1 A0
+
+    // What the 7447 actually drives for a given 4-bit switch state —
+    // 0-9 decode normally, 10-15 blank (see file header for why this
+    // simplification, not the real datasheet's malformed-pattern rows).
+    function decodeSegments(bits) {
+      const value = bits[0] * 8 + bits[1] * 4 + bits[2] * 2 + bits[3];
+      return SEGMENTS[value] || [];
+    }
+
+    function setDisplay(prefix, litSegments, litClass) {
+      BAR_LETTERS.forEach(l => {
+        const bar = document.getElementById(prefix + l.toUpperCase());
+        if (!bar) return;
+        bar.classList.remove('lit', 'lit-correct', 'lit-wrong');
+        if (litSegments.includes(l)) bar.classList.add(litClass || 'lit');
+      });
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS — one per digit 0-9, fixed slot per digit (see header).
+    // kind:'switches': switchLabels() names the 4 switches, options()
+    // supplies the single correct bit array (MSB first, matching
+    // switchLabels' own order) — see quiz-engine.js's own header comment
+    // for the full kind:'switches' contract.
+    // ══════════════════════════════════════════════════════════════════════
+    const QUESTIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(digit => ({
+      digit,
+      kind: 'switches',
+      switchLabels: () => ['A3', 'A2', 'A1', 'A0'],
+      options: () => bcdBits(digit),
+      text: () => `Set the BCD switches so the 7447 decoder drives the display to show <b style="color:var(--colour-ui-primary)">${digit}</b>.`,
+      hint: () => `Write ${digit} as a 4-bit binary number — A3 is the MSB, A0 is the LSB. That 4-bit code is what you set on the switches.`,
+      correctExplain: () => `A3 A2 A1 A0 = ${bcdBits(digit).join(' ')}`,
+      working: () => `
+    <div class="working-line">${digit} written as a 4-bit binary number (A3 is the MSB, A0 is the LSB):</div>
+    <div class="working-total">A3 A2 A1 A0 = <span class="colour-result">${bcdBits(digit).join(' ')}</span></div>
+    <div class="working-line" style="margin-top:.6rem">The 7447 decodes that BCD input into segments <b>${SEGMENTS[digit].join(', ')}</b> — lighting up a ${digit}.</div>`,
+    }));
+
+    RESET_EXTRA = () => shuffle(QUESTIONS);
+
+    // Target display always shows the current question's own digit;
+    // actual display stays blank until Check (st.ans), then shows
+    // whatever the student's own switch state actually decodes to,
+    // coloured green if that matches the target (a correct BCD code) or
+    // red if it doesn't — see file header for why the GLYPH specifically
+    // isn't live. The a-g bit readout below the switches is the opposite:
+    // always live, straight from decodeSegments(st.switches), updating on
+    // every toggle.
+    RENDER_EXTRA = () => {
+      const data = QUESTIONS[cur], st = Q[cur];
+      setDisplay('target', SEGMENTS[data.digit]);
+      setDisplay('actual', st.ans ? decodeSegments(st.switches) : [], st.ans ? (isAnswerCorrect(data, st) ? 'lit-correct' : 'lit-wrong') : 'lit');
+      document.getElementById('actualLabel').textContent = st.ans ? 'Actual Output' : 'Actual Output — press Check';
+
+      const liveLit = decodeSegments(st.switches);
+      BAR_LETTERS.forEach(l => {
+        const el = document.getElementById('segBit' + l.toUpperCase());
+        const on = liveLit.includes(l);
+        el.textContent = on ? '1' : '0';
+        el.classList.toggle('on', on);
+      });
+    };
+
+    initQuizNav();
+    resetQuiz();
+    initQuizFromURL();
+  </script>
+</body>
+
+</html>

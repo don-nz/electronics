@@ -31,7 +31,7 @@
   bjt_knowledge_ac_params_formulas.html):
   `kind`: unset (single-select) | 'multi' | 'match' (plain, `matchByLabel`,
   or `reusablePool` — see below) | 'bits' | 'truth' (see below) | 'fill'
-  (see below).
+  (see below) | 'switches' (see below).
   `leftPanel`: unset/'circuit' (a static circuit-panel div, optionally swapped
   per-question via showCircuitRef(data.circuitId, data.circuitLabel,
   data.circuitViewBox, data.circuitLoad, data.circuitAmmeter) if the page has
@@ -161,6 +161,22 @@
   swapLeftPanel() override) are both page-local, since no other file
   shares that architecture yet.
 
+  `kind:'switches'` — a bank of individual toggle switches, one per bit,
+  each starting OFF and flipping 0<->1 on click (no blank third state — a
+  physical switch is never genuinely unset, unlike a 'bits'/'truth' table
+  cell). `data.switchLabels()` gives each switch's label (e.g. a 4-bit BCD
+  input: `['A3','A2','A1','A0']`); `data.options()` gives the single
+  correct bit array, MSB-first matching switchLabels' own order — there's
+  only ever one bank of switches per question, not per-row values like
+  'bits'. Correctness is per-bit (`st.switches` vs `st.cor`); the engine
+  has no idea what the bits MEAN or decode to — any derived output a
+  question wants to show (e.g. a live 7-segment glyph reacting to the
+  current switch state) is entirely page-local, read from `Q[cur].switches`
+  via `RENDER_EXTRA` on every render. First used by
+  digital_bcd_decoder_practice.html (a 7447 BCD-to-7-segment exercise:
+  given a target digit, set the 4 BCD switches, Check reveals the actual
+  decoded segment pattern).
+
   Every function that runs on EVERY render regardless of the current
   question's own kind (the qMatch/qBits/qOptions display toggles inside
   renderQuestion(), and swapLeftPanel()'s per-mode panel toggles) null-checks
@@ -210,6 +226,7 @@ function isMatch(data) { return data.kind === 'match'; }
 function isBits(data) { return data.kind === 'bits'; }
 function isTruth(data) { return data.kind === 'truth'; }
 function isFill(data) { return data.kind === 'fill'; }
+function isSwitches(data) { return data.kind === 'switches'; }
 function bitFromClicks(n) { const m = n % 3; return m === 0 ? null : m - 1; }
 // 'truth' cells cycle the same blank→0→1→blank way as 'bits' cells — kept as
 // its own identically-implemented function (not an alias) since the two
@@ -244,6 +261,7 @@ function isAnswerCorrect(data, st) {
   // question provides one option per slot, so cor[slot] is never -1 for
   // them and this branch never changes their behaviour.
   if (isFill(data)) return st.slotPlaced.every((p, slot) => st.cor[slot] === -1 ? p === null : p === st.cor[slot]);
+  if (isSwitches(data)) return st.switches.every((b, i) => b === st.cor[i]);
   if (isMatch(data)) {
     if (data.reusablePool) return st.assign.every((_, c) => isColumnCorrectReusable(st, c));
     if (data.matchByLabel) return st.corLabel.every((_, c) => matchColumnCorrect(st, c));
@@ -268,6 +286,7 @@ function selectedLabel(data, st) {
     const correctCount = st.slotPlaced.filter((p, slot) => p === st.cor[slot]).length;
     return `${correctCount} / ${st.slotPlaced.length} correctly placed`;
   }
+  if (isSwitches(data)) return st.switches.join('');
   if (isMatch(data)) {
     if (data.reusablePool) {
       const correctCount = st.assign.filter((_, c) => isColumnCorrectReusable(st, c)).length;
@@ -296,6 +315,7 @@ function fillCorrectSelection(i) {
   if (isBits(data)) st.clicks = st.cor.map(row => row.map(bit => bit + 1)); // clicks bit+1 -> bitFromClicks() lands on 0/1 (0 would land on blank)
   else if (isTruth(data)) st.clicks = st.cor.map(z => z + 1); // same +1 trick as bits: zFromClicks(z+1) lands back on z
   else if (isFill(data)) st.slotPlaced = st.cor.map(c => c === -1 ? null : c); // -1 = correctly-empty slot, not a real pool-item index
+  else if (isSwitches(data)) st.switches = st.cor.slice();
   else if (isMatch(data)) {
     if (data.reusablePool) st.assign = st.assign.map((_, c) => st.opts.findIndex(o => o.cols.includes(c)));
     else st.place = st.cor.slice();
@@ -824,6 +844,45 @@ function slotClicked(slot) {
 }
 window.slotClicked = slotClicked;
 
+// ── kind:'switches' — a bank of individual toggle switches (one per bit,
+// e.g. a 4-bit BCD input), each starting OFF and flipping 0<->1 on click —
+// no "blank" third state like 'bits'/'truth' cells, since a physical
+// switch is never genuinely unset. `data.switchLabels()` gives each
+// switch's label (e.g. ['A3','A2','A1','A0']); `data.options()` gives the
+// single correct bit array (MSB-first, matching switchLabels' own order —
+// there's only ever one bank, not per-row values like 'bits'). `st.switches`
+// is the live 0/1 array. Correctness is purely per-bit (st.switches vs
+// st.cor) — the engine itself has no idea these bits mean "BCD" or decode
+// to anything; whatever derived output a question wants to show (e.g. a
+// 7-segment glyph) is entirely page-local, built from Q[cur].switches via
+// RENDER_EXTRA (see e.g. digital_bcd_decoder_practice.html), same as any
+// other per-file visualisation this engine doesn't know about.
+function renderSwitches() {
+  const st = Q[cur], data = QUESTIONS[cur];
+  const labels = data.switchLabels();
+  const c = document.getElementById('qSwitches'); c.innerHTML = '';
+  labels.forEach((label, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'switch-btn';
+    const val = st.switches[i];
+    btn.innerHTML = `<span class="switch-label">${label}</span><span class="switch-value">${val}</span>`;
+    if (st.ans) {
+      btn.disabled = true;
+      btn.classList.add(val === st.cor[i] ? 'correct' : 'wrong');
+    } else {
+      btn.classList.toggle('on', val === 1);
+      btn.addEventListener('click', () => toggleSwitch(i));
+    }
+    c.appendChild(btn);
+  });
+}
+function toggleSwitch(i) {
+  const st = Q[cur], data = QUESTIONS[cur];
+  if (!isSwitches(data) || st.ans) return;
+  st.switches[i] = st.switches[i] ? 0 : 1;
+  renderQuestion();
+}
+
 function renderQuestion() {
   const data = QUESTIONS[cur], st = Q[cur];
   const multi = isMulti(data);
@@ -838,8 +897,10 @@ function renderQuestion() {
   if (qBitsEl) qBitsEl.style.display = isBits(data) ? 'block' : 'none';
   const qTruthEl = document.getElementById('qTruth');
   if (qTruthEl) qTruthEl.style.display = isTruth(data) ? 'block' : 'none';
+  const qSwitchesEl = document.getElementById('qSwitches');
+  if (qSwitchesEl) qSwitchesEl.style.display = isSwitches(data) ? 'flex' : 'none';
   const qOptionsEl = document.getElementById('qOptions');
-  if (qOptionsEl) qOptionsEl.style.display = (isMatch(data) || isBits(data) || isTruth(data) || isFill(data) || data.leftPanel === 'shapeGrid') ? 'none' : '';
+  if (qOptionsEl) qOptionsEl.style.display = (isMatch(data) || isBits(data) || isTruth(data) || isFill(data) || isSwitches(data) || data.leftPanel === 'shapeGrid') ? 'none' : '';
   const qOptionsBoxEl = document.getElementById('qOptionsBox');
   if (qOptionsBoxEl) qOptionsBoxEl.style.display = (isFill(data) || isTruth(data)) ? 'none' : '';
 
@@ -851,6 +912,8 @@ function renderQuestion() {
     renderTruth();
   } else if (isFill(data)) {
     renderFill();
+  } else if (isSwitches(data)) {
+    renderSwitches();
   } else if (data.leftPanel === 'shapeGrid') {
     renderShapeGrid();
   } else {
@@ -928,6 +991,7 @@ function checkAnswer() {
     isBits(data) ? st.clicks.every(row => row.every(n => bitFromClicks(n) !== null)) :
     isTruth(data) ? st.clicks.every(n => zFromClicks(n) !== null) :
     isFill(data) ? st.slotPlaced.every((p, slot) => p !== null || st.cor[slot] === -1) :
+    isSwitches(data) ? true : // every switch already has a real 0/1 value from the start (no blank state like 'bits'/'truth' cells), so a switches question is always "complete" as-is
     (isMulti(data) ? st.sel.length > 0 : st.sel !== null);
   if (!complete) fillCorrectSelection(cur);
   st.ans = true;
@@ -1049,6 +1113,10 @@ function resetQuiz() {
     if (isBits(data)) {
       const cor = opts.map(row => [3, 2, 1, 0].map(shift => (row.value >> shift) & 1));
       return { ans: false, cor, opts, clicks: opts.map(() => [0, 0, 0, 0]) };
+    }
+    if (isSwitches(data)) {
+      const cor = opts; // data.options() returns the correct bit array directly for this kind — no per-row shape needed, there's only ever one switch bank
+      return { ans: false, cor, switches: cor.map(() => 0) }; // every switch starts OFF — the student sets them, they aren't pre-filled like a 'bits'/'truth' blank cell
     }
     if (isFill(data)) {
       // `col` is normally a single slot index, but may also be an array of
