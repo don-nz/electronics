@@ -55,6 +55,7 @@
   <style>
     .sim-wrap { width: 100%; max-width: 640px; margin: 0 auto; }
     .circuit-panel { cursor: default; }
+    .back-link-row { width: 100%; max-width: 640px; margin: 0 auto .5rem; text-align: right; }
 
     .intro { color: var(--colour-label); font-size: .85rem; line-height: 1.5; text-align: center; margin-bottom: 1rem; }
 
@@ -71,6 +72,26 @@
 
     .fault-caption { text-align: center; font-size: .85rem; color: var(--colour-label); margin-top: .6rem; min-height: 1.2em; }
     .fault-caption b { color: var(--colour-ui-primary); }
+
+    /* Current equations — plain text throughout (values/words), with just
+       the I_DS/I_RG/V_S/R_S/V_G/R_G variable labels picked out in the same
+       green as the I_DS ammeter label on the circuit itself (var(--colour-
+       current)) — same convention as the BJT/sibling JFET current-flow
+       files' own .current-equations. */
+    .current-equations {
+      max-width: 480px;
+      margin: .8rem auto 0;
+      padding: .7rem 1rem;
+      border: 1px solid var(--colour-border);
+      border-radius: var(--radius-sm, 6px);
+      background: rgba(var(--colour-label-rgb), .04);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: .78rem;
+      line-height: 1.8;
+      color: var(--colour-text);
+    }
+    .eq-line sub { font-size: .7em; }
+    .eq-var { color: var(--colour-current); }
   </style>
 </head>
 
@@ -120,6 +141,10 @@
     <h1>JFET Resistor Fault — Current Flow</h1>
     <p>Self-Bias N-Channel JFET · Interactive Simulator</p>
   </header>
+
+  <div class="back-link-row">
+    <a id="backLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+  </div>
 
   <p class="intro">Pick a fault below — the meters update and the animated current show where (and how fast) current is really flowing, scaled to each path's own healthy value.</p>
 
@@ -334,6 +359,10 @@
       </svg>
     </div>
     <div class="fault-caption" id="faultCaption"></div>
+    <div class="current-equations">
+      <div class="eq-line" id="eqIDS"></div>
+      <div class="eq-line" id="eqIRG"></div>
+    </div>
   </div>
 
   <footer>Electronics // Cert III // UEEEC0066 // Resources</footer>
@@ -352,31 +381,43 @@
       'healthy': {
         VG: '0.00', VS: '2.50', VGS: '-2.50', VD: '9.95', VDG: '9.95', VDS: '7.45', IDS: '2.50',
         caption: 'Healthy circuit — every current at its normal value.',
+        idsEq: "<span class=\"eq-var\">I<sub>DS</sub></span> = <span class=\"eq-var\">V<sub>S</sub></span> / <span class=\"eq-var\">R<sub>S</sub></span> = 2.50 / 1000 = <b>2.50 mA</b>",
+        irgEq: "<span class=\"eq-var\">I<sub>RG</sub></span> = <span class=\"eq-var\">V<sub>G</sub></span> / <span class=\"eq-var\">R<sub>G</sub></span> = 0.00 / 1M = <b>0 µA</b>",
       },
       'rd-open': {
         openR: 'RD',
         VG: '0.00', VS: '0.00', VGS: '0.00', VD: '12.00', VDG: '12.00', VDS: '12.00', IDS: '0.00',
         caption: '<b>RD open</b> — the JFET\'s one series path (VDD→RD→channel→RS→common) is broken. IDS drops to a clean 0mA everywhere in that loop; VG is untouched since the gate loop is independent of it.',
+        idsEq: "<span class=\"eq-var\">I<sub>DS</sub></span> = <span class=\"eq-var\">V<sub>S</sub></span> / <span class=\"eq-var\">R<sub>S</sub></span> = 0.00 / 1000 = <b>0 mA</b> — the one series loop is broken via RD, no current anywhere in it",
+        irgEq: "<span class=\"eq-var\">I<sub>RG</sub></span> = <span class=\"eq-var\">V<sub>G</sub></span> / <span class=\"eq-var\">R<sub>G</sub></span> = 0.00 / 1M = <b>0 µA</b> — gate loop is independent of RD",
       },
       'rs-open': {
         openR: 'RS',
         VG: '0.00', VS: '0.00', VGS: '0.00', VD: '12.00', VDG: '12.00', VDS: '12.00', IDS: '0.00',
         caption: '<b>RS open</b> — DC-identical to RD-open: a single series loop breaks the same way no matter where along it the break sits.',
+        idsEq: "<span class=\"eq-var\">I<sub>DS</sub></span> = <b>0 mA</b> — RS itself is the break; no return path to common at all",
+        irgEq: "<span class=\"eq-var\">I<sub>RG</sub></span> = <span class=\"eq-var\">V<sub>G</sub></span> / <span class=\"eq-var\">R<sub>G</sub></span> = 0.00 / 1M = <b>0 µA</b> — gate loop is independent of RS",
       },
       'rd-high': {
         highR: 'RD',
         VG: '0.00', VS: '2.50', VGS: '-2.50', VD: '7.90', VDG: '7.90', VDS: '5.40', IDS: '2.50',
         caption: '<b>RD high</b> (×2, 820Ω→1.64kΩ) — RD never enters the self-bias VG/VS/VGS/IDS calculation at all, so none of those move. Only VD (a bigger resistor, same current) drops.',
+        idsEq: "<span class=\"eq-var\">I<sub>DS</sub></span> = <span class=\"eq-var\">V<sub>S</sub></span> / <span class=\"eq-var\">R<sub>S</sub></span> = 2.50 / 1000 = <b>2.50 mA</b> — RD never enters this calculation at all",
+        irgEq: "<span class=\"eq-var\">I<sub>RG</sub></span> = <span class=\"eq-var\">V<sub>G</sub></span> / <span class=\"eq-var\">R<sub>G</sub></span> = 0.00 / 1M = <b>0 µA</b>",
       },
       'rs-high': {
         highR: 'RS',
         VG: '0.00', VS: '2.50', VGS: '-2.50', VD: '10.98', VDG: '10.98', VDS: '8.48', IDS: '1.25',
         caption: '<b>RS high</b> (×2, 1kΩ→2kΩ) — self-bias holds VS=VG−VGS fixed no matter what RS is, so VG/VS/VGS don\'t move — but IDS=VS/RS does, and it halves. VD actually RISES, since less current now drops across the unchanged RD.',
+        idsEq: "<span class=\"eq-var\">I<sub>DS</sub></span> = <span class=\"eq-var\">V<sub>S</sub></span> / <span class=\"eq-var\">R<sub>S</sub></span> = 2.50 / 2000 = <b>1.25 mA</b> — RS doubled, so the same <span class=\"eq-var\">V<sub>S</sub></span> now pushes half the current",
+        irgEq: "<span class=\"eq-var\">I<sub>RG</sub></span> = <span class=\"eq-var\">V<sub>G</sub></span> / <span class=\"eq-var\">R<sub>G</sub></span> = 0.00 / 1M = <b>0 µA</b> — RG untouched by this fault",
       },
       'rg-high': {
         highR: 'RG',
         VG: '0.00', VS: '2.50', VGS: '-2.50', VD: '9.95', VDG: '9.95', VDS: '7.45', IDS: '2.50',
         caption: '<b>RG high</b> (×2, 1MΩ→2MΩ) — RG carries no current in this circuit at all, so doubling it changes nothing any meter can detect. A genuinely invisible fault: a real lesson in the limits of DC voltage/current testing alone.',
+        idsEq: "<span class=\"eq-var\">I<sub>DS</sub></span> = <span class=\"eq-var\">V<sub>S</sub></span> / <span class=\"eq-var\">R<sub>S</sub></span> = 2.50 / 1000 = <b>2.50 mA</b> — RG never enters this calculation either",
+        irgEq: "<span class=\"eq-var\">I<sub>RG</sub></span> = <span class=\"eq-var\">V<sub>G</sub></span> / <span class=\"eq-var\">R<sub>G</sub></span> = 0.00 / 2M = <b>0 µA</b> — doubled or not, 0V across it still means exactly 0 current; this is why the fault is invisible",
       },
     };
 
@@ -488,12 +529,17 @@
 
       // Caption + active button
       document.getElementById('faultCaption').innerHTML = s.caption;
+      document.getElementById('eqIDS').innerHTML = s.idsEq;
+      document.getElementById('eqIRG').innerHTML = s.irgEq;
       document.querySelectorAll('#faultSeg button').forEach(btn => btn.classList.remove('active'));
       const idx = Object.keys(STATES).indexOf(key);
       document.querySelectorAll('#faultSeg button')[idx].classList.add('active');
     }
 
     setFault('healthy');
+
+    function goBack(e) { e.preventDefault(); history.back(); }
+    if (history.length > 1) { document.getElementById('backLink').style.display = ''; }
   </script>
 </body>
 
