@@ -1,0 +1,418 @@
+<!--
+  SR-latch Q-output construction drill. Shows a randomly-generated, always
+  VALID S/R timing diagram and asks the student to build the resulting Q
+  waveform themselves, one piece at a time, from a small palette: flat runs
+  (1/2/3 columns wide, for speed) plus single-column rise/fall steps.
+
+  A toggle above the puzzle lets the student pick which real gate the latch
+  is built from — NOR (active-HIGH S/R, asserted at 1) or NAND (active-LOW
+  S'/R', asserted at 0, per the standard bar/prime notation) — GATE_CONFIG
+  carries each type's assert/idle level, input labels and rule text, and
+  generateSRPair()/deriveQ() are both written purely in terms of those
+  assert/idle levels so the same code drives either gate type; only which
+  S/R combination counts as Hold vs Invalid flips between the two.
+
+  "Valid" here means two separate constraints, both enforced by
+  generateSRPair(): (1) S and R are never both asserted in the same column —
+  an unclocked SR latch has no defined output for that combination; (2) S
+  and R never CHANGE in the same column either, even when the result would
+  otherwise be well-defined (e.g. S falling exactly as R rises) — per the
+  teacher's own explicit feedback after trialling this exercise, simultaneous
+  S/R transitions are deliberately never shown in the workbook or tests,
+  since a real cross-coupled NAND/NOR latch's output can genuinely race when
+  both inputs change at the same instant (gate propagation delay makes the
+  actual result depend on which input's edge physically arrives first) —
+  not just a drawing-clarity preference. generateSRPair() enforces this by
+  construction: it picks a single random EVENT column at a time and toggles
+  exactly one of S/R there (never both), rather than generating S and R as
+  two independent pulse trains and reconciling collisions afterwards (the
+  original approach here, which could still produce a same-column S/R edge
+  even after its own "never both 1" fix).
+
+  generateSRPair() also biases which signal rises next (see its own comment
+  and MIN_Q_TRANSITIONS) toward whichever one actually flips Q, and retries
+  the whole draw if Q still ends up close to flat — a busy-looking S/R pair
+  can otherwise spend most of its length on R re-asserting Reset while Q is
+  already 0 (or S re-asserting Set while Q is already 1), leaving Q almost a
+  straight line despite S/R themselves changing constantly.
+
+  Genuinely different interaction shape from every other quiz/exercise in
+  this project — one continuous, persistent, sequentially built diagram,
+  not a paginated QUESTIONS[] sequence — so this page does NOT load
+  quiz-engine.js at all. The mechanic itself (random pulse generation, step-
+  waveform rendering, piece placement/undo, progress shading, per-column
+  checking) lives in the shared assets/waveform-builder.js — see that
+  file's own header comment for the shared/page-local split. Only the
+  SR-latch-specific bits stay here: generateSRPair()'s one-signal-at-a-time
+  event constraint and deriveQ()'s Set/Reset/Hold rule.
+
+  Still loads theme-init.js/nav-common.css-equivalent chrome (breadcrumb.js,
+  quiz-common.css) and reuses its .card/.btn/.btn-row/.result-banner
+  classes for visual consistency with every other page, even though the
+  Question/Check/Next paginated shell itself isn't used.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../assets/theme-init.js"></script>
+  <script src="../../assets/waveform-builder.js"></script>
+  <title>Digital Electronics — SR Latch Waveform Builder</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../assets/quiz-common.css">
+  <script src="../../assets/breadcrumb.js" defer></script>
+  <style>
+    .rule-card { font-size: .82rem; line-height: 1.55; margin-bottom: 1.2rem; }
+    .rule-card .rule-row { display: flex; gap: .5rem; margin: .3rem 0; }
+    .rule-card .rule-cond { flex: none; width: 8.5rem; font-family: 'Share Tech Mono', monospace; }
+    .legend-row { display: flex; gap: 1.2rem; margin-top: .6rem; font-size: .72rem; color: var(--colour-label); }
+    .legend-swatch { display: inline-block; width: 1.1rem; height: 2px; margin-right: .3rem; vertical-align: middle; }
+
+    .gate-toggle-card { font-size: .82rem; margin-bottom: 1.2rem; }
+    .gate-toggle-label { color: var(--colour-label); margin-bottom: .6rem; }
+    .gate-toggle { display: flex; gap: .8rem; flex-wrap: wrap; }
+    .gate-toggle-btn {
+      display: flex; flex-direction: column; align-items: center; gap: .3rem;
+      padding: .6rem 1.1rem; border: 1px solid var(--colour-border); border-radius: var(--radius-lg);
+      background: transparent; cursor: pointer; font-family: 'Share Tech Mono', monospace;
+      font-size: .7rem; letter-spacing: .05em; text-transform: uppercase; color: var(--colour-label);
+      transition: background .15s, color .15s, border-color .15s;
+    }
+    .gate-toggle-btn svg { width: 10rem; height: auto; display: block; }
+    .gate-toggle-btn.active {
+      border-color: var(--colour-ui-primary);
+      background: rgba(var(--colour-ui-primary-rgb), .12);
+      color: var(--colour-ui-primary);
+    }
+    .gate-toggle-btn:not(.active):hover { background: rgba(var(--colour-ui-primary-rgb), .04); color: var(--colour-text); }
+  </style>
+</head>
+
+<body>
+  <!-- Hidden defs: NOR/NAND gate symbols for the latch-type toggle below.
+       Copied from the master reference ../../assets/shapes/logic-gates.html
+       (edit shapes there first, then re-copy here) — see that file's header
+       comment for why it can't just be <use>'d cross-file under file://. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur stdDeviation="2" result="b" />
+        <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+      </filter>
+      <!-- ══════════════════ NOR SR LATCH — iec ══════════════════ -->
+      <g id="nor-sr-latch-iec">
+      <g transform="translate(135,90)">
+        <rect x="-75" y="-90" width="150" height="180" rx="4" fill="none" style="stroke: var(--colour-dff)" stroke-width="2" filter="url(#glow)" />
+
+        <!-- S input -->
+        <line x1="-135" y1="-45" x2="-75" y2="-45" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="-60" y="-34" font-size="25" font-weight="bold" style="fill: var(--colour-dff)">S</text>
+
+        <!-- R input -->
+        <line x1="-135" y1="45" x2="-75" y2="45" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="-60" y="55" font-size="25" font-weight="bold" style="fill: var(--colour-dff)">R</text>
+
+        <!-- Q / complement(Q) outputs -->
+        <line x1="75" y1="-45" x2="135" y2="-45" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="60" y="-34" text-anchor="end" font-size="25" font-weight="bold" style="fill: var(--colour-dff)">Q</text>
+
+        <line x1="75" y1="45" x2="135" y2="45" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="60" y="55" text-anchor="end" font-size="25" font-weight="bold" style="fill: var(--colour-dff)"><tspan style="text-decoration: overline">Q</tspan></text>
+      </g>
+      </g>
+
+      <!-- ══════════════════ NAND SR LATCH — IEC ══════════════════  -->
+      <g id="nand-sr-latch-iec">
+      <g transform="translate(135,90)">
+        <rect x="-75" y="-90" width="150" height="180" rx="4" fill="none" style="stroke: var(--colour-dff)" stroke-width="2" filter="url(#glow)" />
+
+        <!-- S input -->
+        <line x1="-135" y1="-45" x2="-75" y2="-45" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="-60" y="-34" font-size="25" font-weight="bold" style="fill: var(--colour-dff)"><tspan style="text-decoration: overline">S</tspan></text>
+
+        <!-- R input -->
+        <line x1="-135" y1="45" x2="-75" y2="45" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="-60" y="55" font-size="25" font-weight="bold" style="fill: var(--colour-dff)"><tspan style="text-decoration: overline">R</tspan></text>
+
+        <!-- Q / complement(Q) outputs -->
+        <line x1="75" y1="-45" x2="135" y2="-45" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="60" y="-34" text-anchor="end" font-size="25" font-weight="bold" style="fill: var(--colour-dff)">Q</text>
+
+        <line x1="75" y1="45" x2="135" y2="45" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="60" y="55" text-anchor="end" font-size="25" font-weight="bold" style="fill: var(--colour-dff)"><tspan style="text-decoration: overline">Q</tspan></text>
+      </g>
+      </g>
+    </defs>  
+  </svg>
+
+  <div class="crumb" id="crumb" data-current="SR Latch Waveform Builder"></div>
+  <header>
+    <h1>Digital Electronics</h1>
+    <p>SR Latch — Build the Q Output</p>
+  </header>
+
+  <div class="quiz-wrap single-col" id="quizWrap">
+    <div class="questions-col">
+
+      <div class="card rule-card">
+        <div class="progress-wrap" style="margin-bottom:.8rem;">
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+        <div>An unclocked <b>SR latch</b> follows one rule at every instant<span id="ruleGateNote"></span>:</div>
+        <div id="ruleRows"></div>
+        <div>Use the pieces below to draw Q, column by column, then hit <b>Check</b>.</div>
+        <div class="legend-row">
+          <span><span class="legend-swatch" style="background:var(--colour-input-a)"></span><span id="legendS">S</span></span>
+          <span><span class="legend-swatch" style="background:var(--colour-input-b)"></span><span id="legendR">R</span></span>
+          <span><span class="legend-swatch" style="background:var(--colour-output-z)"></span>Q (building)</span>
+        </div>
+      </div>
+
+      <div class="card gate-toggle-card">
+        <div class="gate-toggle-label">Choose the type of latch to build:</div>
+        <div class="gate-toggle" id="gateToggle">
+          <button type="button" class="gate-toggle-btn active" id="gateBtnNor" onclick="pickGateType('nor')" aria-pressed="true">
+            <svg viewBox="-10 -10 310 240"><use href="#nor-sr-latch-iec" /></svg>
+            <span>NOR Latch</span>
+          </button>
+          <button type="button" class="gate-toggle-btn" id="gateBtnNand" onclick="pickGateType('nand')" aria-pressed="false">
+            <svg viewBox="-10 -10 310 240"><use href="#nand-sr-latch-iec" /></svg>
+            <span>NAND Latch</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="wb-track-row">
+          <div class="wb-track-label" id="sTrackLabel">S</div>
+          <svg id="sTrack"></svg>
+        </div>
+        <div class="wb-track-row">
+          <div class="wb-track-label" id="rTrackLabel">R</div>
+          <svg id="rTrack"></svg>
+        </div>
+        <div class="wb-track-row">
+          <div class="wb-track-label">Q</div>
+          <svg id="qTrack"></svg>
+        </div>
+
+        <div class="wb-palette" id="palette"></div>
+
+        <div class="result-banner" id="resultBanner"><span id="resultIcon"></span>&nbsp;<span id="resultText"></span></div>
+
+        <div class="btn-row">
+          <button class="btn btn-prev" id="undoBtn" onclick="doUndo()">← Undo</button>
+          <button class="btn btn-check" id="checkBtn" onclick="doCheck()" disabled>Check</button>
+          <button class="btn btn-shuffle" id="restartBtn" onclick="doRestart()">↺ Retry</button>
+          <button class="btn btn-summary" id="newBtn" onclick="doNewDiagram()">🎲 New Diagram</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <footer>Electronics // Cert III // UEEEC0069</footer>
+
+  <script>
+    const N = 20;
+    const PIECES = [
+      { type: 'flat', width: 1 }, { type: 'flat', width: 2 }, { type: 'flat', width: 3 },
+      { type: 'rise' }, { type: 'fall' },
+    ];
+
+    // ── SR-latch domain logic (page-local — see this file's own header
+    // comment for why this stays out of the shared waveform-builder.js) ──
+    // A NOR-based latch is active-HIGH: S/R idle at 0, asserted at 1. A
+    // NAND-based latch is the mirror image — active-LOW: S'/R' idle at 1,
+    // asserted at 0 — with Hold/Invalid swapped accordingly (Hold is
+    // 1,1 instead of 0,0; Invalid is 0,0 instead of 1,1). Both are
+    // expressed below purely in terms of "assert"/"idle" levels (1/0 for
+    // NOR, 0/1 for NAND) so the SAME generator/derivation code drives
+    // either gate type — only GATE_CONFIG's assert/idle values differ.
+    const GATE_CONFIG = {
+      nor: {
+        assert: 1, idle: 0, sLabel: 'S', rLabel: 'R', latchName: 'NOR',
+        rules: [
+          ['S = 1, R = 0', '<b>Set</b> — Q goes (or stays) HIGH'],
+          ['S = 0, R = 1', '<b>Reset</b> — Q goes (or stays) LOW'],
+          ['S = 0, R = 0', '<b>Hold</b> — Q stays exactly where it was'],
+          ['S = 1, R = 1', 'Invalid — never shown here'],
+        ],
+      },
+      nand: {
+        assert: 0, idle: 1, sLabel: "S'", rLabel: "R'", latchName: 'NAND',
+        rules: [
+          ["S' = 0, R' = 1", '<b>Set</b> — Q goes (or stays) HIGH'],
+          ["S' = 1, R' = 0", '<b>Reset</b> — Q goes (or stays) LOW'],
+          ["S' = 1, R' = 1", '<b>Hold</b> — Q stays exactly where it was'],
+          ["S' = 0, R' = 0", 'Invalid — never shown here'],
+        ],
+      },
+    };
+    let gateType = 'nor';
+
+    // A "de-assert" (S or R moving back to idle) never changes Q — it just
+    // returns to the Hold state. Only an "assert" can move Q, and only when
+    // it's the OPPOSITE of Q's current value (asserting S while Q is
+    // already 1, or R while Q is already 0, is a redundant re-assertion
+    // that leaves Q flat). Left fully random, a run can spend most of its
+    // length on exactly that kind of redundant re-assertion churn — S/R
+    // stay busy while Q barely moves. MIN_Q_TRANSITIONS + the 75%-biased
+    // pick below fix that: whenever there's a free choice of which signal
+    // asserts next (both currently idle), bias toward the one that
+    // actually flips Q, and retry the whole draw if Q still ends up close
+    // to flat despite that bias.
+    const MIN_Q_TRANSITIONS = 4;
+    function generateSRPair(n, assert, idle) {
+      const randInt = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
+      let best = null, bestTransitions = -1;
+      for (let attempt = 0; attempt < 30; attempt++) {
+        const S = new Array(n).fill(idle), R = new Array(n).fill(idle);
+        let sLevel = idle, rLevel = idle, qLevel = 0, qTransitions = 0;
+        let col = randInt(1, 3); // leading gap before the first change
+        while (col < n) {
+          // De-asserting is always safe; asserting is only safe while the
+          // OTHER signal is idle — this is what keeps S/R mutually
+          // exclusive by construction, one single-signal event at a time.
+          const canToggleS = sLevel === assert || rLevel === idle;
+          const canToggleR = rLevel === assert || sLevel === idle;
+          let pick;
+          if (canToggleS && canToggleR) {
+            const preferred = qLevel === 0 ? 'S' : 'R';
+            pick = Math.random() < 0.75 ? preferred : (preferred === 'S' ? 'R' : 'S');
+          } else {
+            pick = canToggleS ? 'S' : 'R';
+          }
+          if (pick === 'S') sLevel = sLevel === assert ? idle : assert; else rLevel = rLevel === assert ? idle : assert;
+          const sAsserted = sLevel === assert, rAsserted = rLevel === assert;
+          const newQ = sAsserted ? 1 : (rAsserted ? 0 : qLevel);
+          if (newQ !== qLevel) qTransitions++;
+          qLevel = newQ;
+          for (let i = col; i < n; i++) { S[i] = sLevel; R[i] = rLevel; }
+          col += randInt(1, 3); // gap until the next single-signal change — kept short so the diagram stays busy
+        }
+        if (qTransitions >= MIN_Q_TRANSITIONS) return { S, R };
+        if (qTransitions > bestTransitions) { best = { S, R }; bestTransitions = qTransitions; }
+      }
+      return best; // astronomically unlikely fallback — the busiest of the 30 attempts tried
+    }
+
+    function deriveQ(S, R, assert) {
+      const Q = [];
+      let prev = 0;
+      for (let i = 0; i < S.length; i++) {
+        const sAsserted = S[i] === assert, rAsserted = R[i] === assert;
+        let q;
+        if (sAsserted && !rAsserted) q = 1;
+        else if (rAsserted && !sAsserted) q = 0;
+        else q = prev; // both idle → hold (both asserted/invalid never generated)
+        Q.push(q);
+        prev = q;
+      }
+      return Q;
+    }
+
+    function renderRuleCard() {
+      const cfg = GATE_CONFIG[gateType];
+      document.getElementById('ruleGateNote').textContent = ` (built from two cross-coupled ${cfg.latchName} gates)`;
+      document.getElementById('ruleRows').innerHTML = cfg.rules.map(([cond, desc]) =>
+        `<div class="rule-row"><span class="rule-cond">${cond}</span><span>${desc}</span></div>`
+      ).join('');
+      document.getElementById('legendS').textContent = cfg.sLabel;
+      document.getElementById('legendR').textContent = cfg.rLabel;
+      document.getElementById('sTrackLabel').textContent = cfg.sLabel;
+      document.getElementById('rTrackLabel').textContent = cfg.rLabel;
+    }
+
+    function pickGateType(type) {
+      if (type === gateType) return;
+      gateType = type;
+      document.getElementById('gateBtnNor').classList.toggle('active', type === 'nor');
+      document.getElementById('gateBtnNand').classList.toggle('active', type === 'nand');
+      document.getElementById('gateBtnNor').setAttribute('aria-pressed', String(type === 'nor'));
+      document.getElementById('gateBtnNand').setAttribute('aria-pressed', String(type === 'nand'));
+      renderRuleCard();
+      doNewDiagram();
+    }
+
+    // ── page state ──
+    let S, R, correctQ, builder, checked, lastResult;
+
+    function doNewDiagram() {
+      const cfg = GATE_CONFIG[gateType];
+      ({ S, R } = generateSRPair(N, cfg.assert, cfg.idle));
+      correctQ = deriveQ(S, R, cfg.assert);
+      builder = { pieces: [] };
+      checked = false;
+      lastResult = null;
+      render();
+    }
+
+    function doRestart() {
+      builder = { pieces: [] };
+      checked = false;
+      lastResult = null;
+      render();
+    }
+
+    function doUndo() {
+      if (checked) return;
+      wbUndo(builder);
+      render();
+    }
+
+    function pickPiece(piece) {
+      if (checked) return;
+      wbPlace(builder, piece, N);
+      render();
+    }
+
+    function doCheck() {
+      if (checked) return;
+      if (wbCursor(builder).col !== N) return;
+      lastResult = wbCheck(builder, correctQ);
+      checked = true;
+      render();
+    }
+
+    function render() {
+      const progressCols = wbCursor(builder).col;
+      renderReadOnlyTrackSVG(document.getElementById('sTrack'), S, { className: 'wb-track-path wb-track-s', progressCols });
+      renderReadOnlyTrackSVG(document.getElementById('rTrack'), R, { className: 'wb-track-path wb-track-r', progressCols });
+      renderQTrackSVG(document.getElementById('qTrack'), builder, N, checked ? { results: lastResult.results } : {});
+
+      renderPiecePalette(document.getElementById('palette'), {
+        pieces: PIECES,
+        onPick: pickPiece,
+        isDisabled: (p) => checked || !wbCanPlace(builder, p, N),
+      });
+
+      const cursor = wbCursor(builder);
+      document.getElementById('checkBtn').disabled = checked || cursor.col !== N;
+      document.getElementById('undoBtn').disabled = checked || builder.pieces.length === 0;
+
+      const banner = document.getElementById('resultBanner');
+      if (checked) {
+        banner.className = 'result-banner ' + (lastResult.allCorrect ? 'correct' : 'wrong');
+        document.getElementById('resultIcon').textContent = lastResult.allCorrect ? '✓' : '✗';
+        document.getElementById('resultText').textContent = lastResult.allCorrect
+          ? `All ${lastResult.total} columns correct!`
+          : `${lastResult.correctCount} of ${lastResult.total} columns correct — red columns are wrong.`;
+      } else {
+        banner.className = 'result-banner';
+      }
+    }
+
+    if (history.length > 1) { document.getElementById('menuLink').style.display = ''; }
+    function goBack(e) { e.preventDefault(); history.back(); }
+
+    renderRuleCard();
+    doNewDiagram();
+  </script>
+</body>
+
+</html>
