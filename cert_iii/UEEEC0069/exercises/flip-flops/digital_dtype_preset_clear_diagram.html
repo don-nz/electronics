@@ -1,0 +1,584 @@
+<!--
+  D-type flip-flop Q-output construction drill — the PRESET/CLEAR sibling of
+  digital_flip_flop_nor_nand.html's SR-latch version, reusing the exact same
+  shared mechanic (assets/waveform-builder.js: random pulse tracks, step-
+  waveform rendering, piece placement/undo, progress shading, per-column
+  checking) with a new page-local domain: P (PRESET), C (CLEAR), CLK and D
+  are shown as four random, always-consistent read-only tracks, and the
+  student builds the resulting Q waveform for a D flip-flop with
+  asynchronous PRESET/CLEAR.
+
+  A toggle above the puzzle picks one of 4 real ICs — every combination of
+  edge polarity (positive/rising vs negative/falling clocked) and
+  PRESET/CLEAR polarity (active-HIGH vs active-LOW, per the standard
+  bar/prime notation) — using the already zero-based dff-pos-ah-iec/
+  dff-neg-ah-iec/dff-pos-al-iec/dff-neg-al-iec symbols straight from the
+  master ../../../assets/shapes/flip-flops.html (edit shapes there first,
+  then re-copy here — see that file's own header comment for why it can't
+  just be <use>'d cross-file under file://). CONFIG carries each variant's
+  assert/idle level for P/C, its edge direction and its input labels;
+  deriveQ() is written purely in terms of those so the same code drives all
+  4 variants — only which P/C combination means Preset vs Clear, and which
+  CLK transition counts as the active edge, flips between them.
+
+  Priority rule every column is evaluated against, PRESET first:
+    1. P asserted            -> Q forced HIGH (async — overrides the clock)
+    2. C asserted (not P)    -> Q forced LOW  (async — overrides the clock)
+    3. neither asserted      -> Q holds, UNLESS this column is the active
+                                 CLK edge, in which case Q takes D's value
+                                 at that same column (edge-triggered sample)
+  P and C asserted in the same column is a real IC's undefined/race state
+  (both outputs typically forced high) — deliberately never generated,
+  exactly the same "never shown" convention digital_flip_flop_nor_nand.html
+  already uses for S=R=1. generatePC() enforces this by construction:
+  P and C's asserted windows are picked up front and kept non-overlapping
+  (with a 2-column gap either side, for a clean read), rather than
+  generating each independently and reconciling collisions afterwards.
+
+  CLK is a genuine periodic clock (2 columns high, 2 low, after a short
+  random lead-in) — the ONE track here that ISN'T randomised freely, since
+  a real clock doesn't jitter. D reuses waveform-builder.js's own
+  randomPulseTrack() directly — first page to call it rather than writing a
+  bespoke generator, since D has no mutual-exclusion constraint with
+  anything else (unlike S/R, or P/C here) and that shared generic generator
+  already does exactly "randomised pulses, no more" correctly.
+
+  generateDiagram() retries the whole draw (CLK+D+P+C, up to 30 times,
+  keeping the busiest miss) if Q ends up with fewer than MIN_Q_TRANSITIONS
+  transitions — same reasoning and same constant as
+  digital_flip_flop_nor_nand.html's own generateSRPair(): a random D can by
+  chance keep landing on values that never actually change Q across every
+  clock edge, which would make for a boring, unrepresentative puzzle.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../assets/theme-init.js"></script>
+  <script src="../../../assets/waveform-builder.js"></script>
+  <title>Digital Electronics — D Flip-Flop Waveform Builder</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../assets/quiz-common.css">
+  <script src="../../../assets/breadcrumb.js" defer></script>
+  <style>
+    .rule-card { font-size: .82rem; line-height: 1.55; margin-bottom: 1.2rem; }
+    .rule-card .rule-row { display: flex; gap: .5rem; margin: .3rem 0; }
+    .rule-card .rule-cond { flex: none; width: 8.5rem; font-family: 'Share Tech Mono', monospace; }
+    .legend-row { display: flex; gap: 1rem; row-gap: .4rem; flex-wrap: wrap; margin-top: .6rem; font-size: .72rem; color: var(--colour-label); }
+    .legend-swatch { display: inline-block; width: 1.1rem; height: 2px; margin-right: .3rem; vertical-align: middle; }
+
+    .gate-toggle-card { font-size: .82rem; margin-bottom: 1.2rem; }
+    .gate-toggle-label { color: var(--colour-label); margin-bottom: .6rem; }
+    .gate-toggle { display: grid; grid-template-columns: repeat(2, max-content); gap: .8rem; justify-content: center; }
+    .gate-toggle-btn {
+      display: flex; flex-direction: column; align-items: center; gap: .3rem;
+      padding: .6rem 1.1rem; border: 1px solid var(--colour-border); border-radius: var(--radius-lg);
+      background: transparent; cursor: pointer; font-family: 'Share Tech Mono', monospace;
+      font-size: .7rem; letter-spacing: .05em; text-transform: uppercase; color: var(--colour-label);
+      text-align: center; transition: background .15s, color .15s, border-color .15s;
+    }
+    .gate-toggle-btn svg { width: 9rem; height: auto; display: block; }
+    .gate-toggle-btn.active {
+      border-color: var(--colour-ui-primary);
+      background: rgba(var(--colour-ui-primary-rgb), .12);
+      color: var(--colour-ui-primary);
+    }
+    .gate-toggle-btn:not(.active):hover { background: rgba(var(--colour-ui-primary-rgb), .04); color: var(--colour-text); }
+
+    .hint-toggle-card { font-size: .82rem; margin-bottom: 1.2rem; }
+    .hint-toggle-label { color: var(--colour-label); margin-bottom: .6rem; }
+    .hint-toggle { display: flex; gap: .6rem; flex-wrap: wrap; justify-content: center; }
+    .hint-toggle-btn {
+      padding: .5rem 1.1rem; border: 1px solid var(--colour-border); border-radius: var(--radius-lg);
+      background: transparent; cursor: pointer; font-family: 'Share Tech Mono', monospace;
+      font-size: .7rem; letter-spacing: .05em; text-transform: uppercase; color: var(--colour-label);
+      transition: background .15s, color .15s, border-color .15s;
+    }
+    .hint-toggle-btn:not(.active):hover { background: rgba(var(--colour-ui-primary-rgb), .04); color: var(--colour-text); }
+    .hint-toggle-btn[data-hint="preset"].active { border-color: var(--colour-jfet); color: var(--colour-jfet); background: color-mix(in srgb, var(--colour-jfet) 14%, transparent); }
+    .hint-toggle-btn[data-hint="clear"].active { border-color: var(--colour-bjt); color: var(--colour-bjt); background: color-mix(in srgb, var(--colour-bjt) 14%, transparent); }
+    .hint-toggle-btn[data-hint="clock"].active { border-color: var(--colour-switch); color: var(--colour-switch); background: color-mix(in srgb, var(--colour-switch) 14%, transparent); }
+
+    .wb-tracks-wrap { position: relative; }
+    .wb-hint-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+  </style>
+</head>
+
+<body>
+  <!-- Hidden defs: the 4 composed D-FF+PRESET/CLEAR IEC symbols for the
+       toggle below. Copied from the master reference
+       ../../../assets/shapes/flip-flops.html (edit shapes there first,
+       then re-copy here). Only the IEC block bodies + PRESET/CLEAR
+       extensions are needed — the traditional gate-level D-FF ids
+       (_nand2/_nand-d-latch-stage/dff-*-edge-trad) don't have a
+       PRESET/CLEAR version yet (see that file's own header comment for
+       why), so they're not copied here. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur stdDeviation="2" result="b" />
+        <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+      </filter>
+
+      <g id="dff-pos-edge-iec">
+       <g transform="translate(135,90)">
+        <rect x="-75" y="-90" width="150" height="180" rx="4" fill="none" style="stroke: var(--colour-dff)" stroke-width="2" filter="url(#glow)" />
+        <line x1="-135" y1="-45" x2="-75" y2="-45" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="-60" y="-34" font-size="25" font-weight="bold" style="fill: var(--colour-dff)">D</text>
+        <line x1="-135" y1="45" x2="-75" y2="45" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <path d="M -75 30 L -55 45 L -75 60" fill="none" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="-48" y="52" font-size="20" font-weight="bold" style="fill: var(--colour-dff)">CLK</text>
+        <line x1="75" y1="-45" x2="135" y2="-45" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="60" y="-34" text-anchor="end" font-size="25" font-weight="bold" style="fill: var(--colour-dff)">Q</text>
+        <line x1="75" y1="45" x2="135" y2="45" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="60" y="55" text-anchor="end" font-size="25" font-weight="bold" style="fill: var(--colour-dff)"><tspan style="text-decoration: overline">Q</tspan></text>
+       </g>
+      </g>
+
+      <g id="dff-neg-edge-iec">
+       <g transform="translate(135,90)">
+        <rect x="-75" y="-90" width="150" height="180" rx="4" fill="none" style="stroke: var(--colour-dff)" stroke-width="2" filter="url(#glow)" />
+        <line x1="-135" y1="-45" x2="-75" y2="-45" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="-60" y="-34" font-size="25" font-weight="bold" style="fill: var(--colour-dff)">D</text>
+        <line x1="-135" y1="45" x2="-93" y2="45" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <circle cx="-84" cy="45" r="8" fill="none" style="stroke: var(--colour-dff)" stroke-width="2" filter="url(#glow)" />
+        <path d="M -75 30 L -55 45 L -75 60" fill="none" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="-48" y="52" font-size="20" font-weight="bold" style="fill: var(--colour-dff)">CLK</text>
+        <line x1="75" y1="-45" x2="135" y2="-45" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="60" y="-34" text-anchor="end" font-size="25" font-weight="bold" style="fill: var(--colour-dff)">Q</text>
+        <line x1="75" y1="45" x2="135" y2="45" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="60" y="55" text-anchor="end" font-size="25" font-weight="bold" style="fill: var(--colour-dff)"><tspan style="text-decoration: overline">Q</tspan></text>
+       </g>
+      </g>
+
+      <g id="dff-ah-pre-clr">
+       <g transform="translate(135,90)">
+        <line x1="0" y1="-150" x2="0" y2="-90" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="0" y="-60" text-anchor="middle" font-size="20" font-weight="bold" style="fill: var(--colour-dff)">PRE</text>
+        <line x1="0" y1="90" x2="0" y2="150" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="0" y="82" text-anchor="middle" font-size="20" font-weight="bold" style="fill: var(--colour-dff)">CLR</text>
+       </g>
+      </g>
+
+      <g id="dff-al-pre-clr">
+       <g transform="translate(135,90)">
+        <line x1="0" y1="-150" x2="0" y2="-106" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <circle cx="0" cy="-98" r="8" fill="none" style="stroke: var(--colour-dff)" stroke-width="2" filter="url(#glow)" />
+        <text x="0" y="-60" text-anchor="middle" font-size="20" font-weight="bold" style="fill: var(--colour-dff)"><tspan style="text-decoration: overline">PRE</tspan></text>
+        <line x1="0" y1="106" x2="0" y2="150" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <circle cx="0" cy="98" r="8" fill="none" style="stroke: var(--colour-dff)" stroke-width="2" filter="url(#glow)" />
+        <text x="0" y="82" text-anchor="middle" font-size="20" font-weight="bold" style="fill: var(--colour-dff)"><tspan style="text-decoration: overline">CLR</tspan></text>
+       </g>
+      </g>
+
+      <g id="dff-pos-ah-iec"><g transform="translate(0,60)"><use href="#dff-pos-edge-iec" /><use href="#dff-ah-pre-clr" /></g></g>
+      <g id="dff-neg-ah-iec"><g transform="translate(0,60)"><use href="#dff-neg-edge-iec" /><use href="#dff-ah-pre-clr" /></g></g>
+      <g id="dff-pos-al-iec"><g transform="translate(0,60)"><use href="#dff-pos-edge-iec" /><use href="#dff-al-pre-clr" /></g></g>
+      <g id="dff-neg-al-iec"><g transform="translate(0,60)"><use href="#dff-neg-edge-iec" /><use href="#dff-al-pre-clr" /></g></g>
+    </defs>
+  </svg>
+
+  <div class="crumb" id="crumb" data-current="D Flip-Flop Waveform Builder"></div>
+  <header>
+    <h1>Digital Electronics</h1>
+    <p>D Flip-Flop — PRESET/CLEAR — Build the Q Output</p>
+  </header>
+
+  <div class="quiz-wrap single-col" id="quizWrap">
+    <div class="questions-col">
+
+      <div class="card rule-card">
+        <div class="progress-wrap" style="margin-bottom:.8rem;">
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+        <div>A <b>D flip-flop</b> with asynchronous PRESET/CLEAR follows these rules, in order, at every instant<span id="ruleGateNote"></span>:</div>
+        <div id="ruleRows"></div>
+        <div>Use the pieces below to draw Q, column by column, then hit <b>Check</b>.</div>
+        <div class="legend-row">
+          <span><span class="legend-swatch" style="background:var(--colour-jfet)"></span><span id="legendP">P</span></span>
+          <span><span class="legend-swatch" style="background:var(--colour-bjt)"></span><span id="legendC">C</span></span>
+          <span><span class="legend-swatch" style="background:var(--colour-switch)"></span>CLK</span>
+          <span><span class="legend-swatch" style="background:var(--colour-input-a)"></span>D</span>
+          <span><span class="legend-swatch" style="background:var(--colour-output-z)"></span>Q (building)</span>
+        </div>
+      </div>
+
+      <div class="card gate-toggle-card">
+        <div class="gate-toggle-label">Choose the flip-flop type to build:</div>
+        <div class="gate-toggle" id="gateToggle">
+          <button type="button" class="gate-toggle-btn active" id="cfgBtn-pos-ah" onclick="pickConfig('pos-ah')" aria-pressed="true">
+            <svg viewBox="-10 -10 290 320"><use href="#dff-pos-ah-iec" /></svg>
+            <span>Positive Edge<br>Active-High P/C</span>
+          </button>
+          <button type="button" class="gate-toggle-btn" id="cfgBtn-neg-ah" onclick="pickConfig('neg-ah')" aria-pressed="false">
+            <svg viewBox="-10 -10 290 320"><use href="#dff-neg-ah-iec" /></svg>
+            <span>Negative Edge<br>Active-High P/C</span>
+          </button>
+          <button type="button" class="gate-toggle-btn" id="cfgBtn-pos-al" onclick="pickConfig('pos-al')" aria-pressed="false">
+            <svg viewBox="-10 -10 290 320"><use href="#dff-pos-al-iec" /></svg>
+            <span>Positive Edge<br>Active-Low P/C</span>
+          </button>
+          <button type="button" class="gate-toggle-btn" id="cfgBtn-neg-al" onclick="pickConfig('neg-al')" aria-pressed="false">
+            <svg viewBox="-10 -10 290 320"><use href="#dff-neg-al-iec" /></svg>
+            <span>Negative Edge<br>Active-Low P/C</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="card hint-toggle-card">
+        <div class="hint-toggle-label">Show helper overlays:</div>
+        <div class="hint-toggle" id="hintToggle">
+          <button type="button" class="hint-toggle-btn" id="hintBtnPreset" data-hint="preset" onclick="toggleHint('preset')" aria-pressed="false">Show Preset</button>
+          <button type="button" class="hint-toggle-btn" id="hintBtnClear" data-hint="clear" onclick="toggleHint('clear')" aria-pressed="false">Show Clear</button>
+          <button type="button" class="hint-toggle-btn" id="hintBtnClock" data-hint="clock" onclick="toggleHint('clock')" aria-pressed="false">Show Clock</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="wb-tracks-wrap" id="tracksWrap">
+          <svg class="wb-hint-overlay" id="hintOverlay"></svg>
+          <div class="wb-track-row">
+            <div class="wb-track-label" id="pTrackLabel">P</div>
+            <svg id="pTrack"></svg>
+          </div>
+          <div class="wb-track-row">
+            <div class="wb-track-label" id="cTrackLabel">C</div>
+            <svg id="cTrack"></svg>
+          </div>
+          <div class="wb-track-row">
+            <div class="wb-track-label">CLK</div>
+            <svg id="clkTrack"></svg>
+          </div>
+          <div class="wb-track-row">
+            <div class="wb-track-label">D</div>
+            <svg id="dTrack"></svg>
+          </div>
+          <div class="wb-track-row">
+            <div class="wb-track-label">Q</div>
+            <svg id="qTrack"></svg>
+          </div>
+        </div>
+
+        <div class="wb-palette" id="palette"></div>
+
+        <div class="result-banner" id="resultBanner"><span id="resultIcon"></span>&nbsp;<span id="resultText"></span></div>
+
+        <div class="btn-row">
+          <button class="btn btn-prev" id="undoBtn" onclick="doUndo()">← Undo</button>
+          <button class="btn btn-check" id="checkBtn" onclick="doCheck()" disabled>Check</button>
+          <button class="btn btn-shuffle" id="restartBtn" onclick="doRestart()">↺ Retry</button>
+          <button class="btn btn-summary" id="newBtn" onclick="doNewDiagram()">🎲 New Diagram</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <footer>Electronics // Cert III // UEEEC0069</footer>
+
+  <script>
+    const N = 20;
+    const PIECES = [
+      { type: 'flat', width: 1 }, { type: 'flat', width: 2 }, { type: 'flat', width: 3 },
+      { type: 'rise' }, { type: 'fall' },
+    ];
+
+    // ── D-FF+PRESET/CLEAR domain logic (page-local — see this file's own
+    // header comment for why this stays out of the shared
+    // waveform-builder.js) ── Active-HIGH: P/C idle at 0, asserted at 1.
+    // Active-LOW: P'/C' idle at 1, asserted at 0 — same assert/idle
+    // generalisation digital_flip_flop_nor_nand.html uses for NOR vs NAND,
+    // just applied to P/C here instead of S/R.
+    const CONFIG = {
+      'pos-ah': { assert: 1, idle: 0, edge: 'rising', pLabel: 'P', cLabel: 'C', edgeName: 'positive-edge', edgeWord: 'rising', polarityName: 'active-HIGH' },
+      'neg-ah': { assert: 1, idle: 0, edge: 'falling', pLabel: 'P', cLabel: 'C', edgeName: 'negative-edge', edgeWord: 'falling', polarityName: 'active-HIGH' },
+      'pos-al': { assert: 0, idle: 1, edge: 'rising', pLabel: "P'", cLabel: "C'", edgeName: 'positive-edge', edgeWord: 'rising', polarityName: 'active-LOW' },
+      'neg-al': { assert: 0, idle: 1, edge: 'falling', pLabel: "P'", cLabel: "C'", edgeName: 'negative-edge', edgeWord: 'falling', polarityName: 'active-LOW' },
+    };
+    let configKey = 'pos-ah';
+
+    // A real clock is periodic, not randomised — 2 columns high, 2 low,
+    // after a short random lead-in so it doesn't always start on the same
+    // column.
+    function generateClock(n) {
+      const CLK = new Array(n).fill(0);
+      let level = 0;
+      let col = 2 + Math.floor(Math.random() * 2);
+      while (col < n) {
+        level = level ? 0 : 1;
+        for (let i = col; i < n; i++) CLK[i] = level;
+        col += 2;
+      }
+      return CLK;
+    }
+
+    // P and C's asserted windows are picked up front and kept mutually
+    // exclusive (with a 2-column gap either side) — the PRESET/CLEAR
+    // equivalent of generateSRPair()'s own S/R mutual-exclusion
+    // construction, just without a coupled state machine, since P and C
+    // don't feed back into each other the way cross-coupled S/R do.
+    function generatePC(n, assert, idle) {
+      const P = new Array(n).fill(idle), R = new Array(n).fill(idle);
+      const windows = [];
+      function place(target) {
+        for (let attempt = 0; attempt < 30; attempt++) {
+          const width = 1 + Math.floor(Math.random() * 2);
+          const start = 2 + Math.floor(Math.random() * Math.max(1, n - width - 3));
+          const end = start + width;
+          const clashes = windows.some(w => start < w.end + 2 && end + 2 > w.start);
+          if (!clashes) { windows.push({ start, end }); for (let i = start; i < end; i++) target[i] = assert; return; }
+        }
+      }
+      const pCount = 1 + Math.floor(Math.random() * 2);
+      const cCount = 1 + Math.floor(Math.random() * 2);
+      for (let i = 0; i < pCount; i++) place(P);
+      for (let i = 0; i < cCount; i++) place(R);
+      return { P, C: R };
+    }
+
+    function deriveQ(P, C, CLK, D, assert, edge) {
+      const Q = [];
+      let prev = 0, prevClk = CLK[0];
+      for (let i = 0; i < CLK.length; i++) {
+        const pAsserted = P[i] === assert;
+        const cAsserted = C[i] === assert;
+        let q;
+        if (pAsserted) q = 1;
+        else if (cAsserted) q = 0;
+        else {
+          const rising = prevClk === 0 && CLK[i] === 1;
+          const falling = prevClk === 1 && CLK[i] === 0;
+          const isEdge = edge === 'rising' ? rising : falling;
+          q = isEdge ? D[i] : prev;
+        }
+        Q.push(q);
+        prev = q;
+        prevClk = CLK[i];
+      }
+      return Q;
+    }
+
+    // Retries the whole draw (same reasoning/constant as
+    // digital_flip_flop_nor_nand.html's generateSRPair()) if Q ends up
+    // close to flat — a random D can by chance keep agreeing with Q at
+    // every clock edge.
+    const MIN_Q_TRANSITIONS = 4;
+    function generateDiagram(n, assert, idle, edge) {
+      let best = null, bestTransitions = -1;
+      for (let attempt = 0; attempt < 30; attempt++) {
+        const CLK = generateClock(n);
+        const D = randomPulseTrack(n, { minPulse: 1, maxPulse: 3, minGap: 1, maxGap: 3 });
+        const { P, C } = generatePC(n, assert, idle);
+        const Q = deriveQ(P, C, CLK, D, assert, edge);
+        let transitions = 0;
+        for (let i = 1; i < n; i++) if (Q[i] !== Q[i - 1]) transitions++;
+        if (transitions >= MIN_Q_TRANSITIONS) return { P, C, CLK, D, Q };
+        if (transitions > bestTransitions) { best = { P, C, CLK, D, Q }; bestTransitions = transitions; }
+      }
+      return best;
+    }
+
+    function renderRuleCard() {
+      const cfg = CONFIG[configKey];
+      document.getElementById('ruleGateNote').textContent = ` (${cfg.edgeName} clocked, PRESET/CLEAR ${cfg.polarityName})`;
+      const rules = [
+        [`${cfg.pLabel} = ${cfg.assert}`, '<b>Preset</b> — Q forced HIGH immediately (async, overrides the clock)'],
+        [`${cfg.cLabel} = ${cfg.assert}`, '<b>Clear</b> — Q forced LOW immediately (async, overrides the clock)'],
+        [`${cfg.pLabel} = ${cfg.idle}, ${cfg.cLabel} = ${cfg.idle}`, `Q follows D, but only on each <b>${cfg.edgeWord}</b> CLK edge — holds between edges`],
+      ];
+      document.getElementById('ruleRows').innerHTML = rules.map(([cond, desc]) =>
+        `<div class="rule-row"><span class="rule-cond">${cond}</span><span>${desc}</span></div>`
+      ).join('');
+      document.getElementById('legendP').textContent = cfg.pLabel;
+      document.getElementById('legendC').textContent = cfg.cLabel;
+      document.getElementById('pTrackLabel').textContent = cfg.pLabel;
+      document.getElementById('cTrackLabel').textContent = cfg.cLabel;
+    }
+
+    function pickConfig(key) {
+      if (key === configKey) return;
+      configKey = key;
+      Object.keys(CONFIG).forEach(k => {
+        const btn = document.getElementById('cfgBtn-' + k);
+        btn.classList.toggle('active', k === key);
+        btn.setAttribute('aria-pressed', String(k === key));
+      });
+      renderRuleCard();
+      doNewDiagram();
+    }
+
+    // ── helper overlays ── Show Preset/Show Clear draw a translucent band
+    // from THAT track's own row down to the bottom of Q, spanning the
+    // column-width of each window where it's asserted (P's band starts
+    // higher, at the P row, since P sits above C in the stack — each
+    // starts at "its own line", not a shared top). Show Clock draws a
+    // dashed vertical line at every ACTIVE edge only (matching whichever
+    // edge this config's flip-flop actually triggers on), from the CLK row
+    // down to the bottom of Q. All 3 persist across New Diagram/Retry/Check
+    // — they're a standing study aid, not a one-shot reveal — and are
+    // recomputed via getBoundingClientRect() (not hardcoded pixel math) so
+    // they stay correctly aligned across the responsive/phone-width layout.
+    let hintPreset = false, hintClear = false, hintClock = false;
+
+    function toggleHint(key) {
+      if (key === 'preset') hintPreset = !hintPreset;
+      else if (key === 'clear') hintClear = !hintClear;
+      else if (key === 'clock') hintClock = !hintClock;
+      document.getElementById('hintBtnPreset').classList.toggle('active', hintPreset);
+      document.getElementById('hintBtnPreset').setAttribute('aria-pressed', String(hintPreset));
+      document.getElementById('hintBtnClear').classList.toggle('active', hintClear);
+      document.getElementById('hintBtnClear').setAttribute('aria-pressed', String(hintClear));
+      document.getElementById('hintBtnClock').classList.toggle('active', hintClock);
+      document.getElementById('hintBtnClock').setAttribute('aria-pressed', String(hintClock));
+      renderHints();
+    }
+
+    // Contiguous asserted runs in a track, as {start,end} column ranges
+    // (end exclusive) — the same "one shaded band per run" shape as
+    // generatePC()'s own windows, just derived from the finished track
+    // instead of tracked during generation.
+    function assertedWindows(track, assert) {
+      const windows = [];
+      let start = -1;
+      for (let i = 0; i < track.length; i++) {
+        const asserted = track[i] === assert;
+        if (asserted && start === -1) start = i;
+        if (!asserted && start !== -1) { windows.push({ start, end: i }); start = -1; }
+      }
+      if (start !== -1) windows.push({ start, end: track.length });
+      return windows;
+    }
+
+    function renderHints() {
+      const overlay = document.getElementById('hintOverlay');
+      if (!hintPreset && !hintClear && !hintClock) { overlay.innerHTML = ''; return; }
+
+      const wrap = document.getElementById('tracksWrap');
+      const wrapRect = wrap.getBoundingClientRect();
+      if (wrapRect.width === 0) return; // not laid out yet
+
+      const refRect = document.getElementById('clkTrack').getBoundingClientRect();
+      const trackLeft = refRect.left - wrapRect.left;
+      const colW = refRect.width / N;
+      const pTop = document.getElementById('pTrack').getBoundingClientRect().top - wrapRect.top;
+      const cTop = document.getElementById('cTrack').getBoundingClientRect().top - wrapRect.top;
+      const clkTop = refRect.top - wrapRect.top;
+      const qBottom = document.getElementById('qTrack').getBoundingClientRect().bottom - wrapRect.top;
+
+      overlay.setAttribute('viewBox', `0 0 ${wrapRect.width} ${wrapRect.height}`);
+      const cfg = CONFIG[configKey];
+      let html = '';
+
+      if (hintPreset) {
+        assertedWindows(P, cfg.assert).forEach(w => {
+          const x = trackLeft + w.start * colW, width = (w.end - w.start) * colW;
+          html += `<rect x="${x}" y="${pTop}" width="${width}" height="${qBottom - pTop}" style="fill: var(--colour-jfet)" opacity=".18" />`;
+        });
+      }
+      if (hintClear) {
+        assertedWindows(C, cfg.assert).forEach(w => {
+          const x = trackLeft + w.start * colW, width = (w.end - w.start) * colW;
+          html += `<rect x="${x}" y="${cTop}" width="${width}" height="${qBottom - cTop}" style="fill: var(--colour-bjt)" opacity=".18" />`;
+        });
+      }
+      if (hintClock) {
+        let prevClk = CLK[0];
+        for (let i = 1; i < CLK.length; i++) {
+          const rising = prevClk === 0 && CLK[i] === 1;
+          const falling = prevClk === 1 && CLK[i] === 0;
+          if (cfg.edge === 'rising' ? rising : falling) {
+            const x = trackLeft + i * colW;
+            html += `<line x1="${x}" y1="${clkTop}" x2="${x}" y2="${qBottom}" style="stroke: var(--colour-switch)" stroke-width="2" stroke-dasharray="4,3" />`;
+          }
+          prevClk = CLK[i];
+        }
+      }
+      overlay.innerHTML = html;
+    }
+
+    window.addEventListener('resize', renderHints);
+
+    // ── page state ──
+    let P, C, CLK, D, correctQ, builder, checked, lastResult;
+
+    function doNewDiagram() {
+      const cfg = CONFIG[configKey];
+      ({ P, C, CLK, D, Q: correctQ } = generateDiagram(N, cfg.assert, cfg.idle, cfg.edge));
+      builder = { pieces: [] };
+      checked = false;
+      lastResult = null;
+      render();
+    }
+
+    function doRestart() {
+      builder = { pieces: [] };
+      checked = false;
+      lastResult = null;
+      render();
+    }
+
+    function doUndo() {
+      if (checked) return;
+      wbUndo(builder);
+      render();
+    }
+
+    function pickPiece(piece) {
+      if (checked) return;
+      wbPlace(builder, piece, N);
+      render();
+    }
+
+    function doCheck() {
+      if (checked) return;
+      if (wbCursor(builder).col !== N) return;
+      lastResult = wbCheck(builder, correctQ);
+      checked = true;
+      render();
+    }
+
+    function render() {
+      const progressCols = wbCursor(builder).col;
+      renderReadOnlyTrackSVG(document.getElementById('pTrack'), P, { className: 'wb-track-path wb-track-p', progressCols });
+      renderReadOnlyTrackSVG(document.getElementById('cTrack'), C, { className: 'wb-track-path wb-track-c', progressCols });
+      renderReadOnlyTrackSVG(document.getElementById('clkTrack'), CLK, { className: 'wb-track-path wb-track-clk', progressCols });
+      renderReadOnlyTrackSVG(document.getElementById('dTrack'), D, { className: 'wb-track-path wb-track-d', progressCols });
+      renderQTrackSVG(document.getElementById('qTrack'), builder, N, checked ? { results: lastResult.results } : {});
+
+      renderPiecePalette(document.getElementById('palette'), {
+        pieces: PIECES,
+        onPick: pickPiece,
+        isDisabled: (p) => checked || !wbCanPlace(builder, p, N),
+      });
+
+      const cursor = wbCursor(builder);
+      document.getElementById('checkBtn').disabled = checked || cursor.col !== N;
+      document.getElementById('undoBtn').disabled = checked || builder.pieces.length === 0;
+
+      const banner = document.getElementById('resultBanner');
+      if (checked) {
+        banner.className = 'result-banner ' + (lastResult.allCorrect ? 'correct' : 'wrong');
+        document.getElementById('resultIcon').textContent = lastResult.allCorrect ? '✓' : '✗';
+        document.getElementById('resultText').textContent = lastResult.allCorrect
+          ? `All ${lastResult.total} columns correct!`
+          : `${lastResult.correctCount} of ${lastResult.total} columns correct — red columns are wrong.`;
+      } else {
+        banner.className = 'result-banner';
+      }
+
+      renderHints();
+    }
+
+    if (history.length > 1) { document.getElementById('menuLink').style.display = ''; }
+    function goBack(e) { e.preventDefault(); history.back(); }
+
+    renderRuleCard();
+    doNewDiagram();
+  </script>
+</body>
+
+</html>
