@@ -114,6 +114,7 @@ function wbGridSVG(cols, colWidth = WB_COL_WIDTH) {
 function renderReadOnlyTrackSVG(svgEl, levels, opts = {}) {
   const colWidth = opts.colWidth || WB_COL_WIDTH;
   svgEl.setAttribute('viewBox', `0 0 ${wbSvgWidth(levels.length, colWidth)} ${wbSvgHeight()}`);
+  svgEl.setAttribute('preserveAspectRatio', 'none');
   const cls = opts.className || 'wb-track-path';
   let html = wbGridSVG(levels.length, colWidth);
   if (opts.progressCols > 0) {
@@ -191,6 +192,7 @@ function renderQTrackSVG(svgEl, builder, totalCols, opts = {}) {
   const segs = wbBuiltColumnSegments(builder);
   const cursorCol = segs.length;
   svgEl.setAttribute('viewBox', `0 0 ${wbSvgWidth(totalCols, colWidth)} ${wbSvgHeight()}`);
+  svgEl.setAttribute('preserveAspectRatio', 'none');
   let html = wbGridSVG(totalCols, colWidth);
   if (cursorCol > 0) {
     html += `<rect class="wb-progress-shade" x="0" y="0" width="${cursorCol * colWidth}" height="${wbSvgHeight()}" />`;

@@ -578,7 +578,7 @@
 
     <div class="card">
       <div class="wb-tracks-wrap" id="tracksWrap">
-        <svg class="wb-hint-overlay" id="hintOverlay"></svg>
+        <svg class="wb-hint-overlay" id="hintOverlay" preserveAspectRatio="none"></svg>
         <div class="wb-track-row">
           <div class="wb-track-label" id="pTrackLabel">P</div>
           <svg id="pTrack"></svg>
@@ -725,6 +725,7 @@
       }
 
       svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+      svg.setAttribute('preserveAspectRatio', 'none');
       let html = renderGridLinesHTML(N, colW, H, y0, y1, W);
       html += `<path class="${opts.className}" d="${d}" />`;
       svg.innerHTML = html;
@@ -757,6 +758,7 @@
       }
 
       svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+      svg.setAttribute('preserveAspectRatio', 'none');
       let html = '';
 
       if (opts.results) {
@@ -958,53 +960,63 @@
     }
 
     function renderHints() {
-      const overlay = document.getElementById('hintOverlay');
-      if (!hintPreset && !hintClear && !hintClock) { overlay.innerHTML = ''; return; }
+      requestAnimationFrame(() => {
+        const overlay = document.getElementById('hintOverlay');
+        if (!hintPreset && !hintClear && !hintClock) { overlay.innerHTML = ''; return; }
 
-      const wrap = document.getElementById('tracksWrap');
-      const wrapRect = wrap.getBoundingClientRect();
-      if (wrapRect.width === 0) return;
+        const wrap = document.getElementById('tracksWrap');
+        const wrapRect = wrap.getBoundingClientRect();
+        if (wrapRect.width === 0) return;
 
-      const refRect = document.getElementById('clkTrack').getBoundingClientRect();
-      const trackLeft = refRect.left - wrapRect.left;
-      const colW = refRect.width / N;
-      const pTop = document.getElementById('pTrack').getBoundingClientRect().top - wrapRect.top;
-      const cTop = document.getElementById('cTrack').getBoundingClientRect().top - wrapRect.top;
-      const clkTop = refRect.top - wrapRect.top;
-      const qBottom = document.getElementById('qTrack').getBoundingClientRect().bottom - wrapRect.top;
-
-      overlay.setAttribute('viewBox', `0 0 ${wrapRect.width} ${wrapRect.height}`);
-      const cfg = CONFIG[configKey];
-      let html = '';
-
-      if (hintPreset) {
-        assertedWindows(P, cfg.assert).forEach(w => {
-          const x = trackLeft + w.start * colW, width = (w.end - w.start) * colW;
-          html += `<rect x="${x}" y="${pTop}" width="${width}" height="${qBottom - pTop}" style="fill: var(--colour-jfet)" opacity=".18" />`;
-        });
-      }
-      if (hintClear) {
-        assertedWindows(C, cfg.assert).forEach(w => {
-          const x = trackLeft + w.start * colW, width = (w.end - w.start) * colW;
-          html += `<rect x="${x}" y="${cTop}" width="${width}" height="${qBottom - cTop}" style="fill: var(--colour-bjt)" opacity=".18" />`;
-        });
-      }
-      if (hintClock) {
-        let prevClk = CLK[0];
-        for (let i = 1; i < CLK.length; i++) {
-          const rising = prevClk === 0 && CLK[i] === 1;
-          const falling = prevClk === 1 && CLK[i] === 0;
-          if (cfg.edge === 'rising' ? rising : falling) {
-            const x = trackLeft + i * colW;
-            html += `<line x1="${x}" y1="${clkTop}" x2="${x}" y2="${qBottom}" style="stroke: var(--colour-switch)" stroke-width="2" stroke-dasharray="4,3" />`;
-          }
-          prevClk = CLK[i];
+        const clkSvg = document.getElementById('clkTrack');
+        const ctm = clkSvg.getScreenCTM();
+        const colVbWidth = clkSvg.viewBox.baseVal.width / N;
+        function colX(colIndex) {
+          const pt = clkSvg.createSVGPoint();
+          pt.x = colIndex * colVbWidth;
+          pt.y = 0;
+          return pt.matrixTransform(ctm).x - wrapRect.left;
         }
-      }
-      overlay.innerHTML = html;
+
+        const pTop = document.getElementById('pTrack').getBoundingClientRect().top - wrapRect.top;
+        const cTop = document.getElementById('cTrack').getBoundingClientRect().top - wrapRect.top;
+        const clkTop = clkSvg.getBoundingClientRect().top - wrapRect.top;
+        const qBottom = document.getElementById('qTrack').getBoundingClientRect().bottom - wrapRect.top;
+
+        overlay.setAttribute('viewBox', `0 0 ${wrapRect.width} ${wrapRect.height}`);
+        const cfg = CONFIG[configKey];
+        let html = '';
+
+        if (hintPreset) {
+          assertedWindows(P, cfg.assert).forEach(w => {
+            const x0 = colX(w.start), x1 = colX(w.end);
+            html += `<rect x="${x0}" y="${pTop}" width="${x1 - x0}" height="${qBottom - pTop}" style="fill: var(--colour-jfet)" opacity=".18" />`;
+          });
+        }
+        if (hintClear) {
+          assertedWindows(C, cfg.assert).forEach(w => {
+            const x0 = colX(w.start), x1 = colX(w.end);
+            html += `<rect x="${x0}" y="${cTop}" width="${x1 - x0}" height="${qBottom - cTop}" style="fill: var(--colour-bjt)" opacity=".18" />`;
+          });
+        }
+        if (hintClock) {
+          let prevClk = CLK[0];
+          for (let i = 1; i < CLK.length; i++) {
+            const rising = prevClk === 0 && CLK[i] === 1;
+            const falling = prevClk === 1 && CLK[i] === 0;
+            if (cfg.edge === 'rising' ? rising : falling) {
+              const x = colX(i);
+              html += `<line x1="${x}" y1="${clkTop}" x2="${x}" y2="${qBottom}" style="stroke: var(--colour-switch)" stroke-width="2" stroke-dasharray="4,3" />`;
+            }
+            prevClk = CLK[i];
+          }
+        }
+        overlay.innerHTML = html;
+      });
     }
 
     window.addEventListener('resize', renderHints);
+    if (document.fonts && document.fonts.ready) { document.fonts.ready.then(renderHints); }
 
     let P, C, CLK, D, correctQ, builder, checked, lastResult;
 

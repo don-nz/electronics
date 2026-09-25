@@ -1,0 +1,403 @@
+<!--
+  TEMPLATE FILE — read before cloning for a new weekly quiz (see
+  ../../bjt/basics/bjt_knowledge_basics.html's own header comment for the
+  full explanation of why this structure is mandatory even for a one-
+  question file).
+
+  This file uses a data-driven quiz engine: a single `QUESTIONS` array (in
+  the <script>, search "QUESTIONS —") drives one generic HTML panel and a
+  generic set of engine functions (renderQuestion, checkAnswer,
+  nextQuestion, etc). There is deliberately NO per-question HTML or
+  per-question JS function. Built on the shared cert_iii/assets/
+  quiz-engine.js engine from the start (project convention for all new
+  quizzes).
+
+  Source material: coupling_objectives.webp (lesson objectives) plus 13
+  IMG_29xx.webp photos of the textbook and the teacher's whiteboard,
+  covering: the 3 main coupling methods (capacitive/transformer/direct,
+  plus the teacher's own "light/IR" aside), overall gain of a cascaded
+  amplifier (multiply ratios, ADD dB values), the factors affecting the
+  lower/upper roll-off frequencies (f1/f2), the "cascading two stages does
+  NOT preserve the combined -3dB bandwidth" gotcha, and interstage
+  coupling-capacitor sizing (f1 = 1/(2*pi*RT*Cc)). Applies equally to BJT
+  and FET multistage amplifiers per the lesson objectives, so this file
+  intentionally uses no device-specific accent colour (--colour-ui-primary
+  throughout, not --colour-bjt/--colour-jfet/--colour-mosfet).
+
+  NOTE for whoever reviews/extends this: the source photos have a gap —
+  IMG_2908, IMG_2909 and IMG_2911 don't exist (filenames jump 2907 -> 2910,
+  then 2910-2 -> 2912), matching Don's own warning that he "missed a couple
+  of the whiteboard points at the end". The visible content flows sensibly
+  around the gaps (Factors affecting f1/f2 -> [gap] -> BJT inter-electrode
+  capacitance example -> other stray C/L factors -> [gap] -> interstage
+  coupling -> determining cap size), but whatever was on the missing
+  board(s) isn't reflected here. Not yet covered at all: "describe the
+  advantages/disadvantages of DIRECT coupling" (only capacitive/transformer
+  have an adv/disadv question so far) and "predict the effect of typical
+  faults in a capacitively coupled amplifier" (that's a fault-finding-style
+  quiz of its own, same shape as ../../bjt/fault_finding/ — not attempted
+  here). Add questions for these once there's source content to build them
+  from, rather than inventing values.
+
+  Being built as a first version per Don's own request — add further
+  questions one at a time per his own direction from here, same convention
+  as jfet_knowledge_basics.html.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../assets/theme-init.js"></script>
+  <script src="../../../assets/quiz-engine.js"></script>
+  <title>Coupling Methods Knowledge Quiz 1</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../assets/quiz-common.css">
+  <script src="../../../assets/breadcrumb.js" defer></script>
+  <style>
+    /* Q1's block-diagram (input/interstage/output coupling) — plain SVG
+       shapes styled with currentColor-ish theme tokens, same convention as
+       every other page-local circuit diagram in this project. */
+    .coupling-diagram-label { font-family: var(--font-body); font-size: 13px; fill: var(--colour-label); text-anchor: middle; }
+    .coupling-diagram-letter { font-family: var(--font-body); font-size: 15px; font-weight: 700; fill: var(--colour-ui-primary); text-anchor: middle; }
+    .coupling-diagram-stage { fill: none; stroke: var(--colour-ui-primary); stroke-width: 2; }
+    .coupling-diagram-wire { stroke: var(--colour-ui-primary); stroke-width: 1.5; fill: none; }
+    .coupling-diagram-cap { stroke: var(--colour-ui-primary); stroke-width: 2; }
+  </style>
+</head>
+
+<body>
+  <div class="crumb" id="crumb" data-current="Coupling Basics"></div>
+  <header>
+    <h1>Coupling Methods</h1>
+    <p>Conceptual Questions · Capacitive &amp; Transformer Coupling · Multistage Amplifiers (BJT &amp; FET)</p>
+  </header>
+
+  <div class="quiz-wrap" id="quizWrap">
+
+    <!-- LEFT: static block diagram for Q1 (leftPanel:'circuit'). -->
+    <div class="circuit-col">
+      <div class="circuit-panel">
+        <div class="panel-label">Figure 1 — 3-stage cascaded amplifier</div>
+        <svg viewBox="0 0 700 210" xmlns="http://www.w3.org/2000/svg">
+          <!-- Signal source -->
+          <circle cx="40" cy="100" r="24" class="coupling-diagram-stage" />
+          <path d="M 30,100 Q 35,88 40,100 T 50,100" class="coupling-diagram-wire" />
+          <text x="40" y="150" class="coupling-diagram-label">Signal Source</text>
+
+          <!-- Wire + Capacitor A: source -> Stage 1 -->
+          <line x1="64" y1="100" x2="130" y2="100" class="coupling-diagram-wire" />
+          <line x1="92" y1="86" x2="92" y2="114" class="coupling-diagram-cap" />
+          <line x1="100" y1="86" x2="100" y2="114" class="coupling-diagram-cap" />
+          <text x="96" y="75" class="coupling-diagram-letter">A</text>
+
+          <!-- Stage 1 -->
+          <polygon points="130,60 130,140 230,100" class="coupling-diagram-stage" />
+          <text x="163" y="104" class="coupling-diagram-label">Stage 1</text>
+
+          <!-- Wire + Capacitor B: Stage 1 -> Stage 2 -->
+          <line x1="230" y1="100" x2="290" y2="100" class="coupling-diagram-wire" />
+          <line x1="256" y1="86" x2="256" y2="114" class="coupling-diagram-cap" />
+          <line x1="264" y1="86" x2="264" y2="114" class="coupling-diagram-cap" />
+          <text x="260" y="75" class="coupling-diagram-letter">B</text>
+
+          <!-- Stage 2 -->
+          <polygon points="290,60 290,140 390,100" class="coupling-diagram-stage" />
+          <text x="323" y="104" class="coupling-diagram-label">Stage 2</text>
+
+          <!-- Wire + Capacitor C: Stage 2 -> Stage 3 -->
+          <line x1="390" y1="100" x2="450" y2="100" class="coupling-diagram-wire" />
+          <line x1="416" y1="86" x2="416" y2="114" class="coupling-diagram-cap" />
+          <line x1="424" y1="86" x2="424" y2="114" class="coupling-diagram-cap" />
+          <text x="420" y="75" class="coupling-diagram-letter">C</text>
+
+          <!-- Stage 3 -->
+          <polygon points="450,60 450,140 550,100" class="coupling-diagram-stage" />
+          <text x="483" y="104" class="coupling-diagram-label">Stage 3</text>
+
+          <!-- Wire + Capacitor D: Stage 3 -> Load -->
+          <line x1="550" y1="100" x2="610" y2="100" class="coupling-diagram-wire" />
+          <line x1="576" y1="86" x2="576" y2="114" class="coupling-diagram-cap" />
+          <line x1="584" y1="86" x2="584" y2="114" class="coupling-diagram-cap" />
+          <text x="580" y="75" class="coupling-diagram-letter">D</text>
+
+          <!-- Load (speaker) -->
+          <rect x="610" y="88" width="14" height="24" class="coupling-diagram-stage" />
+          <polygon points="624,84 624,116 654,130 654,70" class="coupling-diagram-stage" />
+          <text x="632" y="150" class="coupling-diagram-label">Load</text>
+        </svg>
+      </div>
+    </div>
+
+    <!-- RIGHT: question -->
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <!-- Single reusable question panel — populated from QUESTIONS[cur] by renderQuestion() -->
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+
+          <div class="options" id="qOptions"></div>
+          <div class="match-wrap" id="qMatch" style="display:none">
+            <div class="match-pool-row" id="matchPoolRow">
+              <div class="match-pool-arrow">▶</div>
+              <div class="match-pool" id="matchPool"></div>
+            </div>
+            <div class="match-columns" id="matchColumns"></div>
+          </div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Summary -->
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS — see quiz-engine.js's own header comment for the full field
+    // reference. Add, remove, split or reorder questions by editing this
+    // array only — nothing in the engine needs to change.
+    // ══════════════════════════════════════════════════════════════════════
+
+    const QUESTIONS = [
+      {
+        // Objective: "Identify capacitive and transformer coupling in
+        // multistage transistor amplifiers given a schematic diagram" —
+        // uses the always-static #circuitCol diagram above (mirrors the
+        // textbook's own "Figure 2" 3-stage block diagram). 2 of the 4
+        // labelled points are genuinely both "interstage coupling", so
+        // this is a 4-option/3-column match, not a 1-to-1 one.
+        leftPanel: 'circuit',
+        kind: 'match',
+        columns: () => ['Input coupling', 'Interstage coupling', 'Output coupling'],
+        text: () => `Look at <b style="color:var(--colour-ui-primary)">Figure 1</b>. <b style="color:var(--colour-ui-primary)">Place</b> each labelled capacitor under the type of coupling it provides.`,
+        hint: () => `"Interstage" just means "between two amplifier stages" — as opposed to between the signal source and the first stage, or between the last stage and the load.`,
+        options: () => shuffle([
+          { label: 'Capacitor A', col: 0 },
+          { label: 'Capacitor B', col: 1 },
+          { label: 'Capacitor C', col: 1 },
+          { label: 'Capacitor D', col: 2 },
+        ]),
+        correctExplain: (st) => {
+          const wrongCount = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).length;
+          return wrongCount === 0 ? 'All 4 capacitors correctly matched' : `${st.opts.length - wrongCount} of ${st.opts.length} capacitors correctly matched`;
+        },
+        working: () => `
+    <div class="working-line"><b style="color:var(--colour-ui-correct)">Capacitor A</b> sits between the signal source and Stage 1 — <b>input coupling</b>.</div>
+    <div class="working-line"><b style="color:var(--colour-ui-correct)">Capacitors B and C</b> each sit between two amplifier stages (Stage 1→2, Stage 2→3) — <b>interstage coupling</b>. A 3-stage amplifier has 2 interstage coupling capacitors, one per join.</div>
+    <div class="working-line"><b style="color:var(--colour-ui-correct)">Capacitor D</b> sits between the last stage and the load — <b>output coupling</b>.</div>
+    <div class="working-total">Every one of these does the same job wherever it sits: block DC, pass the AC signal.</div>`
+      },
+      {
+        // Objective: "List three methods for coupling stages in a
+        // multistage amplifier". The whiteboard also mentions a 4th
+        // "light/IR" method as an aside, separate from the textbook's own
+        // "three main ways" list — included here as a wrong option with an
+        // explanatory (not dismissive) working note, not as a 4th correct
+        // answer, to stay faithful to the objective's own wording.
+        kind: 'multi',
+        text: () => `<b style="color:var(--colour-ui-primary)">Click</b> the <b style="color:var(--colour-ui-correct)">three</b> main methods used to couple stages together in a multistage transistor amplifier.`,
+        hint: () => `Think about what physically sits between two stages to pass the signal from one to the next.`,
+        options: () => shuffle([
+          { label: 'Capacitive coupling', type: 'correct' },
+          { label: 'Transformer (magnetic) coupling', type: 'correct' },
+          { label: 'Direct coupling', type: 'correct' },
+          { label: 'Optical/infrared (IR) coupling', type: 'wrong' },
+          { label: 'Resistive-only coupling', type: 'wrong' },
+          { label: 'Wireless RF coupling', type: 'wrong' },
+        ]),
+        correctExplain: (st) => {
+          const nums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join(', ');
+          return `Options <b>${nums}</b> are the three main coupling methods`;
+        },
+        working: () => `
+    <div class="working-step">The three main coupling methods:</div>
+    <div class="working-line"><b style="color:var(--colour-ui-correct)">Capacitive coupling</b> — a series capacitor between stages.</div>
+    <div class="working-line"><b style="color:var(--colour-ui-correct)">Transformer (magnetic) coupling</b> — a transformer's primary/secondary windings link the stages.</div>
+    <div class="working-line"><b style="color:var(--colour-ui-correct)">Direct coupling</b> — stages wired straight together, no capacitor or transformer in between.</div>
+    <div class="working-step" style="margin-top:.6rem">Optical/infrared coupling is real (e.g. an opto-isolator between stages) but it's a less common, specialised method — not one of the three main ones this objective is asking for. "Resistive-only" and "wireless RF" coupling aren't standard multistage-amplifier coupling methods at all.</div>`
+      },
+      {
+        // Objective: "Describe the advantages, disadvantages and
+        // characteristics of capacitive and transformer coupling in
+        // multistage transistor amplifiers." Direct coupling's own
+        // adv/disadv aren't in the source material yet (see file header
+        // note) — only capacitive vs transformer are covered here.
+        kind: 'match',
+        columns: () => ['Capacitive Coupling', 'Transformer Coupling'],
+        text: () => `Each feature below describes either <b style="color:var(--colour-ui-primary)">capacitive</b> or <b style="color:var(--colour-ui-primary)">transformer</b> coupling. <b style="color:var(--colour-ui-primary)">Place</b> each one under the correct method.`,
+        hint: () => `Which method uses a physical winding/turns-ratio, and which one is just a single component in series with the signal path?`,
+        options: () => shuffle([
+          { label: `Uses a series capacitor between stages — blocks DC while still passing the AC signal`, col: 0 },
+          { label: `Small, light and inexpensive — the most commonly used coupling method`, col: 0 },
+          { label: `Low-frequency response is limited by the coupling capacitor's own reactance (Xc) — this sets f1`, col: 0 },
+          { label: `Uses a transformer's primary/secondary windings — magnetically linked, no direct electrical connection between stages`, col: 1 },
+          { label: `Can provide impedance matching between stages, via the transformer's turns ratio`, col: 1 },
+          { label: `Bulky, heavy and comparatively expensive; frequency response is limited at BOTH low and high frequencies`, col: 1 },
+        ]),
+        correctExplain: (st) => {
+          const wrongCount = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).length;
+          return wrongCount === 0 ? 'All 6 features correctly matched' : `${st.opts.length - wrongCount} of ${st.opts.length} features correctly matched`;
+        },
+        working: () => `
+    <div class="working-line"><b style="color:var(--colour-ui-primary)">Capacitive coupling</b> is just one component (a capacitor) in series with the signal path — cheap, small and light, which is why it's the default choice. Its downside is purely a frequency-response one: the smaller Xc gets as frequency rises, the better it passes the signal, but at low frequencies Xc grows large enough to start attenuating the signal — that's exactly what sets the lower roll-off frequency f1.</div>
+    <div class="working-line"><b style="color:var(--colour-ui-primary)">Transformer coupling</b> trades that simplicity for a genuine advantage capacitive coupling can't offer at all — impedance matching via the turns ratio — at the cost of size, weight, cost, and a frequency response that's limited at both ends (winding inductance/leakage and stray capacitance affect high AND low frequencies, not just low).</div>`
+      },
+      {
+        // Objective: "Calculate and measure the total gain of a
+        // capacitively coupled two stage transistor amplifier (without
+        // global feedback)". Plain multiply-the-ratios calculation —
+        // matches AV(Total) = AV1(loaded) x AV2(loaded) x ... from the
+        // textbook.
+        text: () => `A capacitively coupled <b style="color:var(--colour-ui-primary)">two-stage</b> amplifier has loaded voltage gains of A<sub>V1</sub> = 12 and A<sub>V2</sub> = 8. What is the overall gain A<sub>V(Total)</sub>?`,
+        hint: () => `AV(Total) = AV1(loaded) × AV2(loaded) × ... — the loaded gains of a cascaded amplifier multiply, they don't add.`,
+        options: () => shuffle([
+          { label: '96', correct: true },
+          { label: '20' },
+          { label: '4' },
+          { label: '1.5' },
+        ]),
+        correctExplain: () => 'AV(Total) = AV1 × AV2 = 12 × 8 = 96',
+        working: () => `
+    <div class="working-step">AV(Total) = AV1(loaded) × AV2(loaded)</div>
+    <div class="working-line">AV(Total) = 12 × 8 = <b style="color:var(--colour-ui-correct)">96</b></div>
+    <div class="working-total">Each stage's own loaded gain already accounts for the next stage loading it down — so once you have both loaded gains, combining them is a straight multiplication. 20 is what you'd get by (incorrectly) adding the two gains instead.</div>`
+      },
+      {
+        // Whiteboard's own explicit red-ink "Note" (IMG_2902) — the one
+        // case where the combination rule flips from multiply to add.
+        text: () => `If the loaded gain of each stage is given in <b style="color:var(--colour-ui-primary)">dB</b> instead of a plain ratio, how do you find the overall gain of the cascaded amplifier?`,
+        hint: () => `dB is already a logarithmic (multiplicative-turned-additive) scale — that changes how you combine stage values.`,
+        options: () => shuffle([
+          { label: 'Add the dB values together', correct: true },
+          { label: 'Multiply the dB values together' },
+          { label: 'Average the dB values' },
+          { label: 'Use only the highest single-stage dB value' },
+        ]),
+        correctExplain: () => 'When gain is expressed in dB, the stage values ADD rather than multiply',
+        working: () => `
+    <div class="working-line">Decibels are already a logarithmic representation of a ratio — multiplying two ratios corresponds to <b style="color:var(--colour-ui-correct)">adding</b> their dB values. So if AV1 = 20dB and AV2 = 15dB, the overall gain is 20 + 15 = 35dB — NOT 20 × 15.</div>
+    <div class="working-total">This only applies when the gains are already expressed in dB. If they're plain ratios (e.g. AV1 = 10), you multiply instead — see the previous question.</div>`
+      },
+      {
+        // Whiteboard's own dedicated Q&A (IMG_2906) — a genuine, commonly
+        // -held misconception the teacher specifically called out.
+        text: () => `Two <b style="color:var(--colour-ui-primary)">identical</b> amplifier stages are cascaded. Each stage, on its own, has a bandwidth of 20Hz to 20kHz. What is the overall bandwidth of the combined 2-stage amplifier?`,
+        hint: () => `Each stage's own -3dB point is where ITS gain has already dropped 3dB. What happens at that same frequency once a SECOND identical stage is added after it?`,
+        options: () => shuffle([
+          { label: 'Narrower than 20Hz to 20kHz', correct: true },
+          { label: 'Also 20Hz to 20kHz' },
+          { label: 'Wider than 20Hz to 20kHz' },
+          { label: 'Exactly double — 10Hz to 40kHz' },
+        ]),
+        correctExplain: () => 'No — combining two stages with the same bandwidth makes the OVERALL bandwidth narrower, not the same',
+        working: () => `
+    <div class="working-line">At each stage's own original 20Hz/20kHz -3dB point, that ONE stage's gain is already down 3dB. Cascade a second identical stage, and at those same two frequencies you now get 3dB + 3dB = <b>6dB</b> down overall — past the -3dB point that actually DEFINES the amplifier's overall bandwidth.</div>
+    <div class="working-total">So the true overall -3dB points must sit further IN from 20Hz/20kHz, not at them — the combined bandwidth is <b style="color:var(--colour-ui-correct)">narrower</b> than either individual stage's own bandwidth, even though both stages are identical.</div>`
+      },
+      {
+        // Objective: "List the factors that affect the upper and lower
+        // roll-off frequencies in a multistage transistor amplifier."
+        // f1 side from IMG_2907/IMG_2913 (series Cc + the RT it works
+        // against); f2 side from IMG_2907 (parallel/shunt C) plus
+        // IMG_2910/IMG_2910-2 (BJT inter-electrode capacitance, stray C/L).
+        kind: 'match',
+        columns: () => ['Lower roll-off (f1)', 'Upper roll-off (f2)'],
+        text: () => `Each factor below affects either the <b style="color:var(--colour-ui-primary)">lower</b> roll-off frequency (f1) or the <b style="color:var(--colour-ui-primary)">upper</b> roll-off frequency (f2) of a multistage amplifier. <b style="color:var(--colour-ui-primary)">Place</b> each one correctly.`,
+        hint: () => `A capacitor in SERIES with the signal path behaves oppositely to a capacitor sitting in PARALLEL (shunt) across it, as frequency changes.`,
+        options: () => shuffle([
+          { label: `The value of the series interstage coupling capacitor (Cc)`, col: 0 },
+          { label: `The total series resistance in the coupling network (Rout of one stage + Rin of the next)`, col: 0 },
+          { label: `The transistor's own inter-electrode capacitance (e.g. Ccb, Cbe in a BJT)`, col: 1 },
+          { label: `Stray/parallel capacitance from wiring, PCB tracks or prototyping board tracks`, col: 1 },
+          { label: `Stray inductance from wiring or PCB tracks`, col: 1 },
+        ]),
+        correctExplain: (st) => {
+          const wrongCount = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).length;
+          return wrongCount === 0 ? 'All 5 factors correctly matched' : `${st.opts.length - wrongCount} of ${st.opts.length} factors correctly matched`;
+        },
+        working: () => `
+    <div class="working-line"><b style="color:var(--colour-ui-primary)">f1 (lower roll-off)</b> is set by components in SERIES with the signal — the coupling capacitor Cc and the total resistance it works against (RT = Rout(stage 1) + Rin(stage 2)). A series capacitor's reactance rises as frequency falls, so it's the LOW end of the response that a series cap affects.</div>
+    <div class="working-line"><b style="color:var(--colour-ui-primary)">f2 (upper roll-off)</b> is set by capacitance sitting in PARALLEL (shunt) across the signal path — a transistor's own inter-electrode capacitance, plus stray/unwanted capacitance from wiring and PCB tracks. A parallel capacitor's reactance falls as frequency rises, increasingly shorting the signal — that's the HIGH end of the response. Stray inductance is grouped with f2 here too, as one of the "other factors" affecting the high-frequency end alongside stray capacitance.</div>`
+      },
+      {
+        // Objective: "Calculate and measure the lower roll-off frequency
+        // of a capacitively coupled multistage amplifier (without global
+        // feedback)". f1 = 1 / (2*pi*RT*Cc), RT = Rout(1) + Rin(2) in
+        // series — straight from IMG_2913.
+        text: () => `An interstage coupling capacitor C<sub>C</sub> = 1µF connects Stage 1 (R<sub>out</sub> = 1kΩ) to Stage 2 (R<sub>in</sub> = 9kΩ). What is the resulting lower roll-off frequency f1?`,
+        hint: () => `First add the two resistances in series to get RT, then f1 = 1 / (2π × RT × CC).`,
+        options: () => shuffle([
+          { label: '≈15.9Hz', correct: true },
+          { label: '≈159Hz' },
+          { label: '≈1.59Hz' },
+          { label: '≈1.59kHz' },
+        ]),
+        correctExplain: () => 'RT = 1kΩ + 9kΩ = 10kΩ, so f1 = 1 / (2π × 10,000 × 0.000001) ≈ 15.9Hz',
+        working: () => `
+    <div class="working-step">Step 1 — total series resistance:</div>
+    <div class="working-line">RT = Rout(stage 1) + Rin(stage 2) = 1kΩ + 9kΩ = <b>10kΩ</b></div>
+    <div class="working-step" style="margin-top:.6rem">Step 2 — apply f1 = 1 / (2π × RT × CC):</div>
+    <div class="working-line">f1 = 1 / (2π × 10,000 × 0.000001) = 1 / 0.0628 ≈ <b style="color:var(--colour-ui-correct)">15.9Hz</b></div>
+    <div class="working-total">≈159Hz is what you'd get from a decimal-point slip on CC (treating 1µF as 0.1µF); watch your powers of ten on both RT and CC.</div>`
+      },
+      {
+        // Objective coverage: ties the interstage-coupling "characteristic"
+        // (blocks DC, passes AC) from IMG_2912 back to WHY it matters —
+        // biasing, not just definition.
+        text: () => `Why must an interstage coupling capacitor <b style="color:var(--colour-ui-primary)">block DC</b> while still passing the AC signal?`,
+        hint: () => `Think about what Stage 1's output DC voltage would do if it reached Stage 2's input directly.`,
+        options: () => shuffle([
+          { label: `Passing Stage 1's DC output straight into Stage 2's input would disturb Stage 2's own bias (Q-point)`, correct: true },
+          { label: `It boosts the AC signal's amplitude before it reaches the next stage` },
+          { label: `It matches the input/output impedance between the two stages` },
+          { label: `It filters out unwanted high-frequency noise` },
+        ]),
+        correctExplain: () => `Blocking DC protects Stage 2's own bias point from Stage 1's DC output voltage`,
+        working: () => `
+    <div class="working-line">Stage 1's collector/drain sits at some DC operating voltage. If that DC reached Stage 2's base/gate directly, it would add to (or override) Stage 2's own carefully-set bias — shifting its Q-point, possibly right into saturation or cutoff.</div>
+    <div class="working-total">The coupling capacitor blocks that DC completely while still passing the AC signal through — <b>provided the capacitor is large enough</b> that its reactance stays low at the signal's operating frequency (too small a value pushes f1 up and starts attenuating the signal itself).</div>`
+      }
+    ];
+
+    initQuizNav();
+    resetQuiz();
+    initQuizFromURL();
+  </script>
+</body>
+</html>
