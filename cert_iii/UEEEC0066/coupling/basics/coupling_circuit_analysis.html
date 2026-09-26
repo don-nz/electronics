@@ -1,0 +1,597 @@
+<!--
+  TEMPLATE FILE — read before cloning for a new weekly quiz (see
+  ../../bjt/basics/bjt_knowledge_basics.html's own header comment for the
+  full explanation of why this structure is mandatory even for a one-
+  question file).
+
+  This file uses a data-driven quiz engine: a single `QUESTIONS` array (in
+  the <script>, search "QUESTIONS —") drives one generic HTML panel and a
+  generic set of engine functions (renderQuestion, checkAnswer,
+  nextQuestion, etc). There is deliberately NO per-question HTML or
+  per-question JS function. Built on the shared cert_iii/assets/
+  quiz-engine.js engine, same convention as every other quiz in this
+  project.
+
+  Circuit source: Don's own hand-built ../../../working/transformer_circuit.html
+  (a two-stage voltage-divider-bias BJT amplifier, capacitively coupled via
+  C1 between Stage 1's collector and Stage 2's base). The <defs> shapes and
+  circuit markup below are copied directly from that file (bjt-npn-shape,
+  resistor-vertical, cap-shape, the reusable voltage-divider-bias template,
+  vd1/vd2 instances, the interstage join with C1, the R8 bypass cap C2,
+  and the output load RL) — edit the working file first if the circuit
+  itself needs to change, then re-copy here, same "master shape lives
+  elsewhere" convention as every other quiz that copies from assets/shapes/.
+
+  Circuit values actually used (read straight off the diagram):
+    VCC = 12V, VBE = 0.6V (both stages)
+    Stage 1 (Q1, BC-style NPN, β1=300): R1=80kΩ, R2=20kΩ, R3=5.6kΩ,
+      R4=1.8kΩ — R4 is UNBYPASSED (no cap shown across it).
+    Interstage coupling: C1 = 330nF, between Stage 1's collector and
+      Stage 2's base.
+    Stage 2 (Q2, β2=400): R5=100kΩ, R6=15kΩ, R7=4.2kΩ, R8=680Ω — R8 IS
+      bypassed (C2, "BYPASS R8" group), so Stage 2's own AC gain doesn't
+      involve R8 at all.
+    Output load: RL=10kΩ, wired straight across Stage 2's own output/
+      Common rails (no output coupling cap drawn yet) — doesn't change any
+      of the 10 formulas below (RL only ever enters as the parallel AC
+      load on R7 for AV2, exactly as it would with a coupling cap there
+      too; it never affects Stage 2's own DC bias point, which is set
+      purely by its base/emitter loop).
+
+  Formula conventions — DC bias (VB/VE/IC/VC) is new ground for this
+  project (the existing bjt/ac_parameters/*.html files all take IE as
+  GIVEN rather than deriving it — see that folder's own header comments).
+  Standard approximate voltage-divider method used here, valid because the
+  divider current is comfortably bigger than the base current it has to
+  supply in both stages (~36x for Stage 1, ~30x for Stage 2 — a "stiff"
+  divider, so approximating VB = VCC×R2/(R1+R2) while ignoring IB loading
+  the divider is a safe approximation, not just a shortcut):
+    VB = VCC × R2/(R1+R2),  VE = VB − VBE,  IC ≈ IE = VE/RE,
+    VC = VCC − IC×RC.
+  AC parameters follow the SAME conventions as bjt/ac_parameters/
+  bjt_knowledge_ac_params_ce.html (unbypassed) and _ce_bypassed.html
+  (bypassed) exactly — same 26mV constant, same Zb/Zin shape:
+    re′ = 26mV/IE
+    Zb (unbypassed, Stage 1)  = β×(RE+re′)
+    Zb (bypassed, Stage 2)    = β×re′
+    Rin(stage) = R1∥R2∥Zb  (three-way reciprocal sum)
+  Loaded gain (Stage 1's RC loaded by Stage 2's own Rin, through C1 —
+  Stage 1 is unbypassed so R4 stays in the denominator):
+    AV1 = −(R3∥Rin2)/(R4+re1′)
+  Stage 2's own gain (bypassed, loaded by RL):
+    AV2 = −(R7∥RL)/re2′
+  AVT = AV1×AV2 — POSITIVE (non-inverting overall), since two inverting
+  CE stages cancel each other's inversion.
+  f1 (lower roll-off set by the interstage cap) uses the SAME formula this
+  project's own coupling_knowledge_basics.html Q8 already established
+  (RT = Rout(stage1)+Rin(stage2), no other f1 convention exists anywhere
+  else in the project to match instead):
+    f1 = 1/(2π×RT×C1),  RT = R3 + Rin2   (Zout(stage1) ≈ R3)
+  All 10 values independently verified with a standalone Python script
+  before being written into the QUESTIONS[] options/working below — see
+  the numbers reproduced in each question's own `working` field.
+
+  "Known values" reveal strip — the project's established convention
+  (bjt_knowledge_ac_params_ce.html's own re′/Zb/Zin/Zout badges) places a
+  small badge directly on the diagram at the exact node each value
+  belongs to. This circuit doesn't have the spare room for that — cramming
+  two full stages into one diagram leaves no clean gap near the relevant
+  nodes big enough for a badge+label without colliding with a resistor,
+  wire or the other stage. Adapted instead as a plain text strip below the
+  full circuit (10 slots, revealed left-to-right/top-to-bottom as their
+  own question is answered) — same "reveal once answered, stays revealed"
+  behaviour, same RENDER_EXTRA mechanism, just laid out in open space
+  instead of on the schematic itself.
+
+  Being built as a first version per Don's own request — this is the
+  companion CALCULATION exercise to coupling_knowledge_basics.html (the
+  conceptual quiz already covering coupling methods/adv-disadv/f1-factors
+  for this same "coupling" topic).
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../assets/theme-init.js"></script>
+  <script src="../../../assets/quiz-engine.js"></script>
+  <title>Coupling Circuit Analysis Quiz</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../assets/quiz-common.css">
+  <script src="../../../assets/breadcrumb.js" defer></script>
+  <style>
+    @media(min-width:900px) {
+      /* Two full stages side by side needs real width to stay readable —
+         same fixed-cap-not-percent reasoning as bjt_knowledge_ac_params_ce.html's
+         own .quiz-wrap override, just a wider cap (910x680 viewBox here vs
+         that file's 690x570). */
+      .quiz-wrap { display: grid;
+        grid-template-columns: minmax(340px, 820px) 1fr;
+        gap: 1.2rem;
+        align-items: start; }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Hidden defs: the two-stage circuit, copied from
+       ../../../working/transformer_circuit.html — edit there first. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <filter id="glow">
+        <feGaussianBlur stdDeviation="2" result="b" />
+        <feMerge>
+          <feMergeNode in="b" />
+          <feMergeNode in="SourceGraphic" />
+        </feMerge>
+      </filter>
+
+      <!-- ══ NPN BJT SHAPE ══ -->
+      <g id="bjt-npn-shape">
+        <circle cx="7" cy="0" r="24" fill="var(--colour-panel)" style="stroke: var(--colour-bjt)" stroke-width="2"
+          filter="url(#glow)" />
+        <line x1="-17" y1="0" x2="0" y2="0" style="stroke: var(--colour-bjt)" stroke-width="2" />
+        <line x1="0" y1="-12" x2="0" y2="12" style="stroke: var(--colour-bjt)" stroke-width="2.5" />
+        <polyline points="14,-34 14,-20 0,-8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+        <polyline points="14,34 14,20 0,8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+        <polygon points="12,18 1,14 6,8" style="fill: var(--colour-bjt)" />
+      </g>
+
+      <!-- ══ Resistor Vertical ══ -->
+      <g id="resistor-vertical">
+        <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)"
+          stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+      </g>
+
+      <!-- ══ CAPACITOR SHAPE ══ -->
+      <g id="cap-shape">
+        <rect x="-4" y="-12" width="8" height="24" style="fill: var(--colour-panel)" />
+        <line x1="-4" y1="-12" x2="-4" y2="12" style="stroke: var(--colour-capacitor)" stroke-width="2.5" />
+        <line x1="4" y1="-12" x2="4" y2="12" style="stroke: var(--colour-capacitor)" stroke-width="2.5" />
+      </g>
+
+      <!-- ══ VOLTAGE DIVIDER BASE — reusable template, both stages instance this ══ -->
+      <g id="voltage-divider-bias">
+        <line x1="0" y1="20" x2="340" y2="20" style="stroke: var(--colour-series)" stroke-width="2" />
+        <line x1="0" y1="535" x2="340" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+        <line x1="0" y1="170" x2="100" y2="170" style="stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="100" cy="170" r="5" style="fill: var(--colour-series)" />
+        <line x1="240" y1="170" x2="340" y2="170" style="stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="240" cy="170" r="5" style="fill: var(--colour-series)" />
+        <line x1="100" y1="255" x2="209" y2="255" style="stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="100" cy="255" r="5" style="fill: var(--colour-series)" />
+        <line x1="100" y1="20" x2="100" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="100" cy="20" r="5" style="fill: var(--colour-series)" />
+        <circle cx="100" cy="535" r="5" style="fill: var(--colour-series)" />
+        <line x1="240" y1="20" x2="240" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="240" cy="20" r="5" style="fill: var(--colour-series)" />
+        <circle cx="240" cy="535" r="5" style="fill: var(--colour-series)" />
+        <g transform="translate(226,255)">
+          <use href="#bjt-npn-shape" />
+        </g>
+        <g transform="translate(85,60)">
+          <use href="#resistor-vertical" />
+        </g>
+        <g transform="translate(85,370)">
+          <use href="#resistor-vertical" />
+        </g>
+        <g transform="translate(225,60)">
+          <use href="#resistor-vertical" />
+        </g>
+        <g transform="translate(225,370)">
+          <use href="#resistor-vertical" />
+        </g>
+      </g>
+
+      <!-- ══ VOLTAGE DIVIDER Q1 — R1,R2,R3(R3),R4(R4) ══ -->
+      <g id="voltageDivider-Q1-R1-R4">
+        <use href="#voltage-divider-bias" />
+        <text x="265" y="250" fill="var(--colour-bjt-labels)" text-anchor="start" font-size="12" font-weight="bold">β = 300</text>
+        <text x="220" y="220" fill="var(--colour-bjt-labels)" text-anchor="start" font-size="14" font-weight="bold">Q1</text>
+        <g transform="translate(85,60)">
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R1</text>
+          <text x="60" y="40" fill="var(--colour-text)" text-anchor="middle" font-size="14">80kΩ</text>
+        </g>
+        <g transform="translate(85,370)">
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R2</text>
+          <text x="60" y="40" fill="var(--colour-text)" text-anchor="middle" font-size="14">20kΩ</text>
+        </g>
+        <g transform="translate(225,60)">
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R3</text>
+          <text x="60" y="40" fill="var(--colour-text)" text-anchor="middle" font-size="14">5.6kΩ</text>
+        </g>
+        <g transform="translate(225,370)">
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R4</text>
+          <text x="60" y="40" fill="var(--colour-text)" text-anchor="middle" font-size="14">1.8kΩ</text>
+        </g>
+      </g>
+
+      <!-- ══ VOLTAGE DIVIDER Q2 — R5,R6,R7(R7),R8(R8) ══ -->
+      <g id="voltageDivider-Q2-R5-R8">
+        <use href="#voltage-divider-bias" />
+        <text x="265" y="250" fill="var(--colour-bjt-labels)" text-anchor="start" font-size="12" font-weight="bold">β = 400</text>
+        <text x="220" y="220" fill="var(--colour-bjt-labels)" text-anchor="start" font-size="14" font-weight="bold">Q2</text>
+        <g transform="translate(85,60)">
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R5</text>
+          <text x="60" y="40" fill="var(--colour-text)" text-anchor="middle" font-size="14">100kΩ</text>
+        </g>
+        <g transform="translate(85,370)">
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R6</text>
+          <text x="60" y="40" fill="var(--colour-text)" text-anchor="middle" font-size="14">15kΩ</text>
+        </g>
+        <g transform="translate(225,60)">
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R7</text>
+          <text x="60" y="40" fill="var(--colour-text)" text-anchor="middle" font-size="14">4.2kΩ</text>
+        </g>
+        <g transform="translate(225,370)">
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R8</text>
+          <text x="60" y="40" fill="var(--colour-text)" text-anchor="middle" font-size="14">680Ω</text>
+        </g>
+      </g>
+    </defs>
+  </svg>
+
+  <div class="crumb" id="crumb" data-current="Circuit Analysis"></div>
+  <header>
+    <h1>Coupling Circuit Analysis</h1>
+    <p>Two-Stage Voltage-Divider Bias Amplifier · Capacitive Interstage Coupling · DC Bias → re′ → Rin → Loaded Gain → f1</p>
+  </header>
+
+  <div class="quiz-wrap" id="quizWrap">
+
+    <!-- LEFT: circuit diagram (static — one circuit throughout) -->
+    <div class="circuit-col">
+      <div class="circuit-panel" onclick="openModal()" title="Click to zoom">
+        <div class="panel-label">Q1 (unbypassed) → C1 → Q2 (R8 bypassed) → RL</div>
+        <div class="zoom-hint">
+          <svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.8" fill="none" />
+            <line x1="12.5" y1="12.5" x2="17" y2="17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            <line x1="6" y1="8" x2="10" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+            <line x1="8" y1="6" x2="8" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+          </svg>
+          Zoom
+        </div>
+        <svg id="circuitSvg" viewBox="0 0 910 680" xmlns="http://www.w3.org/2000/svg"
+          font-family="'Share Tech Mono',monospace" shape-rendering="crispEdges">
+
+          <!-- ════════════════════ VCC / COMMON / INPUT / OUTPUT LABELS ════════════════════ -->
+          <g transform="translate(675,-5)">
+            <text x="0" y="15" style="fill: var(--colour-voltage-label)" text-anchor="start" font-size="15" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">CC</tspan></text>
+            <text x="30" y="20" style="fill: var(--colour-text)" text-anchor="start" font-size="14" font-weight="bold">+12V</text>
+          </g>
+          <g transform="translate(775,555)">
+            <text x="0" y="0" style="fill: var(--colour-current)" text-anchor="start" font-size="15" font-weight="bold">Common</text>
+          </g>
+          <g transform="translate(0,155)">
+            <text x="0" y="0" style="fill: var(--colour-text)" text-anchor="start" font-size="15" font-weight="bold">Input</text>
+          </g>
+          <g transform="translate(770,155)">
+            <text x="0" y="0" style="fill: var(--colour-text)" text-anchor="start" font-size="15" font-weight="bold">Output</text>
+          </g>
+
+          <!-- ════════════════════ STAGE 1 (Q1) / STAGE 2 (Q2) ════════════════════ -->
+          <g transform="translate(0,0)">
+            <use href="#voltageDivider-Q1-R1-R4" />
+          </g>
+          <g transform="translate(400,0)">
+            <use href="#voltageDivider-Q2-R5-R8" />
+          </g>
+
+          <!-- ════════════════════ INTERSTAGE COUPLING — C1 ════════════════════ -->
+          <g transform="translate(0,0)">
+            <line x1="340" y1="20" x2="400" y2="20" style="stroke: var(--colour-series)" stroke-width="2" />
+            <line x1="340" y1="535" x2="400" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+            <line x1="340" y1="170" x2="400" y2="170" style="stroke: var(--colour-series)" stroke-width="2" />
+            <g transform="translate(410,170)">
+              <use href="#cap-shape" />
+              <text x="0" y="-20" style="fill: var(--colour-capacitor-labels)" text-anchor="middle" font-size="14" font-weight="bold">C1</text>
+              <text x="0" y="30" style="fill: var(--colour-text)" text-anchor="middle" font-size="14" font-weight="bold">330nF</text>
+            </g>
+          </g>
+
+          <!-- ════════════════════ R8 BYPASS — C2 ════════════════════ -->
+          <g transform="translate(0,0)">
+            <line x1="640" y1="300" x2="730" y2="300" style="stroke: var(--colour-series)" stroke-width="2" />
+            <line x1="730" y1="300" x2="730" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+            <circle cx="730" cy="535" r="5" style="fill: var(--colour-series)" />
+            <use href="#cap-shape" transform="translate(730,455) rotate(90)" />
+            <text x="760" y="460" fill="var(--colour-capacitor-labels)" text-anchor="middle" font-size="16" font-weight="bold">C2</text>
+          </g>
+
+          <!-- ════════════════════ OUTPUT LOAD — RL ════════════════════ -->
+          <g transform="translate(0,0)">
+            <line x1="740" y1="170" x2="800" y2="170" style="stroke: var(--colour-series)" stroke-width="2" />
+            <line x1="740" y1="535" x2="820" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+            <line x1="800" y1="170" x2="800" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+            <circle cx="800" cy="535" r="5" style="fill: var(--colour-series)" />
+            <g transform="translate(785,300)">
+              <use href="#resistor-vertical" />
+              <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">RL</text>
+              <text x="60" y="40" fill="var(--colour-text)" text-anchor="middle" font-size="14">10kΩ</text>
+            </g>
+          </g>
+
+          <!-- ════════════════════ KNOWN VALUES — revealed as each question is answered ════════════════════ -->
+          <text x="455" y="578" style="fill: var(--colour-label)" text-anchor="middle" font-size="12" font-style="italic">— known values, revealed as you answer —</text>
+
+          <g id="revealVB1" display="none" transform="translate(120,220)">
+            <text  x="0" y="0" font-size="16" font-weight="bold"><tspan fill="var(--colour-voltage-label)">V<tspan baseline-shift="sub" font-size="10">B1</tspan></tspan></text>
+            <text  x="0" y="25" font-size="16" font-weight="bold"><tspan fill="var(--colour-text)"> ≈ 2.40 V</tspan></text>
+          </g>
+          <text id="revealVE1" display="none" x="250" y="320" font-size="16" font-weight="bold"><tspan fill="var(--colour-voltage-label)">V<tspan baseline-shift="sub" font-size="10">E1</tspan></tspan><tspan fill="var(--colour-text)"> ≈ 1.80 V</tspan></text>
+          <text id="revealIC1" display="none" x="250" y="50" font-size="16" font-weight="bold"><tspan fill="var(--colour-current)">I<tspan baseline-shift="sub" font-size="10">C1</tspan></tspan><tspan fill="var(--colour-text)"> ≈ 1.00 mA</tspan></text>
+          <text id="revealVC1" display="none" x="250" y="210" font-size="16" font-weight="bold"><tspan fill="var(--colour-voltage-label)">V<tspan baseline-shift="sub" font-size="10">C1</tspan></tspan><tspan fill="var(--colour-text)"> ≈ 6.40 V</tspan></text>
+          <text id="revealRe1" display="none" x="255" y="285" font-size="16" font-weight="bold"><tspan fill="var(--colour-bjt)">r<tspan baseline-shift="sub" font-size="10">e1</tspan>′</tspan><tspan fill="var(--colour-text)"> ≈ 26.0 Ω</tspan></text>
+
+          <g id="revealRIN1" display="none" transform="translate(120,280)">
+            <text  x="0" y="0" font-size="16" font-weight="bold"><tspan fill="var(--colour-gain)">R<tspan baseline-shift="sub" font-size="10">IN1</tspan></tspan></text>
+            <text  x="0" y="25" font-size="16" font-weight="bold"><tspan fill="var(--colour-text)"> ≈ 15.5 kΩ</tspan></text>
+          </g>
+
+          <text id="revealAV1" display="none" x="260" y="160" font-size="16" font-weight="bold"><tspan fill="var(--colour-gain)">A<tspan baseline-shift="sub" font-size="10">V1</tspan></tspan><tspan fill="var(--colour-text)"> ≈ −1.40</tspan></text>
+          <text id="revealAV2" display="none" x="660" y="160" font-size="16" font-weight="bold"><tspan fill="var(--colour-gain)">A<tspan baseline-shift="sub" font-size="10">V2</tspan></tspan><tspan fill="var(--colour-text)"> ≈ −161</tspan></text>
+
+          <g id="revealAVT" display="none" transform="translate(810,245)">
+            <text  x="0" y="0" font-size="16" font-weight="bold"><tspan fill="var(--colour-gain)">A<tspan baseline-shift="sub" font-size="10">VT</tspan></tspan></text>
+            <text  x="0" y="25" font-size="16" font-weight="bold"><tspan fill="var(--colour-text)"> ≈ +226</tspan></text>
+          </g>
+          <text id="revealF1" display="none" x="750" y="655" font-size="16" font-weight="bold"><tspan fill="var(--colour-capacitor-labels)">f<tspan baseline-shift="sub" font-size="10">1</tspan></tspan><tspan fill="var(--colour-text)"> ≈ 46.9 Hz</tspan></text>
+
+          <g id="xyRuler" display="none"></g>
+        </svg>
+      </div>
+    </div>
+
+    <!-- RIGHT: question -->
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <!-- Single reusable question panel — populated from QUESTIONS[cur] by renderQuestion() -->
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+          <div class="options" id="qOptions"></div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Summary -->
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Zoom modal — copies #circuitSvg's current innerHTML/viewBox in on open. -->
+    <div class="diagram-modal" id="diagramModal" onclick="handleModalClick(event)">
+      <div class="modal-inner" id="modalInner">
+        <div class="modal-header">
+          <span class="modal-title" id="modalTitle">Two-Stage Voltage-Divider Bias Amplifier</span>
+          <button class="modal-close" onclick="closeModal()">✕ Close</button>
+        </div>
+        <svg id="modalSvg" viewBox="0 0 910 680" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS — see quiz-engine.js's own header comment for the full field
+    // reference. Every question here is leftPanel default ('circuit' would
+    // need a circuitId — this file has just the one always-static circuit,
+    // so leftPanel is left unset and the panel simply never gets hidden,
+    // same pattern as a single-circuit file with no swapping needs).
+    // ══════════════════════════════════════════════════════════════════════
+
+    const QUESTIONS = [
+      {
+        leftPanel: 'circuit',
+        text: () => `What is <b class="colour-voltage">V<sub>B1</sub></b>, the DC base voltage of <b class="colour-bjt">Q1</b>?`,
+        hint: () => `The divider current through <b class="colour-resistor">R1</b>/<b class="colour-resistor">R2</b> (≈120µA) is far bigger than the base current Q1 actually draws from it (≈3µA) — safe to use the simple unloaded divider formula: VB = <b class="colour-voltage">VCC</b> × <b class="colour-resistor">R2</b>/(<b class="colour-resistor">R1</b>+<b class="colour-resistor">R2</b>).`,
+        options: () => shuffle([
+          { label: `<b class="colour-voltage">VB1</b> = <b class="colour-voltage">VCC</b> × ${frac('<b class="colour-resistor">R2</b>', '<b class="colour-resistor">R1</b>+<b class="colour-resistor">R2</b>')} = 12V × ${frac('20kΩ', '100kΩ')} ≈ 2.40 V`, type: 'correct' },
+          { label: `<b class="colour-voltage">VB1</b> = <b class="colour-voltage">VCC</b> × ${frac('<b class="colour-resistor">R1</b>', '<b class="colour-resistor">R1</b>+<b class="colour-resistor">R2</b>')} = 12V × ${frac('80kΩ', '100kΩ')} ≈ 9.60 V`, type: 'wrong' },
+          { label: `<b class="colour-voltage">VB1</b> ≈ <b class="colour-voltage">VCC</b> = 12.0 V`, type: 'wrong' },
+          { label: `<b class="colour-voltage">VB1</b> ≈ 1.80 V`, type: 'wrong' },
+        ]),
+        correctExplain: () => '<b class="colour-voltage">V<sub>B1</sub></b> ≈ 2.40 V',
+        working: () => `
+    <div class="working-formula-row"><b class="colour-voltage">V<sub>B1</sub></b> = <b class="colour-voltage">V<sub>CC</sub></b> × ${frac('<b class="colour-resistor">R2</b>', '<b class="colour-resistor">R1</b>+<b class="colour-resistor">R2</b>')} = 12V × ${frac('20kΩ', '100kΩ')}</div>
+    <div class="working-total"><b class="colour-voltage">V<sub>B1</sub></b> ≈ 2.40 V — <b class="colour-resistor">R1</b> and <b class="colour-resistor">R2</b> form a simple voltage divider from <b class="colour-voltage">VCC</b> to Common, and the base draws so little current from it (≈3µA, next to the divider's own ≈120µA) that ignoring that loading is a safe approximation. 9.60V is what you'd get from putting <b class="colour-resistor">R1</b> on top of the fraction instead of <b class="colour-resistor">R2</b> — always the resistor whose junction you're NOT measuring across that sits on top.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        text: () => `What is <b class="colour-voltage">V<sub>E1</sub></b>, the DC emitter voltage of <b class="colour-bjt">Q1</b>?`,
+        hint: () => `The base-emitter junction drops a fixed ≈0.6V for a silicon transistor — VE is always VB minus that junction drop, never VB plus it.`,
+        options: () => shuffle([
+          { label: `<b class="colour-voltage">VE1</b> = <b class="colour-voltage">VB1</b> − <b class="colour-voltage">V<sub>BE</sub></b> = 2.40V − 0.6V ≈ 1.80 V`, type: 'correct' },
+          { label: `<b class="colour-voltage">VE1</b> ≈ <b class="colour-voltage">VB1</b> = 2.40 V`, type: 'wrong' },
+          { label: `<b class="colour-voltage">VE1</b> = <b class="colour-voltage">VB1</b> + <b class="colour-voltage">V<sub>BE</sub></b> = 2.40V + 0.6V ≈ 3.00 V`, type: 'wrong' },
+          { label: `<b class="colour-voltage">VE1</b> ≈ <b class="colour-voltage">V<sub>BE</sub></b> = 0.60 V`, type: 'wrong' },
+        ]),
+        correctExplain: () => '<b class="colour-voltage">V<sub>E1</sub></b> ≈ 1.80 V',
+        working: () => `
+    <div class="working-formula-row"><b class="colour-voltage">V<sub>E1</sub></b> = <b class="colour-voltage">V<sub>B1</sub></b> − <b class="colour-voltage">V<sub>BE</sub></b> = 2.40V − 0.6V</div>
+    <div class="working-total"><b class="colour-voltage">V<sub>E1</sub></b> ≈ 1.80 V — the base-emitter junction always drops about 0.6V for a forward-biased silicon BJT, so the emitter always sits 0.6V BELOW the base, never above it. Mixing up VB and VE here is the single most common slip in this whole calculation chain.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        text: () => `What is <b class="colour-current">I<sub>C1</sub></b>, Q1's DC collector current?`,
+        hint: () => `IE1 = VE1/<b class="colour-resistor">R4</b>, and IC is close enough to IE to use interchangeably here (<b class="colour-bjt">β</b> is large). Watch your units on <b class="colour-resistor">R4</b> — it's 1.8kΩ, not 1.8Ω.`,
+        options: () => shuffle([
+          { label: `<b class="colour-current">IC1</b> ≈ <b class="colour-current">IE1</b> = ${frac('<b class="colour-voltage">VE1</b>', '<b class="colour-resistor">R4</b>')} = ${frac('1.80V', '1.8kΩ')} ≈ 1.00 mA`, type: 'correct' },
+          { label: `<b class="colour-current">IC1</b> ≈ ${frac('<b class="colour-voltage">VB1</b>', '<b class="colour-resistor">R4</b>')} = ${frac('2.40V', '1.8kΩ')} ≈ 1.33 mA`, type: 'wrong' },
+          { label: `<b class="colour-current">IC1</b> ≈ ${frac('<b class="colour-voltage">VE1</b>', '<b class="colour-resistor">R3</b>')} = ${frac('1.80V', '5.6kΩ')} ≈ 0.321 mA`, type: 'wrong' },
+          { label: `<b class="colour-current">IC1</b> ≈ ${frac('<b class="colour-voltage">VE1</b>', '<b class="colour-resistor">R4</b>')} = ${frac('1.80V', '1.8Ω')} ≈ 1000 mA`, type: 'wrong' },
+        ]),
+        correctExplain: () => '<b class="colour-current">I<sub>C1</sub></b> ≈ 1.00 mA',
+        working: () => `
+    <div class="working-formula-row"><b class="colour-current">IC1</b> ≈ <b class="colour-current">IE1</b> = ${frac('<b class="colour-voltage">V<sub>E1</sub></b>', '<b class="colour-resistor">R<sub>E1</sub></b>')} = ${frac('1.80V', '1.8kΩ')}</div>
+    <div class="working-total"><b class="colour-current">IC1</b> ≈ 1.00 mA — all of VE1 sits across <b class="colour-resistor">R4</b> (that's what defines the emitter node), so IE1 comes straight from Ohm's law there. IC and IE are close enough (<b class="colour-bjt">β</b>=300) to treat as equal for every practical purpose from here on. Watch the units: forgetting <b class="colour-resistor">R4</b> is in kΩ (using 1.8Ω instead of 1.8kΩ) is a 1000× error, not a rounding difference.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        text: () => `What is <b class="colour-voltage">V<sub>C1</sub></b>, Q1's DC collector voltage?`,
+        hint: () => `Start from <b class="colour-voltage">VCC</b> and subtract the drop across <b class="colour-resistor">R3</b> — the collector current has to flow down through <b class="colour-resistor">R3</b> to get from <b class="colour-voltage">VCC</b> to the collector node.`,
+        options: () => shuffle([
+          { label: `<b class="colour-voltage">VC1</b> = <b class="colour-voltage">VCC</b> − <b class="colour-current">IC1</b>×<b class="colour-resistor">R3</b> = 12V − 1.00mA×5.6kΩ ≈ 6.40 V`, type: 'correct' },
+          { label: `<b class="colour-voltage">VC1</b> = <b class="colour-voltage">VCC</b> + <b class="colour-current">IC1</b>×<b class="colour-resistor">R3</b> = 12V + 1.00mA×5.6kΩ ≈ 17.6 V`, type: 'wrong' },
+          { label: `<b class="colour-voltage">VC1</b> = <b class="colour-voltage">VCC</b> − <b class="colour-current">IC1</b>×<b class="colour-resistor">R4</b> = 12V − 1.00mA×1.8kΩ ≈ 10.2 V`, type: 'wrong' },
+          { label: `<b class="colour-voltage">VC1</b> = <b class="colour-voltage">VE1</b> − <b class="colour-current">IC1</b>×<b class="colour-resistor">R3</b> = 1.80V − 1.00mA×5.6kΩ ≈ −3.80 V`, type: 'wrong' },
+        ]),
+        correctExplain: () => '<b class="colour-voltage">V<sub>C1</sub></b> ≈ 6.40 V',
+        working: () => `
+    <div class="working-formula-row"><b class="colour-voltage">VC1</b> = <b class="colour-voltage">V<sub>CC</sub></b> − <b class="colour-current">IC1</b> × <b class="colour-resistor">R3</b> = 12V − (1.00mA × 5.6kΩ)</div>
+    <div class="working-total"><b class="colour-voltage">VC1</b> ≈ 6.40 V — the current flows from <b class="colour-voltage">VCC</b>, down through <b class="colour-resistor">R3</b>, into the collector, so <b class="colour-resistor">R3</b>'s own voltage drop always SUBTRACTS from <b class="colour-voltage">VCC</b>, never adds. Sitting comfortably between VE1 (1.80V) and VCC (12V) confirms Q1 is biased in its active region, not saturated or cut off.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        text: () => `What is <b class="colour-bjt">r<sub>e1</sub>′</b>, Q1's own internal AC emitter resistance?`,
+        hint: () => `re′ = <b class="colour-voltage">VT</b>/IE, using the standard room-temperature approximation <b class="colour-voltage">VT</b> ≈ 26 mV — the same constant used throughout this project's AC-parameter calculations.`,
+        options: () => shuffle([
+          { label: `<b class="colour-bjt">re1′</b> ≈ ${frac('26 mV', '<b class="colour-current">IE1</b>')} ≈ ${frac('26 mV', '1.00 mA')} ≈ 26.0 Ω`, type: 'correct' },
+          { label: `<b class="colour-bjt">re1′</b> ≈ ${frac('26 V', '<b class="colour-current">IE1</b>')} ≈ ${frac('26 V', '1.00 mA')} ≈ 26,000 Ω`, type: 'wrong' },
+          { label: `<b class="colour-bjt">re1′</b> ≈ ${frac('<b class="colour-voltage">V<sub>BE</sub></b>', '<b class="colour-current">IE1</b>')} ≈ ${frac('0.6 V', '1.00 mA')} ≈ 600 Ω`, type: 'wrong' },
+          { label: `<b class="colour-bjt">re1′</b> ≈ ${frac('<b class="colour-current">IE1</b>', '26 mV')} ≈ ${frac('1.00 mA', '26 mV')} ≈ 0.0385 Ω`, type: 'wrong' },
+        ]),
+        correctExplain: () => '<b class="colour-bjt">r<sub>e1</sub>′</b> ≈ 26.0 Ω',
+        working: () => `
+    <div class="working-formula-row"><b class="colour-bjt">re1′</b> = ${frac('<b class="colour-voltage">V<sub>T</sub></b>', 'IE1')} ≈ ${frac('26 mV', '1.00 mA')}</div>
+    <div class="working-total"><b class="colour-bjt">re1′</b> ≈ 26.0 Ω — keep this value, it feeds directly into both <b class="colour-gain">RIN1</b> and <b class="colour-gain">AV1</b> next. Same 26mV/IE formula as every other BJT AC-parameter calculation in this project (see bjt/ac_parameters). IE1 landing on a clean 1.00mA here makes <b class="colour-bjt">re1′</b> come out to exactly the 26mV constant itself — a coincidence of these particular resistor values, not a shortcut you can rely on generally.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        text: () => `Q1's <b class="colour-resistor">R4</b> is <b style="color:var(--colour-ui-primary)">unbypassed</b>. What is <b class="colour-gain">R<sub>IN1</sub></b>, the AC input resistance looking into Stage 1's base network?`,
+        hint: () => `<b class="colour-gain">Zb1</b> = <b class="colour-bjt">β1</b>×(<b class="colour-resistor">R4</b>+<b class="colour-bjt">re1′</b>) first (R4 stays in the picture since it's unbypassed), then <b class="colour-gain">RIN1</b> = <b class="colour-resistor">R1</b>∥<b class="colour-resistor">R2</b>∥Zb1 — three resistances in parallel, not in series.`,
+        options: () => shuffle([
+          { label: `<b class="colour-gain">RIN1</b> = <b class="colour-resistor">R1</b>∥<b class="colour-resistor">R2</b>∥[<b class="colour-bjt">β1</b>×(<b class="colour-resistor">R4</b>+<b class="colour-bjt">re1′</b>)] = 80kΩ∥20kΩ∥548kΩ ≈ 15.5 kΩ`, type: 'correct' },
+          { label: `<b class="colour-gain">RIN1</b> = <b class="colour-resistor">R1</b>+<b class="colour-resistor">R2</b>+[<b class="colour-bjt">β1</b>×(<b class="colour-resistor">R4</b>+<b class="colour-bjt">re1′</b>)] = 80kΩ+20kΩ+548kΩ ≈ 648 kΩ`, type: 'wrong' },
+          { label: `<b class="colour-gain">RIN1</b> ≈ <b class="colour-resistor">R1</b>∥<b class="colour-resistor">R2</b> = 80kΩ∥20kΩ ≈ 16.0 kΩ`, type: 'wrong' },
+          { label: `<b class="colour-gain">RIN1</b> ≈ <b class="colour-bjt">β1</b>×(<b class="colour-resistor">R4</b>+<b class="colour-bjt">re1′</b>) = 300×1826Ω ≈ 548 kΩ`, type: 'wrong' },
+        ]),
+        correctExplain: () => '<b class="colour-gain">R<sub>IN1</sub></b> = R1∥R2∥Zb1 ≈ 15.5 kΩ',
+        working: () => `
+    <div class="working-step">First, <b class="colour-gain">Zb1</b> (<b class="colour-resistor">R4</b> unbypassed, so it stays in the emitter leg reflected into the base):</div>
+    <div class="working-line"><b class="colour-gain">Zb1</b> = <b class="colour-bjt">β1</b> × (<b class="colour-resistor">R4</b> + <b class="colour-bjt">re1′</b>) = 300 × (1.8kΩ + 26.0Ω) ≈ 548 kΩ</div>
+    <div class="working-step" style="margin-top:.6rem">Then, all three paths to the base node in parallel:</div>
+    <div class="working-formula-row"><b class="colour-gain">RIN1</b> = ${frac('1', `${frac('1', '<b class="colour-resistor">R1</b>')} + ${frac('1', '<b class="colour-resistor">R2</b>')} + ${frac('1', '<b class="colour-gain">Zb1</b>')}`)} = ${frac('1', `${frac('1', '80kΩ')} + ${frac('1', '20kΩ')} + ${frac('1', '548kΩ')}`)}</div>
+    <div class="working-total"><b class="colour-gain">RIN1</b> ≈ 15.5 kΩ — only a little below the R1∥R2-alone value (16.0 kΩ), since <b class="colour-gain">Zb1</b> is so much bigger than either that it barely pulls the parallel combination down. This <b class="colour-gain">RIN1</b> is what the SIGNAL SOURCE feeding Stage 1 would see — it's Stage 2's own input resistance (<b class="colour-gain">RIN2</b>), not this one, that loads Stage 1's own output through <b class="colour-cap">C1</b> (next question).</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        text: () => `What is <b class="colour-gain">A<sub>V1</sub></b>, Stage 1's loaded voltage gain? (Through <b class="colour-cap">C1</b>, Stage 1's collector is loaded by Stage 2's own input resistance, <b class="colour-gain">RIN2</b> ≈ 4.69 kΩ.)`,
+        hint: () => `<b class="colour-resistor">R4</b> is unbypassed, so it stays in the denominator: <b class="colour-gain">AV1</b> = −(<b class="colour-resistor">R3</b>∥<b class="colour-gain">RIN2</b>)/(<b class="colour-resistor">R4</b>+<b class="colour-bjt">re1′</b>). <b class="colour-gain">RIN2</b> isn't asked for as its own question, but it's needed here — it's Stage 2's own R5∥R6∥Zb2, worked out the same way as <b class="colour-gain">RIN1</b> was for Stage 1.`,
+        options: () => shuffle([
+          { label: `<b class="colour-gain">AV1</b> = −${frac('<b class="colour-resistor">R3</b>∥<b class="colour-gain">RIN2</b>', '<b class="colour-resistor">R4</b>+<b class="colour-bjt">re1′</b>')} = −${frac('2.55kΩ', '1826Ω')} ≈ −1.40`, type: 'correct' },
+          { label: `<b class="colour-gain">AV1</b> = −${frac('<b class="colour-resistor">R3</b>', '<b class="colour-resistor">R4</b>+<b class="colour-bjt">re1′</b>')} = −${frac('5.6kΩ', '1826Ω')} ≈ −3.07`, type: 'wrong' },
+          { label: `<b class="colour-gain">AV1</b> = −${frac('<b class="colour-resistor">R3</b>∥<b class="colour-gain">RIN2</b>', '<b class="colour-bjt">re1′</b>')} = −${frac('2.55kΩ', '26.0Ω')} ≈ −98.1`, type: 'wrong' },
+          { label: `<b class="colour-gain">AV1</b> = −${frac('<b class="colour-resistor">R3</b>+<b class="colour-gain">RIN2</b>', '<b class="colour-resistor">R4</b>+<b class="colour-bjt">re1′</b>')} = −${frac('10.29kΩ', '1826Ω')} ≈ −5.64`, type: 'wrong' },
+        ]),
+        correctExplain: () => '<b class="colour-gain">A<sub>V1</sub></b> ≈ −1.40',
+        working: () => `
+    <div class="working-step">Through <b class="colour-cap">C1</b> (a short at signal frequencies), Stage 2's own <b class="colour-gain">RIN2</b> sits in parallel with <b class="colour-resistor">R3</b> — first combine them:</div>
+    <div class="working-line"><b class="colour-resistor">R3</b>∥<b class="colour-gain">RIN2</b> = 5.6kΩ∥4.69kΩ ≈ 2.55 kΩ</div>
+    <div class="working-formula-row"><b class="colour-gain">AV1</b> = −${frac('<b class="colour-resistor">R3</b>∥<b class="colour-gain">RIN2</b>', '<b class="colour-resistor">R4</b>+<b class="colour-bjt">re1′</b>')} = −${frac('2.55kΩ', '1826Ω')}</div>
+    <div class="working-total"><b class="colour-gain">AV1</b> ≈ −1.40 — deliberately LOW gain: leaving <b class="colour-resistor">R4</b> unbypassed swaps gain for stability, exactly the same trade-off this project's own bjt_knowledge_ac_params_ce.html/_ce_bypassed.html pair teaches for a single stage. Stage 1's job here is a stable, predictable, LOW-gain first pass — Stage 2 (next question) is where the real gain comes from.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        text: () => `Q2's <b class="colour-resistor">R8</b> IS bypassed (<b class="colour-cap">C2</b>). What is <b class="colour-gain">A<sub>V2</sub></b>, Stage 2's own loaded gain, driving the 10kΩ load <b class="colour-resistor">RL</b>?`,
+        hint: () => `<b class="colour-resistor">R8</b> drops out of the AC picture entirely once it's bypassed — <b class="colour-gain">AV2</b> = −(<b class="colour-resistor">R7</b>∥<b class="colour-resistor">RL</b>)/<b class="colour-bjt">re2′</b>, no R8 term at all.`,
+        options: () => shuffle([
+          { label: `<b class="colour-gain">AV2</b> = −${frac('<b class="colour-resistor">R7</b>∥<b class="colour-resistor">RL</b>', '<b class="colour-bjt">re2′</b>')} = −${frac('2.96kΩ', '18.3Ω')} ≈ −161`, type: 'correct' },
+          { label: `<b class="colour-gain">AV2</b> = −${frac('<b class="colour-resistor">R7</b>', '<b class="colour-bjt">re2′</b>')} = −${frac('4.2kΩ', '18.3Ω')} ≈ −229`, type: 'wrong' },
+          { label: `<b class="colour-gain">AV2</b> = −${frac('<b class="colour-resistor">R7</b>∥<b class="colour-resistor">RL</b>', '<b class="colour-resistor">R8</b>+<b class="colour-bjt">re2′</b>')} = −${frac('2.96kΩ', '698.3Ω')} ≈ −4.24`, type: 'wrong' },
+          { label: `<b class="colour-gain">AV2</b> = −${frac('<b class="colour-resistor">R7</b>+<b class="colour-resistor">RL</b>', '<b class="colour-bjt">re2′</b>')} = −${frac('14.2kΩ', '18.3Ω')} ≈ −775`, type: 'wrong' },
+        ]),
+        correctExplain: () => '<b class="colour-gain">A<sub>V2</sub></b> ≈ −161',
+        working: () => `
+    <div class="working-line"><b class="colour-cap">C2</b> shorts <b class="colour-resistor">R8</b> to AC ground, so Stage 2's own <b class="colour-bjt">re2′</b> (≈18.3Ω, from IE2≈1.419mA) is the ONLY thing left in the emitter leg — no R8 term in the formula at all.</div>
+    <div class="working-line"><b class="colour-resistor">R7</b>∥<b class="colour-resistor">RL</b> = 4.2kΩ∥10kΩ ≈ 2.96 kΩ</div>
+    <div class="working-formula-row"><b class="colour-gain">AV2</b> = −${frac('<b class="colour-resistor">R7</b>∥<b class="colour-resistor">RL</b>', '<b class="colour-bjt">re2′</b>')} = −${frac('2.96kΩ', '18.3Ω')}</div>
+    <div class="working-total"><b class="colour-gain">AV2</b> ≈ −161 — roughly 100× Stage 1's own gain, exactly because a bypassed stage's gain depends on the tiny <b class="colour-bjt">re2′</b> alone instead of a real, much bigger, swamping resistor.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        text: () => `What is <b class="colour-gain">A<sub>VT</sub></b>, the overall gain of the two stages together?`,
+        hint: () => `<b class="colour-gain">AVT</b> = <b class="colour-gain">AV1</b> × <b class="colour-gain">AV2</b> — and both stages are common-emitter, so both individually invert. What happens to the overall sign when you cascade two inversions?`,
+        options: () => shuffle([
+          { label: `<b class="colour-gain">AVT</b> = <b class="colour-gain">AV1</b> × <b class="colour-gain">AV2</b> = (−1.40) × (−161) ≈ +226`, type: 'correct' },
+          { label: `<b class="colour-gain">AVT</b> ≈ −226`, type: 'wrong' },
+          { label: `<b class="colour-gain">AVT</b> = <b class="colour-gain">AV1</b> + <b class="colour-gain">AV2</b> = (−1.40) + (−161) ≈ −162`, type: 'wrong' },
+          { label: `<b class="colour-gain">AVT</b> ≈ <b class="colour-gain">AV2</b> alone ≈ −161`, type: 'wrong' },
+        ]),
+        correctExplain: () => '<b class="colour-gain">A<sub>VT</sub></b> ≈ +226 (non-inverting overall)',
+        working: () => `
+    <div class="working-formula-row"><b class="colour-gain">AVT</b> = <b class="colour-gain">AV1</b> × <b class="colour-gain">AV2</b> ≈ (−1.398) × (−161.5) ≈ 225.8</div>
+    <div class="working-total"><b class="colour-gain">AVT</b> ≈ +226 — POSITIVE, because each common-emitter stage inverts the signal on its own (a 180° phase flip), and two flips cancel out, leaving the overall output IN PHASE with the original input. Multiplying the more-precise pre-rounding values (−1.398, −161.5) rather than the rounded headline answers (−1.40, −161) is why this doesn't land on EXACTLY 1.40×161=225.4 — a small, normal rounding-cascade difference, not an error.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        text: () => `What is <b class="colour-cap">f<sub>1</sub></b>, the lower roll-off frequency set by the interstage coupling capacitor <b class="colour-cap">C1</b>?`,
+        hint: () => `f1 = 1/(2π×<b class="colour-gain">RT</b>×<b class="colour-cap">C1</b>), where <b class="colour-gain">RT</b> is the TOTAL series resistance C1 works against — Rout of Stage 1 (≈<b class="colour-resistor">R3</b>) PLUS Rin of Stage 2 (<b class="colour-gain">RIN2</b>), same formula this project's own coupling_knowledge_basics.html already covers.`,
+        options: () => shuffle([
+          { label: `<b class="colour-cap">f1</b> = ${frac('1', `2π × <b class="colour-gain">RT</b> × <b class="colour-cap">C1</b>`)} = ${frac('1', '2π × 10.29kΩ × 330nF')} ≈ 46.9 Hz`, type: 'correct' },
+          { label: `<b class="colour-cap">f1</b> = ${frac('1', `2π × <b class="colour-resistor">R3</b> × <b class="colour-cap">C1</b>`)} = ${frac('1', '2π × 5.6kΩ × 330nF')} ≈ 86.1 Hz`, type: 'wrong' },
+          { label: `<b class="colour-cap">f1</b> = ${frac('1', '2π × <b class="colour-gain">RT</b> × 330pF')} ≈ 46.9 kHz`, type: 'wrong' },
+          { label: `<b class="colour-cap">f1</b> = 2π × <b class="colour-gain">RT</b> × <b class="colour-cap">C1</b> ≈ 0.0213`, type: 'wrong' },
+        ]),
+        correctExplain: () => '<b class="colour-cap">f<sub>1</sub></b> ≈ 46.9 Hz',
+        working: () => `
+    <div class="working-step"><b class="colour-gain">RT</b> = Rout(Stage 1) + Rin(Stage 2):</div>
+    <div class="working-line"><b class="colour-gain">RT</b> ≈ <b class="colour-resistor">R3</b> + <b class="colour-gain">RIN2</b> = 5.6kΩ + 4.69kΩ ≈ 10.29 kΩ</div>
+    <div class="working-formula-row"><b class="colour-cap">f1</b> = ${frac('1', `2π × <b class="colour-gain">RT</b> × <b class="colour-cap">C1</b>`)} = ${frac('1', '2π × 10.29kΩ × 330nF')}</div>
+    <div class="working-total"><b class="colour-cap">f1</b> ≈ 46.9 Hz — sitting comfortably below the audio band's usual 20Hz lower limit, so <b class="colour-cap">C1</b> isn't the thing narrowing this amplifier's bandwidth at the low end. Mixing up nF and pF on the capacitor value is a 1000× error, exactly like the re′ V/mV slip from earlier in this quiz.</div>`
+      },
+    ];
+
+    RENDER_EXTRA = () => {
+      const reveal = (id, ans) => { const el = document.getElementById(id); if (el) el.setAttribute('display', ans ? 'inline' : 'none'); };
+      reveal('revealVB1', Q[0].ans);
+      reveal('revealVE1', Q[1].ans);
+      reveal('revealIC1', Q[2].ans);
+      reveal('revealVC1', Q[3].ans);
+      reveal('revealRe1', Q[4].ans);
+      reveal('revealRIN1', Q[5].ans);
+      reveal('revealAV1', Q[6].ans);
+      reveal('revealAV2', Q[7].ans);
+      reveal('revealAVT', Q[8].ans);
+      reveal('revealF1', Q[9].ans);
+    };
+
+    initQuizNav();
+    resetQuiz();
+    initQuizFromURL();
+  </script>
+</body>
+</html>
