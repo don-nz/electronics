@@ -244,3 +244,92 @@ function renderPiecePalette(container, { pieces, onPick, isDisabled }) {
     container.appendChild(btn);
   });
 }
+
+// ── print worksheet ── shared across every waveform-builder page, opt-in
+// exactly like quiz-engine.js's own buildPrintWorksheet(): a page adds a
+// #printWorksheet div as a DIRECT CHILD of <body> (a sibling of its
+// header/.quiz-wrap, not nested inside either — see quiz-common.css's own
+// @media print rule, which hides every OTHER direct child of <body> and
+// shows only this one) plus a "Print Worksheet" button that calls this
+// then window.print(). Deliberately reuses quiz-common.css's EXISTING
+// #printWorksheet/.print-only/@media print machinery as-is (this file
+// loads quiz-common.css for .card/.btn/etc regardless) — only the
+// waveform-specific print styling (.print-diagram-section/.print-wave-row)
+// is new, added alongside quiz-engine.js's own print rules there.
+//
+// Prints the page's own description (whatever HTML the caller points at —
+// e.g. its .rule-card, already reflecting whichever gate/edge/polarity
+// config is currently selected), then the "given" read-only tracks (S/R,
+// or P/C/CLK/D — whatever this page's OWN domain has) exactly as they
+// currently stand on screen (cloned straight from their live <svg>, same
+// technique quiz-engine.js's openModal()/buildPrintWorksheet() use for
+// cloning a circuit) with the answer track left as a BLANK grid — no path
+// drawn — for the student to draw by hand, matching the coupling quiz's
+// own "blank lines, not answers" printed-worksheet choice. A second
+// "Solution" section (page-break-before, so it starts on a fresh printed
+// page — the same "detachable teacher's copy" pattern
+// quiz-engine.js's .print-answers uses) repeats the same given tracks with
+// the answer track this time rendered for real via renderReadOnlyTrackSVG().
+//
+// config: {
+//   descriptionEl: element whose innerHTML becomes the printed
+//     description block (e.g. document.querySelector('.rule-card')).
+//   givenTracks: [{ label, svgEl }] — existing read-only <svg> elements
+//     (already correctly rendered) to clone into BOTH sections as-is.
+//   solutionTrack: { label, levels, totalCols, className? } — the correct
+//     answer, blank in the worksheet section, rendered for real (via
+//     renderReadOnlyTrackSVG) in the solution section.
+//   colWidth: optional, defaults to WB_COL_WIDTH.
+// }
+function buildPrintDiagram(config) {
+  const host = document.getElementById('printWorksheet');
+  if (!host) return;
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const colWidth = config.colWidth || WB_COL_WIDTH;
+  let html = '';
+
+  const h1 = document.querySelector('header h1'), sub = document.querySelector('header p');
+  if (h1) html += `<h1>${esc(h1.textContent)}</h1>`;
+  if (sub) html += `<div class="print-subtitle">${esc(sub.textContent)}</div>`;
+
+  // Carries the description element's OWN class(es) along too (e.g.
+  // "rule-card"), not just "print-description" — that class's rule-row/
+  // legend-row layout is page-local CSS scoped to it, so cloning just the
+  // inner content without it would leave the printed description
+  // unstyled. Clones into a DETACHED node first (not the live element) so
+  // .menu-link (the "← Back" breadcrumb button most .rule-card-style
+  // headers carry) can be stripped without touching the actual on-screen
+  // page — it's page navigation chrome, not part of the description, and
+  // would otherwise print as-is whenever history.length>1 happened to
+  // have made it visible at print time.
+  if (config.descriptionEl) {
+    const clone = config.descriptionEl.cloneNode(true);
+    clone.querySelectorAll('.menu-link').forEach(el => el.remove());
+    html += `<div class="print-description ${esc(config.descriptionEl.className)}">${clone.innerHTML}</div>`;
+  }
+
+  const givenRowsHTML = (config.givenTracks || []).map(t =>
+    `<div class="wb-track-row print-wave-row"><div class="wb-track-label">${esc(t.label)}</div><svg viewBox="${t.svgEl.getAttribute('viewBox')}" preserveAspectRatio="none">${t.svgEl.innerHTML}</svg></div>`
+  ).join('');
+
+  const st = config.solutionTrack;
+  const blankSvg = `<svg viewBox="0 0 ${wbSvgWidth(st.totalCols, colWidth)} ${wbSvgHeight()}" preserveAspectRatio="none">${wbGridSVG(st.totalCols, colWidth)}</svg>`;
+  html += `<div class="print-diagram-section">
+    <div class="wb-tracks-wrap">${givenRowsHTML}
+      <div class="wb-track-row print-wave-row"><div class="wb-track-label">${esc(st.label)}</div>${blankSvg}</div>
+    </div>
+  </div>`;
+
+  const solSvgId = 'printSolutionTrack';
+  html += `<div class="print-diagram-section print-solution">
+    <h2>Solution</h2>
+    <div class="wb-tracks-wrap">${givenRowsHTML}
+      <div class="wb-track-row print-wave-row"><div class="wb-track-label">${esc(st.label)}</div><svg id="${solSvgId}"></svg></div>
+    </div>
+  </div>`;
+
+  host.innerHTML = html;
+  const solSvg = document.getElementById(solSvgId);
+  if (solSvg) renderReadOnlyTrackSVG(solSvg, st.levels, { colWidth, className: st.className || 'wb-track-path wb-q-solution' });
+}
+window.buildPrintDiagram = buildPrintDiagram;
