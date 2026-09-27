@@ -451,6 +451,49 @@
     .btn-secondary:hover {
       background: rgba(var(--colour-ui-primary-rgb), .22);
     }
+
+    /* Print Worksheet — .print-only is invisible on screen, shown only via
+       @media print below. #printWorksheet (a direct child of <body>, NOT
+       nested inside .main-wrap) is built fresh by printDiagramNow() right
+       before window.print(): page title/description, the current P/C/CLK/D
+       diagram with Q left as a blank grid, then a page-break and the same
+       diagram again with the correct Q filled in as the solution. */
+    .print-only { display: none; }
+
+    @media print {
+      /* Force light regardless of whichever theme is active on screen —
+         body.dark-theme has higher specificity than a bare :root rule, so
+         it's redefined here too (same values), not just :root, or dark
+         mode would still win. */
+      :root, body.dark-theme {
+        --colour-bg: #ffffff;
+        --colour-panel: #ffffff;
+        --colour-text: #000000;
+        --colour-text-strong: #000000;
+        --colour-border: #999999;
+        --colour-label: #444444;
+      }
+      body > *:not(#printWorksheet) { display: none !important; }
+      body { background: #fff; background-image: none; padding: 0; display: block; }
+      #printWorksheet {
+        display: block !important;
+        color: #000;
+        font-family: var(--font-body);
+        max-width: 700px;
+        margin: 2rem auto;
+      }
+      #printWorksheet h1 { font-size: 1.3rem; margin: 0 0 .3rem; font-family: var(--font-display); }
+      #printWorksheet .print-subtitle { font-size: .8rem; color: #444; margin-bottom: 1rem; text-transform: uppercase; letter-spacing: .05em; }
+      #printWorksheet .print-description { margin-bottom: 1.2rem; }
+      #printWorksheet .print-diagram-section { page-break-inside: avoid; }
+      /* Solution starts on its own fresh page — a detachable teacher's
+         copy when printed double-sided or handed out separately. */
+      #printWorksheet .print-solution { page-break-before: always; }
+      #printWorksheet .print-solution h2 { font-size: 1.1rem; margin-bottom: .8rem; }
+      #printWorksheet .wb-track-row svg { width: 100%; height: auto; background: none; border: 1px solid #999; }
+      #printWorksheet .wb-track-label { color: #000; }
+      #printWorksheet .wb-grid-line { stroke: #999; stroke-dasharray: none; opacity: 1; }
+    }
   </style>
 </head>
 
@@ -610,9 +653,16 @@
         <button class="btn btn-check" id="checkBtn" onclick="doCheck()" disabled>Check</button>
         <button class="btn btn-secondary" id="restartBtn" onclick="doRestart()">↺ Retry</button>
         <button class="btn btn-secondary" id="newBtn" onclick="doNewDiagram()">🎲 New Diagram</button>
+        <button class="btn btn-secondary" onclick="printDiagramNow()">🖨 Print Worksheet</button>
       </div>
     </div>
   </div>
+
+  <!-- Print Worksheet — direct child of <body> (NOT nested inside
+       .main-wrap), populated by printDiagramNow() below. Invisible on
+       screen (.print-only), shown only via the browser's Print /
+       Save-as-PDF. -->
+  <div id="printWorksheet" class="print-only"></div>
 
   <script>
     function toggleTheme() {
@@ -1085,6 +1135,86 @@
       }
 
       renderHints();
+    }
+
+    // Builds the print worksheet fresh (current gate config's P/C labels
+    // and rule text, current P/C/CLK/D diagram, current correct Q): page
+    // title/description, then the given tracks with Q left as a blank
+    // grid (for the student to draw by hand), then a page-break and the
+    // same tracks again with the correct Q filled in as the solution.
+    // Standalone port of waveform-builder.js's own buildPrintDiagram() —
+    // this file has its own independent render primitives (W=500/H=40/
+    // padY=6, not the shared WB_COL_WIDTH-based geometry), so it's
+    // rewritten here against THOSE rather than shared verbatim.
+    function buildPrintDiagramLocal() {
+      const host = document.getElementById('printWorksheet');
+      if (!host) return;
+      const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+      const cfg = CONFIG[configKey];
+      let html = '';
+
+      const h1 = document.querySelector('header h1'), sub = document.querySelector('header p');
+      if (h1) html += `<h1>${esc(h1.textContent)}</h1>`;
+      if (sub) html += `<div class="print-subtitle">${esc(sub.textContent)}</div>`;
+
+      const descEl = document.querySelector('.rule-card');
+      if (descEl) {
+        // Cloned into a DETACHED node first so anything nav-only (this
+        // page has no .menu-link, but kept for parity with the shared
+        // version in case this file ever grows one) can be stripped
+        // without touching the live page.
+        const clone = descEl.cloneNode(true);
+        clone.querySelectorAll('.menu-link').forEach(el => el.remove());
+        html += `<div class="print-description ${esc(descEl.className)}">${clone.innerHTML}</div>`;
+      }
+
+      const givenTracks = [
+        { label: cfg.pLabel, svgEl: document.getElementById('pTrack') },
+        { label: cfg.cLabel, svgEl: document.getElementById('cTrack') },
+        { label: 'CLK', svgEl: document.getElementById('clkTrack') },
+        { label: 'D', svgEl: document.getElementById('dTrack') },
+      ];
+      const givenRowsHTML = givenTracks.map(t =>
+        `<div class="wb-track-row"><div class="wb-track-label">${esc(t.label)}</div><svg viewBox="${t.svgEl.getAttribute('viewBox')}" preserveAspectRatio="none">${t.svgEl.innerHTML}</svg></div>`
+      ).join('');
+
+      const W = 500, H = 40, padY = 6;
+      const colW = W / N, y0 = H - padY, y1 = padY;
+      const blankGrid = renderGridLinesHTML(N, colW, H, y0, y1, W);
+      html += `<div class="print-diagram-section">
+        <div class="wb-tracks-wrap">${givenRowsHTML}
+          <div class="wb-track-row"><div class="wb-track-label">Q</div><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${blankGrid}</svg></div>
+        </div>
+      </div>`;
+
+      const solId = 'printSolutionTrack';
+      html += `<div class="print-diagram-section print-solution">
+        <h2>Solution</h2>
+        <div class="wb-tracks-wrap">${givenRowsHTML}
+          <div class="wb-track-row"><div class="wb-track-label">Q</div><svg id="${solId}"></svg></div>
+        </div>
+      </div>`;
+
+      host.innerHTML = html;
+      const solSvg = document.getElementById(solId);
+      if (solSvg) renderReadOnlyTrackSVG(solSvg, correctQ, { className: 'wb-track-path wb-track-q' });
+    }
+
+    // window.print() has no reliable effect on Android's Chromium-based
+    // mobile browsers (confirmed by Don across Chrome AND Arc Search —
+    // both silently do nothing there); iOS Safari opens its native
+    // print/share sheet fine. There's no JS-observable way to tell
+    // whether window.print() actually did anything, so this always shows
+    // a short toast alongside it as a fallback instruction — redundant/
+    // harmless where print DID open, essential where it silently didn't.
+    function printDiagramNow() {
+      buildPrintDiagramLocal();
+      window.print();
+      const toast = document.createElement('div');
+      toast.textContent = "Worksheet ready. If a Print dialog didn't just open, use your browser's own menu (Share → Print, or ⋮ → Print).";
+      toast.style.cssText = 'position:fixed;left:50%;bottom:1.2rem;transform:translateX(-50%);max-width:90vw;background:#1e293b;color:#fff;padding:.7rem 1.1rem;border-radius:8px;font-size:.8rem;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.3);';
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 6000);
     }
 
     renderRuleCard();
