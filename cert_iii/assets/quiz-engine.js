@@ -962,6 +962,21 @@ function renderQuestion() {
   document.getElementById('qNext').style.display = (st.ans && !isLast) ? 'inline-block' : 'none';
   document.getElementById('qSummary').style.display = (st.ans && isLast) ? 'inline-block' : 'none';
 
+  // Optional Example 1/2/3/Randomise mode-switcher (.mode-toggle — see
+  // coupling_circuit_analysis.html/bjt_npn_voltage_divider.html for the
+  // pattern) only makes sense before the student has committed to any
+  // answer: switching values mid-quiz has no way to carry existing
+  // progress forward, it just silently resets everything via setMode()'s
+  // own resetQuiz() call. So it shows only while the whole attempt is
+  // still blank, and hides the moment ANYTHING is answered — including
+  // questions other than the current one, since a page could jump/deep-
+  // link to a later question. Backing all the way to a truly fresh Q1
+  // (backQuestion() clears cur..end) naturally re-shows it, same as a
+  // Restart would. A no-op on every other page — querySelector just
+  // returns null if there's no .mode-toggle in the markup.
+  const modeToggle = document.querySelector('.mode-toggle');
+  if (modeToggle) modeToggle.style.display = Q.every(q => !q.ans) ? '' : 'none';
+
   // Default to 'circuit' only when the question actually carries a
   // circuitId — most files always set leftPanel explicitly whenever a
   // circuit shows (so this never mattered before), but some files (e.g.
