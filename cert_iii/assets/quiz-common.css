@@ -992,7 +992,15 @@ header p {
 }
 
 .btn {
-    padding: .42rem 0;
+    /* Sized to its own label + padding, not a fixed width — a uniform
+       96px fit "Restart"/"Next →" fine but left wide empty margins on
+       "Prev"/"Check" while sometimes not being wide enough for a longer
+       label like "Print Worksheet" (or its own text wrapping to 2 lines
+       instead). With several buttons often showing in the same row, that
+       wasted width was pushing the row wider than it needed to be,
+       forcing an earlier wrap onto a second line than the buttons'
+       actual combined content required. */
+    padding: .42rem 1rem;
     border-radius: var(--radius-sm);
     font-family: var(--font-mono);
     font-size: .64rem;
@@ -1001,8 +1009,8 @@ header p {
     cursor: pointer;
     transition: all .15s;
     border: 1px solid;
-    width: 96px;
     text-align: center;
+    white-space: nowrap;
 }
 
 /* Check/Next/See-Summary are the SAME conceptual "move forward" action,
@@ -1015,7 +1023,7 @@ header p {
    action visually stands out against them, not just against the page. */
 .btn-check, .btn-next, .btn-summary {
     font-weight: 700;
-    padding: .58rem 0;
+    padding: .58rem 1.1rem;
     border-width: 2px;
 }
 
@@ -2036,7 +2044,7 @@ header p {
   .questions-col .option-btn { padding: .5rem .7rem; font-size: .76rem; }
   .questions-col .q-text { font-size: .86rem; }
   .questions-col .result-banner { font-size: .72rem; padding: .5rem .8rem; }
-  .questions-col .btn { width: 115px; font-size: .64rem; }
+  .questions-col .btn { font-size: .64rem; }
   .questions-col .working-box { padding: .85rem 1rem; }
   .questions-col .options { gap: .4rem; }
   /* leftPanel:'none' questions collapse to a single centred column */
@@ -2131,4 +2139,90 @@ header p {
   .wb-track-label { width: 1.1rem; font-size: .8rem; }
   .wb-piece-btn { padding: .35rem .45rem; }
   .wb-piece-icon { width: 32px; height: 24px; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   Print Worksheet — see quiz-engine.js's own buildPrintWorksheet() for
+   the JS half (opt-in: a page adds a #printWorksheet div as a DIRECT
+   CHILD of <body>, plus a "Print Worksheet" button calling
+   buildPrintWorksheet() then window.print()). First used by
+   coupling/basics/coupling_circuit_analysis.html.
+
+   .print-only is invisible on screen and shown ONLY in print (or Print
+   Preview) — the reverse of quiz-common.css's usual classes. On screen,
+   #printWorksheet just sits there empty/hidden; nothing about it is
+   visible until printing actually happens.
+   ══════════════════════════════════════════════════════════════════════ */
+.print-only { display: none; }
+
+@media print {
+  @page { margin: 1.5cm; }
+
+  /* Force light/white regardless of whichever theme is active on screen
+     — printing the dark theme's near-black background under white text
+     would waste ink and (worse) print pages of near-invisible text if a
+     printer/PDF renderer drops the background fill. Only the STRUCTURAL
+     variables are forced; the semantic accent colours (colour-voltage,
+     colour-resistor, colour-gain, etc) are left as whichever theme is
+     active — both this project's light AND dark accent palettes are
+     vivid/mid-saturation, not pale, so either reads fine on white paper
+     without needing every single accent variable duplicated here too. */
+  :root {
+    --colour-bg: #ffffff;
+    --colour-panel: #ffffff;
+    --colour-text: #000000;
+    --colour-text-strong: #000000;
+    --colour-border: #999999;
+    --colour-label: #444444;
+  }
+
+  /* #printWorksheet must be a direct child of <body> (see quiz-engine.js's
+     own comment on buildPrintWorksheet()) — this hides every OTHER direct
+     child (header, breadcrumb, theme toggle, the whole interactive
+     .quiz-wrap, the zoom modal, everything) in one rule, so no page needs
+     to hand-tag its own interactive chrome with a .no-print class. */
+  body > *:not(#printWorksheet) { display: none !important; }
+  body { background: #fff; }
+
+  #printWorksheet {
+    display: block !important;
+    color: #000;
+    font-family: var(--font-mono, 'Share Tech Mono', monospace);
+  }
+  #printWorksheet h1 { font-size: 1.3rem; margin: 0 0 .3rem; }
+  #printWorksheet .print-subtitle { font-size: .8rem; color: #444; margin-bottom: 1rem; }
+
+  #printWorksheet .print-circuit { margin-bottom: 1.5rem; }
+  #printWorksheet .print-circuit-label { font-weight: bold; font-size: .8rem; margin-bottom: .3rem; }
+  #printWorksheet .print-circuit svg { width: 100%; height: auto; max-height: 9cm; }
+
+  #printWorksheet .print-question { margin-bottom: 1rem; page-break-inside: avoid; font-size: .9rem; }
+  #printWorksheet .print-qnum { font-weight: bold; }
+  #printWorksheet .print-options { margin: .3rem 0 0 1.5rem; }
+  /* Blank ruled lines, not multiple-choice options — the printed
+     worksheet is for working the calculation out on paper, not picking
+     an answer (that's what the on-screen quiz is for). Same count and
+     roughly the same height as the on-screen options they replace (one
+     line + margin each), so a question that had 4 options still gets
+     roughly the same amount of writing space it always did. */
+  #printWorksheet .print-blank-line { height: 1.1rem; margin-bottom: .25rem; border-bottom: 1px solid #999; max-width: 500px; }
+
+  /* Answer key starts on its own fresh page — functions as a detachable
+     "teacher's copy" section when printed double-sided or handed out
+     separately. */
+  #printWorksheet .print-answers { page-break-before: always; }
+  #printWorksheet .print-answers h2 { font-size: 1.1rem; margin-bottom: 1rem; }
+  #printWorksheet .print-answer { margin-bottom: 1.1rem; page-break-inside: avoid; font-size: .85rem; }
+  #printWorksheet .print-correct { font-weight: bold; }
+  #printWorksheet .print-working { margin-top: .3rem; }
+
+  /* working-box/working-frac etc are the SAME classes the interactive
+     working-solution HTML already uses (correctExplain()/working() are
+     literally the same functions) — carry just enough of their styling
+     into print so stacked fractions/formula rows/etc still render
+     legibly instead of falling back to unstyled inline text. */
+  #printWorksheet .working-frac { display: inline-flex; flex-direction: column; text-align: center; vertical-align: middle; margin: 0 .2rem; }
+  #printWorksheet .working-frac .num { border-bottom: 1px solid #000; padding: 0 .2rem; }
+  #printWorksheet .working-frac .den { padding: 0 .2rem; }
+  #printWorksheet .working-formula-row, #printWorksheet .working-line, #printWorksheet .working-step, #printWorksheet .working-total { margin: .2rem 0; }
 }

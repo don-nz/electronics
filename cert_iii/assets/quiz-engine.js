@@ -977,6 +977,14 @@ function renderQuestion() {
   const modeToggle = document.querySelector('.mode-toggle');
   if (modeToggle) modeToggle.style.display = Q.every(q => !q.ans) ? '' : 'none';
 
+  // Print Worksheet button (.print-worksheet-btn — see
+  // coupling_circuit_analysis.html's own buildPrintWorksheet() comment)
+  // gets the exact same "before quiz started" rule as .mode-toggle above,
+  // and for the same underlying reason: it's meant for printing a BLANK
+  // worksheet before attempting it, not a snapshot of progress mid-quiz.
+  const printBtn = document.querySelector('.print-worksheet-btn');
+  if (printBtn) printBtn.style.display = Q.every(q => !q.ans) ? '' : 'none';
+
   // Default to 'circuit' only when the question actually carries a
   // circuitId — most files always set leftPanel explicitly whenever a
   // circuit shows (so this never mattered before), but some files (e.g.
@@ -1211,6 +1219,89 @@ function closeModal() {
 }
 function handleModalClick(e) { if (e.target.closest('.modal-close')) return; closeModal(); }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// ── print worksheet — fully defensive, opt-in like the zoom modal above:
+// pages without a #printWorksheet element simply never call this (no
+// "Print Worksheet" button exists there). #printWorksheet MUST be a
+// DIRECT CHILD of <body> (a sibling of the page's header/.quiz-wrap, not
+// nested inside either) — quiz-common.css's own @media print rule hides
+// every OTHER direct child of <body> and shows only this one, so a page
+// that nests it inside .quiz-wrap would have it hidden along with
+// everything else in that container.
+//
+// Builds one flat, all-questions-at-once view from the SAME QUESTIONS[]
+// data the interactive quiz already has: the circuit (if this page has
+// one) as it CURRENTLY stands — whichever Example/Randomise values are
+// active, since it just clones #circuitSvg's live innerHTML the same way
+// openModal() does — then every question's text + (for the ordinary
+// single/multi-select kind only — see below) a set of BLANK ruled lines,
+// one per option the question actually has, for the student to work the
+// answer out on paper — this is deliberately NOT a multiple-choice
+// printout (the on-screen quiz already is one; the point of a printed
+// worksheet is practising the calculation itself) — then a separate
+// answer-key section with each question's correctExplain()+working(),
+// styled to start on a fresh printed page (.print-answers has
+// page-break-before:always).
+//
+// Only single/multi-select questions get blank lines — match/bits/truth/
+// fill/switches/shapeGrid kinds don't have a natural "blank lines" shape
+// (a drag-and-match board, a bit-click grid, a wired switch bank...), so
+// for those this only prints the question text in the worksheet section;
+// the answer key section still covers every kind, since
+// correctExplain()/working() are exactly the same functions the
+// interactive "Correct!" state already calls.
+//
+// The answer key borrows fillCorrectSelection() (see its own comment) to
+// put each question's REAL st into "correctly answered" shape before
+// calling correctExplain()/working() — then restores st's original
+// fields straight after, so a student's own in-progress interactive
+// answers on screen are never disturbed by printing.
+function buildPrintWorksheet() {
+  const host = document.getElementById('printWorksheet');
+  if (!host) return;
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  let html = '';
+
+  const h1 = document.querySelector('header h1'), sub = document.querySelector('header p');
+  if (h1) html += `<h1>${esc(h1.textContent)}</h1>`;
+  if (sub) html += `<div class="print-subtitle">${esc(sub.textContent)}</div>`;
+
+  const circuitSvg = document.getElementById(CIRCUIT_SVG_ID);
+  const circuitPanel = document.querySelector('.circuit-panel');
+  if (circuitSvg && circuitPanel && getComputedStyle(circuitPanel).display !== 'none') {
+    const label = document.querySelector('.panel-label');
+    html += `<div class="print-circuit">
+      ${label ? `<div class="print-circuit-label">${esc(label.textContent)}</div>` : ''}
+      <svg viewBox="${circuitSvg.getAttribute('viewBox')}" xmlns="http://www.w3.org/2000/svg">${circuitSvg.innerHTML}</svg>
+    </div>`;
+  }
+
+  html += '<div class="print-questions">';
+  QUESTIONS.forEach((data, i) => {
+    const st = Q[i];
+    html += `<div class="print-question"><span class="print-qnum">Q${i + 1}.</span> <span class="print-qtext">${data.text(st)}</span>`;
+    if (!isMatch(data) && !isBits(data) && !isTruth(data) && !isFill(data) && !isSwitches(data) && st.opts) {
+      html += '<div class="print-options">';
+      st.opts.forEach(() => { html += '<div class="print-blank-line"></div>'; });
+      html += '</div>';
+    }
+    html += '</div>';
+  });
+  html += '</div>';
+
+  html += '<div class="print-answers"><h2>Worked Solutions &amp; Answers</h2>';
+  QUESTIONS.forEach((data, i) => {
+    const st = Q[i];
+    const snapshot = { sel: st.sel, clicks: st.clicks, slotPlaced: st.slotPlaced, switches: st.switches, assign: st.assign, place: st.place };
+    fillCorrectSelection(i);
+    html += `<div class="print-answer"><span class="print-qnum">Q${i + 1}.</span> <span class="print-correct">${data.correctExplain(st)}</span><div class="print-working">${data.working(st)}</div></div>`;
+    Object.assign(st, snapshot);
+  });
+  html += '</div>';
+
+  host.innerHTML = html;
+}
+window.buildPrintWorksheet = buildPrintWorksheet;
 
 function goBack(e) { e.preventDefault(); history.back(); }
 

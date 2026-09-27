@@ -549,10 +549,15 @@
             <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
             <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
             <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+            <button class="btn print-worksheet-btn" onclick="printWorksheetNow()">🖨 Print Worksheet</button>
           </div>
         </div>
 
-        <!-- Summary -->
+        <!-- Summary — no Print Worksheet button here: by the time the
+             summary is reachable every question is answered, and the
+             print button only ever shows before the FIRST answer (same
+             rule as .mode-toggle, see quiz-engine.js's renderQuestion()),
+             so it would never actually be visible in this panel anyway. -->
         <div id="summaryPanel" style="display:none">
           <div class="summary-head">
             <div class="summary-title">Quiz Summary</div>
@@ -575,6 +580,13 @@
     </div>
 
   </div>
+
+  <!-- Print Worksheet — direct child of <body> (NOT nested inside
+       .quiz-wrap), populated by quiz-engine.js's own buildPrintWorksheet()
+       (see its header comment for the full explanation). Invisible on
+       screen (.print-only), shown only via the browser's Print / Save-as-
+       PDF, triggered by the "Print Worksheet" button below the questions. -->
+  <div id="printWorksheet" class="print-only"></div>
 
   <script>
     // ══════════════════════════════════════════════════════════════════════
@@ -689,12 +701,22 @@
     //    figures, trimmed" for resistors/RIN/ROUT/RT/AV2/AVT/f1, auto
     //    mA/µA/kΩ/kHz unit switching for currents/resistors/frequency). ──
     function sig3(v) { return parseFloat(Number(v).toPrecision(3)); }
-    function fmtR(v) { return Math.abs(v) >= 1000 ? sig3(v / 1000) + 'kΩ' : sig3(v) + 'Ω'; }
+    // unitBoundary: is `a` at or past `threshold`, tolerant of float error?
+    // A chain like VB1(=2.4) − VBE(=0.6) → /R4 can land IE1 at
+    // 0.0009999999999999998 instead of exactly 0.001 — a plain `a >= 1e-3`
+    // check sends that a hair under the mA/µA boundary, printing "1000.00
+    // µA" instead of "1.00 mA" (a genuine 1000x-LOOKING misread, caught via
+    // the print worksheet rendering it as literal text where it couldn't
+    // be missed, unlike glancing at an interactive badge). The tolerance
+    // is relative to threshold (not a fixed epsilon), so it stays scale-
+    // appropriate whether threshold is 1e-3 (fmtA2) or 1e6 (fmtCap).
+    function unitBoundary(a, threshold) { return a >= threshold * (1 - 1e-9); }
+    function fmtR(v) { return unitBoundary(Math.abs(v), 1000) ? sig3(v / 1000) + 'kΩ' : sig3(v) + 'Ω'; }
     function fmtV2(v) { return v.toFixed(2) + ' V'; }
     function fmtOhm1(v) { return v.toFixed(1) + ' Ω'; }
     function fmtA2(v) {
       const a = Math.abs(v);
-      if (a >= 1e-3) return (v * 1000).toFixed(2) + ' mA';
+      if (unitBoundary(a, 1e-3)) return (v * 1000).toFixed(2) + ' mA';
       return (v * 1e6).toFixed(2) + ' µA';
     }
     // AV1 is always negative (a single CE stage always inverts) and small
@@ -704,8 +726,8 @@
     function fmtAV1(v) { return '−' + Math.abs(v).toFixed(2); }
     function fmtAV2(v) { return '−' + sig3(Math.abs(v)); }
     function fmtAVT(v) { return '+' + sig3(Math.abs(v)); }
-    function fmtHz(v) { return v >= 1000 ? sig3(v / 1000) + ' kHz' : sig3(v) + ' Hz'; }
-    function fmtCap(v) { return v >= 1e-6 ? sig3(v * 1e6) + 'µF' : sig3(v * 1e9) + 'nF'; }
+    function fmtHz(v) { return unitBoundary(v, 1000) ? sig3(v / 1000) + ' kHz' : sig3(v) + ' Hz'; }
+    function fmtCap(v) { return unitBoundary(v, 1e-6) ? sig3(v * 1e6) + 'µF' : sig3(v * 1e9) + 'nF'; }
     function frac(num, den) { return `<span class="working-frac"><span class="num">${num}</span><span class="den">${den}</span></span>`; }
 
     // Pushes the current V's own values onto the circuit diagram itself
@@ -749,6 +771,16 @@
         el.querySelectorAll('rect').forEach(r => r.remove());
       });
       resetQuiz();
+    }
+
+    // Rebuilds the print worksheet fresh (so it always reflects whichever
+    // mode/values are CURRENTLY active, not whatever was active the last
+    // time it was printed) right before actually opening the browser's
+    // print dialog — see quiz-engine.js's own buildPrintWorksheet() for
+    // what gets built.
+    function printWorksheetNow() {
+      buildPrintWorksheet();
+      window.print();
     }
 
     // ══════════════════════════════════════════════════════════════════════
