@@ -333,3 +333,26 @@ function buildPrintDiagram(config) {
   if (solSvg) renderReadOnlyTrackSVG(solSvg, st.levels, { colWidth, className: st.className || 'wb-track-path wb-q-solution' });
 }
 window.buildPrintDiagram = buildPrintDiagram;
+
+// Call this INSTEAD of a bare window.print() after buildPrintDiagram() —
+// on Android's Chromium-based mobile browsers (confirmed by Don across
+// Chrome AND Arc Search, both silently doing nothing — a genuine platform
+// gap, not a bug in the print content itself), window.print() has no
+// reliable effect at all; iOS Safari opens its native print/share sheet
+// fine. There's no JS-observable way to tell whether window.print()
+// actually did anything, so rather than fail silently on the platforms
+// where it doesn't, this always shows a short toast alongside it —
+// redundant/harmless where print DID open, essential where it silently
+// didn't (the student can still use the browser's OWN Print/Share menu
+// manually — the worksheet content is already built and sitting in the
+// DOM either way, @media print will pick it up regardless of how the
+// print dialog itself got opened).
+function wbTriggerPrint() {
+  window.print();
+  const toast = document.createElement('div');
+  toast.textContent = "Worksheet ready. If a Print dialog didn't just open, use your browser's own menu (Share → Print, or ⋮ → Print).";
+  toast.style.cssText = 'position:fixed;left:50%;bottom:1.2rem;transform:translateX(-50%);max-width:90vw;background:#1e293b;color:#fff;padding:.7rem 1.1rem;border-radius:8px;font-size:.8rem;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.3);';
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 6000);
+}
+window.wbTriggerPrint = wbTriggerPrint;

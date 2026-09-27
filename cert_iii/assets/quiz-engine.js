@@ -1303,6 +1303,25 @@ function buildPrintWorksheet() {
 }
 window.buildPrintWorksheet = buildPrintWorksheet;
 
+// Call this INSTEAD of a bare window.print() after buildPrintWorksheet() —
+// same helper/same reasoning as waveform-builder.js's own qeTriggerPrint()
+// sibling (kept duplicated rather than shared, since a page using
+// quiz-engine.js never also loads waveform-builder.js or vice versa — see
+// that file's own header comment): Android's Chromium-based mobile
+// browsers (confirmed by Don across Chrome AND Arc Search) have no
+// reliable window.print() support at all, unlike iOS Safari. Since
+// there's no way to detect whether it actually did anything, this always
+// shows a short toast alongside it as a fallback instruction.
+function qeTriggerPrint() {
+  window.print();
+  const toast = document.createElement('div');
+  toast.textContent = "Worksheet ready. If a Print dialog didn't just open, use your browser's own menu (Share → Print, or ⋮ → Print).";
+  toast.style.cssText = 'position:fixed;left:50%;bottom:1.2rem;transform:translateX(-50%);max-width:90vw;background:#1e293b;color:#fff;padding:.7rem 1.1rem;border-radius:8px;font-size:.8rem;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.3);';
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 6000);
+}
+window.qeTriggerPrint = qeTriggerPrint;
+
 function goBack(e) { e.preventDefault(); history.back(); }
 
 function jump(n, answered) {
