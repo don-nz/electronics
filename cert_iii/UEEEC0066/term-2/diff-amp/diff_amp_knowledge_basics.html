@@ -1,0 +1,755 @@
+<!--
+  Source material: the teacher's own "Section 3 — The differential amplifier"
+  objectives page (Purpose + 9 bullet objectives) plus a printed Review
+  Questions sheet (8 questions, 2 circuits — a plain resistor-tail diff amp
+  in Figure 1, a zener-referenced constant-current-source-tail diff amp in
+  Figure 2). User's own explicit instruction: "consider the review questions
+  but not copy them when creating questions" — so the TOPIC COVERAGE below
+  mirrors the review sheet's own scope closely (same DC-then-AC-then-CMRR
+  progression, same two circuit TYPES), but every component value, circuit
+  layout and specific question wording is original, independently computed
+  from scratch (see each calculation question's own working() for the
+  derivation) rather than transcribed from the photographed Figures 1/2.
+
+  One objective is deliberately NOT covered here: "Verify the correct
+  operation of a discrete transistor differential amplifier" — hands-on
+  bench work, not a knowledge quiz, matching this project's own established
+  precedent (e.g. coupling_knowledge_direct.html's own header note) of
+  covering only the CALCULATE/predict/describe/explain half of an objective
+  list and leaving physical verification for the bench. "Calculate AND
+  measure" objectives are covered for their CALCULATE half only, same
+  policy.
+
+  Two original circuits, neither copied from the source photos — own
+  component values throughout, independently computed and cross-checked
+  (see each calculation question's own working() for the derivation):
+
+  1. `fig-diffamp-resistor-tail` — the baseline case: two matched NPN
+     transistors (Q1/Q2), separate collector resistors (RC1=RC2=5k6) to a
+     shared +15V rail, separate base resistors (RB1=RB2=39k) returning each
+     base to 0V/Common (NOT to −VEE — a separate ground reference from the
+     ±15V supply rails, same as the source sheet's own Figure 1 topology),
+     and a single shared "tail" resistor (RE=8k2) from the joined emitters
+     down to −15V. β=200 throughout, matching this project's own established
+     convention (e.g. coupling_knowledge_direct.html's Q1).
+
+  2. `fig-diffamp-ccs-tail` — identical Q1/Q2/RC1/RC2/RB1/RB2 (so the ONLY
+     thing that changes between the two circuits is the tail itself — a
+     deliberate one-variable-at-a-time comparison for the CMRR-improvement
+     questions at the end). The plain RE tail resistor is replaced by a
+     third transistor, Q3, run as a constant-current source: a zener diode
+     (D1, Vz=5.6V) referenced off 0V through a bias resistor R1 sets Q3's
+     own base at VB3 = −(VEE−Vz) (the zener's cathode sits at the R1/base
+     junction, its anode toward −VEE, so it regulates that junction to sit
+     Vz ABOVE the −VEE rail, not Vz below 0V — a deliberately-verified
+     distinction, see Q15's own working()), and Q3's own emitter resistor
+     RE3=3k3 sets the actual tail current from there. The current source's
+     own OUTPUT impedance (180kΩ, far higher than any practical resistor
+     could give) is simply GIVEN where needed (Q18) rather than derived
+     from Q3's own hybrid parameters — same simplifying-given convention
+     the source sheet's own Review Q8 already uses ("given the impedance of
+     the current source is 80k"), not a new invention.
+
+  New shapes added to this file's own <defs> (none of them exist in any
+  other quiz's own <defs> — cross-file <use> doesn't work under file://, so
+  every quiz's shapes are its own local copy, per this project's established
+  convention): `zener-vert` (a vertical zener symbol — cathode bar with the
+  usual bent "Z" ends at the top, anode triangle pointing down, for D1) and
+  `gnd-symbol` (a standard 3-tier shrinking-bar ground symbol, for RB1/RB2's
+  own return to 0V/Common — a DIFFERENT reference from the ±15V rails, so a
+  plain rail line would be misleading here).
+
+  All DC/AC values below independently Python-verified before writing:
+  Circuit A — VE1=−0.6V, IT≈1.756mA, IC1≈0.878mA, VC1≈10.08V, re≈29.6Ω,
+  AV(Diff)≈94.6, AV(CM)≈0.341, CMRR≈48.8dB. Circuit B — VB3=−9.4V,
+  VE3=−10.0V, IT≈1.515mA, IC(each)≈0.758mA, VC≈10.76V, re≈34.3Ω,
+  AV(Diff)≈81.6, AV(CM)≈0.01556, CMRR≈74.4dB — a ≈25.6dB CMRR improvement
+  from the CCS tail alone, the deliberate payoff the final question (Q20)
+  ties back to.
+
+  Same data-driven QUESTIONS[] engine as every other *_knowledge_*.html
+  quiz in this project (assets/quiz-engine.js) — add/reorder questions by
+  editing the QUESTIONS array only. Answer options with a formula use the
+  established `frac()` + `.colour-*` span convention (ported from
+  coupling_circuit_analysis.html, per the user's own explicit request on a
+  sibling file) — component-type colour coding plus stacked fractions, in
+  both the options AND the worked solutions. No parenthetical "giveaway"
+  comments on wrong options either (same policy applied retroactively to
+  coupling_knowledge_direct.html) — any needed explanation of why a
+  distractor is wrong lives in that question's own working() instead.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../assets/theme-init.js"></script>
+  <script src="../../../assets/quiz-engine.js"></script>
+  <title>Differential Amplifier Knowledge Quiz</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../assets/quiz-common.css">
+  <script src="../../../assets/breadcrumb.js" defer></script>
+  <style>
+    .ckt-r-label { fill: var(--colour-resistor-labels); font-size: 16px; font-weight: 700; }
+    .ckt-value { fill: var(--colour-text); font-size: 15px; font-weight: 700; text-anchor: middle; }
+    .ckt-bjt-label { fill: var(--colour-bjt-labels); font-size: 16px; font-weight: 700; }
+    .ckt-diode-label { fill: var(--colour-diode-labels); font-size: 15px; font-weight: 700; }
+    .ckt-rail-label { fill: var(--colour-voltage-label); font-size: 16px; font-weight: 700; text-anchor: middle; }
+    .ckt-io-label { fill: var(--colour-signal); font-size: 18px; font-weight: 700; }
+  </style>
+</head>
+
+<body>
+  <div class="crumb" id="crumb" data-current="Differential Amplifier Basics"></div>
+  <header>
+    <h1>Differential Amplifier</h1>
+    <p>Applications &amp; Operation · DC Bias &amp; AC Gain · Common-Mode Rejection · Constant-Current-Source Tail</p>
+  </header>
+
+  <div class="quiz-wrap" id="quizWrap">
+
+    <div class="circuit-col">
+      <div class="circuit-panel">
+        <div class="panel-label" id="circuitRefLabel">Resistor-tail differential amplifier</div>
+        <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+          <defs>
+            <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="2" result="b" />
+              <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+
+            <g id="bjt-npn-shape">
+              <circle cx="7" cy="0" r="24" style="fill: var(--colour-panel); stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+              <line x1="-17" y1="0" x2="0" y2="0" style="stroke: var(--colour-bjt)" stroke-width="2" />
+              <line x1="0" y1="-12" x2="0" y2="12" style="stroke: var(--colour-bjt)" stroke-width="2.5" />
+              <polyline points="14,-34 14,-20 0,-8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+              <polyline points="14,34 14,20 0,8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+              <polygon points="12,18 1,14 6,8" style="fill: var(--colour-bjt)" />
+            </g>
+
+            <g id="resistor-vertical">
+              <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+            </g>
+
+            <!-- Vertical zener — cathode bar (bent "Z" ends) at top, anode
+                 triangle pointing down. D1's own cathode sits at the R1/base
+                 junction (top lead), anode toward −VEE (bottom lead) — see
+                 Q15's own working() for why that orientation matters. -->
+            <g id="zener-vert">
+              <line x1="0" y1="0" x2="0" y2="8" style="stroke: var(--colour-diode)" stroke-width="2" />
+              <polygon points="-9,8 9,8 0,24" style="fill: none; stroke: var(--colour-diode)" stroke-width="2" stroke-linejoin="round" />
+              <line x1="-9" y1="8" x2="-13" y2="2" style="stroke: var(--colour-diode)" stroke-width="2" />
+              <line x1="9" y1="8" x2="13" y2="14" style="stroke: var(--colour-diode)" stroke-width="2" />
+              <line x1="0" y1="24" x2="0" y2="32" style="stroke: var(--colour-diode)" stroke-width="2" />
+            </g>
+
+            <!-- Standard 3-tier ground symbol — used for RB1/RB2's own
+                 return to 0V/Common, a DIFFERENT reference from the ±15V
+                 rails (a plain rail line here would wrongly imply RB1/RB2
+                 return to −VEE). -->
+            <g id="gnd-symbol">
+              <line x1="0" y1="0" x2="0" y2="10" style="stroke: var(--colour-series)" stroke-width="2" />
+              <line x1="-14" y1="10" x2="14" y2="10" style="stroke: var(--colour-current)" stroke-width="2" />
+              <line x1="-8" y1="16" x2="8" y2="16" style="stroke: var(--colour-current)" stroke-width="2" />
+              <line x1="-3" y1="22" x2="3" y2="22" style="stroke: var(--colour-current)" stroke-width="2" />
+            </g>
+
+            <!-- ══ Resistor-tail differential amplifier — Q1/Q2 matched
+                 pair, separate RC1/RC2 to +15V, separate RB1/RB2 returning
+                 each base to 0V/Common (NOT −VEE), joined emitters through
+                 a single shared tail resistor RE to −15V. ══ -->
+            <g id="fig-diffamp-resistor-tail">
+              <line x1="0" y1="20" x2="600" y2="20" style="stroke: var(--colour-series)" stroke-width="2" />
+              <line x1="0" y1="550" x2="600" y2="550" style="stroke: var(--colour-series)" stroke-width="2" />
+
+              <g transform="translate(180,150)"><use href="#bjt-npn-shape" /></g>
+              <g transform="translate(420,150) scale(-1,1)"><use href="#bjt-npn-shape" /></g>
+              <text x="145" y="230" class="ckt-bjt-label">Q1</text>
+              <text x="435" y="230" class="ckt-bjt-label">Q2</text>
+
+              <!-- RC1 / RC2 -->
+              <line x1="194" y1="20" x2="194" y2="40" style="stroke: var(--colour-series)" stroke-width="2" />
+              <g transform="translate(179,40)"><use href="#resistor-vertical" /></g>
+              <line x1="194" y1="120" x2="194" y2="116" style="stroke: var(--colour-series)" stroke-width="2" />
+              <text x="150" y="65" class="ckt-r-label" text-anchor="end">RC1</text>
+              <text x="150" y="85" class="ckt-value" text-anchor="end">5k6</text>
+              <line x1="406" y1="20" x2="406" y2="40" style="stroke: var(--colour-series)" stroke-width="2" />
+              <g transform="translate(391,40)"><use href="#resistor-vertical" /></g>
+              <line x1="406" y1="120" x2="406" y2="116" style="stroke: var(--colour-series)" stroke-width="2" />
+              <text x="450" y="65" class="ckt-r-label" text-anchor="start">RC2</text>
+              <text x="450" y="85" class="ckt-value" text-anchor="start">5k6</text>
+
+              <!-- Outputs -->
+              <line x1="194" y1="20" x2="194" y2="0" style="stroke: var(--colour-series)" stroke-width="2" />
+              <text x="194" y="-8" class="ckt-io-label" text-anchor="middle">Output 1</text>
+              <line x1="406" y1="20" x2="406" y2="0" style="stroke: var(--colour-series)" stroke-width="2" />
+              <text x="406" y="-8" class="ckt-io-label" text-anchor="middle">Output 2</text>
+
+              <!-- RB1 / RB2 — down from each base to 0V/Common -->
+              <line x1="163" y1="150" x2="163" y2="190" style="stroke: var(--colour-series)" stroke-width="2" />
+              <g transform="translate(148,190)"><use href="#resistor-vertical" /></g>
+              <line x1="163" y1="270" x2="163" y2="305" style="stroke: var(--colour-series)" stroke-width="2" />
+              <g transform="translate(163,305)"><use href="#gnd-symbol" /></g>
+              <text x="115" y="215" class="ckt-r-label" text-anchor="end">RB1</text>
+              <text x="115" y="235" class="ckt-value" text-anchor="end">39k</text>
+
+              <line x1="437" y1="150" x2="437" y2="190" style="stroke: var(--colour-series)" stroke-width="2" />
+              <g transform="translate(422,190)"><use href="#resistor-vertical" /></g>
+              <line x1="437" y1="270" x2="437" y2="305" style="stroke: var(--colour-series)" stroke-width="2" />
+              <g transform="translate(437,305)"><use href="#gnd-symbol" /></g>
+              <text x="485" y="215" class="ckt-r-label" text-anchor="start">RB2</text>
+              <text x="485" y="235" class="ckt-value" text-anchor="start">39k</text>
+
+              <!-- Inputs -->
+              <line x1="50" y1="150" x2="163" y2="150" style="stroke: var(--colour-series)" stroke-width="2" />
+              <text x="45" y="140" class="ckt-io-label" text-anchor="end">Input 1</text>
+              <line x1="437" y1="150" x2="550" y2="150" style="stroke: var(--colour-series)" stroke-width="2" />
+              <text x="555" y="140" class="ckt-io-label">Input 2</text>
+
+              <!-- Shared emitter / tail -->
+              <line x1="194" y1="184" x2="406" y2="184" style="stroke: var(--colour-series)" stroke-width="2" />
+              <circle cx="300" cy="184" r="5" style="fill: var(--colour-series)" />
+              <line x1="300" y1="184" x2="300" y2="320" style="stroke: var(--colour-series)" stroke-width="2" />
+              <g transform="translate(285,320)"><use href="#resistor-vertical" /></g>
+              <line x1="300" y1="400" x2="300" y2="550" style="stroke: var(--colour-series)" stroke-width="2" />
+              <text x="330" y="355" class="ckt-r-label" text-anchor="start">RE</text>
+              <text x="330" y="375" class="ckt-value" text-anchor="start">8k2</text>
+
+              <text x="600" y="5" class="ckt-rail-label" text-anchor="end">+15V</text>
+              <text x="600" y="575" class="ckt-rail-label" text-anchor="end">−15V</text>
+            </g>
+
+            <!-- ══ CCS-tail differential amplifier — identical Q1/Q2/RC1/
+                 RC2/RB1/RB2 to fig-diffamp-resistor-tail (only the tail
+                 itself changes). Plain RE replaced by Q3 (run as a current
+                 source) + its own RE3, biased by a zener reference D1
+                 (through bias resistor R1 from 0V). ══ -->
+            <g id="fig-diffamp-ccs-tail">
+              <line x1="0" y1="20" x2="600" y2="20" style="stroke: var(--colour-series)" stroke-width="2" />
+              <line x1="0" y1="550" x2="600" y2="550" style="stroke: var(--colour-series)" stroke-width="2" />
+
+              <g transform="translate(180,150)"><use href="#bjt-npn-shape" /></g>
+              <g transform="translate(420,150) scale(-1,1)"><use href="#bjt-npn-shape" /></g>
+              <text x="145" y="230" class="ckt-bjt-label">Q1</text>
+              <text x="435" y="230" class="ckt-bjt-label">Q2</text>
+
+              <line x1="194" y1="20" x2="194" y2="40" style="stroke: var(--colour-series)" stroke-width="2" />
+              <g transform="translate(179,40)"><use href="#resistor-vertical" /></g>
+              <line x1="194" y1="120" x2="194" y2="116" style="stroke: var(--colour-series)" stroke-width="2" />
+              <text x="150" y="65" class="ckt-r-label" text-anchor="end">RC1</text>
+              <text x="150" y="85" class="ckt-value" text-anchor="end">5k6</text>
+              <line x1="406" y1="20" x2="406" y2="40" style="stroke: var(--colour-series)" stroke-width="2" />
+              <g transform="translate(391,40)"><use href="#resistor-vertical" /></g>
+              <line x1="406" y1="120" x2="406" y2="116" style="stroke: var(--colour-series)" stroke-width="2" />
+              <text x="450" y="65" class="ckt-r-label" text-anchor="start">RC2</text>
+              <text x="450" y="85" class="ckt-value" text-anchor="start">5k6</text>
+
+              <line x1="194" y1="20" x2="194" y2="0" style="stroke: var(--colour-series)" stroke-width="2" />
+              <text x="194" y="-8" class="ckt-io-label" text-anchor="middle">Output 1</text>
+              <line x1="406" y1="20" x2="406" y2="0" style="stroke: var(--colour-series)" stroke-width="2" />
+              <text x="406" y="-8" class="ckt-io-label" text-anchor="middle">Output 2</text>
+
+              <line x1="163" y1="150" x2="163" y2="190" style="stroke: var(--colour-series)" stroke-width="2" />
+              <g transform="translate(148,190)"><use href="#resistor-vertical" /></g>
+              <line x1="163" y1="270" x2="163" y2="305" style="stroke: var(--colour-series)" stroke-width="2" />
+              <g transform="translate(163,305)"><use href="#gnd-symbol" /></g>
+              <text x="115" y="215" class="ckt-r-label" text-anchor="end">RB1</text>
+              <text x="115" y="235" class="ckt-value" text-anchor="end">39k</text>
+
+              <line x1="437" y1="150" x2="437" y2="190" style="stroke: var(--colour-series)" stroke-width="2" />
+              <g transform="translate(422,190)"><use href="#resistor-vertical" /></g>
+              <line x1="437" y1="270" x2="437" y2="305" style="stroke: var(--colour-series)" stroke-width="2" />
+              <g transform="translate(437,305)"><use href="#gnd-symbol" /></g>
+              <text x="485" y="215" class="ckt-r-label" text-anchor="start">RB2</text>
+              <text x="485" y="235" class="ckt-value" text-anchor="start">39k</text>
+
+              <line x1="50" y1="150" x2="163" y2="150" style="stroke: var(--colour-series)" stroke-width="2" />
+              <text x="45" y="140" class="ckt-io-label" text-anchor="end">Input 1</text>
+              <line x1="437" y1="150" x2="550" y2="150" style="stroke: var(--colour-series)" stroke-width="2" />
+              <text x="555" y="140" class="ckt-io-label">Input 2</text>
+
+              <!-- Shared emitter node down to Q3 (the current source) -->
+              <line x1="194" y1="184" x2="406" y2="184" style="stroke: var(--colour-series)" stroke-width="2" />
+              <circle cx="300" cy="184" r="5" style="fill: var(--colour-series)" />
+              <line x1="300" y1="184" x2="300" y2="246" style="stroke: var(--colour-series)" stroke-width="2" />
+              <g transform="translate(286,280)"><use href="#bjt-npn-shape" /></g>
+              <text x="325" y="290" class="ckt-bjt-label">Q3</text>
+              <line x1="300" y1="314" x2="300" y2="320" style="stroke: var(--colour-series)" stroke-width="2" />
+              <g transform="translate(285,320)"><use href="#resistor-vertical" /></g>
+              <line x1="300" y1="400" x2="300" y2="550" style="stroke: var(--colour-series)" stroke-width="2" />
+              <text x="330" y="355" class="ckt-r-label" text-anchor="start">RE3</text>
+              <text x="330" y="375" class="ckt-value" text-anchor="start">3k3</text>
+
+              <!-- Zener reference: 0V — R1 — (junction: base tap + D1) — −15V -->
+              <g transform="translate(70,166)"><use href="#gnd-symbol" /></g>
+              <line x1="70" y1="176" x2="70" y2="180" style="stroke: var(--colour-series)" stroke-width="2" />
+              <g transform="translate(55,180)"><use href="#resistor-vertical" /></g>
+              <text x="35" y="210" class="ckt-r-label" text-anchor="end">R1</text>
+              <line x1="70" y1="260" x2="70" y2="280" style="stroke: var(--colour-series)" stroke-width="2" />
+              <line x1="70" y1="280" x2="269" y2="280" style="stroke: var(--colour-series)" stroke-width="2" />
+              <g transform="translate(70,280)"><use href="#zener-vert" /></g>
+              <text x="35" y="298" class="ckt-diode-label" text-anchor="end">D1</text>
+              <text x="35" y="316" class="ckt-value" text-anchor="end">5.6V</text>
+              <line x1="70" y1="312" x2="70" y2="550" style="stroke: var(--colour-series)" stroke-width="2" />
+
+              <text x="600" y="5" class="ckt-rail-label" text-anchor="end">+15V</text>
+              <text x="600" y="575" class="ckt-rail-label" text-anchor="end">−15V</text>
+            </g>
+          </defs>
+        </svg>
+        <svg id="circuitSvg" viewBox="-80 -30 730 630" xmlns="http://www.w3.org/2000/svg">
+          <use id="circuitRefUse" href="#fig-diffamp-resistor-tail" />
+        </svg>
+      </div>
+    </div>
+
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+
+          <div class="options" id="qOptions"></div>
+          <div class="match-wrap" id="qMatch" style="display:none">
+            <div class="match-pool-row" id="matchPoolRow">
+              <div class="match-pool-arrow">▶</div>
+              <div class="match-pool" id="matchPool"></div>
+            </div>
+            <div class="match-columns" id="matchColumns"></div>
+          </div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    CIRCUIT_SVG_ID = 'circuitSvg';
+    DEFAULT_CIRCUIT_VIEWBOX = '-80 -30 730 630';
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS
+    // ══════════════════════════════════════════════════════════════════════
+
+    const QUESTIONS = [
+      {
+        // Objective: "State typical applications for differential amplifiers."
+        leftPanel: 'none',
+        kind: 'multi',
+        text: () => `<b style="color:var(--colour-ui-primary)">Click</b> every genuine typical application of a differential amplifier.`,
+        hint: () => `Think about what a differential amplifier is actually GOOD at — amplifying a difference while ignoring whatever's common to both inputs.`,
+        options: () => shuffle([
+          { label: `Instrumentation/measurement amplifiers — amplifying a small wanted signal while rejecting noise common to both inputs`, type: 'correct' },
+          { label: `The input stage of an operational amplifier (op-amp)`, type: 'correct' },
+          { label: `Rejecting a common-mode interference signal (e.g. mains hum) picked up equally by both inputs`, type: 'correct' },
+          { label: `A single-ended audio volume control` },
+          { label: `A digital logic AND gate` },
+        ]),
+        correctExplain: (st) => {
+          const nums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join(', ');
+          return `Options <b>${nums}</b> are genuine applications`;
+        },
+        working: () => `
+    <div class="working-line">A differential amplifier is built specifically to amplify the <b style="color:var(--colour-ui-correct)">DIFFERENCE</b> between two inputs while rejecting whatever's <b style="color:var(--colour-ui-correct)">COMMON</b> to both — exactly why it underpins instrumentation/measurement amplifiers, sits at the input of practically every op-amp ever made, and is the standard tool for rejecting common-mode interference like mains hum.</div>
+    <div class="working-total">A volume control and a logic AND gate aren't differential-amplifier applications at all — neither one cares about the DIFFERENCE between two separate input signals.</div>`
+      },
+      {
+        // Objective: "Identify the circuit of a discrete transistor differential amplifier."
+        leftPanel: 'circuit',
+        circuitId: 'fig-diffamp-resistor-tail',
+        circuitLabel: 'Resistor-tail differential amplifier',
+        circuitViewBox: '-80 -30 730 630',
+        text: () => `Which feature of the circuit below identifies it as a differential amplifier, rather than two separate single-ended stages sharing a supply?`,
+        hint: () => `Look at what Q1 and Q2's own emitters actually do.`,
+        options: () => shuffle([
+          { label: `Q1 and Q2's emitters join together at a single shared node (the "tail"), rather than each having its own separate emitter resistor to a rail`, type: 'correct' },
+          { label: `Each transistor has its own separate collector resistor` },
+          { label: `Both transistors share the same +15V rail` },
+          { label: `Each transistor has its own separate input` },
+        ]),
+        correctExplain: () => `Q1 and Q2's emitters join at one shared tail node`,
+        working: () => `
+    <div class="working-line">The <b style="color:var(--colour-ui-correct)">shared tail node</b> is what makes this a genuine differential PAIR rather than two independent stages — one combined tail current that continuously re-apportions itself between Q1 and Q2 depending on which base sits higher.</div>
+    <div class="working-total">Separate collector resistors, a shared supply rail, and separate inputs are all completely normal features of ANY two ordinary CE stages, differential or not — none of them, on their own, creates the differential relationship. Only the shared emitter node does that.</div>`
+      },
+      {
+        // Objective: "Explain the operation of a discrete transistor differential amplifier."
+        leftPanel: 'none',
+        text: () => `How does a differential amplifier actually produce its output?`,
+        hint: () => `Think about what the shared tail current is free to do as the two base voltages move relative to each other.`,
+        options: () => shuffle([
+          { label: `The shared tail current splits between Q1 and Q2 according to the DIFFERENCE between the two base voltages — the output is the difference between the two resulting collector voltages`, type: 'correct' },
+          { label: `Each transistor amplifies its own input completely independently, with no interaction between the two sides at all` },
+          { label: `The output is the SUM of the two input voltages, amplified` },
+          { label: `Only one transistor conducts at a time, like a digital switch` },
+        ]),
+        correctExplain: () => `The tail current splits by the difference between the two inputs; output = difference between the two collector voltages`,
+        working: () => `
+    <div class="working-line">Both transistors stay <b style="color:var(--colour-ui-correct)">conducting simultaneously</b> — the shared tail current is essentially fixed by the tail itself, and just re-apportions between the two sides in proportion to the DIFFERENCE between the two base voltages. Tip one base higher and more of that fixed current flows through its own side, pulling its own collector voltage down further than the other — that difference between the two collector voltages IS the output.</div>
+    <div class="working-total">The two sides absolutely DO interact (that's the entire point of the shared tail), the output tracks the DIFFERENCE rather than the sum, and neither transistor ever fully switches off like a digital comparator would — it's an analogue re-apportioning, not an on/off switch.</div>`
+      },
+      {
+        // DC bias — resistor tail — IT.
+        leftPanel: 'circuit',
+        circuitId: 'fig-diffamp-resistor-tail',
+        circuitLabel: 'Resistor-tail differential amplifier',
+        circuitViewBox: '-80 -30 730 630',
+        text: () => `With both inputs grounded (VB1 = VB2 ≈ 0V), calculate I<sub>T</sub> — the total DC tail current.`,
+        hint: () => `VE1 = VB1 − 0.6V first, then IT = (VE1 − (−VEE))/RE — the tail resistor sits between VE1 and the NEGATIVE rail, so it's the full difference between them that sets the current.`,
+        options: () => shuffle([
+          { label: `<b class="colour-voltage">VE1</b> = 0V − 0.6V = −0.6V; <b class="colour-current">IT</b> = ${frac('−0.6V − (−15V)', '<b class="colour-resistor">RE</b>')} = ${frac('14.4V', '8k2Ω')} ≈ 1.76mA`, type: 'correct' },
+          { label: `<b class="colour-current">IT</b> = ${frac('0.6V', '<b class="colour-resistor">RE</b>')} = ${frac('0.6V', '8k2Ω')} ≈ 0.073mA` },
+          { label: `<b class="colour-current">IT</b> = ${frac('<b class="colour-voltage">VCC</b> − (−<b class="colour-voltage">VEE</b>)', '<b class="colour-resistor">RE</b>')} = ${frac('30V', '8k2Ω')} ≈ 3.66mA` },
+          { label: `<b class="colour-voltage">VE1</b> = 0V + 0.6V = 0.6V; <b class="colour-current">IT</b> = ${frac('0.6V − (−15V)', '<b class="colour-resistor">RE</b>')} = ${frac('15.6V', '8k2Ω')} ≈ 1.90mA` },
+        ]),
+        correctExplain: () => `VE1 = −0.6V; IT = (VE1 − (−VEE))/RE ≈ 1.76mA`,
+        working: () => `
+    <div class="working-formula-row"><b class="colour-voltage">VE1</b> = <b class="colour-voltage">VB1</b> − 0.6V = 0V − 0.6V = −0.6V</div>
+    <div class="working-formula-row"><b class="colour-current">IT</b> = ${frac('−0.6V − (−15V)', '<b class="colour-resistor">RE</b>')} = ${frac('14.4V', '8k2Ω')}</div>
+    <div class="working-total"><b class="colour-current">IT</b> ≈ <b style="color:var(--colour-ui-correct)">1.76mA</b></div>
+    <div class="working-line">0.073mA comes from using VE1 alone, ignoring that RE actually sits between VE1 and the NEGATIVE rail, not between VE1 and 0V. 3.66mA comes from using the full supply span (VCC to −VEE) instead of VE1 to −VEE — RE only ever sees the emitter's own voltage, not the collector rail's. And 1.90mA comes from adding the 0.6V junction drop instead of subtracting it — VE always sits BELOW VB for a forward-biased silicon BJT, never above.</div>`
+      },
+      {
+        // DC bias — resistor tail — IC1.
+        leftPanel: 'circuit',
+        circuitId: 'fig-diffamp-resistor-tail',
+        circuitLabel: 'Resistor-tail differential amplifier',
+        circuitViewBox: '-80 -30 730 630',
+        text: () => `Calculate I<sub>C1</sub> — Q1's own DC collector current.`,
+        hint: () => `IC1 ≈ IT/2 — two matched, equally-biased transistors split a fixed shared tail current evenly.`,
+        options: () => shuffle([
+          { label: `<b class="colour-current">IC1</b> = ${frac('<b class="colour-current">IT</b>', '2')} = ${frac('1.76mA', '2')} ≈ 0.88mA`, type: 'correct' },
+          { label: `<b class="colour-current">IC1</b> ≈ <b class="colour-current">IT</b> = 1.76mA` },
+          { label: `<b class="colour-current">IC1</b> = ${frac('<b class="colour-current">IT</b>', '4')} = ${frac('1.76mA', '4')} ≈ 0.44mA` },
+          { label: `<b class="colour-current">IC1</b> = <b class="colour-current">IT</b> × 2 = 3.51mA` },
+        ]),
+        correctExplain: () => `IC1 = IT/2 ≈ 0.88mA`,
+        working: () => `
+    <div class="working-formula-row"><b class="colour-current">IC1</b> = ${frac('<b class="colour-current">IT</b>', '2')} = ${frac('1.76mA', '2')}</div>
+    <div class="working-total"><b class="colour-current">IC1</b> ≈ <b style="color:var(--colour-ui-correct)">0.88mA</b></div>
+    <div class="working-line">Using the full 1.76mA treats Q1 as if it carried the ENTIRE tail current by itself — but Q2 shares it too. Dividing by 4 halves it twice over, and doubling it goes the wrong direction entirely.</div>`
+      },
+      {
+        // DC bias — resistor tail — VC1.
+        leftPanel: 'circuit',
+        circuitId: 'fig-diffamp-resistor-tail',
+        circuitLabel: 'Resistor-tail differential amplifier',
+        circuitViewBox: '-80 -30 730 630',
+        text: () => `Calculate V<sub>C1</sub> — Q1's own DC collector voltage.`,
+        hint: () => `VC1 = VCC − (IC1 × RC1).`,
+        options: () => shuffle([
+          { label: `<b class="colour-voltage">VC1</b> = <b class="colour-voltage">VCC</b> − (<b class="colour-current">IC1</b> × <b class="colour-resistor">RC1</b>) = 15V − (0.88mA × 5k6Ω) ≈ 10.08V`, type: 'correct' },
+          { label: `<b class="colour-voltage">VC1</b> = <b class="colour-voltage">VCC</b> − (<b class="colour-current">IT</b> × <b class="colour-resistor">RC1</b>) = 15V − (1.76mA × 5k6Ω) ≈ 5.17V` },
+          { label: `<b class="colour-voltage">VC1</b> = <b class="colour-voltage">VCC</b> − (<b class="colour-current">IC1</b> × <b class="colour-resistor">RE</b>) = 15V − (0.88mA × 8k2Ω) ≈ 7.80V` },
+          { label: `<b class="colour-voltage">VC1</b> = <b class="colour-voltage">VCC</b> + (<b class="colour-current">IC1</b> × <b class="colour-resistor">RC1</b>) = 15V + (0.88mA × 5k6Ω) ≈ 19.92V` },
+        ]),
+        correctExplain: () => `VC1 = VCC − (IC1 × RC1) ≈ 10.08V`,
+        working: () => `
+    <div class="working-formula-row"><b class="colour-voltage">VC1</b> = <b class="colour-voltage">VCC</b> − (<b class="colour-current">IC1</b> × <b class="colour-resistor">RC1</b>) = 15V − (0.88mA × 5k6Ω)</div>
+    <div class="working-total"><b class="colour-voltage">VC1</b> ≈ <b style="color:var(--colour-ui-correct)">10.08V</b></div>
+    <div class="working-line">5.17V comes from using the full tail current IT instead of Q1's own share, IC1. 7.80V comes from using RE (the tail resistor) instead of RC1 — RE only ever sets the EMITTER side of the picture, it has nothing to do with the collector's own voltage drop. And adding instead of subtracting the IC1×RC1 drop would put VC1 ABOVE VCC, which is impossible — current only ever flows FROM VCC, DOWN through RC1, INTO the collector.</div>`
+      },
+      {
+        // Objective: "Describe the terms differential gain, common-mode gain, CMRR" — differential gain.
+        leftPanel: 'none',
+        text: () => `What does the term <i>differential gain</i> (A<sub>V(Diff)</sub>) describe?`,
+        hint: () => `Think about which of the two input "modes" this gain figure actually applies to.`,
+        options: () => shuffle([
+          { label: `The gain applied to the DIFFERENCE between the two input signals — how much a differential (out-of-phase) input gets amplified`, type: 'correct' },
+          { label: `The gain applied when both inputs receive the exact same signal simultaneously` },
+          { label: `The overall voltage gain of a single, ordinary (non-differential) CE stage` },
+          { label: `The ratio between the two input voltages` },
+        ]),
+        correctExplain: () => `The gain applied to the DIFFERENCE between the two inputs`,
+        working: () => `
+    <div class="working-line">Differential gain is specifically the gain applied to a <b style="color:var(--colour-ui-correct)">DIFFERENTIAL</b> input — a signal applied out-of-phase between the two inputs (or to just one, with the other held steady). It's the gain the differential amplifier is actually DESIGNED to deliver.</div>
+    <div class="working-total">The same-signal-on-both-inputs case is common-mode gain instead (next question) — a completely different, ideally much SMALLER figure. And it's not a ratio between the two raw input voltages either — gain always relates an OUTPUT to an input, never one input to another.</div>`
+      },
+      {
+        leftPanel: 'none',
+        text: () => `What does the term <i>common-mode gain</i> (A<sub>V(CM)</sub>) describe?`,
+        hint: () => `"Common-mode" means the same signal appearing on BOTH inputs at once.`,
+        options: () => shuffle([
+          { label: `The gain applied when the SAME signal is present on both inputs simultaneously — ideally as close to zero as possible`, type: 'correct' },
+          { label: `The gain applied to the difference between the two inputs` },
+          { label: `The gain of the output stage only, ignoring the input stage entirely` },
+          { label: `The gain measured with one input grounded and the other left open-circuit` },
+        ]),
+        correctExplain: () => `The gain applied when the same signal sits on both inputs at once — ideally near zero`,
+        working: () => `
+    <div class="working-line">A truly IDEAL differential amplifier would have <b style="color:var(--colour-ui-correct)">zero</b> common-mode gain — a signal appearing equally on both inputs (interference, mains hum, etc) should cancel out entirely rather than reach the output at all. Real circuits only approach this; common-mode gain is how far short of zero they actually fall.</div>
+    <div class="working-total">The difference-gain case is differential gain instead (previous question) — a deliberately LARGE figure, the opposite design goal from common-mode gain.</div>`
+      },
+      {
+        leftPanel: 'none',
+        text: () => `What does CMRR (common-mode rejection ratio) describe, and what does a HIGHER CMRR mean?`,
+        hint: () => `CMRR compares the two gain figures from the previous two questions.`,
+        options: () => shuffle([
+          { label: `CMRR = AV(Diff)/AV(CM) (often expressed in dB) — a HIGHER CMRR means the amplifier is BETTER at rejecting common-mode signals while still amplifying the wanted differential signal`, type: 'correct' },
+          { label: `CMRR = AV(CM)/AV(Diff) — a higher CMRR means WORSE common-mode rejection` },
+          { label: `CMRR is simply the total voltage gain of the amplifier` },
+          { label: `A higher CMRR means the amplifier amplifies common-mode signals MORE strongly` },
+        ]),
+        correctExplain: () => `CMRR = AV(Diff)/AV(CM); higher CMRR = better common-mode rejection`,
+        working: () => `
+    <div class="working-line">CMRR directly compares the two gains from the last two questions: <b style="color:var(--colour-ui-correct)">AV(Diff) ÷ AV(CM)</b>. The bigger that ratio, the more the amplifier favours a wanted DIFFERENTIAL signal over unwanted COMMON-MODE interference — so a HIGHER CMRR is always the better outcome.</div>
+    <div class="working-total">Flipping the ratio upside down would make a WORSE amplifier (bigger AV(CM) relative to AV(Diff)) score a higher number — backwards. CMRR is specifically a RATIO of the two gains, not the total gain on its own, and it has nothing to do with amplifying common-mode signals more — the entire goal is the opposite.</div>`
+      },
+      {
+        // AC parameters — re.
+        leftPanel: 'circuit',
+        circuitId: 'fig-diffamp-resistor-tail',
+        circuitLabel: 'Resistor-tail differential amplifier',
+        circuitViewBox: '-80 -30 730 630',
+        text: () => `Calculate re — Q1's own internal AC emitter resistance.`,
+        hint: () => `re = 26mV/IC1 — use Q1's OWN share of the tail current, not the full IT.`,
+        options: () => shuffle([
+          { label: `<b class="colour-bjt">re</b> = ${frac('26mV', '<b class="colour-current">IC1</b>')} = ${frac('26mV', '0.88mA')} ≈ 29.6Ω`, type: 'correct' },
+          { label: `<b class="colour-bjt">re</b> = ${frac('26mV', '<b class="colour-current">IT</b>')} = ${frac('26mV', '1.76mA')} ≈ 14.8Ω` },
+          { label: `<b class="colour-bjt">re</b> = ${frac('0.6V', '<b class="colour-current">IC1</b>')} = ${frac('0.6V', '0.88mA')} ≈ 683Ω` },
+          { label: `<b class="colour-bjt">re</b> = ${frac('<b class="colour-current">IC1</b>', '26mV')} = ${frac('0.88mA', '26mV')} ≈ 33.8` },
+        ]),
+        correctExplain: () => `re = 26mV/IC1 ≈ 29.6Ω`,
+        working: () => `
+    <div class="working-formula-row"><b class="colour-bjt">re</b> = ${frac('26mV', '<b class="colour-current">IC1</b>')} = ${frac('26mV', '0.88mA')}</div>
+    <div class="working-total"><b class="colour-bjt">re</b> ≈ <b style="color:var(--colour-ui-correct)">29.6Ω</b></div>
+    <div class="working-line">14.8Ω comes from using the full tail current IT instead of Q1's own share IC1 — re′ is always a PER-TRANSISTOR quantity. 683Ω comes from confusing the 0.6V base-emitter turn-on voltage with the unrelated 26mV thermal-voltage constant that re′ actually uses. And flipping the fraction upside down gives a result with no meaningful unit at all.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        circuitId: 'fig-diffamp-resistor-tail',
+        circuitLabel: 'Resistor-tail differential amplifier',
+        circuitViewBox: '-80 -30 730 630',
+        text: () => `Given re ≈ 29.6Ω, calculate A<sub>V(Diff)</sub> — the differential voltage gain.`,
+        hint: () => `AV(Diff) = RC/(2×re).`,
+        options: () => shuffle([
+          { label: `<b class="colour-gain">AV(Diff)</b> = ${frac('<b class="colour-resistor">RC</b>', '2 × <b class="colour-bjt">re</b>')} = ${frac('5k6Ω', '2 × 29.6Ω')} ≈ 94.6`, type: 'correct' },
+          { label: `<b class="colour-gain">AV(Diff)</b> = ${frac('<b class="colour-resistor">RC</b>', '<b class="colour-bjt">re</b>')} = ${frac('5k6Ω', '29.6Ω')} ≈ 189.2` },
+          { label: `<b class="colour-gain">AV(Diff)</b> = ${frac('<b class="colour-resistor">RC</b>', '4 × <b class="colour-bjt">re</b>')} = ${frac('5k6Ω', '118.4Ω')} ≈ 47.3` },
+          { label: `<b class="colour-gain">AV(Diff)</b> = ${frac('2 × <b class="colour-resistor">RC</b>', '<b class="colour-bjt">re</b>')} = ${frac('11k2Ω', '29.6Ω')} ≈ 378.4` },
+        ]),
+        correctExplain: () => `AV(Diff) = RC/(2×re) ≈ 94.6`,
+        working: () => `
+    <div class="working-formula-row"><b class="colour-gain">AV(Diff)</b> = ${frac('<b class="colour-resistor">RC</b>', '2 × <b class="colour-bjt">re</b>')} = ${frac('5k6Ω', '2 × 29.6Ω')}</div>
+    <div class="working-total"><b class="colour-gain">AV(Diff)</b> ≈ <b style="color:var(--colour-ui-correct)">94.6</b></div>
+    <div class="working-line">189.2 comes from dropping the "2×" from the denominator entirely. 47.3 comes from an extra, unwanted factor of 2 (4×re instead of 2×re). And 378.4 comes from doubling RC instead of re — the "2" belongs on the re′ side of this particular formula, not the RC side.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        circuitId: 'fig-diffamp-resistor-tail',
+        circuitLabel: 'Resistor-tail differential amplifier',
+        circuitViewBox: '-80 -30 730 630',
+        text: () => `Calculate A<sub>V(CM)</sub> — the common-mode voltage gain.`,
+        hint: () => `AV(CM) = RC/(2×RE) — same formula shape as AV(Diff), but using the TAIL resistor instead of re.`,
+        options: () => shuffle([
+          { label: `<b class="colour-gain">AV(CM)</b> = ${frac('<b class="colour-resistor">RC</b>', '2 × <b class="colour-resistor">RE</b>')} = ${frac('5k6Ω', '2 × 8k2Ω')} ≈ 0.341`, type: 'correct' },
+          { label: `<b class="colour-gain">AV(CM)</b> = ${frac('<b class="colour-resistor">RC</b>', '<b class="colour-resistor">RE</b>')} = ${frac('5k6Ω', '8k2Ω')} ≈ 0.683` },
+          { label: `<b class="colour-gain">AV(CM)</b> = ${frac('<b class="colour-resistor">RE</b>', '2 × <b class="colour-resistor">RC</b>')} = ${frac('8k2Ω', '11k2Ω')} ≈ 0.732` },
+          { label: `<b class="colour-gain">AV(CM)</b> = ${frac('<b class="colour-resistor">RC</b>', '2 × <b class="colour-bjt">re</b>')} = ${frac('5k6Ω', '59.2Ω')} ≈ 94.6` },
+        ]),
+        correctExplain: () => `AV(CM) = RC/(2×RE) ≈ 0.341`,
+        working: () => `
+    <div class="working-formula-row"><b class="colour-gain">AV(CM)</b> = ${frac('<b class="colour-resistor">RC</b>', '2 × <b class="colour-resistor">RE</b>')} = ${frac('5k6Ω', '2 × 8k2Ω')}</div>
+    <div class="working-total"><b class="colour-gain">AV(CM)</b> ≈ <b style="color:var(--colour-ui-correct)">0.341</b> — genuinely less than 1, exactly what a well-behaved common-mode gain should look like.</div>
+    <div class="working-line">0.683 comes from dropping the "2×" from the denominator. 0.732 comes from flipping the fraction upside down entirely. And 94.6 is actually AV(Diff) from the previous question — using re′ here by mistake instead of RE, the tail resistor, confuses the two formulas' own denominators.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        circuitId: 'fig-diffamp-resistor-tail',
+        circuitLabel: 'Resistor-tail differential amplifier',
+        circuitViewBox: '-80 -30 730 630',
+        text: () => `Using AV(Diff) ≈ 94.6 and AV(CM) ≈ 0.341 from the previous two questions, calculate CMRR in dB.`,
+        hint: () => `CMRR(dB) = 20 × Log(AV(Diff)/AV(CM)).`,
+        options: () => shuffle([
+          { label: `<b class="colour-gain">CMRR</b> = 20 × Log(${frac('<b class="colour-gain">AV(Diff)</b>', '<b class="colour-gain">AV(CM)</b>')}) = 20 × Log(${frac('94.6', '0.341')}) ≈ 48.8dB`, type: 'correct' },
+          { label: `<b class="colour-gain">CMRR</b> = ${frac('<b class="colour-gain">AV(Diff)</b>', '<b class="colour-gain">AV(CM)</b>')} = ${frac('94.6', '0.341')} ≈ 277.4` },
+          { label: `<b class="colour-gain">CMRR</b> = 20 × Log(${frac('<b class="colour-gain">AV(CM)</b>', '<b class="colour-gain">AV(Diff)</b>')}) = 20 × Log(${frac('0.341', '94.6')}) ≈ −48.8dB` },
+          { label: `<b class="colour-gain">CMRR</b> = 10 × Log(${frac('<b class="colour-gain">AV(Diff)</b>', '<b class="colour-gain">AV(CM)</b>')}) = 10 × Log(${frac('94.6', '0.341')}) ≈ 24.4dB` },
+        ]),
+        correctExplain: () => `CMRR = 20×Log(AV(Diff)/AV(CM)) ≈ 48.8dB`,
+        working: () => `
+    <div class="working-formula-row"><b class="colour-gain">CMRR</b> = 20 × Log(${frac('<b class="colour-gain">AV(Diff)</b>', '<b class="colour-gain">AV(CM)</b>')}) = 20 × Log(${frac('94.6', '0.341')})</div>
+    <div class="working-total"><b class="colour-gain">CMRR</b> ≈ <b style="color:var(--colour-ui-correct)">48.8dB</b></div>
+    <div class="working-line">277.4 is the plain RATIO without converting to dB at all — CMRR is conventionally expressed in dB, same as any other gain-type figure in this course. Inverting the fraction gives a NEGATIVE dB figure, which would mean common-mode signals get amplified MORE than differential ones — backwards for any usable amplifier. And the 10×Log form is the POWER-ratio dB formula, not the voltage-ratio one CMRR actually uses (20×Log).</div>`
+      },
+      {
+        // Identify the CCS-tail circuit.
+        leftPanel: 'circuit',
+        circuitId: 'fig-diffamp-ccs-tail',
+        circuitLabel: 'CCS-tail differential amplifier',
+        circuitViewBox: '-80 -30 730 630',
+        text: () => `Looking at the circuit below, which feature identifies it as using a CONSTANT-CURRENT-SOURCE tail, rather than the plain resistor tail from the earlier questions?`,
+        hint: () => `Look at what replaced the simple tail resistor.`,
+        options: () => shuffle([
+          { label: `The tail resistor is replaced by a third transistor (Q3), biased by its own zener reference — the tail current is now set by Q3's own bias network, not simply by VEE/RE`, type: 'correct' },
+          { label: `RC1 and RC2 are still present` },
+          { label: `Both circuits use the same ±15V dual supply` },
+          { label: `Q1 and Q2 are still a matched pair` },
+        ]),
+        correctExplain: () => `The plain tail resistor is replaced by a current-source transistor (Q3) with its own zener-referenced bias network`,
+        working: () => `
+    <div class="working-line">Q1, Q2, RC1, RC2, RB1 and RB2 are all completely UNCHANGED from the resistor-tail version — the ONLY thing that's different is what the two emitters join down into: here, it's <b style="color:var(--colour-ui-correct)">Q3's own current-source bias network</b> (zener D1 + R1 + RE3) instead of a single plain resistor.</div>
+    <div class="working-total">RC1/RC2 being present, the shared ±15V supply, and Q1/Q2 still being matched are all true of BOTH circuits — none of them is what makes THIS one the CCS version specifically.</div>`
+      },
+      {
+        // CCS bias — VB3.
+        leftPanel: 'circuit',
+        circuitId: 'fig-diffamp-ccs-tail',
+        circuitLabel: 'CCS-tail differential amplifier',
+        circuitViewBox: '-80 -30 730 630',
+        text: () => `Calculate V<sub>B3</sub> — the DC base voltage of Q3, the current-source transistor, given the zener reference Vz = 5.6V.`,
+        hint: () => `D1's own cathode sits at the R1/base junction, its anode toward −VEE — current flows from 0V, through R1, through D1 in reverse breakdown, down to −VEE. That junction sits Vz ABOVE the −VEE rail, not Vz below 0V.`,
+        options: () => shuffle([
+          { label: `<b class="colour-voltage">VB3</b> = −<b class="colour-voltage">VEE</b> + Vz = −15V + 5.6V ≈ −9.4V`, type: 'correct' },
+          { label: `<b class="colour-voltage">VB3</b> = −Vz = −5.6V` },
+          { label: `<b class="colour-voltage">VB3</b> = −(<b class="colour-voltage">VEE</b> + Vz) = −(15V + 5.6V) ≈ −20.6V` },
+          { label: `<b class="colour-voltage">VB3</b> = 0V, same as Q1/Q2's own bases` },
+        ]),
+        correctExplain: () => `VB3 = −VEE + Vz ≈ −9.4V`,
+        working: () => `
+    <div class="working-formula-row"><b class="colour-voltage">VB3</b> = −<b class="colour-voltage">VEE</b> + Vz = −15V + 5.6V</div>
+    <div class="working-total"><b class="colour-voltage">VB3</b> ≈ <b style="color:var(--colour-ui-correct)">−9.4V</b></div>
+    <div class="working-line">−5.6V treats the zener as if it referenced straight off 0V — but D1's own anode actually goes all the way down to −VEE, not to ground, so −VEE has to be part of the sum. −20.6V goes the other way, adding Vz onto −VEE instead of back UP from it. And 0V would only be right if Q3's base were grounded like Q1/Q2's own bases are — it isn't; that's the entire point of the separate zener reference.</div>`
+      },
+      {
+        // CCS bias — IT.
+        leftPanel: 'circuit',
+        circuitId: 'fig-diffamp-ccs-tail',
+        circuitLabel: 'CCS-tail differential amplifier',
+        circuitViewBox: '-80 -30 730 630',
+        text: () => `Calculate I<sub>T</sub> — the tail current set by the current source (IT ≈ IC3 ≈ IE3).`,
+        hint: () => `VE3 = VB3 − 0.6V first, then IT = (VE3 − (−VEE))/RE3.`,
+        options: () => shuffle([
+          { label: `<b class="colour-voltage">VE3</b> = −9.4V − 0.6V = −10.0V; <b class="colour-current">IT</b> = ${frac('−10.0V − (−15V)', '<b class="colour-resistor">RE3</b>')} = ${frac('5.0V', '3k3Ω')} ≈ 1.52mA`, type: 'correct' },
+          { label: `<b class="colour-voltage">VE3</b> = −9.4V + 0.6V = −8.8V; <b class="colour-current">IT</b> = ${frac('−8.8V − (−15V)', '<b class="colour-resistor">RE3</b>')} = ${frac('6.2V', '3k3Ω')} ≈ 1.88mA` },
+          { label: `<b class="colour-current">IT</b> = ${frac('<b class="colour-voltage">VB3</b> − (−15V)', '<b class="colour-resistor">RE3</b>')} = ${frac('5.6V', '3k3Ω')} ≈ 1.70mA` },
+          { label: `<b class="colour-current">IT</b> = ${frac('5.0V', '<b class="colour-resistor">RC</b>')} = ${frac('5.0V', '5k6Ω')} ≈ 0.89mA` },
+        ]),
+        correctExplain: () => `VE3 = VB3 − 0.6V ≈ −10.0V; IT = (VE3 − (−VEE))/RE3 ≈ 1.52mA`,
+        working: () => `
+    <div class="working-formula-row"><b class="colour-voltage">VE3</b> = <b class="colour-voltage">VB3</b> − 0.6V = −9.4V − 0.6V = −10.0V</div>
+    <div class="working-formula-row"><b class="colour-current">IT</b> = ${frac('−10.0V − (−15V)', '<b class="colour-resistor">RE3</b>')} = ${frac('5.0V', '3k3Ω')}</div>
+    <div class="working-total"><b class="colour-current">IT</b> ≈ <b style="color:var(--colour-ui-correct)">1.52mA</b></div>
+    <div class="working-line">1.88mA comes from adding the 0.6V junction drop instead of subtracting it. 1.70mA comes from using VB3 directly instead of VE3 — skipping the base-emitter junction drop entirely. And 0.89mA comes from dividing by RC (5k6Ω) instead of RE3 (3k3Ω) — RC belongs to Q1/Q2's own collectors, nowhere near Q3's own emitter circuit.</div>`
+      },
+      {
+        // CCS bias — VC.
+        leftPanel: 'circuit',
+        circuitId: 'fig-diffamp-ccs-tail',
+        circuitLabel: 'CCS-tail differential amplifier',
+        circuitViewBox: '-80 -30 730 630',
+        text: () => `Calculate V<sub>C</sub> — the DC collector voltage of Q1 and Q2 in this CCS-biased version (IC(each) = IT/2).`,
+        hint: () => `VC = VCC − (IC(each) × RC).`,
+        options: () => shuffle([
+          { label: `<b class="colour-current">IC(each)</b> = ${frac('1.52mA', '2')} ≈ 0.76mA; <b class="colour-voltage">VC</b> = 15V − (0.76mA × 5k6Ω) ≈ 10.76V`, type: 'correct' },
+          { label: `<b class="colour-voltage">VC</b> = 15V − (1.52mA × 5k6Ω) ≈ 6.52V` },
+          { label: `<b class="colour-voltage">VC</b> = 15V − (0.76mA × 3k3Ω) ≈ 12.50V` },
+          { label: `<b class="colour-voltage">VC</b> = 15V + (0.76mA × 5k6Ω) ≈ 19.24V` },
+        ]),
+        correctExplain: () => `IC(each) = IT/2 ≈ 0.76mA; VC = VCC − (IC(each)×RC) ≈ 10.76V`,
+        working: () => `
+    <div class="working-formula-row"><b class="colour-current">IC(each)</b> = ${frac('<b class="colour-current">IT</b>', '2')} = ${frac('1.52mA', '2')}</div>
+    <div class="working-formula-row"><b class="colour-voltage">VC</b> = <b class="colour-voltage">VCC</b> − (<b class="colour-current">IC(each)</b> × <b class="colour-resistor">RC</b>) = 15V − (0.76mA × 5k6Ω)</div>
+    <div class="working-total"><b class="colour-voltage">VC</b> ≈ <b style="color:var(--colour-ui-correct)">10.76V</b></div>
+    <div class="working-line">6.52V comes from using the full tail current IT instead of each transistor's own share. 12.50V comes from using RE3 (Q3's own emitter resistor) instead of RC — RE3 has nothing to do with Q1/Q2's own collector voltage. And adding instead of subtracting would push VC above VCC, which current flowing down through RC can never do.</div>`
+      },
+      {
+        // CCS — AV(CM).
+        leftPanel: 'circuit',
+        circuitId: 'fig-diffamp-ccs-tail',
+        circuitLabel: 'CCS-tail differential amplifier',
+        circuitViewBox: '-80 -30 730 630',
+        text: () => `Given the current source's own output impedance is 180kΩ (replacing RE in the AV(CM) formula), calculate A<sub>V(CM)</sub> for this CCS-biased version.`,
+        hint: () => `AV(CM) = RC/(2×Rout(CCS)) — same formula shape as the resistor-tail version, just with the current source's own (much bigger) output impedance standing in for RE.`,
+        options: () => shuffle([
+          { label: `<b class="colour-gain">AV(CM)</b> = ${frac('<b class="colour-resistor">RC</b>', '2 × Rout(CCS)')} = ${frac('5k6Ω', '2 × 180kΩ')} ≈ 0.0156`, type: 'correct' },
+          { label: `<b class="colour-gain">AV(CM)</b> = ${frac('<b class="colour-resistor">RC</b>', 'Rout(CCS)')} = ${frac('5k6Ω', '180kΩ')} ≈ 0.0311` },
+          { label: `<b class="colour-gain">AV(CM)</b> = ${frac('<b class="colour-resistor">RC</b>', '2 × <b class="colour-resistor">RE</b>')} = ${frac('5k6Ω', '2 × 8k2Ω')} ≈ 0.341` },
+          { label: `<b class="colour-gain">AV(CM)</b> = ${frac('Rout(CCS)', '2 × <b class="colour-resistor">RC</b>')} = ${frac('180kΩ', '11k2Ω')} ≈ 16.07` },
+        ]),
+        correctExplain: () => `AV(CM) = RC/(2×Rout(CCS)) ≈ 0.0156`,
+        working: () => `
+    <div class="working-formula-row"><b class="colour-gain">AV(CM)</b> = ${frac('<b class="colour-resistor">RC</b>', '2 × Rout(CCS)')} = ${frac('5k6Ω', '2 × 180kΩ')}</div>
+    <div class="working-total"><b class="colour-gain">AV(CM)</b> ≈ <b style="color:var(--colour-ui-correct)">0.0156</b> — over 20× smaller than the resistor-tail version's own 0.341.</div>
+    <div class="working-line">0.0311 comes from dropping the "2×" from the denominator. 0.341 is actually the EARLIER resistor-tail circuit's own AV(CM) — using RE (8k2Ω) here by mistake instead of the current source's own, far larger, 180kΩ output impedance. And flipping the fraction upside down gives a gain well over 1, which a well-behaved common-mode figure should never be.</div>`
+      },
+      {
+        // CCS — CMRR.
+        leftPanel: 'circuit',
+        circuitId: 'fig-diffamp-ccs-tail',
+        circuitLabel: 'CCS-tail differential amplifier',
+        circuitViewBox: '-80 -30 730 630',
+        text: () => `Using AV(Diff) ≈ 81.6 (re ≈ 34.3Ω here, following the exact same steps as the resistor-tail circuit) and AV(CM) ≈ 0.0156 from the previous question, calculate the CMRR for this CCS-biased version.`,
+        hint: () => `CMRR(dB) = 20 × Log(AV(Diff)/AV(CM)), same formula as before.`,
+        options: () => shuffle([
+          { label: `<b class="colour-gain">CMRR</b> = 20 × Log(${frac('81.6', '0.0156')}) ≈ 74.4dB`, type: 'correct' },
+          { label: `<b class="colour-gain">CMRR</b> = ${frac('81.6', '0.0156')} ≈ 5231` },
+          { label: `<b class="colour-gain">CMRR</b> = 20 × Log(${frac('0.0156', '81.6')}) ≈ −74.4dB` },
+          { label: `<b class="colour-gain">CMRR</b> = 10 × Log(${frac('81.6', '0.0156')}) ≈ 37.2dB` },
+        ]),
+        correctExplain: () => `CMRR = 20×Log(AV(Diff)/AV(CM)) ≈ 74.4dB`,
+        working: () => `
+    <div class="working-formula-row"><b class="colour-gain">CMRR</b> = 20 × Log(${frac('81.6', '0.0156')})</div>
+    <div class="working-total"><b class="colour-gain">CMRR</b> ≈ <b style="color:var(--colour-ui-correct)">74.4dB</b> — roughly 25.6dB better than the resistor-tail circuit's own 48.8dB, despite AV(Diff) barely changing (94.6 → 81.6).</div>
+    <div class="working-line">5231 is the plain ratio without converting to dB. Inverting the fraction gives a negative dB figure, implying common-mode signals get amplified MORE than differential ones. And 10×Log is the power-ratio dB formula, not the voltage-ratio one CMRR uses.</div>`
+      },
+      {
+        // Objective: "Explain how constant current source bias improves CMRR."
+        leftPanel: 'none',
+        text: () => `Comparing the two circuits above (resistor tail: CMRR ≈ 48.8dB vs CCS tail: CMRR ≈ 74.4dB), WHY does a constant-current-source tail give such a dramatic CMRR improvement over a plain resistor tail?`,
+        hint: () => `Look at what actually changed the most between the two circuits' own AV(Diff) and AV(CM) figures.`,
+        options: () => shuffle([
+          { label: `A CCS has a MUCH higher output impedance than any practical tail resistor, and AV(CM) = RC/(2×Rtail) — a bigger Rtail makes AV(CM) much smaller, which makes CMRR = AV(Diff)/AV(CM) much bigger, while AV(Diff) barely changes at all`, type: 'correct' },
+          { label: `A CCS makes AV(Diff) much larger, which is what improves CMRR` },
+          { label: `A CCS removes the need for RC1/RC2 entirely` },
+          { label: `A CCS makes Q1 and Q2 match each other more closely` },
+        ]),
+        correctExplain: () => `CCS's own far higher output impedance shrinks AV(CM) dramatically while AV(Diff) stays roughly the same, so their ratio (CMRR) rises sharply`,
+        working: () => `
+    <div class="working-line">Track the actual numbers: <b style="color:var(--colour-ui-correct)">AV(Diff)</b> barely moved (94.6 → 81.6), but <b style="color:var(--colour-ui-correct)">AV(CM)</b> collapsed by over 20× (0.341 → 0.0156) — entirely because the current source's own 180kΩ output impedance is SO much bigger than any practical 8k2Ω tail resistor could ever be, and AV(CM) = RC/(2×Rtail) shrinks as Rtail grows.</div>
+    <div class="working-total">Since CMRR = AV(Diff)/AV(CM), a nearly-unchanged numerator over a dramatically SMALLER denominator is exactly what drives CMRR up so sharply. RC1/RC2 are still fully present in both circuits, and Q1/Q2's own matching is a separate consideration entirely from the tail's own impedance.</div>`
+      },
+    ];
+
+    initQuizNav();
+    resetQuiz();
+    initQuizFromURL();
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,1033 @@
+<!--
+  MIGRATED to the shared engine/styles, this session, at the user's own
+  request: "I have brought in a quiz I wrote last year that was on a
+  subject already completed... Can you update this so it uses the common
+  styles, engine and has the same back button and option to just check the
+  answer to see the correct value?" The original file (a hand-built,
+  bespoke quiz predating assets/quiz-engine.js entirely — its own custom
+  CSS design tokens, its own hand-rolled Check/Next/Back/Restart engine,
+  its own zoom-modal) already had a Check-then-reveal pattern and a menu
+  link, so the FUNCTIONAL behaviour asked for already existed; the ask was
+  specifically to bring the STYLING and ENGINE in line with every other
+  quiz in this project (quiz-common.css, assets/quiz-engine.js, the
+  standard ← Back link via initQuizNav()).
+
+  This is a content-preserving STYLE/ENGINE port, not a content rewrite —
+  every question's own wording, correct answer, wrong-option values and
+  worked-solution reasoning are carried over unchanged from the original;
+  only the presentation (colour-coded frac() formulas matching every other
+  quiz's own convention) and the underlying mechanics changed. 19 questions
+  across 7 circuit diagrams, same order as the original QUESTION_DEFS
+  (open, inverting, non-inverting, summing, comparator, night-light).
+
+  ONE deliberate architecture change, forced by the shared engine's own
+  design: the original toggled annotations (revealed values, flashing
+  highlight rings) ON TOP OF a small, fixed set of shared SVG groups as
+  questions were answered — a feature the shared engine doesn't have (every
+  other quiz in this project instead gives each question its own fully-
+  baked STATIC circuitId, swapped via circuitId/circuitLabel/circuitViewBox,
+  with computed values living in the text/hint/working() panel rather than
+  appearing on the diagram itself). Ported to that same convention here:
+  each of the 7 circuit TOPOLOGIES below is its own static `fig-op-*` circuit
+  (component values always shown as GIVEN labels, matching every other
+  quiz's own convention, rather than hidden until revealed), and the two
+  cases where the original literally showed a MODIFIED circuit get their
+  own separate variant — `fig-op-comparator-r2mod` (R2 changed 4kΩ→12kΩ,
+  comp_4 only) — rather than one circuit mutating live. Flashing highlight
+  rings and the "hide the panel label on the identify-this-circuit
+  question" trick are dropped (no directly equivalent engine feature); the
+  panel-label trick is approximated instead by giving each circuit's own
+  FIRST (identify) question circuitLabel:'Reference Circuit' (the engine's
+  own fallback default for an empty label) and only naming the circuit for
+  later questions in that same group, once it's already been identified.
+
+  Colour mapping from the original's own bespoke --col-* tokens to this
+  project's shared quiz-common.css tokens: wires/junctions → --colour-series,
+  resistor boxes/names → --colour-resistor/--colour-resistor-labels
+  (component VALUES stay plain --colour-text, matching every other quiz's
+  own R-label-vs-value convention), the op-amp triangle body/±terminals →
+  --colour-switch, supply rails (+12V/−12V/+Vcc/−Vee/+9V) → --colour-supply,
+  signal sources (Vin terminals) → --colour-voltage-label, output labels →
+  --colour-signal, common/ground → --colour-gnd, AvOL/AvCL gain figures →
+  --colour-gain, the chip part number (LM741/TL072) → --colour-label.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../assets/theme-init.js"></script>
+  <script src="../../../assets/quiz-engine.js"></script>
+  <title>Op-Amp Knowledge Revision Quiz</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../assets/quiz-common.css">
+  <script src="../../../assets/breadcrumb.js" defer></script>
+  <style>
+    :root { --colour-ring-highlight: #ffe600; }
+    :root[data-theme="light"] { --colour-ring-highlight: #ca8a04; }
+
+    @keyframes flash-ring {
+      0%, 100% { opacity: .9; }
+      50% { opacity: .35; }
+    }
+
+    .flash-ring {
+      animation: flash-ring 1.2s ease-in-out infinite;
+      stroke: var(--colour-ring-highlight);
+      stroke-width: 3;
+      stroke-dasharray: 8 4;
+    }
+
+    .ckt-r-label { fill: var(--colour-resistor-labels); font-size: 14px; font-weight: 700; }
+    .ckt-value { fill: var(--colour-text); font-size: 13px; }
+    .ckt-chip-label { fill: var(--colour-label); font-size: 13px; font-style: italic; text-anchor: middle; }
+    .ckt-rail-label { fill: var(--colour-supply); font-size: 17px; font-weight: 700; }
+    .ckt-gnd-label { fill: var(--colour-gnd); font-size: 15px; font-weight: 700; }
+    .ckt-io-label { fill: var(--colour-signal); font-size: 14px; }
+    .ckt-in-label { fill: var(--colour-voltage-label); font-size: 15px; font-weight: 700; text-anchor: middle; }
+    .ckt-gain-label { fill: var(--colour-gain); font-size: 15px; font-weight: 700; }
+  </style>
+</head>
+
+<body>
+  <div class="crumb" id="crumb" data-current="Op-Amp Knowledge Revision"></div>
+  <header>
+    <h1>Op-Amp Circuits</h1>
+    <p>Identification &amp; Analysis · Open Loop, Comparator, Inverting, Non-Inverting &amp; Summing</p>
+  </header>
+
+  <div class="quiz-wrap" id="quizWrap">
+
+    <div class="circuit-col">
+      <div class="circuit-panel">
+        <div class="panel-label" id="circuitRefLabel">Reference Circuit</div>
+        <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+          <defs>
+            <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="2" result="b" />
+              <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+            <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+              <path d="M0,0 L0,6 L8,3 Z" style="fill: var(--colour-series)" />
+            </marker>
+
+            <!-- ══ Open loop — Vin on + input (unterminated), − tied to
+                 common, no feedback path at all. ══ -->
+            <g id="fig-op-open-loop">
+              <polygon points="260,110 260,310 460,210" style="fill: var(--colour-panel); stroke: var(--colour-switch)" stroke-width="2.5" filter="url(#glow)" />
+              <text x="272" y="200" style="fill: var(--colour-switch)" font-size="22" font-weight="bold">+</text>
+              <text x="272" y="240" style="fill: var(--colour-switch)" font-size="26" font-weight="bold">−</text>
+              <text x="345" y="215" class="ckt-chip-label">LM741</text>
+
+              <line x1="360" y1="160" x2="360" y2="100" style="stroke: var(--colour-supply)" stroke-width="2" />
+              <circle cx="360" cy="100" r="5" style="fill: var(--colour-supply)" />
+              <text x="380" y="105" class="ckt-rail-label">+12V</text>
+              <line x1="360" y1="260" x2="360" y2="320" style="stroke: var(--colour-supply)" stroke-width="2" />
+              <circle cx="360" cy="320" r="5" style="fill: var(--colour-supply)" />
+              <text x="380" y="325" class="ckt-rail-label">−12V</text>
+
+              <line x1="460" y1="210" x2="580" y2="210" style="stroke: var(--colour-series)" stroke-width="2" marker-end="url(#arr)" />
+              <text x="540" y="200" class="ckt-io-label">V<tspan baseline-shift="sub" font-size="10">out</tspan></text>
+
+              <line x1="140" y1="190" x2="260" y2="190" style="stroke: var(--colour-series)" stroke-width="2" />
+              <circle cx="140" cy="190" r="7" style="fill: var(--colour-panel); stroke: var(--colour-voltage-label)" stroke-width="2" />
+              <text x="140" y="172" class="ckt-in-label">V<tspan baseline-shift="sub" font-size="11">in</tspan></text>
+              <g transform="translate(50, 0)">
+                <path d="M 0,190 C 9,165 21,165 30,190 C 39,215 51,215 60,190" fill="none" style="stroke: var(--colour-voltage-label)" stroke-width="2" stroke-linecap="round" />
+              </g>
+
+              <line x1="210" y1="230" x2="260" y2="230" style="stroke: var(--colour-gnd)" stroke-width="2" />
+              <line x1="210" y1="230" x2="210" y2="380" style="stroke: var(--colour-gnd)" stroke-width="2" />
+
+              <line x1="140" y1="380" x2="560" y2="380" style="stroke: var(--colour-gnd)" stroke-width="2.5" />
+              <circle cx="140" cy="380" r="7" style="fill: var(--colour-panel); stroke: var(--colour-gnd)" stroke-width="2" />
+              <circle cx="560" cy="380" r="7" style="fill: var(--colour-panel); stroke: var(--colour-gnd)" stroke-width="2" />
+              <text x="310" y="403" class="ckt-gnd-label" text-anchor="middle" letter-spacing="3">COMMON</text>
+              <line x1="240" y1="380" x2="240" y2="400" style="stroke: var(--colour-gnd)" stroke-width="2.5" />
+              <line x1="220" y1="400" x2="260" y2="400" style="stroke: var(--colour-gnd)" stroke-width="2.5" />
+              <line x1="228" y1="410" x2="252" y2="410" style="stroke: var(--colour-gnd)" stroke-width="2" />
+              <line x1="236" y1="420" x2="244" y2="420" style="stroke: var(--colour-gnd)" stroke-width="1.5" />
+              <text x="180" y="400" class="ckt-gnd-label">0V</text>
+
+              <text x="490" y="310" class="ckt-gain-label">Av<tspan baseline-shift="sub" font-size="11">OL</tspan> = 200,000</text>
+            </g>
+
+            <!-- ══ Comparator — voltage divider (+9V→R1→R2→common) on +
+                 input, 4.5V fixed reference on − input, no feedback. ══ -->
+            <g id="fig-op-comparator">
+              <polygon points="260,110 260,310 460,210" style="fill: var(--colour-panel); stroke: var(--colour-switch)" stroke-width="2.5" filter="url(#glow)" />
+              <text x="272" y="200" style="fill: var(--colour-switch)" font-size="22" font-weight="bold">+</text>
+              <text x="272" y="240" style="fill: var(--colour-switch)" font-size="26" font-weight="bold">−</text>
+              <text x="345" y="215" class="ckt-chip-label">TL072</text>
+
+              <line x1="360" y1="60" x2="360" y2="160" style="stroke: var(--colour-supply)" stroke-width="2" />
+              <line x1="20" y1="60" x2="360" y2="60" style="stroke: var(--colour-supply)" stroke-width="2" />
+              <circle cx="360" cy="60" r="5" style="fill: var(--colour-supply)" />
+              <circle cx="20" cy="60" r="7" style="fill: var(--colour-panel); stroke: var(--colour-supply)" stroke-width="2" />
+              <circle cx="50" cy="60" r="5" style="fill: var(--colour-supply)" />
+              <text x="380" y="65" class="ckt-rail-label">+9V</text>
+
+              <line x1="360" y1="260" x2="360" y2="380" style="stroke: var(--colour-gnd)" stroke-width="2" />
+              <circle cx="360" cy="380" r="4" style="fill: var(--colour-gnd)" />
+
+              <line x1="460" y1="210" x2="580" y2="210" style="stroke: var(--colour-series)" stroke-width="2" marker-end="url(#arr)" />
+              <text x="540" y="190" class="ckt-io-label">V<tspan baseline-shift="sub" font-size="10">out</tspan></text>
+
+              <line x1="50" y1="65" x2="50" y2="80" style="stroke: var(--colour-series)" stroke-width="2" />
+              <rect x="36" y="80" width="28" height="80" rx="3" style="fill: var(--colour-panel); stroke: var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+              <text x="24" y="122" class="ckt-r-label" text-anchor="end">R1</text>
+              <text x="76" y="122" class="ckt-value" text-anchor="start">8kΩ</text>
+              <line x1="50" y1="160" x2="50" y2="190" style="stroke: var(--colour-series)" stroke-width="2" />
+              <circle cx="50" cy="190" r="5" style="fill: var(--colour-series)" />
+              <line x1="50" y1="190" x2="260" y2="190" style="stroke: var(--colour-series)" stroke-width="2" />
+              <line x1="50" y1="190" x2="50" y2="255" style="stroke: var(--colour-series)" stroke-width="2" />
+              <rect x="36" y="255" width="28" height="80" rx="3" style="fill: var(--colour-panel); stroke: var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+              <text x="24" y="302" class="ckt-r-label" text-anchor="end">R2</text>
+              <text x="76" y="302" class="ckt-value" text-anchor="start">4kΩ</text>
+              <line x1="50" y1="340" x2="50" y2="380" style="stroke: var(--colour-series)" stroke-width="2" />
+              <circle cx="50" cy="380" r="4" style="fill: var(--colour-gnd)" />
+
+              <line x1="140" y1="230" x2="260" y2="230" style="stroke: var(--colour-series)" stroke-width="2" />
+              <circle cx="140" cy="230" r="7" style="fill: var(--colour-panel); stroke: var(--colour-voltage-label)" stroke-width="2" />
+              <text x="140" y="255" class="ckt-in-label">4.5V</text>
+
+              <line x1="20" y1="380" x2="560" y2="380" style="stroke: var(--colour-gnd)" stroke-width="2.5" />
+              <circle cx="20" cy="380" r="7" style="fill: var(--colour-panel); stroke: var(--colour-gnd)" stroke-width="2" />
+              <circle cx="560" cy="380" r="7" style="fill: var(--colour-panel); stroke: var(--colour-gnd)" stroke-width="2" />
+              <text x="310" y="403" class="ckt-gnd-label" text-anchor="middle" letter-spacing="3">COMMON</text>
+              <line x1="240" y1="380" x2="240" y2="400" style="stroke: var(--colour-gnd)" stroke-width="2.5" />
+              <line x1="220" y1="400" x2="260" y2="400" style="stroke: var(--colour-gnd)" stroke-width="2.5" />
+              <line x1="228" y1="410" x2="252" y2="410" style="stroke: var(--colour-gnd)" stroke-width="2" />
+              <line x1="236" y1="420" x2="244" y2="420" style="stroke: var(--colour-gnd)" stroke-width="1.5" />
+              <text x="180" y="400" class="ckt-gnd-label">0V</text>
+
+              <text x="450" y="290" class="ckt-gain-label">Av<tspan baseline-shift="sub" font-size="11">OL</tspan> = 200,000</text>
+            </g>
+
+            <!-- ══ Comparator with a flashing ring around the + input —
+                 shown while the "voltage at the + input" question is
+                 active. ══ -->
+            <g id="fig-op-comparator-plus">
+              <use href="#fig-op-comparator" />
+              <circle cx="278" cy="193" r="12" fill="none" class="flash-ring" />
+            </g>
+
+            <!-- ══ Comparator with a flashing ring around Vout — shown
+                 while the "output voltage" question is active. ══ -->
+            <g id="fig-op-comparator-vout">
+              <use href="#fig-op-comparator" />
+              <circle cx="553" cy="184" r="20" fill="none" class="flash-ring" />
+            </g>
+
+            <!-- ══ Comparator, R2 modified 4kΩ→12kΩ (comp_4 only) — same
+                 topology as fig-op-comparator, R2's own label changed.
+                 Flashing rings around R2 (what changed) and Vout (what's
+                 being asked). ══ -->
+            <g id="fig-op-comparator-r2mod">
+              <polygon points="260,110 260,310 460,210" style="fill: var(--colour-panel); stroke: var(--colour-switch)" stroke-width="2.5" filter="url(#glow)" />
+              <text x="272" y="200" style="fill: var(--colour-switch)" font-size="22" font-weight="bold">+</text>
+              <text x="272" y="240" style="fill: var(--colour-switch)" font-size="26" font-weight="bold">−</text>
+              <text x="345" y="215" class="ckt-chip-label">TL072</text>
+
+              <line x1="360" y1="60" x2="360" y2="160" style="stroke: var(--colour-supply)" stroke-width="2" />
+              <line x1="20" y1="60" x2="360" y2="60" style="stroke: var(--colour-supply)" stroke-width="2" />
+              <circle cx="360" cy="60" r="5" style="fill: var(--colour-supply)" />
+              <circle cx="20" cy="60" r="7" style="fill: var(--colour-panel); stroke: var(--colour-supply)" stroke-width="2" />
+              <circle cx="50" cy="60" r="5" style="fill: var(--colour-supply)" />
+              <text x="380" y="65" class="ckt-rail-label">+9V</text>
+
+              <line x1="360" y1="260" x2="360" y2="380" style="stroke: var(--colour-gnd)" stroke-width="2" />
+              <circle cx="360" cy="380" r="4" style="fill: var(--colour-gnd)" />
+
+              <line x1="460" y1="210" x2="580" y2="210" style="stroke: var(--colour-series)" stroke-width="2" marker-end="url(#arr)" />
+              <text x="540" y="190" class="ckt-io-label">V<tspan baseline-shift="sub" font-size="10">out</tspan></text>
+              <circle cx="553" cy="184" r="20" fill="none" class="flash-ring" />
+
+              <line x1="50" y1="65" x2="50" y2="80" style="stroke: var(--colour-series)" stroke-width="2" />
+              <rect x="36" y="80" width="28" height="80" rx="3" style="fill: var(--colour-panel); stroke: var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+              <text x="24" y="122" class="ckt-r-label" text-anchor="end">R1</text>
+              <text x="76" y="122" class="ckt-value" text-anchor="start">8kΩ</text>
+              <line x1="50" y1="160" x2="50" y2="190" style="stroke: var(--colour-series)" stroke-width="2" />
+              <circle cx="50" cy="190" r="5" style="fill: var(--colour-series)" />
+              <line x1="50" y1="190" x2="260" y2="190" style="stroke: var(--colour-series)" stroke-width="2" />
+              <line x1="50" y1="190" x2="50" y2="255" style="stroke: var(--colour-series)" stroke-width="2" />
+              <rect x="36" y="255" width="28" height="80" rx="3" style="fill: var(--colour-panel); stroke: var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+              <text x="24" y="302" class="ckt-r-label" text-anchor="end">R2</text>
+              <text x="76" y="302" class="ckt-value" text-anchor="start">12kΩ</text>
+              <rect x="30" y="249" width="40" height="92" rx="6" fill="none" class="flash-ring" />
+              <line x1="50" y1="340" x2="50" y2="380" style="stroke: var(--colour-series)" stroke-width="2" />
+              <circle cx="50" cy="380" r="4" style="fill: var(--colour-gnd)" />
+
+              <line x1="140" y1="230" x2="260" y2="230" style="stroke: var(--colour-series)" stroke-width="2" />
+              <circle cx="140" cy="230" r="7" style="fill: var(--colour-panel); stroke: var(--colour-voltage-label)" stroke-width="2" />
+              <text x="140" y="255" class="ckt-in-label">4.5V</text>
+
+              <line x1="20" y1="380" x2="560" y2="380" style="stroke: var(--colour-gnd)" stroke-width="2.5" />
+              <circle cx="20" cy="380" r="7" style="fill: var(--colour-panel); stroke: var(--colour-gnd)" stroke-width="2" />
+              <circle cx="560" cy="380" r="7" style="fill: var(--colour-panel); stroke: var(--colour-gnd)" stroke-width="2" />
+              <text x="310" y="403" class="ckt-gnd-label" text-anchor="middle" letter-spacing="3">COMMON</text>
+              <line x1="240" y1="380" x2="240" y2="400" style="stroke: var(--colour-gnd)" stroke-width="2.5" />
+              <line x1="220" y1="400" x2="260" y2="400" style="stroke: var(--colour-gnd)" stroke-width="2.5" />
+              <line x1="228" y1="410" x2="252" y2="410" style="stroke: var(--colour-gnd)" stroke-width="2" />
+              <line x1="236" y1="420" x2="244" y2="420" style="stroke: var(--colour-gnd)" stroke-width="1.5" />
+              <text x="180" y="400" class="ckt-gnd-label">0V</text>
+
+              <text x="450" y="290" class="ckt-gain-label">Av<tspan baseline-shift="sub" font-size="11">OL</tspan> = 200,000</text>
+            </g>
+
+            <!-- ══ Night light — same comparator topology, R1=47kΩ, R2
+                 replaced by an LDR (sun icon), 4.5V reference. ══ -->
+            <g id="fig-op-night-light">
+              <polygon points="260,110 260,310 460,210" style="fill: var(--colour-panel); stroke: var(--colour-switch)" stroke-width="2.5" filter="url(#glow)" />
+              <text x="272" y="200" style="fill: var(--colour-switch)" font-size="22" font-weight="bold">+</text>
+              <text x="272" y="240" style="fill: var(--colour-switch)" font-size="26" font-weight="bold">−</text>
+              <text x="345" y="215" class="ckt-chip-label">TL072</text>
+
+              <line x1="360" y1="60" x2="360" y2="160" style="stroke: var(--colour-supply)" stroke-width="2" />
+              <line x1="20" y1="60" x2="360" y2="60" style="stroke: var(--colour-supply)" stroke-width="2" />
+              <circle cx="360" cy="60" r="5" style="fill: var(--colour-supply)" />
+              <circle cx="20" cy="60" r="7" style="fill: var(--colour-panel); stroke: var(--colour-supply)" stroke-width="2" />
+              <circle cx="50" cy="60" r="5" style="fill: var(--colour-supply)" />
+              <text x="380" y="65" class="ckt-rail-label">+9V</text>
+
+              <line x1="360" y1="260" x2="360" y2="380" style="stroke: var(--colour-gnd)" stroke-width="2" />
+              <circle cx="360" cy="380" r="4" style="fill: var(--colour-gnd)" />
+
+              <line x1="460" y1="210" x2="580" y2="210" style="stroke: var(--colour-series)" stroke-width="2" marker-end="url(#arr)" />
+              <text x="540" y="190" class="ckt-io-label">V<tspan baseline-shift="sub" font-size="10">out</tspan></text>
+
+              <line x1="50" y1="65" x2="50" y2="80" style="stroke: var(--colour-series)" stroke-width="2" />
+              <rect x="36" y="80" width="28" height="80" rx="3" style="fill: var(--colour-panel); stroke: var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+              <text x="24" y="122" class="ckt-r-label" text-anchor="end">R1</text>
+              <text x="76" y="122" class="ckt-value" text-anchor="start">47kΩ</text>
+              <line x1="50" y1="160" x2="50" y2="190" style="stroke: var(--colour-series)" stroke-width="2" />
+              <circle cx="50" cy="190" r="5" style="fill: var(--colour-series)" />
+              <line x1="50" y1="190" x2="260" y2="190" style="stroke: var(--colour-series)" stroke-width="2" />
+              <line x1="50" y1="190" x2="50" y2="255" style="stroke: var(--colour-series)" stroke-width="2" />
+              <rect x="36" y="255" width="28" height="80" rx="3" style="fill: var(--colour-panel); stroke: var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+              <text x="24" y="302" class="ckt-r-label" text-anchor="end">R2</text>
+              <text x="76" y="302" class="ckt-value" text-anchor="start">LDR</text>
+              <g transform="translate(14,275)" style="stroke: var(--colour-signal)" stroke-width="1.5" stroke-linecap="round">
+                <circle r="7" fill="none" />
+                <line x1="0" y1="-10" x2="0" y2="-8" />
+                <line x1="0" y1="10" x2="0" y2="8" />
+                <line x1="-10" y1="0" x2="-8" y2="0" />
+                <line x1="10" y1="0" x2="8" y2="0" />
+                <line x1="-7" y1="-7" x2="-6" y2="-6" />
+                <line x1="7" y1="-7" x2="6" y2="-6" />
+                <line x1="-7" y1="7" x2="-6" y2="6" />
+                <line x1="7" y1="7" x2="6" y2="6" />
+              </g>
+              <line x1="50" y1="340" x2="50" y2="380" style="stroke: var(--colour-series)" stroke-width="2" />
+              <circle cx="50" cy="380" r="4" style="fill: var(--colour-gnd)" />
+
+              <line x1="140" y1="230" x2="260" y2="230" style="stroke: var(--colour-series)" stroke-width="2" />
+              <circle cx="140" cy="230" r="7" style="fill: var(--colour-panel); stroke: var(--colour-voltage-label)" stroke-width="2" />
+              <text x="140" y="255" class="ckt-in-label">4.5V</text>
+
+              <line x1="20" y1="380" x2="560" y2="380" style="stroke: var(--colour-gnd)" stroke-width="2.5" />
+              <circle cx="20" cy="380" r="7" style="fill: var(--colour-panel); stroke: var(--colour-gnd)" stroke-width="2" />
+              <circle cx="560" cy="380" r="7" style="fill: var(--colour-panel); stroke: var(--colour-gnd)" stroke-width="2" />
+              <text x="310" y="403" class="ckt-gnd-label" text-anchor="middle" letter-spacing="3">COMMON</text>
+              <line x1="240" y1="380" x2="240" y2="400" style="stroke: var(--colour-gnd)" stroke-width="2.5" />
+              <line x1="220" y1="400" x2="260" y2="400" style="stroke: var(--colour-gnd)" stroke-width="2.5" />
+              <line x1="228" y1="410" x2="252" y2="410" style="stroke: var(--colour-gnd)" stroke-width="2" />
+              <line x1="236" y1="420" x2="244" y2="420" style="stroke: var(--colour-gnd)" stroke-width="1.5" />
+              <text x="180" y="400" class="ckt-gnd-label">0V</text>
+
+              <text x="450" y="290" class="ckt-gain-label">Av<tspan baseline-shift="sub" font-size="11">OL</tspan> = 200,000</text>
+            </g>
+
+            <!-- ══ Night light with flashing rings around BOTH R1 and R2
+                 — shown while the "what is this used as" identify
+                 question is active. ══ -->
+            <g id="fig-op-night-light-r1r2">
+              <use href="#fig-op-night-light" />
+              <rect x="30" y="74" width="40" height="92" rx="6" fill="none" class="flash-ring" />
+              <rect x="30" y="249" width="40" height="92" rx="6" fill="none" class="flash-ring" />
+            </g>
+
+            <!-- ══ Night light with a flashing ring around R2 (the LDR) —
+                 shown while the "LDR resistance in darkness" question is
+                 active. ══ -->
+            <g id="fig-op-night-light-r2">
+              <use href="#fig-op-night-light" />
+              <rect x="30" y="249" width="40" height="92" rx="6" fill="none" class="flash-ring" />
+            </g>
+
+            <!-- ══ Night light with a flashing ring around the + input —
+                 shown while the "+ input voltage change" question is
+                 active. ══ -->
+            <g id="fig-op-night-light-plus">
+              <use href="#fig-op-night-light" />
+              <circle cx="278" cy="193" r="12" fill="none" class="flash-ring" />
+            </g>
+
+            <!-- ══ Inverting amplifier — Vin→Rin→(−) input; Rf feeds back
+                 from output to that same junction; (+) input to common. ══ -->
+            <g id="fig-op-inverting">
+              <polygon points="260,110 260,310 460,210" style="fill: var(--colour-panel); stroke: var(--colour-switch)" stroke-width="2.5" filter="url(#glow)" />
+              <text x="272" y="194" style="fill: var(--colour-switch)" font-size="22" font-weight="bold">−</text>
+              <text x="272" y="254" style="fill: var(--colour-switch)" font-size="26" font-weight="bold">+</text>
+              <text x="345" y="225" class="ckt-chip-label">LM741</text>
+
+              <line x1="360" y1="160" x2="360" y2="100" style="stroke: var(--colour-supply)" stroke-width="2" />
+              <circle cx="360" cy="100" r="5" style="fill: var(--colour-supply)" />
+              <text x="380" y="105" class="ckt-rail-label">+Vcc</text>
+
+              <line x1="360" y1="260" x2="360" y2="320" style="stroke: var(--colour-supply)" stroke-width="2" />
+              <circle cx="360" cy="320" r="5" style="fill: var(--colour-supply)" />
+              <text x="380" y="325" class="ckt-rail-label">−Vee</text>
+
+              <line x1="460" y1="210" x2="545" y2="210" style="stroke: var(--colour-series)" stroke-width="2" marker-end="url(#arr)" />
+              <text x="510" y="190" class="ckt-io-label">V<tspan baseline-shift="sub" font-size="10">out</tspan></text>
+              <circle cx="490" cy="210" r="5" style="fill: var(--colour-series)" />
+
+              <g transform="translate(4,-10)">
+                <path d="M 0,190 C 8,167.5 19,167.5 27,190 C 35,212.5 46,212.5 54,190" fill="none" style="stroke: var(--colour-voltage-label)" stroke-width="2" stroke-linecap="round" />
+              </g>
+              <circle cx="72" cy="180" r="7" style="fill: var(--colour-panel); stroke: var(--colour-voltage-label)" stroke-width="2" />
+              <text x="80" y="160" class="ckt-in-label">V<tspan baseline-shift="sub" font-size="11">in</tspan></text>
+              <line x1="80" y1="180" x2="110" y2="180" style="stroke: var(--colour-series)" stroke-width="2" />
+              <rect x="100" y="166" width="80" height="28" rx="3" style="fill: var(--colour-panel); stroke: var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+              <text x="144" y="145" class="ckt-r-label" text-anchor="middle">R<tspan baseline-shift="sub" font-size="10">in</tspan></text>
+              <text x="144" y="220" class="ckt-value" text-anchor="middle">10kΩ</text>
+              <line x1="180" y1="180" x2="200" y2="180" style="stroke: var(--colour-series)" stroke-width="2" />
+              <circle cx="200" cy="180" r="5" style="fill: var(--colour-series)" />
+              <line x1="200" y1="180" x2="260" y2="180" style="stroke: var(--colour-series)" stroke-width="2" />
+
+              <line x1="130" y1="240" x2="260" y2="240" style="stroke: var(--colour-series)" stroke-width="2" />
+              <line x1="130" y1="240" x2="130" y2="380" style="stroke: var(--colour-series)" stroke-width="2" />
+              <circle cx="130" cy="380" r="4" style="fill: var(--colour-gnd)" />
+
+              <line x1="200" y1="60" x2="200" y2="180" style="stroke: var(--colour-series)" stroke-width="2" />
+              <line x1="200" y1="60" x2="280" y2="60" style="stroke: var(--colour-series)" stroke-width="2" />
+              <rect x="260" y="46" width="80" height="28" rx="3" style="fill: var(--colour-panel); stroke: var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+              <text x="300" y="25" class="ckt-r-label" text-anchor="middle">R<tspan baseline-shift="sub" font-size="10">f</tspan></text>
+              <text x="300" y="100" class="ckt-value" text-anchor="middle">100kΩ</text>
+              <line x1="340" y1="60" x2="490" y2="60" style="stroke: var(--colour-series)" stroke-width="2" />
+              <line x1="490" y1="60" x2="490" y2="210" style="stroke: var(--colour-series)" stroke-width="2" />
+
+              <line x1="40" y1="380" x2="550" y2="380" style="stroke: var(--colour-gnd)" stroke-width="2.5" />
+              <circle cx="40" cy="380" r="7" style="fill: var(--colour-panel); stroke: var(--colour-gnd)" stroke-width="2" />
+              <circle cx="550" cy="380" r="7" style="fill: var(--colour-panel); stroke: var(--colour-gnd)" stroke-width="2" />
+              <text x="310" y="403" class="ckt-gnd-label" text-anchor="middle" letter-spacing="3">COMMON</text>
+              <line x1="240" y1="380" x2="240" y2="400" style="stroke: var(--colour-gnd)" stroke-width="2.5" />
+              <line x1="220" y1="400" x2="260" y2="400" style="stroke: var(--colour-gnd)" stroke-width="2.5" />
+              <line x1="228" y1="410" x2="252" y2="410" style="stroke: var(--colour-gnd)" stroke-width="2" />
+              <line x1="236" y1="420" x2="244" y2="420" style="stroke: var(--colour-gnd)" stroke-width="1.5" />
+              <text x="180" y="400" class="ckt-gnd-label">0V</text>
+
+              <text x="490" y="310" class="ckt-gain-label">Av<tspan baseline-shift="sub" font-size="11">OL</tspan> = 200,000</text>
+            </g>
+
+            <!-- ══ Inverting amplifier with flashing rings around Rin and
+                 Rf — shown while the "closed-loop gain" question is
+                 active. ══ -->
+            <g id="fig-op-inverting-gain">
+              <use href="#fig-op-inverting" />
+              <rect x="96" y="162" width="88" height="36" rx="6" fill="none" class="flash-ring" />
+              <rect x="256" y="42" width="88" height="36" rx="6" fill="none" class="flash-ring" />
+            </g>
+
+            <!-- ══ Non-inverting amplifier — Vin straight to (+) input;
+                 Rf/R2 feedback divider from output back to (−) input. ══ -->
+            <g id="fig-op-noninverting">
+              <g transform="translate(-60,-80)">
+                <polygon points="260,110 260,310 460,210" style="fill: var(--colour-panel); stroke: var(--colour-switch)" stroke-width="2.5" filter="url(#glow)" />
+                <text x="272" y="180" style="fill: var(--colour-switch)" font-size="22" font-weight="bold">+</text>
+                <text x="272" y="260" style="fill: var(--colour-switch)" font-size="26" font-weight="bold">−</text>
+                <text x="345" y="215" class="ckt-chip-label">LM741</text>
+
+                <line x1="360" y1="160" x2="360" y2="100" style="stroke: var(--colour-supply)" stroke-width="2" />
+                <circle cx="360" cy="100" r="5" style="fill: var(--colour-supply)" />
+                <text x="380" y="105" class="ckt-rail-label">+12V</text>
+                <line x1="360" y1="260" x2="360" y2="320" style="stroke: var(--colour-supply)" stroke-width="2" />
+                <circle cx="360" cy="320" r="5" style="fill: var(--colour-supply)" />
+                <text x="380" y="325" class="ckt-rail-label">−12V</text>
+
+                <line x1="460" y1="210" x2="580" y2="210" style="stroke: var(--colour-series)" stroke-width="2" marker-end="url(#arr)" />
+                <text x="540" y="190" class="ckt-io-label">V<tspan baseline-shift="sub" font-size="10">out</tspan></text>
+
+                <line x1="140" y1="180" x2="260" y2="180" style="stroke: var(--colour-series)" stroke-width="2" />
+                <circle cx="140" cy="180" r="7" style="fill: var(--colour-panel); stroke: var(--colour-voltage-label)" stroke-width="2" />
+                <text x="140" y="152" class="ckt-in-label">V<tspan baseline-shift="sub" font-size="11">in</tspan></text>
+                <g transform="translate(80, -10)">
+                  <path d="M 0,190 C 5,175 13,175 18,190 C 23,205 31,205 36,190" fill="none" style="stroke: var(--colour-voltage-label)" stroke-width="2" stroke-linecap="round" />
+                </g>
+
+                <text x="440" y="150" class="ckt-gain-label">Av<tspan baseline-shift="sub" font-size="11">OL</tspan> = 200,000</text>
+
+                <line x1="500" y1="210" x2="500" y2="250" style="stroke: var(--colour-series)" stroke-width="2" />
+                <rect x="486" y="230" width="28" height="80" rx="3" style="fill: var(--colour-panel); stroke: var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+                <text x="470" y="270" class="ckt-r-label" text-anchor="middle">R<tspan baseline-shift="sub" font-size="10">f</tspan></text>
+                <line x1="500" y1="310" x2="500" y2="370" style="stroke: var(--colour-series)" stroke-width="2" />
+                <rect x="486" y="370" width="28" height="80" rx="3" style="fill: var(--colour-panel); stroke: var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+                <text x="470" y="405" class="ckt-r-label" text-anchor="middle">R<tspan baseline-shift="sub" font-size="10">2</tspan></text>
+                <line x1="500" y1="450" x2="500" y2="480" style="stroke: var(--colour-series)" stroke-width="2" />
+                <circle cx="500" cy="480" r="5" style="fill: var(--colour-series)" />
+
+                <circle cx="500" cy="345" r="5" style="fill: var(--colour-series)" />
+                <line x1="220" y1="345" x2="500" y2="345" style="stroke: var(--colour-series)" stroke-width="2.5" />
+                <line x1="220" y1="250" x2="260" y2="250" style="stroke: var(--colour-series)" stroke-width="2" />
+                <line x1="220" y1="250" x2="220" y2="345" style="stroke: var(--colour-series)" stroke-width="2" />
+
+                <g transform="translate(0,40)">
+                  <line x1="140" y1="440" x2="560" y2="440" style="stroke: var(--colour-gnd)" stroke-width="2.5" />
+                  <circle cx="140" cy="440" r="7" style="fill: var(--colour-panel); stroke: var(--colour-gnd)" stroke-width="2" />
+                  <circle cx="560" cy="440" r="7" style="fill: var(--colour-panel); stroke: var(--colour-gnd)" stroke-width="2" />
+                  <text x="310" y="463" class="ckt-gnd-label" text-anchor="middle" letter-spacing="3">COMMON</text>
+                  <line x1="240" y1="440" x2="240" y2="460" style="stroke: var(--colour-gnd)" stroke-width="2.5" />
+                  <line x1="220" y1="460" x2="260" y2="460" style="stroke: var(--colour-gnd)" stroke-width="2.5" />
+                  <line x1="228" y1="470" x2="252" y2="470" style="stroke: var(--colour-gnd)" stroke-width="2" />
+                  <line x1="236" y1="480" x2="244" y2="480" style="stroke: var(--colour-gnd)" stroke-width="1.5" />
+                  <text x="180" y="460" class="ckt-gnd-label">0V</text>
+                </g>
+              </g>
+            </g>
+
+            <!-- ══ Summing amplifier — Vin1/2/3 → R1/R2/R3 → shared (−)
+                 input junction; Rf feeds back from output; (+) to common. ══ -->
+            <g id="fig-op-summing" transform="translate(40,0)">
+              <polygon points="260,110 260,310 460,210" style="fill: var(--colour-panel); stroke: var(--colour-switch)" stroke-width="2.5" filter="url(#glow)" />
+              <text x="272" y="199" style="fill: var(--colour-switch)" font-size="22" font-weight="bold">−</text>
+              <text x="272" y="249" style="fill: var(--colour-switch)" font-size="26" font-weight="bold">+</text>
+              <text x="345" y="225" class="ckt-chip-label">LM741</text>
+
+              <line x1="360" y1="160" x2="360" y2="100" style="stroke: var(--colour-supply)" stroke-width="2" />
+              <circle cx="360" cy="100" r="5" style="fill: var(--colour-supply)" />
+              <text x="380" y="105" class="ckt-rail-label">+Vcc</text>
+              <line x1="360" y1="260" x2="360" y2="320" style="stroke: var(--colour-supply)" stroke-width="2" />
+              <circle cx="360" cy="320" r="5" style="fill: var(--colour-supply)" />
+              <text x="380" y="325" class="ckt-rail-label">−Vee</text>
+
+              <line x1="460" y1="210" x2="545" y2="210" style="stroke: var(--colour-series)" stroke-width="2" marker-end="url(#arr)" />
+              <text x="510" y="190" class="ckt-io-label">V<tspan baseline-shift="sub" font-size="10">out</tspan></text>
+              <circle cx="490" cy="210" r="5" style="fill: var(--colour-series)" />
+
+              <circle cx="44" cy="100" r="7" style="fill: var(--colour-panel); stroke: var(--colour-voltage-label)" stroke-width="2" />
+              <text x="40" y="75" class="ckt-in-label">V<tspan baseline-shift="sub" font-size="11">in 1</tspan></text>
+              <text x="20" y="104" class="ckt-in-label" text-anchor="end">+2V</text>
+              <line x1="52" y1="100" x2="70" y2="100" style="stroke: var(--colour-series)" stroke-width="2" />
+              <rect x="70" y="90" width="80" height="28" rx="3" style="fill: var(--colour-panel); stroke: var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+              <text x="114" y="75" class="ckt-r-label" text-anchor="middle">R<tspan baseline-shift="sub" font-size="10">1</tspan></text>
+              <text x="114" y="138" class="ckt-value" text-anchor="middle">10kΩ</text>
+              <line x1="150" y1="100" x2="200" y2="100" style="stroke: var(--colour-series)" stroke-width="2" />
+              <circle cx="200" cy="100" r="5" style="fill: var(--colour-series)" />
+
+              <circle cx="44" cy="190" r="7" style="fill: var(--colour-panel); stroke: var(--colour-voltage-label)" stroke-width="2" />
+              <text x="40" y="162" class="ckt-in-label">V<tspan baseline-shift="sub" font-size="11">in 2</tspan></text>
+              <text x="20" y="194" class="ckt-in-label" text-anchor="end">+4V</text>
+              <line x1="52" y1="190" x2="70" y2="190" style="stroke: var(--colour-series)" stroke-width="2" />
+              <rect x="70" y="176" width="80" height="28" rx="3" style="fill: var(--colour-panel); stroke: var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+              <text x="114" y="163" class="ckt-r-label" text-anchor="middle">R<tspan baseline-shift="sub" font-size="10">2</tspan></text>
+              <text x="114" y="224" class="ckt-value" text-anchor="middle">20kΩ</text>
+              <line x1="150" y1="190" x2="200" y2="190" style="stroke: var(--colour-series)" stroke-width="2" />
+              <circle cx="200" cy="190" r="5" style="fill: var(--colour-series)" />
+              <line x1="200" y1="190" x2="260" y2="190" style="stroke: var(--colour-series)" stroke-width="2" />
+
+              <circle cx="44" cy="280" r="7" style="fill: var(--colour-panel); stroke: var(--colour-voltage-label)" stroke-width="2" />
+              <text x="40" y="252" class="ckt-in-label">V<tspan baseline-shift="sub" font-size="11">in 3</tspan></text>
+              <text x="20" y="284" class="ckt-in-label" text-anchor="end">+6V</text>
+              <line x1="52" y1="280" x2="70" y2="280" style="stroke: var(--colour-series)" stroke-width="2" />
+              <rect x="70" y="266" width="80" height="28" rx="3" style="fill: var(--colour-panel); stroke: var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+              <text x="114" y="253" class="ckt-r-label" text-anchor="middle">R<tspan baseline-shift="sub" font-size="10">3</tspan></text>
+              <text x="114" y="314" class="ckt-value" text-anchor="middle">200kΩ</text>
+              <line x1="150" y1="280" x2="200" y2="280" style="stroke: var(--colour-series)" stroke-width="2" />
+              <circle cx="200" cy="280" r="5" style="fill: var(--colour-series)" />
+
+              <line x1="230" y1="240" x2="260" y2="240" style="stroke: var(--colour-series)" stroke-width="2" />
+              <line x1="230" y1="240" x2="230" y2="380" style="stroke: var(--colour-series)" stroke-width="2" />
+              <circle cx="230" cy="380" r="4" style="fill: var(--colour-gnd)" />
+
+              <line x1="200" y1="60" x2="200" y2="280" style="stroke: var(--colour-series)" stroke-width="2" />
+              <line x1="200" y1="60" x2="280" y2="60" style="stroke: var(--colour-series)" stroke-width="2" />
+              <rect x="260" y="46" width="80" height="28" rx="3" style="fill: var(--colour-panel); stroke: var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+              <text x="300" y="34" class="ckt-r-label" text-anchor="middle">R<tspan baseline-shift="sub" font-size="10">f</tspan></text>
+              <text x="300" y="94" class="ckt-value" text-anchor="middle">100kΩ</text>
+              <line x1="340" y1="60" x2="490" y2="60" style="stroke: var(--colour-series)" stroke-width="2" />
+              <line x1="490" y1="60" x2="490" y2="210" style="stroke: var(--colour-series)" stroke-width="2" />
+
+              <line x1="40" y1="380" x2="550" y2="380" style="stroke: var(--colour-gnd)" stroke-width="2.5" />
+              <circle cx="40" cy="380" r="7" style="fill: var(--colour-panel); stroke: var(--colour-gnd)" stroke-width="2" />
+              <circle cx="550" cy="380" r="7" style="fill: var(--colour-panel); stroke: var(--colour-gnd)" stroke-width="2" />
+              <text x="310" y="403" class="ckt-gnd-label" text-anchor="middle" letter-spacing="3">COMMON</text>
+              <line x1="240" y1="380" x2="240" y2="400" style="stroke: var(--colour-gnd)" stroke-width="2.5" />
+              <line x1="220" y1="400" x2="260" y2="400" style="stroke: var(--colour-gnd)" stroke-width="2.5" />
+              <line x1="228" y1="410" x2="252" y2="410" style="stroke: var(--colour-gnd)" stroke-width="2" />
+              <line x1="236" y1="420" x2="244" y2="420" style="stroke: var(--colour-gnd)" stroke-width="1.5" />
+              <text x="180" y="400" class="ckt-gnd-label">0V</text>
+
+              <text x="430" y="280" class="ckt-gain-label">Av<tspan baseline-shift="sub" font-size="11">OL</tspan> = 200,000</text>
+            </g>
+
+            <!-- ══ Summing amplifier with a flashing ring around the −
+                 input — shown while the "voltage at the inverting input"
+                 question is active. fig-op-summing itself carries its own
+                 translate(40,0), which <use> reproduces for its cloned
+                 content but NOT for these sibling ring elements — their
+                 own coordinates are pre-shifted by +40 to compensate. ══ -->
+            <g id="fig-op-summing-junction">
+              <use href="#fig-op-summing" />
+              <circle cx="318" cy="193" r="12" fill="none" class="flash-ring" />
+            </g>
+
+            <!-- ══ Summing amplifier with a flashing ring around Vout —
+                 shown while the "output voltage" question is active
+                 (same +40 pre-shift as fig-op-summing-junction, above). ══ -->
+            <g id="fig-op-summing-vout">
+              <use href="#fig-op-summing" />
+              <circle cx="564" cy="185" r="18" fill="none" class="flash-ring" />
+            </g>
+
+          </defs>
+        </svg>
+        <svg id="circuitSvg" viewBox="0 0 640 460" xmlns="http://www.w3.org/2000/svg">
+          <use id="circuitRefUse" href="#fig-op-open-loop" />
+        </svg>
+      </div>
+    </div>
+
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+
+          <div class="options" id="qOptions"></div>
+          <div class="match-wrap" id="qMatch" style="display:none">
+            <div class="match-pool-row" id="matchPoolRow">
+              <div class="match-pool-arrow">▶</div>
+              <div class="match-pool" id="matchPool"></div>
+            </div>
+            <div class="match-columns" id="matchColumns"></div>
+          </div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    CIRCUIT_SVG_ID = 'circuitSvg';
+    DEFAULT_CIRCUIT_VIEWBOX = '0 0 640 460';
+
+    function wave(pathD) {
+      return `<svg width="140" height="50" viewBox="0 0 140 50" style="display:block">
+      <line x1="0" y1="25" x2="140" y2="25" stroke="var(--colour-border)" stroke-width="1" stroke-dasharray="3,3"/>
+      <path d="${pathD}" fill="none" style="stroke: var(--colour-series)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`;
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS — same order/content as the original (open, inverting,
+    // non-inverting, summing, comparator, night-light); see this file's own
+    // header comment for what changed in the port and why.
+    // ══════════════════════════════════════════════════════════════════════
+
+    const QUESTIONS = [
+      {
+        leftPanel: 'circuit',
+        circuitId: 'fig-op-open-loop',
+        circuitLabel: 'Reference Circuit',
+        circuitViewBox: '0 0 640 460',
+        text: () => `What type of <b style="color:var(--colour-ui-primary)">op-amp circuit</b> does this circuit represent?`,
+        hint: () => `Look at where the input is connected, whether there is a feedback path, and how the power supply is arranged.`,
+        options: () => shuffle([
+          { label: `Non-inverting in open loop`, type: 'correct' },
+          { label: `Inverting in open loop` },
+          { label: `Non-inverting with negative feedback` },
+          { label: `Voltage follower (unity gain)` },
+        ]),
+        correctExplain: () => `Non-inverting in open loop`,
+        working: () => `
+    <div class="working-line">The signal connects to the <b style="color:var(--colour-ui-correct)">+ (non-inverting)</b> input. The − (inverting) input is tied to 0V. Because the signal enters the + input, this is a <b style="color:var(--colour-ui-correct)">non-inverting</b> configuration.</div>
+    <div class="working-line">There is <b style="color:var(--colour-ui-correct)">no resistor</b> connecting the output back to either input. Without a feedback path the op-amp operates <b style="color:var(--colour-ui-correct)">open loop</b> and uses its full open-loop voltage gain, Av<sub>OL</sub> = 200,000.</div>
+    <div class="working-total">With a gain of 200,000 and a ±12V supply, the output swings to +12V or −12V for almost any non-zero input. The circuit acts as a comparator — it tells you which input is larger, not the actual difference. Vin &gt; 0V → output swings to +12V; Vin &lt; 0V → output swings to −12V; Vin = 0V → output is 0V (in theory).</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        circuitId: 'fig-op-open-loop',
+        circuitLabel: 'Open Loop',
+        circuitViewBox: '0 0 640 460',
+        text: () => `A <b style="color:var(--colour-ui-primary)">500mV peak-to-peak sine wave</b> is applied to V<sub>in</sub>. What does the output waveform look like?`,
+        hint: () => `Consider the open-loop gain and the supply voltage limits.`,
+        options: () => shuffle([
+          { label: wave('M 3,25 L 3,5 L 68,5 L 68,45 L 137,45 L 137,5'), type: 'correct' },
+          { label: wave('M 3,25 C 20,18 48,18 70,25 C 92,32 120,32 137,25') },
+          { label: wave('M 3,25 C 20,5 48,5 70,25 C 92,45 120,45 137,25') },
+          { label: wave('M 3,25 L 12,5 L 58,5 L 68,25 C 78,45 105,45 115,25 L 125,5 L 137,5') },
+        ]),
+        correctExplain: () => `A heavily clipped sine wave, snapping between +12V and −12V`,
+        working: () => `
+    <div class="working-line">The input is 500mV p-p, which is ±250mV. Multiplied by the open-loop gain: Vout = ±250mV × 200,000 = <b>±50,000V</b>.</div>
+    <div class="working-line">The op-amp is powered from ±12V. The output can never exceed the supply rails, so it clips immediately: Vout clips to <b style="color:var(--colour-ui-correct)">+12V</b> or <b style="color:var(--colour-ui-correct)">−12V</b>.</div>
+    <div class="working-total">The output is a heavily clipped sine that snaps between rails almost instantly, making it appear to have vertical edges and flat tops — it looks like a square wave, but is technically a clipped sine. Vin goes positive → output snaps to +12V; Vin goes negative → output snaps to −12V.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        circuitId: 'fig-op-inverting',
+        circuitLabel: 'Reference Circuit',
+        circuitViewBox: '0 0 640 460',
+        text: () => `What type of <b style="color:var(--colour-ui-primary)">op-amp circuit</b> does this circuit represent?`,
+        hint: () => `Look at which input the signal connects to, and whether there is a feedback path from the output.`,
+        options: () => shuffle([
+          { label: `Inverting amplifier`, type: 'correct' },
+          { label: `Non-inverting amplifier` },
+          { label: `Voltage follower (unity gain)` },
+          { label: `Comparator` },
+        ]),
+        correctExplain: () => `Inverting amplifier`,
+        working: () => `
+    <div class="working-line">The signal connects through <b class="colour-resistor">Rin</b> to the <b style="color:var(--colour-ui-correct)">inverting (−) input</b>. Whenever the signal enters the − input, the circuit is in an inverting configuration.</div>
+    <div class="working-line"><b class="colour-resistor">Rf</b> connects the output back to the − input. This is <b style="color:var(--colour-ui-correct)">negative feedback</b> — it stabilises the gain and allows the op-amp to amplify linearly rather than saturating at the supply rails. The + input is tied to common (0V), setting the comparison reference to ground.</div>
+    <div class="working-total">Signal at the − input with Rf feedback from output to − input = <b style="color:var(--colour-ui-correct)">inverting amplifier</b>. The output is inverted relative to the input — when the input goes positive, the output goes negative, and vice versa. This is more accurately called signal inversion than a phase shift, since the op-amp responds instantaneously.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        circuitId: 'fig-op-inverting-gain',
+        circuitLabel: 'Inverting Amplifier',
+        circuitViewBox: '0 0 640 460',
+        text: () => `What is the closed-loop voltage gain (A<sub>vCL</sub>) for this circuit?`,
+        hint: () => `Apply the inverting amplifier gain formula using Rin and Rf.`,
+        options: () => shuffle([
+          { label: `<b class="colour-gain">AvCL</b> = −${frac('<b class="colour-resistor">Rf</b>', '<b class="colour-resistor">Rin</b>')} = −${frac('100kΩ', '10kΩ')} = −10`, type: 'correct' },
+          { label: `<b class="colour-gain">AvCL</b> = ${frac('<b class="colour-resistor">Rf</b>', '<b class="colour-resistor">Rin</b>')} = ${frac('100kΩ', '10kΩ')} = +10` },
+          { label: `<b class="colour-gain">AvCL</b> = −${frac('<b class="colour-resistor">Rin</b>', '<b class="colour-resistor">Rf</b>')} = −${frac('10kΩ', '100kΩ')} = −0.1` },
+          { label: `<b class="colour-gain">AvCL</b> = −${frac('<b class="colour-resistor">Rf</b>', '<b class="colour-resistor">Rin</b>')} = −${frac('1000kΩ', '10kΩ')} = −100` },
+        ]),
+        correctExplain: () => `AvCL = −(Rf/Rin) = −10`,
+        working: () => `
+    <div class="working-formula-row"><b class="colour-gain">AvCL</b> = −${frac('<b class="colour-resistor">Rf</b>', '<b class="colour-resistor">Rin</b>')} = −${frac('100kΩ', '10kΩ')}</div>
+    <div class="working-total"><b class="colour-gain">AvCL</b> = <b style="color:var(--colour-ui-correct)">−10</b> — a gain of −10 means the output is 10 times larger than the input and inverted. If Vin = +0.5V, then Vout = −5V. The negative sign is not a loss — it indicates signal inversion, not a reduction in amplitude.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        circuitId: 'fig-op-inverting',
+        circuitLabel: 'Inverting Amplifier',
+        circuitViewBox: '0 0 640 460',
+        text: () => `Input voltage is 700mV pp. What is the output voltage (V<sub>out</sub>)?`,
+        hint: () => `Multiply the input voltage by AvCL from the previous question (≈−10).`,
+        options: () => shuffle([
+          { label: `<b class="colour-voltage">Vout</b> = <b class="colour-gain">AvCL</b> × <b class="colour-voltage">Vin</b> = −10 × 700mV pp = −7V pp`, type: 'correct' },
+          { label: `<b class="colour-voltage">Vout</b> = <b class="colour-gain">AvCL</b> × <b class="colour-voltage">Vin</b> = +10 × 700mV pp = +7V pp` },
+          { label: `<b class="colour-voltage">Vout</b> = 700mV pp ÷ 10 = 70mV pp` },
+          { label: `<b class="colour-voltage">Vout</b> = −1 × 700mV pp = −700mV pp` },
+        ]),
+        correctExplain: () => `Vout = AvCL × Vin = −10 × 700mV pp = −7V pp`,
+        working: () => `
+    <div class="working-formula-row"><b class="colour-voltage">Vout</b> = <b class="colour-gain">AvCL</b> × <b class="colour-voltage">Vin</b> = −10 × 700mV pp</div>
+    <div class="working-total"><b class="colour-voltage">Vout</b> = <b style="color:var(--colour-ui-correct)">−7V pp</b> — 7V peak-to-peak and inverted. The gain of 10 amplifies the 700mV input ten-fold, and the negative sign confirms the output swings in the opposite direction — when Vin goes positive, Vout goes negative.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        circuitId: 'fig-op-noninverting',
+        circuitLabel: 'Non-Inverting Amplifier',
+        circuitViewBox: '0 0 640 460',
+        text: () => `What type of <b style="color:var(--colour-ui-primary)">op-amp circuit</b> does this diagram represent?`,
+        hint: () => `Look at which input the signal connects to, and whether there is a feedback path from the output.`,
+        options: () => shuffle([
+          { label: `Non-inverting amplifier`, type: 'correct' },
+          { label: `Inverting amplifier` },
+          { label: `Voltage follower` },
+          { label: `Comparator` },
+        ]),
+        correctExplain: () => `Non-inverting amplifier`,
+        working: () => `
+    <div class="working-line">The signal connects to the <b style="color:var(--colour-ui-correct)">non-inverting (+) input</b>. Whenever the signal enters the + input, the output is in phase with the input — no inversion.</div>
+    <div class="working-line"><b class="colour-resistor">Rf</b> and <b class="colour-resistor">R2</b> form a feedback voltage divider from the output back to the inverting (−) input. This negative feedback sets the closed-loop gain: AvCL = 1 + (Rf/R2).</div>
+    <div class="working-total">Signal at the + input with resistor feedback from output to − input = <b style="color:var(--colour-ui-correct)">non-inverting amplifier</b>. The output swings in the same direction as the input and is always larger by a factor set by the resistor ratio.</div>`
+      },
+      {
+        // Objective (summing): identify.
+        leftPanel: 'circuit',
+        circuitId: 'fig-op-summing',
+        circuitLabel: 'Reference Circuit',
+        circuitViewBox: '0 0 640 460',
+        text: () => `What type of <b style="color:var(--colour-ui-primary)">op-amp circuit</b> does this circuit represent?`,
+        hint: () => `Look at how many inputs are connected to the inverting (−) input through resistors.`,
+        options: () => shuffle([
+          { label: `Summing amplifier`, type: 'correct' },
+          { label: `Comparator` },
+          { label: `Inverting amplifier` },
+          { label: `Voltage follower` },
+        ]),
+        correctExplain: () => `Summing amplifier`,
+        working: () => `
+    <div class="working-line">Three input signals each connect to the <b style="color:var(--colour-ui-correct)">inverting (−) input</b> through their own resistor. This is the key feature of a summing amplifier.</div>
+    <div class="working-line">A feedback resistor <b class="colour-resistor">Rf</b> connects the output back to the inverting input, setting the closed-loop gain.</div>
+    <div class="working-total">The output is an <b style="color:var(--colour-ui-correct)">inverted, weighted sum</b> of all input voltages — the op-amp adds the signals together (with inversion).</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        circuitId: 'fig-op-summing',
+        circuitLabel: 'Summing Amplifier',
+        circuitViewBox: '0 0 640 460',
+        text: () => `What is the theoretical gain for <b style="color:var(--colour-voltage-label)">Vin3</b>?`,
+        hint: () => `Each input of a summing amplifier has its own gain: Av = −(Rf ÷ Rinput). Use Rf and R3.`,
+        options: () => shuffle([
+          { label: `<b class="colour-gain">Av(in3)</b> = −${frac('<b class="colour-resistor">Rf</b>', '<b class="colour-resistor">R3</b>')} = −${frac('100kΩ', '200kΩ')} = −0.5`, type: 'correct' },
+          { label: `<b class="colour-gain">Av(in3)</b> = +${frac('<b class="colour-resistor">Rf</b>', '<b class="colour-resistor">R3</b>')} = +${frac('100kΩ', '200kΩ')} = +0.5` },
+          { label: `<b class="colour-gain">Av(in3)</b> = −${frac('<b class="colour-resistor">Rf</b>', '<b class="colour-resistor">R1</b>')} = −${frac('100kΩ', '50kΩ')} = −2` },
+          { label: `<b class="colour-gain">Av(in3)</b> = −${frac('<b class="colour-resistor">Rf</b>', '<b class="colour-resistor">R2</b>')} = −${frac('100kΩ', '20kΩ')} = −5` },
+        ]),
+        correctExplain: () => `Av(in3) = −(Rf/R3) = −0.5`,
+        working: () => `
+    <div class="working-formula-row"><b class="colour-gain">Av(in3)</b> = −${frac('<b class="colour-resistor">Rf</b>', '<b class="colour-resistor">R3</b>')} = −${frac('100kΩ', '200kΩ')}</div>
+    <div class="working-total"><b class="colour-gain">Av(in3)</b> = <b style="color:var(--colour-ui-correct)">−0.5</b> — input 3 is attenuated to half its amplitude and inverted. Unlike inputs 1 and 2 (gains of −10 and −5), each input of a summing amplifier can have a completely different gain, set independently by its own resistor.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        circuitId: 'fig-op-summing',
+        circuitLabel: 'Summing Amplifier',
+        circuitViewBox: '0 0 640 460',
+        text: () => `What is the theoretical gain for <b style="color:var(--colour-voltage-label)">Vin1</b>?`,
+        hint: () => `Each input of a summing amplifier has its own gain: Av = −(Rf ÷ Rinput). Use Rf and R1.`,
+        options: () => shuffle([
+          { label: `<b class="colour-gain">Av(in1)</b> = −${frac('<b class="colour-resistor">Rf</b>', '<b class="colour-resistor">R1</b>')} = −${frac('100kΩ', '10kΩ')} = −10`, type: 'correct' },
+          { label: `<b class="colour-gain">Av(in1)</b> = +${frac('<b class="colour-resistor">Rf</b>', '<b class="colour-resistor">R1</b>')} = +${frac('100kΩ', '10kΩ')} = +10` },
+          { label: `<b class="colour-gain">Av(in1)</b> = −${frac('<b class="colour-resistor">R1</b>', '<b class="colour-resistor">Rf</b>')} = −${frac('10kΩ', '100kΩ')} = −0.1` },
+          { label: `<b class="colour-gain">Av(in1)</b> = −${frac('<b class="colour-resistor">Rf</b>', '<b class="colour-resistor">R2</b>')} = −${frac('100kΩ', '20kΩ')} = −5` },
+        ]),
+        correctExplain: () => `Av(in1) = −(Rf/R1) = −10`,
+        working: () => `
+    <div class="working-formula-row"><b class="colour-gain">Av(in1)</b> = −${frac('<b class="colour-resistor">Rf</b>', '<b class="colour-resistor">R1</b>')} = −${frac('100kΩ', '10kΩ')}</div>
+    <div class="working-total"><b class="colour-gain">Av(in1)</b> = <b style="color:var(--colour-ui-correct)">−10</b> — input 1 is amplified ten times and inverted. Unlike inputs 2 and 3 (gains of −5 and −0.5), each input of a summing amplifier can have a completely different gain, set independently by its own resistor.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        circuitId: 'fig-op-summing',
+        circuitLabel: 'Summing Amplifier',
+        circuitViewBox: '0 0 640 460',
+        text: () => `What is the theoretical gain for <b style="color:var(--colour-voltage-label)">Vin2</b>?`,
+        hint: () => `Each input of a summing amplifier has its own gain: Av = −(Rf ÷ Rinput). Use Rf and R2.`,
+        options: () => shuffle([
+          { label: `<b class="colour-gain">Av(in2)</b> = −${frac('<b class="colour-resistor">Rf</b>', '<b class="colour-resistor">R2</b>')} = −${frac('100kΩ', '20kΩ')} = −5`, type: 'correct' },
+          { label: `<b class="colour-gain">Av(in2)</b> = +${frac('<b class="colour-resistor">Rf</b>', '<b class="colour-resistor">R2</b>')} = +${frac('100kΩ', '20kΩ')} = +5` },
+          { label: `<b class="colour-gain">Av(in2)</b> = −${frac('<b class="colour-resistor">R2</b>', '<b class="colour-resistor">Rf</b>')} = −${frac('20kΩ', '100kΩ')} = −0.2` },
+          { label: `<b class="colour-gain">Av(in2)</b> = −${frac('<b class="colour-resistor">Rf</b>', '<b class="colour-resistor">R1</b>')} = −${frac('100kΩ', '10kΩ')} = −10` },
+        ]),
+        correctExplain: () => `Av(in2) = −(Rf/R2) = −5`,
+        working: () => `
+    <div class="working-formula-row"><b class="colour-gain">Av(in2)</b> = −${frac('<b class="colour-resistor">Rf</b>', '<b class="colour-resistor">R2</b>')} = −${frac('100kΩ', '20kΩ')}</div>
+    <div class="working-total"><b class="colour-gain">Av(in2)</b> = <b style="color:var(--colour-ui-correct)">−5</b> — together with inputs 1 and 3 (gains of −10 and −0.5), this completes the picture: each input of a summing amplifier has its own independent gain, set purely by its own resistor.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        circuitId: 'fig-op-summing-junction',
+        circuitLabel: 'Summing Amplifier',
+        circuitViewBox: '0 0 640 460',
+        text: () => `If Vin1 = +2V, Vin2 = +4V, and Vin3 = +6V, what is the voltage at the inverting input?`,
+        hint: () => `Negative feedback forces the inverting (−) input to match the non-inverting (+) input. What is the (+) input connected to?`,
+        options: () => shuffle([
+          { label: `0V`, type: 'correct' },
+          { label: `+12V` },
+          { label: `+4V` },
+          { label: `+6V` },
+        ]),
+        correctExplain: () => `0V`,
+        working: () => `
+    <div class="working-line">With negative feedback and a very high open-loop gain, the op-amp drives its output until <b style="color:var(--colour-ui-correct)">V− = V+</b>.</div>
+    <div class="working-line">The non-inverting (+) input is tied directly to the common (0V) rail.</div>
+    <div class="working-total">So V− = V+ = <b style="color:var(--colour-ui-correct)">0V</b> — regardless of Vin1, Vin2 and Vin3. The input voltages set the current through each resistor (and hence Vout), but they never move the summing junction away from 0V.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        circuitId: 'fig-op-summing-vout',
+        circuitLabel: 'Summing Amplifier',
+        circuitViewBox: '0 0 640 460',
+        text: () => `What is the output voltage?`,
+        hint: () => `Vout = Av(1)×Vin1 + Av(2)×Vin2 + Av(3)×Vin3. Use the gains and input voltages already found.`,
+        options: () => shuffle([
+          { label: `<b class="colour-voltage">Vout</b> = (−10×2V) + (−5×4V) + (−0.5×6V) = −20V − 20V − 3V = −43V`, type: 'correct' },
+          { label: `<b class="colour-voltage">Vout</b> = (10×2V) + (5×4V) + (0.5×6V) = +43V` },
+          { label: `<b class="colour-voltage">Vout</b> = (−10×2V) + (−5×4V) = −20V − 20V = −40V` },
+          { label: `<b class="colour-voltage">Vout</b> = −10 + −5 + −0.5 = −3V` },
+        ]),
+        correctExplain: () => `Vout = (−10×2V) + (−5×4V) + (−0.5×6V) = −43V`,
+        working: () => `
+    <div class="working-formula-row"><b class="colour-voltage">Vout</b> = <b class="colour-gain">Av(1)</b>Vin1 + <b class="colour-gain">Av(2)</b>Vin2 + <b class="colour-gain">Av(3)</b>Vin3</div>
+    <div class="working-formula-row"><b class="colour-voltage">Vout</b> = (−10 × 2V) + (−5 × 4V) + (−0.5 × 6V)</div>
+    <div class="working-total"><b class="colour-voltage">Vout</b> = −20V − 20V − 3V = <b style="color:var(--colour-ui-correct)">−43V</b> — each input contributes its own weighted, inverted share to the output. The summing amplifier adds all three contributions together — the output is the inverted, weighted sum of the three input voltages.</div>`
+      },
+      {
+        // Objective (comparator): identify.
+        leftPanel: 'circuit',
+        circuitId: 'fig-op-comparator',
+        circuitLabel: 'Reference Circuit',
+        circuitViewBox: '0 0 640 460',
+        text: () => `This is a specific type of <b style="color:var(--colour-ui-primary)">non-inverting amplifier</b>. What is it commonly known as?`,
+        hint: () => `Look at the input configuration and whether there is a feedback path.`,
+        options: () => shuffle([
+          { label: `Comparator`, type: 'correct' },
+          { label: `Divider` },
+          { label: `Subtractor` },
+          { label: `Multiplier` },
+        ]),
+        correctExplain: () => `Comparator`,
+        working: () => `
+    <div class="working-line">The voltage-divider output connects to the <b style="color:var(--colour-ui-correct)">non-inverting (+)</b> input. The 4.5V reference connects to the <b style="color:var(--colour-ui-correct)">inverting (−)</b> input.</div>
+    <div class="working-line">There is <b style="color:var(--colour-ui-correct)">no feedback resistor</b> from output back to either input. The op-amp runs open loop — full gain Av<sub>OL</sub> = 200,000.</div>
+    <div class="working-total">An open-loop op-amp used to compare two voltages is called a <b style="color:var(--colour-ui-correct)">comparator</b>. The output swings to +9V or 0V depending on which input is higher.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        circuitId: 'fig-op-comparator-plus',
+        circuitLabel: 'Comparator',
+        circuitViewBox: '0 0 640 460',
+        text: () => `What is the voltage at the non-inverting (+) input?`,
+        hint: () => `R1 and R2 form a voltage divider from the +9V rail to common.`,
+        options: () => shuffle([
+          { label: `<b class="colour-voltage">V+</b> = 9V × ${frac('<b class="colour-resistor">R2</b>', '<b class="colour-resistor">R1</b> + <b class="colour-resistor">R2</b>')} = 9V × ${frac('4kΩ', '12kΩ')} = 3V`, type: 'correct' },
+          { label: `<b class="colour-voltage">V+</b> = 9V × ${frac('<b class="colour-resistor">R1</b>', '<b class="colour-resistor">R1</b> + <b class="colour-resistor">R2</b>')} = 9V × ${frac('8kΩ', '12kΩ')} = 6V` },
+          { label: `<b class="colour-voltage">V+</b> = ${frac('9V', '2')} = 4.5V` },
+          { label: `<b class="colour-voltage">V+</b> = 9V` },
+        ]),
+        correctExplain: () => `V+ = 9V × R2/(R1+R2) = 3V`,
+        working: () => `
+    <div class="working-line">R1 and R2 divide the +9V rail down to common (0V):</div>
+    <div class="working-formula-row"><b class="colour-voltage">V+</b> = 9V × ${frac('<b class="colour-resistor">R2</b>', '<b class="colour-resistor">R1</b> + <b class="colour-resistor">R2</b>')} = 9V × ${frac('4kΩ', '8kΩ + 4kΩ')}</div>
+    <div class="working-total"><b class="colour-voltage">V+</b> = 9V × ${frac('4', '12')} = <b style="color:var(--colour-ui-correct)">3V</b></div>`
+      },
+      {
+        leftPanel: 'circuit',
+        circuitId: 'fig-op-comparator-vout',
+        circuitLabel: 'Comparator',
+        circuitViewBox: '0 0 640 460',
+        text: () => `What is the output voltage?`,
+        hint: () => `Compare V+ with the 4.5V reference on V− to decide which way the output swings.`,
+        options: () => shuffle([
+          { label: `0V`, type: 'correct' },
+          { label: `+9V` },
+          { label: `3V` },
+          { label: `4.5V` },
+        ]),
+        correctExplain: () => `0V`,
+        working: () => `
+    <div class="working-line">V+ = 3V (voltage divider, previous question); V− = 4.5V (fixed reference).</div>
+    <div class="working-line">Since V+ &lt; V−, the output swings LOW.</div>
+    <div class="working-total">Vout = <b style="color:var(--colour-ui-correct)">0V</b> — this op-amp runs from a single +9V supply, with Vee tied to common (0V), so the output can only swing between 0V (LOW) and +9V (HIGH). Because V+ is below the reference, the output is pulled LOW to 0V.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        circuitId: 'fig-op-comparator-r2mod',
+        circuitLabel: 'Comparator — R2 modified',
+        circuitViewBox: '0 0 640 460',
+        text: () => `The circuit has been modified — <b class="colour-resistor">R2</b> has been changed to <b>12kΩ</b>. What is the new output voltage?`,
+        hint: () => `Recalculate V+ with the new R2, then compare again with V− = 4.5V.`,
+        options: () => shuffle([
+          { label: `<b class="colour-voltage">V+</b> = 9V × ${frac('<b class="colour-resistor">R2</b>', '<b class="colour-resistor">R1</b> + <b class="colour-resistor">R2</b>')} = 9V × ${frac('12kΩ', '20kΩ')} = 5.4V → V+ &gt; V− → <b class="colour-voltage">Vout</b> = +9V`, type: 'correct' },
+          { label: `<b class="colour-voltage">V+</b> = 9V × ${frac('<b class="colour-resistor">R1</b>', '<b class="colour-resistor">R1</b> + <b class="colour-resistor">R2</b>')} = 9V × ${frac('8kΩ', '20kΩ')} = 3.6V → V+ &lt; V− → <b class="colour-voltage">Vout</b> = 0V` },
+          { label: `<b class="colour-voltage">V+</b> = 5.4V, but still V+ &lt; V− so <b class="colour-voltage">Vout</b> = 0V` },
+          { label: `<b class="colour-voltage">Vout</b> = 4.5V, matching the reference exactly` },
+        ]),
+        correctExplain: () => `V+ = 9V × R2/(R1+R2) = 5.4V; V+ > V− so Vout = +9V`,
+        working: () => `
+    <div class="working-line">R2 has changed to 12kΩ. Apply the voltage divider formula again:</div>
+    <div class="working-formula-row"><b class="colour-voltage">V+</b> = 9V × ${frac('<b class="colour-resistor">R2</b>', '<b class="colour-resistor">R1</b> + <b class="colour-resistor">R2</b>')} = 9V × ${frac('12kΩ', '8kΩ + 12kΩ')}</div>
+    <div class="working-line"><b class="colour-voltage">V+</b> = 9V × ${frac('12', '20')} = 5.4V</div>
+    <div class="working-line">V+ = 5.4V &nbsp;|&nbsp; V− = 4.5V. Since V+ &gt; V−, the output swings HIGH.</div>
+    <div class="working-total"><b class="colour-voltage">Vout</b> = <b style="color:var(--colour-ui-correct)">+9V</b></div>`
+      },
+      {
+        // Objective (night light): identify application.
+        leftPanel: 'circuit',
+        circuitId: 'fig-op-night-light-r1r2',
+        circuitLabel: 'Reference Circuit',
+        circuitViewBox: '0 0 640 460',
+        text: () => `The circuit has been modified: <b class="colour-resistor">R1</b> has been changed to <b>47kΩ</b> and <b class="colour-resistor">R2</b> is now a <b style="color:var(--colour-ui-primary)">Light Dependent Resistor</b>. What is this new circuit most likely designed to be used as?`,
+        hint: () => `Look at what type of variable component is used in the left voltage divider.`,
+        options: () => shuffle([
+          { label: `Night light`, type: 'correct' },
+          { label: `Security light` },
+          { label: `Temperature alarm` },
+          { label: `Soil moisture alert` },
+        ]),
+        correctExplain: () => `Night light`,
+        working: () => `
+    <div class="working-line">The left voltage divider uses an <b style="color:var(--colour-ui-correct)">LDR</b> (Light Dependent Resistor). As light levels fall, the LDR resistance increases, raising the voltage at the + input above Vref (4.5V). The comparator output goes HIGH and switches a light on — exactly how a night light works.</div>
+    <div class="working-total">The same basic circuit can be adapted for other applications by swapping the sensor: a thermistor makes a temperature alarm, a moisture probe makes a soil moisture alert, and a security light typically uses the same LDR sensing plus a PIR motion sensor for full functionality.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        circuitId: 'fig-op-night-light-r2',
+        circuitLabel: 'Night Light',
+        circuitViewBox: '0 0 640 460',
+        text: () => `What happens to the LDR's resistance as the room gets darker?`,
+        hint: () => `LDR stands for Light Dependent Resistor — think about what light does to charge carriers inside the semiconductor.`,
+        options: () => shuffle([
+          { label: `It increases`, type: 'correct' },
+          { label: `It decreases` },
+          { label: `It stays the same` },
+          { label: `It drops to 0Ω` },
+        ]),
+        correctExplain: () => `It increases`,
+        working: () => `
+    <div class="working-line">An LDR is made from a light-sensitive semiconductor (typically cadmium sulphide). When light hits it, photons knock electrons free, creating charge carriers. More carriers = lower resistance.</div>
+    <div class="working-line">With no light, very few charge carriers are freed. The material becomes a poor conductor and its resistance <b style="color:var(--colour-ui-correct)">increases significantly</b> — often from a few hundred ohms in bright light to hundreds of kilohms in complete darkness.</div>
+    <div class="working-total">R1 is fixed at 47kΩ. The LDR forms the bottom half of a voltage divider. As the LDR resistance rises in darkness, the voltage at the + input rises with it.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        circuitId: 'fig-op-night-light-plus',
+        circuitLabel: 'Night Light',
+        circuitViewBox: '0 0 640 460',
+        text: () => `As it gets darker, what happens to the voltage at the + (non-inverting) input?`,
+        hint: () => `R1 is fixed. Apply the voltage divider formula as LDR resistance increases.`,
+        options: () => shuffle([
+          { label: `It increases`, type: 'correct' },
+          { label: `It decreases` },
+          { label: `It stays constant` },
+          { label: `It drops to 0V` },
+        ]),
+        correctExplain: () => `It increases`,
+        working: () => `
+    <div class="working-line">R1 and the LDR divide the +9V supply. The voltage at the + input is the voltage across the LDR:</div>
+    <div class="working-formula-row"><b class="colour-voltage">V+</b> = 9V × ${frac('R<sub>LDR</sub>', 'R1 + R<sub>LDR</sub>')}</div>
+    <div class="working-line">As it gets darker, R<sub>LDR</sub> increases. A larger LDR in the denominator means a larger fraction of 9V drops across it, so V+ rises. Bright: R<sub>LDR</sub> ≈ 500Ω → V+ = 9 × ${frac('0.5k', '47.5k')} ≈ 0.1V. Dark: R<sub>LDR</sub> ≈ 100kΩ → V+ = 9 × ${frac('100k', '147k')} ≈ 6.1V.</div>
+    <div class="working-total">The reference voltage on the − input is fixed at 4.5V. When V+ rises above 4.5V, the comparator output goes HIGH and the light turns on.</div>`
+      },
+    ];
+
+    initQuizNav();
+    resetQuiz();
+    initQuizFromURL();
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,1114 @@
+<!--
+  EXPLORATORY TESTBED — "click-the-circuit" interactive question format.
+
+  Extracted from bjt_knowledge_bjt_fault_finding.html: just its Q1 (click
+  every component on the circuit whose fault could explain a DC-fine/
+  AC-dead symptom) and its final question (click every meter/scope
+  affected by an R1-high fault), renumbered Q1/Q2 here. The source file is
+  otherwise untouched and kept as the current 14-question revision quiz —
+  this file exists purely to let the click-the-circuit format be explored
+  and refined in isolation before deciding whether to roll it out more
+  broadly.
+
+  Same static CE voltage-divider reference circuit (ce-fault-circuit),
+  same WIRES/NODES/PRETEND METERS convention, and the same generalised
+  interactive-circuit engine (ALL_INTERACTIVE_KEYS / TARGET_GROUP_ID /
+  wireComponentClicks / paintComponent / syncInteractiveVisuals /
+  syncMeterValues) as the source file. VBE updated project-wide from 0.7V
+  to 0.6V (the teacher's own course-standard value) — see the full
+  circuit-value derivation (VTH=1.33V, RTH=13.3kΩ, IB≈10.8µA, IE≈IC≈2.2mA,
+  VB≈1.2V, VE≈0.6V, VC≈8.1V) and Q2's own R1-high fault derivation
+  (R1: 120kΩ→240kΩ, VB≈0.68V, VE≈0.08V, IE≈0.31mA, VC≈11.44V). Note this
+  fault is now meaningfully LESS dramatic than under the old VBE=0.7V
+  assumption (IE only drops ~86%, not ~99% — VTH=0.706V no longer sits
+  almost exactly on top of VBE, so there's real headroom left even with
+  R1 doubled).
+  Datasheet questions/markup (the source file's Q11-14 .mock-datasheet
+  content) are not included here — neither of the two questions kept
+  uses it.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../../assets/theme-init.js"></script>
+  <title>BJT Knowledge Quiz — Interactive Fault Circuit (Exploratory)</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../../assets/quiz-common.css">
+  <script src="../../../../assets/breadcrumb.js" defer></script>
+  <style>
+    .progress-wrap { display: flex; gap: .4rem; align-items: center; margin-bottom: 1rem; }
+    /* This page has no click-to-zoom modal (removed) — quiz-common.css's
+       shared .circuit-panel still sets cursor:zoom-in unconditionally for
+       every other page that DOES have one, so override it back to default
+       here rather than changing that shared rule for one page. */
+    .circuit-panel { cursor: default; }
+    @media(min-width:900px) {
+      .quiz-wrap { display: grid;
+        grid-template-columns: minmax(340px, 760px) 1fr;
+        gap: 1.2rem;
+        align-items: start; }
+    }
+    /* Interactive-circuit questions (see interactiveCircuit flag) —
+       .comp-interactive is added/removed per-target by
+       syncInteractiveVisuals(), only on whichever of the 12 possible
+       targets (6 components, 4 meters, 2 scopes) the CURRENT question
+       actually uses. Hover
+       affordance uses filter, NOT stroke — any CSS rule (even this
+       non-!important one) always wins over a presentation attribute set
+       via JS, so a stroke-based hover rule on the same hl-<key> rect
+       paintComponent() manages would silently override its selection-
+       state colour for as long as the mouse stayed put after a click
+       (this was a real, reported bug: deselecting while still hovering
+       left the highlight box visibly stuck, only clearing once the
+       mouse moved to a different component and this rule stopped
+       applying — filter never touches the same attribute, so it can't
+       fight with paintComponent() no matter how the two overlap). */
+    .comp-interactive { cursor: pointer; }
+    .comp-interactive:hover { filter: brightness(1.15); }
+  </style>
+</head>
+
+<body>
+  <!-- Hidden defs: one static CE voltage-divider reference circuit, same
+       WIRES/NODES convention and component values as bjt_knowledge_ac_
+       parameters.html's own ce-divider-ac (see this file's header
+       comment). -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <filter id="glow">
+        <feGaussianBlur stdDeviation="2" result="b" />
+        <feMerge>
+          <feMergeNode in="b" />
+          <feMergeNode in="SourceGraphic" />
+        </feMerge>
+      </filter>
+
+      <g id="bjt-npn-shape">
+        <circle cx="7" cy="0" r="24" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+        <line x1="-17" y1="0" x2="0" y2="0" style="stroke: var(--colour-bjt)" stroke-width="2" />
+        <line x1="0" y1="-12" x2="0" y2="12" style="stroke: var(--colour-bjt)" stroke-width="2.5" />
+        <polyline points="14,-34 14,-20 0,-8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+        <polyline points="14,34 14,20 0,8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+        <polygon points="12,18 1,14 6,8" style="fill: var(--colour-bjt)" />
+      </g>
+
+      <g id="bjt-npn-shape-large">
+        <circle cx="7" cy="0" r="48" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+        <line id="bjt-base" x1="-42" y1="0" x2="0" y2="0" style="stroke: var(--colour-bjt)" stroke-width="2" />
+        <line x1="0" y1="-12" x2="0" y2="12" style="stroke: var(--colour-bjt)" stroke-width="2.5" />
+        <polyline id="bjt-emitter" points="14,-48 14,-20 0,-8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+        <polyline id="bjt-collector" points="14,48 14,20 0,8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+        <polygon points="12,18 1,14 6,8" style="fill: var(--colour-bjt)" />
+      </g>
+
+      <!-- ══ VOLTMETER SHAPE ══ -->
+      <g id="meter-shape">
+        <circle cx="0" cy="0" r="30" style="fill: var(--colour-meter-fill); stroke: var(--colour-red)" stroke-width="1.5" filter="url(#glow)" />
+        <line x1="-15" y1="-20" x2="15" y2="-20" style="stroke: var(--colour-red)" stroke-width="1.5"/>
+        <line x1="-15" y1="-14" x2="15" y2="-14" style="stroke: var(--colour-red)" stroke-width="1.5" stroke-dasharray="3,2"/>
+      </g>
+
+      <!-- ══ PRETEND AMMETER BADGE — defined once, instanced with <use> ══ -->
+      <g id="ammeter-shape">
+        <circle cx="0" cy="0" r="30" style="fill: var(--colour-ammeter-fill); stroke: var(--colour-current)"
+          stroke-width="1.5" filter="url(#glow)" />
+      </g>
+
+      <!-- ══ PROBE WIRE — 30px dashed stub ══ -->
+      <line id="probe-wire" x1="0" y1="0" x2="30" y2="0"
+        style="stroke: var(--colour-red)" stroke-width="1.5" stroke-dasharray="4,3" opacity=".8" />
+
+      <!-- ══ COUPLING CAPACITOR SHAPE — two plates ══ -->
+      <g id="cap-shape">
+        <rect x="-6" y="-12" width="12" height="24" style="fill: var(--colour-bg)" />
+        <line x1="-4" y1="-12" x2="-4" y2="12" style="stroke: var(--colour-capacitor)" stroke-width="2.5" />
+        <line x1="4" y1="-12" x2="4" y2="12" style="stroke: var(--colour-capacitor)" stroke-width="2.5" />
+      </g>
+
+      <!-- ══ OSCILLOSCOPE SHAPE ══ -->
+      <!-- 1. BASE SCOPE (No waveforms) -->
+      <g id="scope-base">
+        <rect x="-35" y="-25" width="70" height="50" rx="6" ry="6" style="fill: var(--colour-meter-fill); stroke: var(--colour-scope)" stroke-width="1.5" filter="url(#glow)"></rect>
+        <rect x="-28" y="-18" width="56" height="36" rx="3" ry="3" style="fill: #0d1117; stroke: var(--colour-scope)" stroke-width="1" opacity="0.8"></rect>
+        <line x1="-26" y1="0" x2="26" y2="0" style="stroke: var(--colour-scope)" stroke-width="0.75" stroke-dasharray="2,2" opacity="0.4"></line>
+        <line x1="0" y1="-16" x2="0" y2="16" style="stroke: var(--colour-scope)" stroke-width="0.75" stroke-dasharray="2,2" opacity="0.4"></line>
+      </g>
+
+      <!-- 2. WAVEFORM CH1 (Yellow Input) -->
+      <path id="wave-ch1" d="M -26 0 C -23.4 -14, -18.2 -14, -15.6 0 C -13 14, -7.8 14, -5.2 0 C -2.6 -14, 2.6 -14, 5.2 0 C 7.8 14, 13 14, 15.6 0 C 18.2 -14, 23.4 -14, 26 0" style="stroke: var(--colour-scope-input); fill: none;" stroke-width="1.0" stroke-linecap="round" stroke-linejoin="round"></path>
+      <line id="flat-ch1" x1="26" y1="0" x2="26" y2="0" style="stroke: var(--colour-scope-input)" stroke-width="0.75"></line>
+
+      <!-- 3. WAVEFORM CH2 (Cyan Output) -->
+      <path id="wave-ch2" d="M -26 0 C -23.4 14, -18.2 14, -15.6 0 C -13 -14, -7.8 -14, -5.2 0 C -2.6 14, 2.6 14, 5.2 0 C 7.8 -14, 13 -14, 15.6 0 C 18.2 14, 23.4 14, 26 0" style="stroke: var(--colour-scope-output); fill: none;" stroke-width="1.0" stroke-linecap="round" stroke-linejoin="round"></path>
+      <line id="flat-ch2" x1="-26" y1="0" x2="26" y2="0" style="stroke: var(--colour-scope-output)" stroke-width="0.75"></line>
+
+      <!-- ══ 3 COMBINATION SHAPES ══ -->
+
+      <!-- Combination A: Channel 1 Only -->
+      <!-- Scaled down from wave-ch1's own native amplitude, purely so the
+           scope icon has visible headroom — Q1's own output is dead
+           (flat), Q2's revealed output is the full-scale scope-ch2-only
+           (barely reduced gain, see that fault's own comment for why). -->
+      <g id="scope-ch1-only">
+        <use href="#scope-base"></use>
+        <g clip-path="url(#scope-screen-clip)">
+          <use href="#wave-ch1" transform="scale(1, 0.45)"></use>
+        </g>
+      </g>
+
+      <!-- Combination A: Channel 1 Only -->
+      <g id="scope-ch1-flat-only">
+        <use href="#scope-base"></use>
+        <g clip-path="url(#scope-screen-clip)">
+          <use href="#flat-ch1"></use>
+        </g>
+      </g>
+
+      <!-- Combination B: Channel 2 Only -->
+      <g id="scope-ch2-only">
+        <use href="#scope-base"></use>
+        <g clip-path="url(#scope-screen-clip)">
+          <use href="#wave-ch2"></use>
+        </g>
+      </g>
+
+      <g id="scope-ch2-flat-only">
+        <use href="#scope-base"></use>
+        <g clip-path="url(#scope-screen-clip)">
+          <use href="#flat-ch2"></use>
+        </g>
+      </g>
+
+      <!-- Combination D: Channel 2, collapsed-gain amplitude. NOT
+           currently used by any question — Q2's own R1-high fault used
+           to collapse gain to near-unity under the old VBE=0.7V
+           assumption (this shape was built for that), but with VBE=0.6V
+           (the teacher's course-standard value) the same R1 fault only
+           drops gain from ≈6.4 to ≈5.1, too mild to justify a visibly
+           shrunk trace — Q2 now uses the full scope-ch2-only instead.
+           Left defined here in case a future, more severe fault (e.g. a
+           bigger R1 multiplier) needs a genuinely collapsed-gain icon. -->
+      <g id="scope-ch2-small-only">
+        <use href="#scope-base"></use>
+        <g clip-path="url(#scope-screen-clip)">
+          <use href="#wave-ch2" transform="scale(1, 0.45)"></use>
+        </g>
+      </g>
+
+      <!-- ══ SCOPE WIRES ══ -->
+      <!-- Single master wire starting at the top edge of the scope -->
+      <marker id="probe-node-dot"
+              viewBox="-6 -6 12 12"
+              refX="0" refY="0"
+              markerWidth="12" markerHeight="12">
+        <circle cx="0" cy="0" r="2" style="fill: var(--colour-series); stroke: none;" />
+      </marker>
+
+      <!-- Master Wire using stroke-opacity instead of element opacity -->
+      <line id="scope-wire-v" x1="0" y1="-25" x2="0" y2="-90"
+            style="stroke: var(--colour-scope); stroke-width: 1.5; stroke-dasharray: 4,3; stroke-opacity: 0.8;"
+            marker-end="url(#probe-node-dot)" />
+          <!-- TOP CENTER    - no translate
+              TOP RIGHT     - transform="translate(25, 0)
+              TOP LEFT      - transform="translate(-25, 0)
+              BOTTOM CENTER - transform="scale(1, -1)
+              BOTTOM RIGHT  - transform="scale(1, -1) translate(-25, 0)
+              BOTTOM LEFT   - transform="scale(1, -1) translate(25, 0)
+          -->
+
+          <g id="ac-source-shape">
+        <circle cx="0" cy="0" r="24" fill="none" style="stroke: var(--colour-signal)" stroke-width="2" filter="url(#glow)" />
+        <path d="M -16,0 C -11,-14 -5,-14 0,0 C 5,14 11,14 16,0" fill="none" style="stroke: var(--colour-signal)" stroke-width="2.5" stroke-linecap="round" />
+      </g>
+
+      <g id="cap-shape">
+        <rect x="-4" y="-12" width="8" height="24" style="fill: var(--colour-panel)" />
+        <line x1="-4" y1="-12" x2="-4" y2="12" style="stroke: var(--colour-capacitor)" stroke-width="2.5" />
+        <line x1="4" y1="-12" x2="4" y2="12" style="stroke: var(--colour-capacitor)" stroke-width="2.5" />
+      </g>
+
+      <!-- Node/meter shapes — same convention as bjt_npn_troubleshoot_dc.html/
+           bjt_pnp_troubleshoot_ac.html's own PRETEND METERS, ported in here
+           so this knowledge quiz's reference circuit reads the same way as
+           the two DC/AC troubleshooter simulators. This file's own meters
+           are static (always show the healthy reading, never update) —
+           dropped the "Pretend"/live-value id plumbing those files need,
+           kept just the visual shapes. -->
+      <g id="node-shape">
+        <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5" />
+      </g>
+      <line id="probe-wire" x1="0" y1="0" x2="30" y2="0" style="stroke: var(--colour-red)" stroke-width="1.5"
+        stroke-dasharray="4,3" opacity=".8" />
+      <g id="meter-shape">
+        <circle cx="0" cy="0" r="30" style="fill: var(--colour-meter-fill); stroke: var(--colour-red)"
+          stroke-width="1.5" filter="url(#glow)" />
+        <line x1="-15" y1="-20" x2="15" y2="-20" style="stroke: var(--colour-red)" stroke-width="1.5" />
+        <line x1="-15" y1="-14" x2="15" y2="-14" style="stroke: var(--colour-red)" stroke-width="1.5"
+          stroke-dasharray="3,2" />
+      </g>
+
+      <!-- ══════════════════════════════════════════════════════════════════
+           CE-FAULT-CIRCUIT — same coordinates/values as bjt_knowledge_ac_
+           parameters.html's ce-divider-ac. NODE B/C/E marked with the
+           HEALTHY reference reading at each point — every fault question
+           reasons about how a given fault shifts these three numbers.
+           ══════════════════════════════════════════════════════════════ -->
+    </defs>
+  </svg>
+
+  <div class="crumb" id="crumb" data-current="Interactive Fault Circuit (Exploratory)"></div>
+  <header>
+    <h1>BJT Amplifier: Interactive Fault Circuit (Exploratory)</h1>
+    <p>Click-the-Circuit Format · Components, Meters &amp; Scopes · Testbed</p>
+  </header>
+
+  <div class="quiz-wrap">
+
+    <!-- LEFT: circuit diagram -->
+    <div class="circuit-col">
+      <div class="circuit-panel">
+        <div class="panel-label" id="circuitRefLabel">Reference Circuit</div>
+        <svg id="circuitRefSvg" viewBox="-10 -10 690 570" xmlns="http://www.w3.org/2000/svg">
+      <g id="ce-fault-circuit">
+
+        <!-- ════════════════════ WIRES ════════════════════ -->
+
+        <!-- ── LEFT VERTICAL (Source return) ── -->
+        <line x1="30" y1="279" x2="30" y2="535" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Source return down to GND level -->
+
+        <!-- ── CENTER VERTICAL (R1/R2) ── -->
+        <line x1="200" y1="10" x2="200" y2="535" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC rail down to GND -->
+
+        <!-- ── RIGHT VERTICAL (RC/RE── -->
+        <line x1="440" y1="10" x2="440" y2="222" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC rail down to Collector pin -->
+        <line x1="440" y1="279" x2="440" y2="535" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Emitter pin down to GND -->
+
+        <!-- ── VCC HORIZONTAL ── -->
+        <line x1="160" y1="10" x2="480" y2="10" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC rail (R1 column to RC column) -->
+        <circle cx="200" cy="10" r="5" style="fill: var(--colour-series)" />
+        <circle cx="440" cy="10" r="5" style="fill: var(--colour-series)" />
+
+        <!-- ── BOTTOM HORIZONTAL ── -->
+        <line x1="10" y1="535" x2="600" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="30" cy="535" r="5" style="fill: var(--colour-series)" />
+        <circle cx="200" cy="535" r="5" style="fill: var(--colour-series)" />
+        <circle cx="440" cy="535" r="5" style="fill: var(--colour-series)" />
+
+        <!-- ── LEFT HORIZONTAL ── -->
+        <line x1="54" y1="245" x2="410" y2="245" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Source to Base node -->
+
+        <!-- ── RIGHT HORIZONTAL (Output) ── -->
+        <line x1="440" y1="175" x2="600" y2="175" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Collector pin, through C2, to output -->
+
+        <!-- ════════════════════ NODES — B/C/E probe points ════════════════════
+             Small circled-letter markers on the wire itself, same convention
+             as bjt_npn_troubleshoot_dc.html/bjt_pnp_troubleshoot_ac.html —
+             see PRETEND METERS below for the healthy-reading readouts these
+             connect to. -->
+
+        <circle cx="200" cy="245" r="5" style="fill: var(--colour-series)" />
+        <g transform="translate(225,270)">
+          <use href="#node-shape" />
+          <text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14" font-weight="bold">B</text>
+        </g>
+
+        <circle cx="440" cy="175" r="5" style="fill: var(--colour-series)" />
+        <g transform="translate(415,175)">
+          <use href="#node-shape" />
+          <text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14" font-weight="bold">C</text>
+        </g>
+
+        <circle cx="440" cy="320" r="5" style="fill: var(--colour-series)" />
+        <g transform="translate(465,310)">
+          <use href="#node-shape" />
+          <text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14" font-weight="bold">E</text>
+        </g>
+
+        <!-- ════════════════════ PRETEND METERS — always show the healthy reading ════════════════════ -->
+
+        <g id="meterVB" transform="translate(295,308)">
+          <use href="#probe-wire" transform="rotate(215) translate(30,0)" />
+          <use href="#meter-shape" />
+          <text x="-45" y="-10" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">B</tspan></text>
+          <text id="meterVBValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">1.2</text>
+          <text id="meterVBUnit" x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle" font-size="14">V</text>
+          <rect id="hl-VB" x="-34" y="-36" width="68" height="72" rx="10" fill="none" stroke="transparent" stroke-width="2.5" />
+          <text id="badge-VB" x="42" y="-24" text-anchor="middle" font-size="16" font-weight="bold"></text>
+        </g>
+
+        <g id="meterVC" transform="translate(335,175)">
+          <use href="#probe-wire" transform="rotate(0) translate(30,0)" />
+          <use href="#meter-shape" />
+          <text x="-45" y="-10" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">C</tspan></text>
+          <text id="meterVCValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">8.1</text>
+          <text id="meterVCUnit" x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle" font-size="14">V</text>
+          <rect id="hl-VC" x="-34" y="-36" width="68" height="72" rx="10" fill="none" stroke="transparent" stroke-width="2.5" />
+          <text id="badge-VC" x="42" y="-24" text-anchor="middle" font-size="16" font-weight="bold"></text>
+        </g>
+
+        <g id="meterVE" transform="translate(535,310)">
+          <use href="#probe-wire" transform="rotate(180) translate(30,0)" />
+          <use href="#meter-shape" />
+          <text x="-45" y="-10" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">E</tspan></text>
+          <text id="meterVEValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">0.6</text>
+          <text id="meterVEUnit" x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle" font-size="14">V</text>
+          <rect id="hl-VE" x="-34" y="-36" width="68" height="72" rx="10" fill="none" stroke="transparent" stroke-width="2.5" />
+          <text id="badge-VE" x="42" y="-24" text-anchor="middle" font-size="16" font-weight="bold"></text>
+        </g>
+        <!-- Ammeter — healthy IE, same "always shows the healthy reading"
+             convention as the VB/VC/VE meters above. IE = (β+1)×IB, derived
+             via the same base-Thevenin method stated in the source file's
+             own header comment (VTH≈1.33V, RTH≈13.3kΩ, IB≈10.8µA, VBE=0.6V,
+             the teacher's course-standard value) — IE≈2.18mA, cross-checked
+             against IE=VE/RE=0.5887V/270Ω≈2.18mA (VE's own more precise
+             value before rounding to the displayed 0.6). Unit fixed to mA,
+             not the placeholder's own bare "A" — this current is nowhere
+             near 1 A. -->
+        <g id="ammeterGroup" transform="translate(440,480)">
+          <use href="#ammeter-shape" />
+          <text x="-45" y="-10" style="fill: var(--colour-current)" text-anchor="middle" font-size="14" font-weight="bold">I<tspan baseline-shift="sub" font-size="10">E</tspan></text>
+          <text id="ammeterValue" x="0" y="-2" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">2.18</text>
+          <text id="ammeterUnit" x="0" y="15" style="fill: var(--colour-current)" text-anchor="middle"
+            font-size="12">mA</text>
+          <rect id="hl-IE" x="-34" y="-36" width="68" height="72" rx="10" fill="none" stroke="transparent" stroke-width="2.5" />
+          <text id="badge-IE" x="42" y="-24" text-anchor="middle" font-size="16" font-weight="bold"></text>
+        </g>
+        <!-- ════════════════════ AC INPUT COMPONENTS ════════════════════ -->
+
+        <g transform="translate(30,245)">
+          <use href="#ac-source-shape" />
+          <text x="0" y="-35" style="fill: var(--colour-signal)" text-anchor="middle" font-size="16" font-weight="bold">input</text>
+        </g>
+
+        <g id="comp-C1" transform="translate(120,245)">
+          <use href="#cap-shape" />
+          <text x="0" y="-25" fill="var(--colour-capacitor-labels)" text-anchor="middle" font-size="13" font-weight="bold">C1</text>
+          <rect id="hl-C1" x="-16" y="-42" width="32" height="60" rx="6" fill="none" stroke="transparent" stroke-width="2.5" />
+          <text id="badge-C1" x="26" y="-24" text-anchor="middle" font-size="16" font-weight="bold"></text>
+        </g>
+
+        <!-- ════════════════════ AC OUTPUT COMPONENTS ════════════════════ -->
+
+        <g id="comp-C2" transform="translate(530,175)">
+          <use href="#cap-shape" />
+          <text x="0" y="-25" fill="var(--colour-capacitor-labels)" text-anchor="middle" font-size="13" font-weight="bold">C2</text>
+          <rect id="hl-C2" x="-16" y="-42" width="32" height="60" rx="6" fill="none" stroke="transparent" stroke-width="2.5" />
+          <text id="badge-C2" x="26" y="-24" text-anchor="middle" font-size="16" font-weight="bold"></text>
+        </g>
+        <circle cx="600" cy="175" r="5" style="fill: var(--colour-signal)" />
+        <text x="614" y="180" style="fill: var(--colour-signal)" text-anchor="start" font-size="16" font-weight="bold">output</text>
+
+
+          <!-- ════════════════════ SCOPES ════════════════════ -->
+          <!-- Both used to share id="scopeOutput" (harmless duplicate, since
+               nothing queried it by id) — given distinct comp-SCOPE_IN/
+               comp-SCOPE_OUT ids now that they're selectable targets too. -->
+          <!-- ════ Scope input  ════ -->
+          <g id="comp-SCOPE_IN" transform="translate(50,155)">
+            <use href="#scope-wire-v" transform="scale(1, -1) translate(25, 0)"></use>
+            <!-- Render Channel 1 shape -->
+            <use id="scopeShape-SCOPE_IN" href="#scope-ch1-only"></use>
+            <rect id="hl-SCOPE_IN" x="-40" y="-30" width="80" height="60" rx="8" fill="none" stroke="transparent" stroke-width="2.5" />
+            <text id="badge-SCOPE_IN" x="36" y="-24" text-anchor="middle" font-size="16" font-weight="bold"></text>
+          </g>
+
+          <!-- ════ Scope output  ════ -->
+          <g id="comp-SCOPE_OUT" transform="translate(580,85)">
+            <use href="#scope-wire-v" transform="scale(1, -1) translate(0, 0)"></use>
+            <!-- Render Channel 2 shape -->
+            <use id="scopeShape-SCOPE_OUT" href="#scope-ch2-flat-only"></use>
+            <rect id="hl-SCOPE_OUT" x="-40" y="-30" width="80" height="60" rx="8" fill="none" stroke="transparent" stroke-width="2.5" />
+            <text id="badge-SCOPE_OUT" x="36" y="-24" text-anchor="middle" font-size="16" font-weight="bold"></text>
+          </g>
+
+        <!-- ════════════════════ VCC ════════════════════ -->
+
+        <g transform="translate(490,-10)">
+          <text x="0" y="15" style="fill: var(--colour-voltage-label)" text-anchor="start" font-size="15" font-weight="bold">
+            V<tspan baseline-shift="sub" font-size="10">CC</tspan>
+             <tspan style="fill: var(--colour-text)" font-size="14">+ 12 V</tspan>
+          </text>
+        </g>
+
+        <text x="120" y="560" fill="var(--colour-gnd)" text-anchor="middle" font-size="14" font-weight="bold">Common</text>
+
+        <!-- ════════════════════ Q1 — NPN ════════════════════ -->
+
+        <g transform="translate(426,246)">
+          <use href="#bjt-npn-shape" />
+          <text x="-15" y="-25" fill="var(--colour-bjt-labels)" text-anchor="middle" font-size="14" font-weight="bold">Q1</text>
+          <text x="0" y="40" fill="var(--colour-bjt-labels)" text-anchor="end" font-size="12">BC549</text>
+          <text x="40" y="0" fill="var(--colour-bjt-labels)" text-anchor="start" font-size="14" font-weight="bold">β = 200</text>
+        </g>
+
+        <!-- ════════════════════ RESISTORS ════════════════════ -->
+
+        <g id="comp-R1" transform="translate(185,50)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R1</text>
+          <text x="65" y="40" text-anchor="middle" font-size="16"><tspan fill="var(--colour-text)">120</tspan><tspan fill="var(--colour-resistor-labels)"> kΩ</tspan></text>
+          <rect id="hl-R1" x="-28" y="-8" width="66" height="96" rx="6" fill="none" stroke="transparent" stroke-width="2.5" />
+          <text id="badge-R1" x="48" y="10" text-anchor="middle" font-size="16" font-weight="bold"></text>
+        </g>
+
+        <g id="comp-R2" transform="translate(185,345)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R2</text>
+          <text x="65" y="40" text-anchor="middle" font-size="16"><tspan fill="var(--colour-text)">15</tspan><tspan fill="var(--colour-resistor-labels)"> kΩ</tspan></text>
+          <rect id="hl-R2" x="-28" y="-8" width="66" height="96" rx="6" fill="none" stroke="transparent" stroke-width="2.5" />
+          <text id="badge-R2" x="48" y="10" text-anchor="middle" font-size="16" font-weight="bold"></text>
+        </g>
+
+        <g id="comp-RC" transform="translate(425,50)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">RC</text>
+          <text x="65" y="40" text-anchor="middle" font-size="16"><tspan fill="var(--colour-text)">1.8</tspan><tspan fill="var(--colour-resistor-labels)"> kΩ</tspan></text>
+          <rect id="hl-RC" x="-28" y="-8" width="66" height="96" rx="6" fill="none" stroke="transparent" stroke-width="2.5" />
+          <text id="badge-RC" x="48" y="10" text-anchor="middle" font-size="16" font-weight="bold"></text>
+        </g>
+
+        <g id="comp-RE" transform="translate(425,345)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">RE</text>
+          <text x="65" y="40" text-anchor="middle" font-size="16"><tspan fill="var(--colour-text)">270</tspan><tspan fill="var(--colour-resistor-labels)"> Ω</tspan></text>
+          <rect id="hl-RE" x="-28" y="-8" width="66" height="96" rx="6" fill="none" stroke="transparent" stroke-width="2.5" />
+          <text id="badge-RE" x="48" y="10" text-anchor="middle" font-size="16" font-weight="bold"></text>
+        </g>
+
+      </g>
+          <g id="xyRuler" display="none"></g>
+        </svg>
+      </div>
+    </div>
+
+    <!-- RIGHT: question -->
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <!-- Single reusable question panel — populated from QUESTIONS[cur] by renderQuestion() -->
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+          <div class="options" id="qOptions"></div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Summary -->
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+
+  </div>
+
+  <script>
+    const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
+    const DEFAULT_VIEWBOX = '-10 -10 690 570';
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS — see bjt_knowledge_basics.html's header comment for the
+    // full field reference. Just the two interactiveCircuit questions
+    // pulled from bjt_knowledge_bjt_fault_finding.html (see this file's
+    // own header comment).
+    // ══════════════════════════════════════════════════════════════════════
+
+    const QUESTIONS = [
+      {
+        circuitLabel: 'Common Emitter (voltage-divider bias, RE unbypassed)',
+        // INTERACTIVE CIRCUIT question — the student clicks components
+        // directly on the reference circuit (C1/C2/R1/R2/RC/RE) instead of
+        // picking from a separate text option list, same "select every one
+        // that applies" mechanic as digital_knowledge_logic_gates.html's
+        // own Q1, but using the real circuit diagram as the click surface
+        // instead of a shapeGrid box of text labels. Needed the circuit to
+        // stop being a <defs>+<use> reference and become real inline SVG
+        // (see showCircuitRef()'s own comment) — a <use> instance can only
+        // ever be clicked as ONE opaque unit, individual children inside
+        // it aren't separately hit-testable.
+        // No scope-wrap here any more — the circuit's own scope icons
+        // (added directly to ce-fault-circuit) already show this exact
+        // "healthy input, flat output" story on every question, so
+        // repeating it as a second scope specifically on Q1 was pure
+        // duplication once that existed. Just describes it in words now.
+        // Correct = C1 + C2 ONLY. R1/R2/RC/RE were deliberately NOT
+        // included as correct, even though the user's first draft of this
+        // question listed them as candidates — each one sets or affects a
+        // DC bias voltage directly (R1/R2 set VB, RC sets VC), so a fault
+        // in any of them would show up as a DC deviation too, contradicting
+        // this question's own premise ("every DC bias voltage reads
+        // exactly correct"). Only a component with ZERO effect on DC (a
+        // capacitor) can fail in a way that's invisible to a DC voltage
+        // check — that IS the lesson this question teaches, so R1/R2/RC/RE
+        // are here as WRONG options precisely to test that distinction,
+        // not omitted. (An "RB" option was also proposed but dropped —
+        // this circuit uses R1/R2 voltage-divider bias, there's no single
+        // component actually labelled RB to select.)
+        kind: 'multi',
+        interactiveCircuit: true,
+        text: () => 'The AC <b style="color:var(--colour-signal)">output</b> is flat-lining, yet the <b style="color:var(--colour-supply)">voltage</b> and <b style="color:var(--colour-current)">current</b> readings are <b style="color:var(--colour-ui-primary)"> okay</b>. <b style="color:var(--colour-ui-primary)">Click</b> every <b style="color:var(--colour-ui-primary)">component</b> on the circuit where a <b style="color:var(--colour-ui-primary)">fault</b> could explain this pattern.',
+        hint: () => 'A fault that only affects the AC signal path — not the DC bias network — leaves every DC voltage untouched. Ask, for each component: does this one have ANY effect on the DC operating point at all?',
+        options: () => shuffle([
+          { key: 'C1', label: '<b class="colour-cap">C1</b> — input coupling capacitor', type: 'correct' },
+          { key: 'C2', label: '<b class="colour-cap">C2</b> — output coupling capacitor', type: 'correct' },
+          { key: 'R1', label: '<b class="colour-resistor">R1</b>', type: 'wrong' },
+          { key: 'R2', label: '<b class="colour-resistor">R2</b>', type: 'wrong' },
+          { key: 'RC', label: '<b class="colour-resistor">RC</b>', type: 'wrong' },
+          { key: 'RE', label: '<b class="colour-resistor">RE</b>', type: 'wrong' },
+        ]),
+        // No letter list is ever shown for this question (the circuit IS
+        // the option list), so correctExplain/working reference component
+        // KEYS (C1, C2, ...) directly rather than shuffled LETTERS[i] —
+        // letters wouldn't point at anything visible on screen here.
+        correctExplain: (st) => {
+          const keys = st.opts.map(o => o.type === 'correct' ? o.key : null).filter(Boolean).join(' & ');
+          return `${keys} — only the coupling capacitors have zero effect on DC bias`;
+        },
+        working: (st) => {
+          const correctKeys = st.opts.map(o => o.type === 'correct' ? o.key : null).filter(Boolean).join(' & ');
+          const wrongKeys = st.opts.map(o => o.type === 'wrong' ? o.key : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-step">${correctKeys}:</div>
+    <div class="working-line">A capacitor blocks DC entirely — it has NO effect on the bias network's own resistor-divider maths, whether it's healthy or open. An open C1 kills the AC signal before it ever reaches the base; an open C2 lets Q1 keep amplifying normally, but the result never reaches the output terminal. Either way: DC untouched, AC output dead — exactly what's measured here.</div>
+    <div class="working-step" style="margin-top:.6rem">${wrongKeys} — not gates for THIS symptom, even though a real fault:</div>
+    <div class="working-line"><b class="colour-resistor">R1</b> and <b class="colour-resistor">R2</b> set <b class="colour-current">V<sub>B</sub></b> directly — a fault in either shifts the whole bias point, including <b class="colour-current">V<sub>E</sub></b> and <b class="colour-current">V<sub>C</sub></b>. <b class="colour-resistor">RC</b> sets <b class="colour-current">V<sub>C</sub></b> directly — a fault there crashes or lifts <b class="colour-current">V<sub>C</sub></b>. <b class="colour-resistor">RE</b> sets <b class="colour-current">I<sub>E</sub></b>, which shifts <b class="colour-current">V<sub>E</sub></b> and (via <b class="colour-current">I<sub>C</sub></b>≈<b class="colour-current">I<sub>E</sub></b>) <b class="colour-current">V<sub>C</sub></b> too. All four would show up as a DC reading gone wrong — this question's own premise is that EVERY DC voltage reads correct, which rules every one of them out.</div>`;
+        }
+      },
+      {
+        // Second interactiveCircuit question, and the first to use the
+        // METER/SCOPE half of the generalised target universe rather than
+        // the component half Q1 uses — see ALL_INTERACTIVE_KEYS/
+        // TARGET_GROUP_ID. Deliberately the OPPOSITE lesson from Q1: Q1
+        // was "which fault could cause DC-untouched-but-AC-dead" (only
+        // capacitors qualify); this is "given a DC BIAS fault, which
+        // READINGS move" — R1 sits in the bias divider itself, so unlike
+        // C1/C2 it disturbs EVERYTHING downstream, DC and AC alike. That's
+        // why the correct set is lopsided (5 of 6) rather than a "balanced"
+        // multi-select — the lesson genuinely is "a bias-network fault
+        // cascades broadly," not an artificially even split.
+        // R1 HIGH values derived from first principles (same base-
+        // Thevenin method, VBE=0.6V — the teacher's own course-standard
+        // value, updated project-wide from the earlier 0.7V), R1:
+        // 120kΩ→240kΩ (mult=2, matching the sibling troubleshooter files'
+        // own "R1 high" fault magnitude):
+        //   VTH=0.706V, RTH=14.12kΩ, IB≈1.55µA (was 10.8µA), IE≈0.31mA
+        //   (was 2.18mA — about 7x smaller, a real drop but nowhere near
+        //   cutoff), VB≈0.68V (was 1.2V), VE≈0.08V (was 0.6V), VC≈11.44V
+        //   (was 8.1V, up toward VCC but not fully pinned).
+        // NOTE this fault reads as meaningfully less severe than it did
+        // under the old VBE=0.7V assumption: back then VTH=0.706V sat
+        // almost exactly on top of VBE, leaving next to no forward-bias
+        // headroom (IE collapsed >100x, to 17.3µA). With VBE=0.6V there's
+        // real headroom left (0.706-0.6=0.106V, not 0.006V), so IE drops
+        // a real but much more moderate ~86%, and the AC gain barely
+        // moves (Av: 6.4→5.1, NOT collapsing to unity) — see SCOPE_OUT
+        // below, which changed from the small/shrunk trace to the full
+        // healthy-looking one for exactly this reason.
+        // SCOPE_OUT is correct too — re′=VT/IE balloons as IE drops, so
+        // gain (∝1/re′) drops with it, even though nothing about R1 is an
+        // AC-path component itself — just not dramatically enough to
+        // visibly shrink the trace at this icon's scale any more. SCOPE_IN
+        // is the one deliberately WRONG option — it probes the external
+        // source directly, upstream of the whole amplifier, so nothing
+        // happening to Q1's own bias point can ever reach back and change
+        // what the signal generator itself is putting out.
+        circuitLabel: 'Common Emitter (voltage-divider bias, RE unbypassed)',
+        kind: 'multi',
+        interactiveCircuit: true,
+        meterOverride: (answered) => answered
+          ? {
+            VB: { value: '0.68', unit: 'V' }, VC: { value: '11.44', unit: 'V' },
+            VE: { value: '0.08', unit: 'V' }, IE: { value: '0.31', unit: 'mA' },
+          }
+          : {
+            VB: { value: '?', unit: 'V' }, VC: { value: '?', unit: 'V' },
+            VE: { value: '?', unit: 'V' }, IE: { value: '?', unit: 'mA' },
+          },
+        // Full healthy-looking wave now, not the shrunk "near-unity"
+        // trace from the old VBE=0.7V version — gain barely moves (6.4→
+        // 5.1), too subtle a difference to represent as a visibly smaller
+        // icon, so the honest choice is the same full-scale trace as the
+        // (never-shown) healthy state, not an artificially shrunk one.
+        // Concealed until answered, same reasoning as meterOverride above
+        // — SCOPE_OUT is one of this question's own clickable options.
+        scopeOverride: (answered) => answered ? { SCOPE_OUT: 'scope-ch2-only' } : null,
+        text: () => '<b class="colour-resistor">R1</b> has gone <b style="color:var(--colour-ui-primary)">HIGH</b> (increased significantly in value). <b style="color:var(--colour-ui-primary)">Click</b> every <b style="color:var(--colour-ui-primary)">meter</b> or <b style="color:var(--colour-ui-primary)">scope</b> on the circuit that would show an <b style="color:var(--colour-ui-primary)">AFFECTED</b> reading as a result.',
+        hint: () => 'R1 sits in the base bias divider itself — trace the chain: R1 changes VB, VB changes VE, VE changes IE, IE changes VC. Which of the six readings genuinely has NO path back to anything R1 touches? (This particular R1 increase isn\'t severe enough to fully starve the base — expect a real but moderate shift, not a collapse.)',
+        options: () => shuffle([
+          { key: 'VB', label: 'VB meter', type: 'correct' },
+          { key: 'VC', label: 'VC meter', type: 'correct' },
+          { key: 'VE', label: 'VE meter', type: 'correct' },
+          { key: 'IE', label: 'IE ammeter', type: 'correct' },
+          { key: 'SCOPE_OUT', label: 'Output scope', type: 'correct' },
+          { key: 'SCOPE_IN', label: 'Input scope', type: 'wrong' },
+        ]),
+        correctExplain: (st) => {
+          const keys = st.opts.map(o => o.type === 'correct' ? o.key : null).filter(Boolean).join(', ');
+          return `${keys} — everything downstream of the bias divider moves`;
+        },
+        working: (st) => {
+          const wrongKeys = st.opts.map(o => o.type === 'wrong' ? o.key : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-step">VB, VC, VE, IE — the whole DC bias chain:</div>
+    <div class="working-line">A bigger R1 drops more of VCC across itself, leaving less for the R1/R2 junction — <b class="colour-current">V<sub>B</sub></b> falls from 1.2 V to about <b class="colour-result">0.68 V</b>. That drags <b class="colour-current">V<sub>E</sub></b> down with it (0.6 V → <b class="colour-result">0.08 V</b>), which drops <b class="colour-current">I<sub>E</sub></b> from 2.18 mA down to about <b class="colour-result">0.31 mA</b> — a real drop (roughly 7x smaller), but the base still has genuine forward-bias headroom left, nowhere near full cutoff. With less collector current, less drops across RC, so <b class="colour-current">V<sub>C</sub></b> rises from 8.1 V up to about <b class="colour-result">11.44 V</b> — up toward the supply rail, but not fully pinned against it.</div>
+    <div class="working-step" style="margin-top:.6rem">Output scope:</div>
+    <div class="working-line">re′ = V<sub>T</sub>/I<sub>E</sub> — with I<sub>E</sub> down to about a seventh of its healthy value, re′ grows and AC gain (which scales with 1/re′) drops with it (from about 6.4 down to about 5.1) — a real reduction, but modest enough that it's barely visible on the scope icon at this scale. The output trace stays a recognisable, healthy-looking sine, even though R1 itself isn't an AC-path component at all.</div>
+    <div class="working-step" style="margin-top:.6rem">${wrongKeys} — the one reading R1 can never reach:</div>
+    <div class="working-line">The input scope probes the external signal source directly, BEFORE it ever reaches C1 or the base — completely upstream of Q1's own bias point. Nothing happening inside this amplifier can reach back and change what the signal generator itself is producing.</div>`;
+        }
+      },
+    ];
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUIZ ENGINE — generic; driven entirely by QUESTIONS[] via index.
+    // ══════════════════════════════════════════════════════════════════════
+
+    function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+    function isMulti(data) { return data.kind === 'multi'; }
+    function isAnswerCorrect(data, st) {
+      if (!isMulti(data)) return st.sel === st.cor;
+      const a = [...st.sel].sort((x, y) => x - y), b = [...st.cor].sort((x, y) => x - y);
+      return a.length === b.length && a.every((v, i) => v === b[i]);
+    }
+    function selectedLabel(data, st) {
+      if (!isMulti(data)) return (st.sel != null && st.opts[st.sel]) ? st.opts[st.sel].label : '—';
+      return st.sel.length ? [...st.sel].sort((a, b) => a - b).map(i => LETTERS[i]).join(', ') : '—';
+    }
+
+    let Q = [];
+    let cur = 0;
+
+    function buildProgressDots() {
+      document.getElementById('progressDots').innerHTML =
+        QUESTIONS.map((_, i) => `<div class="progress-dot" id="dot-${i}"></div>`).join('');
+    }
+
+    function updateProgress() {
+      QUESTIONS.forEach((_, i) => {
+        const d = document.getElementById('dot-' + i);
+        d.className = 'progress-dot';
+        if (i === cur) d.classList.add('active'); else if (Q[i].ans) d.classList.add('done');
+      });
+      document.getElementById('progressLabel').textContent = (cur + 1) + ' / ' + QUESTIONS.length;
+    }
+
+    function renderOptions() {
+      const st = Q[cur], data = QUESTIONS[cur];
+      const multi = isMulti(data);
+      const c = document.getElementById('qOptions'); c.innerHTML = '';
+      st.opts.forEach((opt, i) => {
+        const btn = document.createElement('button'); btn.className = 'option-btn';
+        btn.innerHTML = `<span class="option-letter">${LETTERS[i]}</span><span>${opt.label}</span>`;
+        if (st.ans) {
+          btn.disabled = true;
+          if (multi) {
+            const selected = st.sel.includes(i);
+            if (opt.type === 'correct') { btn.classList.add(selected ? 'correct' : 'missed'); if (selected) btn.innerHTML += `<span class="result-icon">✓</span>`; }
+            else { btn.classList.add(selected ? 'wrong' : 'dimmed'); if (selected) btn.innerHTML += `<span class="result-icon">✗</span>`; }
+          } else {
+            if (i === st.cor) { btn.classList.add('correct'); btn.innerHTML += `<span class="result-icon">✓</span>`; }
+            else if (i === st.sel) { btn.classList.add('wrong'); btn.innerHTML += `<span class="result-icon">✗</span>`; }
+            else btn.classList.add('dimmed');
+          }
+        } else {
+          if (multi ? st.sel.includes(i) : i === st.sel) btn.classList.add('selected');
+          btn.addEventListener('click', () => selectOption(i));
+        }
+        c.appendChild(btn);
+      });
+    }
+
+    function selectOption(i) {
+      const st = Q[cur], data = QUESTIONS[cur];
+      if (st.ans) return;
+      if (isMulti(data)) {
+        const pos = st.sel.indexOf(i);
+        if (pos >= 0) st.sel.splice(pos, 1); else st.sel.push(i);
+      } else {
+        st.sel = i;
+      }
+      renderQuestion();
+    }
+
+    // ── INTERACTIVE CIRCUIT (any question with interactiveCircuit:true) ──
+    // Wires EVERY selectable thing on the circuit — the 6 components
+    // (C1/C2/R1/R2/RC/RE), the 4 DC meters (VB/VC/VE/IE), and the 2
+    // scope icons (SCOPE_IN/SCOPE_OUT) — up to the SAME st.sel/
+    // selectOption() state every other multi-select question already
+    // uses. Originally just the 6 components (Q1); generalised so a
+    // question can pick ANY subset of this whole universe as its own
+    // options() list (e.g. "which meters/scopes would show an affected
+    // reading" uses VB/VC/VE/IE/SCOPE_OUT/SCOPE_IN instead). Each key
+    // maps to its own real SVG group id — components/scopes use
+    // comp-<key>, but the meters/ammeter keep their own pre-existing
+    // meterVB/meterVC/meterVE/ammeterGroup ids rather than being renamed.
+    const ALL_INTERACTIVE_KEYS = ['C1', 'C2', 'R1', 'R2', 'RC', 'RE', 'VB', 'VC', 'VE', 'IE', 'SCOPE_IN', 'SCOPE_OUT'];
+    const TARGET_GROUP_ID = {
+      C1: 'comp-C1', C2: 'comp-C2', R1: 'comp-R1', R2: 'comp-R2', RC: 'comp-RC', RE: 'comp-RE',
+      VB: 'meterVB', VC: 'meterVC', VE: 'meterVE', IE: 'ammeterGroup',
+      SCOPE_IN: 'comp-SCOPE_IN', SCOPE_OUT: 'comp-SCOPE_OUT',
+    };
+
+    function wireComponentClicks() {
+      ALL_INTERACTIVE_KEYS.forEach(key => {
+        const g = document.getElementById(TARGET_GROUP_ID[key]);
+        if (!g) return;
+        g.addEventListener('click', () => {
+          const data = QUESTIONS[cur], st = Q[cur];
+          if (!data.interactiveCircuit || st.ans) return;
+          const idx = st.opts.findIndex(o => o.key === key);
+          if (idx >= 0) selectOption(idx);
+        });
+      });
+    }
+
+    // Colour a single target's highlight frame + badge for its current
+    // state — selection-pending (blue), or post-answer correct/wrong/missed
+    // (same green/red/amber convention as every option-btn elsewhere).
+    function paintComponent(key, idx, st, answered) {
+      const hl = document.getElementById('hl-' + key), badge = document.getElementById('badge-' + key);
+      if (!hl || !badge) return;
+      const selected = st.sel.includes(idx);
+      const isCorrect = st.opts[idx].type === 'correct';
+      if (!answered) {
+        hl.setAttribute('stroke', selected ? 'var(--colour-ui-primary)' : 'transparent');
+        hl.setAttribute('fill', selected ? 'rgba(var(--colour-ui-primary-rgb),.1)' : 'none');
+        badge.textContent = selected ? '✓' : '';
+        badge.setAttribute('fill', 'var(--colour-ui-primary)');
+      } else if (isCorrect) {
+        hl.setAttribute('stroke', selected ? 'var(--colour-ui-correct)' : 'var(--colour-ui-restart)');
+        hl.setAttribute('stroke-dasharray', selected ? 'none' : '4,3');
+        hl.setAttribute('fill', selected ? 'rgba(var(--colour-ui-correct-rgb),.12)' : 'none');
+        badge.textContent = selected ? '✓' : '?';
+        badge.setAttribute('fill', selected ? 'var(--colour-ui-correct)' : 'var(--colour-ui-restart)');
+      } else {
+        hl.setAttribute('stroke', selected ? 'var(--colour-ui-wrong)' : 'transparent');
+        hl.setAttribute('stroke-dasharray', 'none');
+        hl.setAttribute('fill', selected ? 'rgba(var(--colour-ui-wrong-rgb),.12)' : 'none');
+        badge.textContent = selected ? '✗' : '';
+        badge.setAttribute('fill', 'var(--colour-ui-wrong)');
+      }
+      if (!answered || isCorrect) hl.removeAttribute('stroke-dasharray');
+    }
+
+    // Single pass over the WHOLE interactive universe, every render,
+    // whether the current question is interactive or not — for each key,
+    // either paint it (if it's actually one of the CURRENT question's own
+    // options) or blank it back out (if it isn't, e.g. every question
+    // that isn't interactiveCircuit at all, or an interactive question
+    // that only uses SOME of the 12 possible keys — Q1 doesn't touch
+    // VB/VC/VE/IE/SCOPE_*, and the meter question doesn't touch the 6
+    // components, so both need the OTHER half explicitly reset, not just
+    // left however the previous question happened to leave them).
+    function syncInteractiveVisuals(data, st) {
+      ALL_INTERACTIVE_KEYS.forEach(key => {
+        const g = document.getElementById(TARGET_GROUP_ID[key]);
+        const idx = (data.interactiveCircuit && st.opts) ? st.opts.findIndex(o => o.key === key) : -1;
+        if (g) g.classList.toggle('comp-interactive', idx >= 0);
+        if (idx >= 0) {
+          paintComponent(key, idx, st, st.ans);
+        } else {
+          const hl = document.getElementById('hl-' + key), badge = document.getElementById('badge-' + key);
+          if (hl) { hl.setAttribute('stroke', 'transparent'); hl.setAttribute('fill', 'none'); hl.removeAttribute('stroke-dasharray'); }
+          if (badge) badge.textContent = '';
+        }
+      });
+    }
+
+    // ── METER VALUES — dynamic per question ──
+    // VB/VC/VE/IE always showed one hardcoded HEALTHY reading before —
+    // now overridable per-question (e.g. "?" until answered, then the
+    // real faulted number) via an optional data.meterOverride(answered)
+    // function returning {VB:{value,unit}, ...} for whichever meters it
+    // cares about. Every question that doesn't define one falls back to
+    // HEALTHY_METERS unchanged.
+    const HEALTHY_METERS = {
+      VB: { value: '1.2', unit: 'V' }, VC: { value: '8.1', unit: 'V' },
+      VE: { value: '0.6', unit: 'V' }, IE: { value: '2.18', unit: 'mA' },
+    };
+    const METER_TEXT_ID = {
+      VB: ['meterVBValue', 'meterVBUnit'], VC: ['meterVCValue', 'meterVCUnit'],
+      VE: ['meterVEValue', 'meterVEUnit'], IE: ['ammeterValue', 'ammeterUnit'],
+    };
+    function syncMeterValues(data, st) {
+      const override = data.meterOverride ? data.meterOverride(st.ans) : null;
+      Object.keys(METER_TEXT_ID).forEach(key => {
+        const state = (override && override[key]) ? override[key] : HEALTHY_METERS[key];
+        const [valId, unitId] = METER_TEXT_ID[key];
+        const valEl = document.getElementById(valId), unitEl = document.getElementById(unitId);
+        if (valEl) valEl.textContent = state.value;
+        if (unitEl) unitEl.textContent = state.unit;
+      });
+    }
+
+    // ── SCOPE WAVEFORMS — dynamic per question ──
+    // SCOPE_IN/SCOPE_OUT always showed one hardcoded pair of shapes before
+    // (healthy wave in, flat line out — exactly Q1's own C1/C2-open
+    // premise). Now overridable per-question via an optional
+    // data.scopeOverride(answered) hook, same "conceal until answered"
+    // convention as meterOverride — before a question is answered, any
+    // scope that's one of ITS OWN clickable options stays at the neutral
+    // Q1-matching default rather than revealing early (an interactive
+    // question that includes SCOPE_OUT as a clickable option would
+    // otherwise give the answer away visually before the student commits
+    // to one), then reveals the fault-accurate shape once answered.
+    const HEALTHY_SCOPES = { SCOPE_IN: 'scope-ch1-only', SCOPE_OUT: 'scope-ch2-flat-only' };
+    const SCOPE_SHAPE_ID = { SCOPE_IN: 'scopeShape-SCOPE_IN', SCOPE_OUT: 'scopeShape-SCOPE_OUT' };
+    function syncScopeShapes(data, st) {
+      const override = data.scopeOverride ? data.scopeOverride(st.ans) : null;
+      Object.keys(SCOPE_SHAPE_ID).forEach(key => {
+        const shapeId = (override && override[key]) ? override[key] : HEALTHY_SCOPES[key];
+        const el = document.getElementById(SCOPE_SHAPE_ID[key]);
+        if (el) el.setAttribute('href', '#' + shapeId);
+      });
+    }
+
+    // This quiz only ever shows the one static ce-fault-circuit, so it's
+    // rendered as real inline SVG content directly inside circuitRefSvg
+    // now (not a <defs>+<use> reference swapped by id) — needed so Q1's
+    // own components are individually clickable, which a <use>-cloned
+    // shadow tree can't support (a click on any part of a <use> instance
+    // only ever targets the <use> element itself, not its internal
+    // children). showCircuitRef() no longer swaps WHICH circuit is shown,
+    // just the label/viewBox.
+    function showCircuitRef(id, label, viewBox) {
+      document.getElementById('circuitRefLabel').textContent = label || 'Reference Circuit';
+      document.getElementById('circuitRefSvg').setAttribute('viewBox', viewBox || DEFAULT_VIEWBOX);
+      if (xyOn) buildXYRuler();
+    }
+
+    /* ─── DEV: xy ruler overlay, for lining up SVG coordinates by eye ────────
+       Console:   setXY(1) / setXY(0)     URL: ?xy=1 */
+    let xyOn = false;
+    function buildXYRuler() {
+      const g = document.getElementById('xyRuler');
+      if (!g) return;
+      const vb = document.getElementById('circuitRefSvg').viewBox.baseVal;
+      const offX = vb.x, offY = vb.y, W = vb.width, H = vb.height;
+      const hy = offY + H - 10, vx = offX + 10, col = '#ff00ff';
+      let svg = `<line x1="${offX}" y1="${hy}" x2="${offX + W}" y2="${hy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+      for (let x = 0; x <= W; x += 10) {
+        const gx = offX + x, major = (Math.round(gx) % 50 === 0), len = major ? 10 : 5;
+        svg += `<line x1="${gx}" y1="${hy - len}" x2="${gx}" y2="${hy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+        if (major) svg += `<text x="${gx}" y="${hy - 13}" fill="${col}" font-size="8" text-anchor="middle">${Math.round(gx)}</text>`;
+      }
+      svg += `<line x1="${vx}" y1="${offY}" x2="${vx}" y2="${offY + H}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+      for (let y = 0; y <= H; y += 10) {
+        const gy = offY + y, major = (Math.round(gy) % 50 === 0), len = major ? 10 : 5;
+        svg += `<line x1="${vx}" y1="${gy}" x2="${vx + len}" y2="${gy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+        if (major) svg += `<text x="${vx + 13}" y="${gy + 3}" fill="${col}" font-size="8" text-anchor="start">${Math.round(gy)}</text>`;
+      }
+      g.innerHTML = svg;
+    }
+    function setXY(on) {
+      xyOn = on;
+      const g = document.getElementById('xyRuler');
+      if (!g) return;
+      if (on) buildXYRuler();
+      g.setAttribute('display', on ? 'inline' : 'none');
+    }
+    window.setXY = setXY;
+
+    function renderQuestion() {
+      const data = QUESTIONS[cur], st = Q[cur];
+      const multi = isMulti(data);
+
+      document.getElementById('qNum').textContent = 'Q' + (cur + 1);
+      document.getElementById('qText').innerHTML = data.text();
+      document.getElementById('qHint').innerHTML = data.hint();
+
+      // Any interactiveCircuit question has no separate option list at
+      // all — the circuit diagram itself is the click surface (see
+      // wireComponentClicks()/syncInteractiveVisuals()). Every other
+      // question keeps the normal button list.
+      document.getElementById('qOptions').style.display = data.interactiveCircuit ? 'none' : '';
+      if (!data.interactiveCircuit) renderOptions();
+      syncInteractiveVisuals(data, st);
+      syncMeterValues(data, st);
+      syncScopeShapes(data, st);
+
+      const selList = document.getElementById('qSelectedList');
+      if (multi) {
+        selList.style.display = '';
+        const selectedNames = data.interactiveCircuit
+          ? [...st.sel].sort((a, b) => a - b).map(i => st.opts[i].key)
+          : [...st.sel].sort((a, b) => a - b).map(i => LETTERS[i]);
+        selList.textContent = st.sel.length
+          ? `Selected: ${selectedNames.join(', ')}`
+          : (data.interactiveCircuit ? 'Click the components on the circuit to select your answer.' : 'Click the options above to select your answer.');
+      } else {
+        selList.style.display = 'none';
+      }
+
+      const banner = document.getElementById('qBanner');
+      if (st.ans) {
+        const ok = isAnswerCorrect(data, st);
+        banner.className = 'result-banner ' + (ok ? 'correct' : 'wrong');
+        document.getElementById('qIcon').textContent = ok ? '✓' : '✗';
+        document.getElementById('qBannerText').innerHTML = ok ? `Correct! ${data.correctExplain(st)}` : `The correct answer is ${data.correctExplain(st)}`;
+      } else {
+        banner.className = 'result-banner';
+      }
+
+      const working = document.getElementById('qWorking');
+      working.className = 'working-box' + (st.ans ? ' visible' : '');
+      document.getElementById('qWorkingContent').innerHTML = st.ans ? data.working(st) : '';
+
+      document.getElementById('qBack').style.display = cur > 0 ? 'inline-block' : 'none';
+      const check = document.getElementById('qCheck');
+      check.style.display = st.ans ? 'none' : 'inline-block';
+      check.disabled = st.ans || (multi ? st.sel.length === 0 : st.sel === null);
+      const isLast = cur === QUESTIONS.length - 1;
+      document.getElementById('qNext').style.display = (st.ans && !isLast) ? 'inline-block' : 'none';
+      document.getElementById('qSummary').style.display = (st.ans && isLast) ? 'inline-block' : 'none';
+
+      showCircuitRef('ce-fault-circuit', data.circuitLabel);
+      updateProgress();
+    }
+
+    function checkAnswer() {
+      const st = Q[cur], data = QUESTIONS[cur];
+      if (st.ans) return;
+      if (isMulti(data) ? st.sel.length === 0 : st.sel === null) return;
+      st.ans = true;
+      renderQuestion();
+      document.getElementById('qBanner').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function scrollToQuestionTop() {
+      document.getElementById('qPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function nextQuestion() { if (cur < QUESTIONS.length - 1) { cur++; renderQuestion(); scrollToQuestionTop(); } }
+
+    function backQuestion() {
+      if (cur <= 0) return;
+      cur--;
+      for (let i = cur; i < QUESTIONS.length; i++) {
+        Q[i].ans = false;
+        Q[i].sel = isMulti(QUESTIONS[i]) ? [] : null;
+      }
+      renderQuestion();
+      scrollToQuestionTop();
+    }
+
+    function goToQuestion(n) {
+      cur = Math.max(0, Math.min(QUESTIONS.length - 1, n - 1));
+      document.getElementById('summaryPanel').style.display = 'none';
+      document.getElementById('qPanel').style.display = 'flex';
+      renderQuestion();
+      scrollToQuestionTop();
+    }
+
+    function resetQuiz() {
+      Q = QUESTIONS.map(data => {
+        const opts = data.options();
+        if (isMulti(data)) {
+          const cor = opts.map((o, i) => o.type === 'correct' ? i : -1).filter(i => i >= 0);
+          return { sel: [], ans: false, cor, opts };
+        }
+        return { sel: null, ans: false, cor: opts.findIndex(o => o.type === 'correct'), opts };
+      });
+      cur = 0;
+      document.getElementById('summaryPanel').style.display = 'none';
+      document.getElementById('qPanel').style.display = 'flex';
+      renderQuestion();
+    }
+
+    function showSummary() {
+      document.getElementById('qPanel').style.display = 'none';
+      document.getElementById('summaryPanel').style.display = 'block';
+      showCircuitRef('ce-fault-circuit', 'Common Emitter (voltage-divider bias, RE unbypassed)');
+      const items = QUESTIONS.map((data, i) => {
+        const st = Q[i];
+        const ans = selectedLabel(data, st);
+        const ok = isAnswerCorrect(data, st);
+        const colour = ok ? 'var(--colour-ui-correct)' : '#ff3366';
+        const mark = ok ? '✓' : '✗';
+        return `<div class="summary-item">
+      <div class="summary-item-head"><span class="summary-qnum">Q${i + 1}</span><span class="summary-question">${data.text()}</span></div>
+      <div class="summary-answer" style="color:${colour}">You answered: ${ans} &nbsp; ${mark}</div>
+      <div class="working-box visible">${st.ans ? data.working(st) : ''}</div>
+    </div>`;
+      }).join('');
+      document.getElementById('summaryContent').innerHTML = items;
+      QUESTIONS.forEach((_, i) => { const d = document.getElementById('dot-' + i); if (d) d.className = 'progress-dot done'; });
+      document.getElementById('progressLabel').textContent = 'Complete';
+    }
+
+
+    buildProgressDots();
+    wireComponentClicks();
+    resetQuiz();
+
+    function goBack(e) { e.preventDefault(); history.back(); }
+    if (history.length > 1) {
+      document.getElementById('menuLink').style.display = '';
+    }
+
+    function jump(n, answered) {
+      if (n < 1 || n > QUESTIONS.length) { console.warn('jump: no question', n); return; }
+      for (let i = 0; i < n - 1; i++) {
+        Q[i].sel = Array.isArray(Q[i].cor) ? [...Q[i].cor] : Q[i].cor;
+        Q[i].ans = true;
+      }
+      goToQuestion(n);
+      if (answered) {
+        Q[cur].sel = Array.isArray(Q[cur].cor) ? [...Q[cur].cor] : Q[cur].cor;
+        checkAnswer();
+      }
+    }
+    window.jump = jump;
+
+    function jumpToSummary() {
+      QUESTIONS.forEach((_, i) => {
+        if (Q[i].ans) return;
+        Q[i].sel = Array.isArray(Q[i].cor) ? [...Q[i].cor] : Q[i].cor;
+        Q[i].ans = true;
+      });
+      showSummary();
+    }
+    window.jumpToSummary = jumpToSummary;
+
+    {
+      const p = new URLSearchParams(location.search);
+      if (p.has('q')) { if (p.get('q') === 's') jumpToSummary(); else jump(+p.get('q'), p.has('ans')); }
+      if (p.has('xy')) setXY(+p.get('xy') === 1);
+    }
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,1244 @@
+<!--
+  TEMPLATE FILE — read before cloning for a new weekly quiz (see
+  ../../bjt/basics/bjt_knowledge_basics.html's own header comment for the
+  full explanation of why this structure is mandatory even for a one-
+  question file).
+
+  This file uses a data-driven quiz engine: a single `QUESTIONS` array (in
+  the <script>, search "QUESTIONS —") drives one generic HTML panel and a
+  generic set of engine functions (renderQuestion, checkAnswer,
+  nextQuestion, etc). There is deliberately NO per-question HTML or
+  per-question JS function. Built on the shared cert_iii/assets/
+  quiz-engine.js engine from the start (project convention for all new
+  quizzes).
+
+  Source material: coupling_objectives.webp (lesson objectives) plus 13
+  IMG_29xx.webp photos of the textbook and the teacher's whiteboard,
+  covering: the 3 main coupling methods (capacitive/transformer/direct,
+  plus the teacher's own "light/IR" aside), overall gain of a cascaded
+  amplifier (multiply ratios, ADD dB values), the factors affecting the
+  lower/upper roll-off frequencies (f1/f2), the "cascading two stages does
+  NOT preserve the combined -3dB bandwidth" gotcha, and interstage
+  coupling-capacitor sizing (f1 = 1/(2*pi*RT*Cc)). Applies equally to BJT
+  and FET multistage amplifiers per the lesson objectives, so this file
+  intentionally uses no device-specific accent colour (--colour-ui-primary
+  throughout, not --colour-bjt/--colour-jfet/--colour-mosfet).
+
+  NOTE for whoever reviews/extends this: the source photos have a gap —
+  IMG_2908, IMG_2909 and IMG_2911 don't exist (filenames jump 2907 -> 2910,
+  then 2910-2 -> 2912), matching Don's own warning that he "missed a couple
+  of the whiteboard points at the end". The visible content flows sensibly
+  around the gaps (Factors affecting f1/f2 -> [gap] -> BJT inter-electrode
+  capacitance example -> other stray C/L factors -> [gap] -> interstage
+  coupling -> determining cap size), but whatever was on the missing
+  board(s) isn't reflected here. Not yet covered at all: "describe the
+  advantages/disadvantages of DIRECT coupling" (only capacitive/transformer
+  have an adv/disadv question so far) and "predict the effect of typical
+  faults in a capacitively coupled amplifier" (that's a fault-finding-style
+  quiz of its own, same shape as ../../bjt/fault_finding/ — not attempted
+  here). Add questions for these once there's source content to build them
+  from, rather than inventing values.
+
+  Being built as a first version per Don's own request — add further
+  questions one at a time per his own direction from here, same convention
+  as jfet_knowledge_basics.html.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../../assets/theme-init.js"></script>
+  <script src="../../../../assets/quiz-engine.js"></script>
+  <title>Coupling Methods Knowledge Quiz 1</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../../assets/quiz-common.css">
+  <script src="../../../../assets/breadcrumb.js" defer></script>
+  <style>
+    /* Q1's block-diagram (input/interstage/output coupling) — plain SVG
+       shapes styled with currentColor-ish theme tokens, same convention as
+       every other page-local circuit diagram in this project. Q8's own
+       Figure 8 (Thevenin-equivalent two-stage coupling) reuses the same
+       .coupling-diagram-wire/-cap classes for its own plain wires/cap, but
+       needs its own resistor/source colour classes since it's drawing
+       real component symbols (R/Vs), not the abstract stage-triangles Q1
+       uses. Both diagrams now live in <defs> and are swapped into the one
+       visible #circuitSvg via CIRCUIT_SVG_ID's own <use> — see each
+       question's own circuitId field. */
+    .coupling-diagram-label { font-family: var(--font-body); font-size: 13px; fill: var(--colour-label); text-anchor: middle; }
+    .coupling-diagram-letter { font-family: var(--font-body); font-size: 15px; font-weight: 700; fill: var(--colour-ui-primary); text-anchor: middle; }
+    .coupling-diagram-stage { fill: none; stroke: var(--colour-ui-primary); stroke-width: 2; }
+    .coupling-diagram-wire { stroke: var(--colour-ui-primary); stroke-width: 1.5; fill: none; }
+    .coupling-diagram-cap { stroke: var(--colour-ui-primary); stroke-width: 2; }
+    .fig8-box { fill: none; stroke: var(--colour-label); stroke-width: 1.5; }
+    .fig8-r { fill: var(--colour-panel); stroke: var(--colour-resistor); stroke-width: 2; }
+    .fig8-r-label { fill: var(--colour-resistor-labels); font-size: 13px; font-weight: 700; }
+    .fig8-vs { fill: none; stroke: var(--colour-signal); stroke-width: 2; }
+    .fig8-vs-label { fill: var(--colour-signal-labels); font-size: 13px; font-weight: 700; }
+    .fig8-cc-label { fill: var(--colour-capacitor-labels); font-size: 13px; font-weight: 700; text-anchor: middle; }
+    .fig8-value { fill: var(--colour-text); font-size: 13px; font-weight: 700; text-anchor: middle; }
+
+    /* Review-question circuit labels (Q1-22/26-28) — BJT/JFET single- and
+       two-stage amplifiers, plus the transformer-coupled output stage.
+       Same colour-by-component-type convention as .fig8-r-label/-vs-label
+       above, just reused across several new figures instead of one. */
+    .ckt-r-label { fill: var(--colour-resistor-labels); font-size: 15px; font-weight: 700; }
+    .ckt-c-label { fill: var(--colour-capacitor-labels); font-size: 13px; font-weight: 700; text-anchor: middle; }
+    .ckt-value { fill: var(--colour-text); font-size: 13px; font-weight: 700; text-anchor: middle; }
+    .ckt-bjt-label { fill: var(--colour-bjt-labels); font-size: 13px; font-weight: 700; }
+    .ckt-jfet-label { fill: var(--colour-jfet-labels); font-size: 13px; font-weight: 700; }
+    .ckt-rail-label { fill: var(--colour-voltage-label); font-size: 14px; font-weight: 700; text-anchor: middle; }
+    .ckt-gnd-label { fill: var(--colour-current); font-size: 13px; font-weight: 700; }
+    .ckt-io-label { fill: var(--colour-text); font-size: 13px; }
+  </style>
+</head>
+
+<body>
+  <div class="crumb" id="crumb" data-current="Coupling Basics"></div>
+  <header>
+    <h1>Coupling Methods</h1>
+    <p>Conceptual Questions · Capacitive &amp; Transformer Coupling · Multistage Amplifiers (BJT &amp; FET)</p>
+  </header>
+
+  <div class="quiz-wrap" id="quizWrap">
+
+    <!-- LEFT: circuit diagram, swapped per-question via circuitId (see
+         quiz-engine.js's own showCircuitRef()/CIRCUIT_SVG_ID mechanism). -->
+    <div class="circuit-col">
+      <div class="circuit-panel">
+        <div class="panel-label" id="circuitRefLabel">Figure 1 — 3-stage cascaded amplifier</div>
+        <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+          <defs>
+            <g id="cap-shape">
+              <rect x="-4" y="-12" width="8" height="24" style="fill: var(--colour-panel)" />
+              <line x1="-4" y1="-12" x2="-4" y2="12" style="stroke: var(--colour-capacitor)" stroke-width="2.5" />
+              <line x1="4" y1="-12" x2="4" y2="12" style="stroke: var(--colour-capacitor)" stroke-width="2.5" />
+            </g>
+
+            <!-- ══ Review-question shapes (Section 1, Q1-22/26-28) — BJT/
+                 JFET bodies and the resistor box are copied verbatim from
+                 ../../../working/transformer_circuit.html (that file's own
+                 master copy) per this project's usual "edit master first,
+                 copy into consuming files" convention. voltage-divider-bias
+                 is ALSO copied verbatim from there — the same generic,
+                 unlabelled 4-resistor BJT frame that file's own
+                 voltageDivider-Q1-R1-R4/Q2-R5-R8 build on, reused here the
+                 same way for Figure 1 and Figure 3's own first stage.
+                 jfet-single-stage-bias is a NEW analogous frame (no
+                 existing master anywhere in the project) for a plain
+                 gate-resistor-biased JFET stage — same rail/footprint
+                 convention (340 wide, VCC rail y=20, common rail y=535,
+                 device row y≈250) so it drops into the same coupling-cap/
+                 bypass-cap wiring patterns as the BJT frame, but the LEFT
+                 side only runs gate-tap→RG→common (no VCC connection, a
+                 JFET gate draws no bias current) rather than a full
+                 divider. transformer-shape is also new (no transformer
+                 symbol exists anywhere in this project's shape masters) —
+                 two mirrored coil arcs either side of a 2-line laminated-
+                 core mark, zero-based on the primary coil's own centre
+                 line so it drops in via a plain translate() like every
+                 other component here. ── -->
+            <g id="bjt-npn-shape">
+              <circle cx="7" cy="0" r="24" style="fill: var(--colour-panel); stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+              <line x1="-17" y1="0" x2="0" y2="0" style="stroke: var(--colour-bjt)" stroke-width="2" />
+              <line x1="0" y1="-12" x2="0" y2="12" style="stroke: var(--colour-bjt)" stroke-width="2.5" />
+              <polyline points="14,-34 14,-20 0,-8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+              <polyline points="14,34 14,20 0,8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+              <polygon points="12,18 1,14 6,8" style="fill: var(--colour-bjt)" />
+            </g>
+
+            <g id="jfet-n-shape">
+              <circle cx="7" cy="0" r="30" fill="var(--colour-panel)" style="stroke: var(--colour-jfet)" stroke-width="2" filter="url(#glow)" />
+              <line x1="-30" y1="7" x2="0" y2="7" style="stroke: var(--colour-jfet)" stroke-width="2" />
+              <rect x="0" y="-20" width="4" height="40" style="fill: var(--colour-jfet)" />
+              <line x1="0" y1="-15" x2="15" y2="-15" style="stroke: var(--colour-jfet)" stroke-width="2" />
+              <line x1="14" y1="-15" x2="14" y2="-40" style="stroke: var(--colour-jfet)" stroke-width="2" />
+              <line x1="0" y1="15" x2="15" y2="15" style="stroke: var(--colour-jfet)" stroke-width="2" />
+              <line x1="14" y1="15" x2="14" y2="40" style="stroke: var(--colour-jfet)" stroke-width="2" />
+              <polygon points="-8,3 -8,12 2,7" style="fill: var(--colour-jfet)" />
+            </g>
+
+            <g id="resistor-vertical">
+              <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+            </g>
+
+            <g id="transformer-shape">
+              <path d="M 0,-40 A 10,10 0 0 1 0,-20 A 10,10 0 0 1 0,0 A 10,10 0 0 1 0,20 A 10,10 0 0 1 0,40" fill="none" style="stroke: var(--colour-series)" stroke-width="2.5" />
+              <line x1="14" y1="-45" x2="14" y2="45" style="stroke: var(--colour-label)" stroke-width="2" />
+              <line x1="20" y1="-45" x2="20" y2="45" style="stroke: var(--colour-label)" stroke-width="2" />
+              <path d="M 34,-40 A 10,10 0 0 0 34,-20 A 10,10 0 0 0 34,0 A 10,10 0 0 0 34,20 A 10,10 0 0 0 34,40" fill="none" style="stroke: var(--colour-series)" stroke-width="2.5" />
+            </g>
+
+            <!-- ══ Generic BJT divider-bias frame — footprint 340×535,
+                 zero-based (translate(X,Y) lands on its own top-left
+                 corner): VCC rail y=20, common rail y=535, base tap
+                 (0,190)-(100,190), collector tap (240,190)-(340,190),
+                 R1/R2 (base divider, x=85) at y=60/370, R3/R4 (collector/
+                 emitter, x=225) at y=60/370, Q at (226,255). ══ -->
+            <g id="voltage-divider-bias">
+              <line x1="0" y1="20" x2="340" y2="20" style="stroke: var(--colour-series)" stroke-width="2" />
+              <line x1="0" y1="535" x2="340" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+              <line x1="0" y1="190" x2="100" y2="190" style="stroke: var(--colour-series)" stroke-width="2" />
+              <circle cx="100" cy="190" r="5" style="fill: var(--colour-series)" />
+              <line x1="240" y1="190" x2="340" y2="190" style="stroke: var(--colour-series)" stroke-width="2" />
+              <circle cx="240" cy="190" r="5" style="fill: var(--colour-series)" />
+              <line x1="100" y1="255" x2="209" y2="255" style="stroke: var(--colour-series)" stroke-width="2" />
+              <circle cx="100" cy="255" r="5" style="fill: var(--colour-series)" />
+              <line x1="100" y1="20" x2="100" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+              <circle cx="100" cy="20" r="5" style="fill: var(--colour-series)" />
+              <circle cx="100" cy="535" r="5" style="fill: var(--colour-series)" />
+              <line x1="240" y1="20" x2="240" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+              <circle cx="240" cy="20" r="5" style="fill: var(--colour-series)" />
+              <circle cx="240" cy="535" r="5" style="fill: var(--colour-series)" />
+              <g transform="translate(226,255)"><use href="#bjt-npn-shape" /></g>
+              <g transform="translate(85,60)"><use href="#resistor-vertical" /></g>
+              <g transform="translate(85,370)"><use href="#resistor-vertical" /></g>
+              <g transform="translate(225,60)"><use href="#resistor-vertical" /></g>
+              <g transform="translate(225,370)"><use href="#resistor-vertical" /></g>
+            </g>
+
+            <!-- ══ Generic JFET gate-resistor-bias frame — same 340×535
+                 footprint/rail convention as voltage-divider-bias, but the
+                 LEFT side only runs gate-tap(0,255)-(100,255) down through
+                 RG (x=85,y=370) to the common rail — no VCC connection at
+                 all on that side. RD (x=225,y=60) and RS (x=225,y=370)
+                 sit on the drain/source rail exactly like RC/RE do in the
+                 BJT frame. Q at (226,248) — shifted 7px up from the BJT
+                 frame's own (226,255) so jfet-n-shape's own gate lead
+                 (local y=+7, vs bjt-npn-shape's base lead at local y=0)
+                 lands exactly on the y=255 gate-tap row. ══ -->
+            <g id="jfet-single-stage-bias">
+              <line x1="0" y1="20" x2="340" y2="20" style="stroke: var(--colour-series)" stroke-width="2" />
+              <line x1="0" y1="535" x2="340" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+              <line x1="0" y1="255" x2="100" y2="255" style="stroke: var(--colour-series)" stroke-width="2" />
+              <circle cx="100" cy="255" r="5" style="fill: var(--colour-series)" />
+              <line x1="100" y1="255" x2="100" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+              <circle cx="100" cy="535" r="5" style="fill: var(--colour-series)" />
+              <line x1="240" y1="190" x2="340" y2="190" style="stroke: var(--colour-series)" stroke-width="2" />
+              <circle cx="240" cy="190" r="5" style="fill: var(--colour-series)" />
+              <line x1="240" y1="20" x2="240" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+              <circle cx="240" cy="20" r="5" style="fill: var(--colour-series)" />
+              <circle cx="240" cy="535" r="5" style="fill: var(--colour-series)" />
+              <g transform="translate(226,248)"><use href="#jfet-n-shape" /></g>
+              <g transform="translate(85,370)"><use href="#resistor-vertical" /></g>
+              <g transform="translate(225,60)"><use href="#resistor-vertical" /></g>
+              <g transform="translate(225,370)"><use href="#resistor-vertical" /></g>
+            </g>
+
+            <!-- ══ BJT single-stage reference circuit — voltage-divider-
+                 bias with own values R1=91k/R2=24k/R3=8k2/R4=3k9,
+                 C1=2µF input, C2=1µF output, β=120, +9V. NO emitter
+                 bypass cap at all (R4 sits bare, unlike the two-stage
+                 cascade's own first stage below) — deliberately, since
+                 that's exactly why the "which components set f1" answer
+                 here is just "C1 and C2", not a third bypass-cap factor
+                 (contrast the JFET stage further down, where a THIRD
+                 cap — a source bypass — does count). ══ -->
+            <g id="fig-bjt-single-stage">
+              <use href="#voltage-divider-bias" />
+              <line x1="-90" y1="190" x2="0" y2="190" style="stroke: var(--colour-series)" stroke-width="2" />
+              <line x1="340" y1="190" x2="430" y2="190" style="stroke: var(--colour-series)" stroke-width="2" />
+              <use href="#cap-shape" transform="translate(-30,190)" />
+              <use href="#cap-shape" transform="translate(370,190)" />
+              <text x="-30" y="160" class="ckt-c-label">C1</text>
+              <text x="-30" y="225" class="ckt-value">2µF</text>
+              <text x="370" y="160" class="ckt-c-label">C2</text>
+              <text x="370" y="225" class="ckt-value">1µF</text>
+              <text x="-95" y="175" class="ckt-io-label" text-anchor="end">Input</text>
+              <text x="435" y="175" class="ckt-io-label">Output</text>
+              <text x="255" y="235" class="ckt-bjt-label">Q1, β = 120</text>
+              <g transform="translate(85,60)"><text x="15" y="-8" class="ckt-r-label" text-anchor="middle">R1</text><text x="15" y="103" class="ckt-value">91kΩ</text></g>
+              <g transform="translate(85,370)"><text x="15" y="-8" class="ckt-r-label" text-anchor="middle">R2</text><text x="15" y="103" class="ckt-value">24kΩ</text></g>
+              <g transform="translate(225,60)"><text x="15" y="-8" class="ckt-r-label" text-anchor="middle">R3</text><text x="15" y="103" class="ckt-value">8k2Ω</text></g>
+              <g transform="translate(225,370)"><text x="15" y="-8" class="ckt-r-label" text-anchor="middle">R4</text><text x="15" y="103" class="ckt-value">3k9Ω</text></g>
+              <text x="360" y="5" class="ckt-rail-label">+9V</text>
+              <text x="10" y="560" class="ckt-gnd-label">Common</text>
+            </g>
+
+            <!-- ══ JFET common-source stage — reworked with its own
+                 values (RG=1M2/RD=4k7/RS=1k5, C1=220nF input, RL=1k8
+                 load, +18V) rather than the handout's. Deliberately the
+                 SAME RG/RD/RS/C-equivalent values as the two-stage
+                 cascade's own second stage further down — this stage
+                 design is genuinely reused twice, same as it always was,
+                 just with fresh numbers throughout. ══ -->
+            <g id="fig-jfet-single-stage">
+              <use href="#jfet-single-stage-bias" />
+              <line x1="-90" y1="255" x2="0" y2="255" style="stroke: var(--colour-series)" stroke-width="2" />
+              <use href="#cap-shape" transform="translate(-30,255)" />
+              <text x="-30" y="225" class="ckt-c-label">C1</text>
+              <text x="-30" y="290" class="ckt-value">220nF</text>
+              <text x="-95" y="240" class="ckt-io-label" text-anchor="end">Input</text>
+              <line x1="240" y1="300" x2="330" y2="300" style="stroke: var(--colour-series)" stroke-width="2" />
+              <line x1="330" y1="300" x2="330" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+              <use href="#cap-shape" transform="translate(330,460) rotate(90)" />
+              <text x="360" y="465" class="ckt-c-label">C3</text>
+              <line x1="340" y1="190" x2="400" y2="190" style="stroke: var(--colour-series)" stroke-width="2" />
+              <use href="#cap-shape" transform="translate(370,190)" />
+              <text x="370" y="160" class="ckt-c-label">C2</text>
+              <line x1="400" y1="190" x2="460" y2="190" style="stroke: var(--colour-series)" stroke-width="2" />
+              <line x1="340" y1="535" x2="460" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+              <line x1="460" y1="190" x2="460" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+              <g transform="translate(445,300)">
+                <use href="#resistor-vertical" />
+                <text x="15" y="-8" class="ckt-r-label" text-anchor="middle">RL</text>
+                <text x="15" y="103" class="ckt-value">1k8Ω</text>
+              </g>
+              <text x="270" y="220" class="ckt-jfet-label">Q1</text>
+              <g transform="translate(85,370)"><text x="15" y="-8" class="ckt-r-label" text-anchor="middle">RG</text><text x="15" y="103" class="ckt-value">1M2</text></g>
+              <g transform="translate(225,60)"><text x="15" y="-8" class="ckt-r-label" text-anchor="middle">RD</text><text x="15" y="103" class="ckt-value">4k7Ω</text></g>
+              <g transform="translate(225,370)"><text x="15" y="-8" class="ckt-r-label" text-anchor="middle">RS</text><text x="15" y="103" class="ckt-value">1k5Ω</text></g>
+              <text x="360" y="5" class="ckt-rail-label">+18V</text>
+              <text x="10" y="560" class="ckt-gnd-label">Common</text>
+            </g>
+
+            <!-- ══ Two-stage BJT + JFET cascade — reworked with fresh
+                 values throughout: BJT stage (voltage-divider-bias,
+                 RB1=180k/RC=6k8/RB2=39k/RE=1k8, β=250, emitter bypass
+                 C2=82µF) feeding the SAME JFET stage design as above
+                 (RG=1M2/RD=4k7/RS=1k5) through interstage cap C3=220nF.
+                 Both stages share one +18V/Common rail pair. Every gain/
+                 f1 figure in Q16-21 below was independently computed from
+                 THESE values (see each question's own working()), not
+                 copied from anywhere. ══ -->
+            <g id="fig-two-stage-bjt-jfet">
+              <g transform="translate(0,0)"><use href="#voltage-divider-bias" /></g>
+              <g transform="translate(500,0)"><use href="#jfet-single-stage-bias" /></g>
+              <line x1="340" y1="20" x2="500" y2="20" style="stroke: var(--colour-series)" stroke-width="2" />
+              <line x1="340" y1="535" x2="500" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+
+              <!-- Stage 1 input C1 -->
+              <line x1="-90" y1="190" x2="0" y2="190" style="stroke: var(--colour-series)" stroke-width="2" />
+              <use href="#cap-shape" transform="translate(-30,190)" />
+              <text x="-30" y="160" class="ckt-c-label">C1</text>
+              <text x="-30" y="225" class="ckt-value">1.5µF</text>
+              <text x="-95" y="175" class="ckt-io-label" text-anchor="end">Input</text>
+
+              <!-- Stage 1 emitter bypass (RE = R4 slot) -->
+              <line x1="240" y1="300" x2="330" y2="300" style="stroke: var(--colour-series)" stroke-width="2" />
+              <line x1="330" y1="300" x2="330" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+              <use href="#cap-shape" transform="translate(330,460) rotate(90)" />
+              <text x="360" y="465" class="ckt-c-label">C2</text>
+              <text x="360" y="485" class="ckt-value">82µF</text>
+
+              <!-- Interstage coupling C3, collector (stage1) -> gate (stage2) -->
+              <line x1="340" y1="190" x2="420" y2="190" style="stroke: var(--colour-series)" stroke-width="2" />
+              <line x1="420" y1="190" x2="420" y2="255" style="stroke: var(--colour-series)" stroke-width="2" />
+              <line x1="420" y1="255" x2="500" y2="255" style="stroke: var(--colour-series)" stroke-width="2" />
+              <use href="#cap-shape" transform="translate(460,255)" />
+              <text x="460" y="225" class="ckt-c-label">C3</text>
+              <text x="460" y="290" class="ckt-value">220nF</text>
+
+              <!-- Stage 2 source bypass (RS slot, x=740=500+240) -->
+              <line x1="740" y1="300" x2="830" y2="300" style="stroke: var(--colour-series)" stroke-width="2" />
+              <line x1="830" y1="300" x2="830" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+              <use href="#cap-shape" transform="translate(830,460) rotate(90)" />
+              <text x="860" y="465" class="ckt-c-label">C5</text>
+
+              <!-- Stage 2 output C4 -->
+              <line x1="840" y1="190" x2="900" y2="190" style="stroke: var(--colour-series)" stroke-width="2" />
+              <use href="#cap-shape" transform="translate(870,190)" />
+              <text x="870" y="160" class="ckt-c-label">C4</text>
+              <line x1="900" y1="190" x2="960" y2="190" style="stroke: var(--colour-series)" stroke-width="2" />
+              <text x="965" y="175" class="ckt-io-label">Output</text>
+
+              <text x="255" y="235" class="ckt-bjt-label">Q1, β = 250</text>
+              <text x="770" y="220" class="ckt-jfet-label">Q2</text>
+              <g transform="translate(85,60)"><text x="15" y="-8" class="ckt-r-label" text-anchor="middle">RB1</text><text x="15" y="103" class="ckt-value">180kΩ</text></g>
+              <g transform="translate(85,370)"><text x="15" y="-8" class="ckt-r-label" text-anchor="middle">RB2</text><text x="15" y="103" class="ckt-value">39kΩ</text></g>
+              <g transform="translate(225,60)"><text x="15" y="-8" class="ckt-r-label" text-anchor="middle">RC</text><text x="15" y="103" class="ckt-value">6k8Ω</text></g>
+              <g transform="translate(225,370)"><text x="15" y="-8" class="ckt-r-label" text-anchor="middle">RE</text><text x="15" y="103" class="ckt-value">1k8Ω</text></g>
+              <g transform="translate(585,370)"><text x="15" y="-8" class="ckt-r-label" text-anchor="middle">RG</text><text x="15" y="103" class="ckt-value">1M2</text></g>
+              <g transform="translate(725,60)"><text x="15" y="-8" class="ckt-r-label" text-anchor="middle">RD</text><text x="15" y="103" class="ckt-value">4k7Ω</text></g>
+              <g transform="translate(725,370)"><text x="15" y="-8" class="ckt-r-label" text-anchor="middle">RS</text><text x="15" y="103" class="ckt-value">1k5Ω</text></g>
+              <text x="850" y="5" class="ckt-rail-label">+18V</text>
+              <text x="10" y="560" class="ckt-gnd-label">Common</text>
+            </g>
+
+            <!-- ══ Transformer-coupled output stage — a BJT stage built
+                 by hand (not <use>ing voltage-divider-bias, since that
+                 frame bakes a resistor into every one of its 4 slots and
+                 this circuit needs a TRANSFORMER in the collector slot
+                 instead): own base divider (R1=75k/R2=30k) and emitter
+                 (R4=4k7 + 22µF bypass), T1 sits on the x=240 collector
+                 rail in place of RC, its footprint (±40 local y either
+                 side of translate) matched exactly to a resistor-
+                 vertical's own 80-tall span so it drops into the same
+                 y=60→140 slot. Secondary feeds a 150Ω load — the actual
+                 question here is about the collector's own voltage SWING
+                 through the transformer, not a value the diagram needs
+                 to label beyond what's already here. ══ -->
+            <g id="fig-transformer-stage">
+              <line x1="0" y1="20" x2="340" y2="20" style="stroke: var(--colour-series)" stroke-width="2" />
+              <line x1="0" y1="535" x2="340" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+              <line x1="-90" y1="190" x2="100" y2="190" style="stroke: var(--colour-series)" stroke-width="2" />
+              <circle cx="100" cy="190" r="5" style="fill: var(--colour-series)" />
+              <line x1="100" y1="255" x2="209" y2="255" style="stroke: var(--colour-series)" stroke-width="2" />
+              <circle cx="100" cy="255" r="5" style="fill: var(--colour-series)" />
+              <line x1="100" y1="20" x2="100" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+              <circle cx="100" cy="20" r="5" style="fill: var(--colour-series)" />
+              <circle cx="100" cy="535" r="5" style="fill: var(--colour-series)" />
+              <line x1="240" y1="20" x2="240" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+              <circle cx="240" cy="20" r="5" style="fill: var(--colour-series)" />
+              <circle cx="240" cy="535" r="5" style="fill: var(--colour-series)" />
+              <g transform="translate(226,255)"><use href="#bjt-npn-shape" /></g>
+              <g transform="translate(85,60)"><use href="#resistor-vertical" /></g>
+              <g transform="translate(85,370)"><use href="#resistor-vertical" /></g>
+              <g transform="translate(225,370)"><use href="#resistor-vertical" /></g>
+              <g transform="translate(240,100)"><use href="#transformer-shape" /></g>
+
+              <!-- Secondary -> 150Ω load -->
+              <line x1="274" y1="60" x2="400" y2="60" style="stroke: var(--colour-series)" stroke-width="2" />
+              <line x1="274" y1="140" x2="400" y2="140" style="stroke: var(--colour-series)" stroke-width="2" />
+              <g transform="translate(385,60)"><use href="#resistor-vertical" /></g>
+              <text x="430" y="95" class="ckt-r-label">RL</text>
+              <text x="430" y="115" class="ckt-value" text-anchor="start">150Ω</text>
+              <text x="255" y="35" class="ckt-io-label">T1</text>
+
+              <!-- Emitter bypass -->
+              <line x1="240" y1="300" x2="330" y2="300" style="stroke: var(--colour-series)" stroke-width="2" />
+              <line x1="330" y1="300" x2="330" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+              <use href="#cap-shape" transform="translate(330,460) rotate(90)" />
+              <text x="360" y="465" class="ckt-c-label">C2</text>
+              <text x="360" y="485" class="ckt-value" text-anchor="start">22µF</text>
+
+              <!-- Input C1 (no value given in the source) -->
+              <use href="#cap-shape" transform="translate(-30,190)" />
+              <text x="-30" y="160" class="ckt-c-label">C1</text>
+              <text x="-95" y="175" class="ckt-io-label" text-anchor="end">Input</text>
+
+              <text x="255" y="235" class="ckt-bjt-label">Q1</text>
+              <g transform="translate(85,60)"><text x="15" y="-8" class="ckt-r-label" text-anchor="middle">R1</text><text x="15" y="103" class="ckt-value">75kΩ</text></g>
+              <g transform="translate(85,370)"><text x="15" y="-8" class="ckt-r-label" text-anchor="middle">R2</text><text x="15" y="103" class="ckt-value">30kΩ</text></g>
+              <g transform="translate(225,370)"><text x="15" y="-8" class="ckt-r-label" text-anchor="middle">R4</text><text x="15" y="103" class="ckt-value">4k7Ω</text></g>
+              <text x="360" y="5" class="ckt-rail-label">+24V</text>
+              <text x="10" y="560" class="ckt-gnd-label">Common</text>
+            </g>
+
+            <!-- ══ FIGURE 1 — Q1's 3-stage cascaded block diagram ══ -->
+            <g id="fig-coupling-stages">
+              <!-- Signal source -->
+              <circle cx="40" cy="100" r="24" class="coupling-diagram-stage" />
+              <path d="M 30,100 Q 35,88 40,100 T 50,100" class="coupling-diagram-wire" />
+              <text x="40" y="150" class="coupling-diagram-label">Signal Source</text>
+
+              <!-- Wire + Capacitor A: source -> Stage 1 -->
+              <line x1="64" y1="100" x2="130" y2="100" class="coupling-diagram-wire" />
+              <use href="#cap-shape" x="92" y="100" />
+              <text x="96" y="75" class="coupling-diagram-letter">A</text>
+
+              <!-- Stage 1 -->
+              <polygon points="130,60 130,140 230,100" class="coupling-diagram-stage" />
+              <text x="163" y="104" class="coupling-diagram-label">Stage 1</text>
+
+              <!-- Wire + Capacitor B: Stage 1 -> Stage 2 -->
+              <line x1="230" y1="100" x2="290" y2="100" class="coupling-diagram-wire" />
+              <use href="#cap-shape" x="256" y="100" />
+              <text x="260" y="75" class="coupling-diagram-letter">B</text>
+
+              <!-- Stage 2 -->
+              <polygon points="290,60 290,140 390,100" class="coupling-diagram-stage" />
+              <text x="323" y="104" class="coupling-diagram-label">Stage 2</text>
+
+              <!-- Wire + Capacitor C: Stage 2 -> Stage 3 -->
+              <line x1="390" y1="100" x2="450" y2="100" class="coupling-diagram-wire" />
+              <use href="#cap-shape" x="416" y="100" />
+              <text x="420" y="75" class="coupling-diagram-letter">C</text>
+
+              <!-- Stage 3 -->
+              <polygon points="450,60 450,140 550,100" class="coupling-diagram-stage" />
+              <text x="483" y="104" class="coupling-diagram-label">Stage 3</text>
+
+              <!-- Wire + Capacitor D: Stage 3 -> Load -->
+              <line x1="550" y1="100" x2="610" y2="100" class="coupling-diagram-wire" />
+              <use href="#cap-shape" x="576" y="100" />
+              <text x="580" y="75" class="coupling-diagram-letter">D</text>
+
+              <!-- Load (speaker) -->
+              <rect x="610" y="88" width="14" height="24" class="coupling-diagram-stage" />
+              <polygon points="624,84 624,116 654,130 654,70" class="coupling-diagram-stage" />
+              <text x="632" y="150" class="coupling-diagram-label">Load</text>
+            </g>
+
+            <!-- ══ FIGURE 8 — Q8's Thevenin-equivalent two-stage coupling
+                 circuit (matches the textbook's own Figure 8 exactly: two
+                 boxes, each RIN/VS/ROUT, joined by CC on the top/signal
+                 rail only — the bottom/return rail runs straight through
+                 with no cap). Only the values THIS question actually gives
+                 (ROUT1, CC, RIN2) get a number annotated underneath; RIN1/
+                 VS1/VS2/ROUT2 stay symbolic, same as the textbook figure
+                 doesn't need them either. ══ -->
+
+            <g id="fig-two-base-shape">
+              <rect x="0" y="5" width="230" height="160" class="fig8-box" />
+              <line x1="0" y1="40" x2="50" y2="40" class="coupling-diagram-wire" />
+              <line x1="0" y1="140" x2="50" y2="140" class="coupling-diagram-wire" />
+              <!-- RIN -->
+              <line x1="50" y1="40" x2="50" y2="65" class="coupling-diagram-wire" />
+              <line x1="50" y1="115" x2="50" y2="140" class="coupling-diagram-wire" />
+              <rect x="40" y="65" width="20" height="50" class="fig8-r" />
+              <!-- VS -->
+              <line x1="120" y1="40" x2="120" y2="66" class="coupling-diagram-wire" />
+              <line x1="120" y1="114" x2="120" y2="140" class="coupling-diagram-wire" />
+              <circle cx="120" cy="90" r="24" class="fig8-vs" />
+              <path d="M 108,90 C 112,78 118,78 120,90 C 122,102 128,102 132,90" class="fig8-vs" stroke-linecap="round" />
+              <!-- ROUT -->
+              <line x1="120" y1="40" x2="230" y2="40" class="coupling-diagram-wire" />
+              <line x1="120" y1="140" x2="230" y2="140" class="coupling-diagram-wire" />
+              <rect x="155" y="30" width="50" height="20" class="fig8-r" />
+            </g>
+
+            <g id="fig-two-stage-1">
+              <use href="#fig-two-base-shape" />
+              <text x="12" y="100" class="fig8-r-label">R<tspan baseline-shift="sub" font-size="9">IN1</tspan></text>
+              <text x="75" y="100" class="fig8-value">2kΩ</text>
+
+              <text x="150" y="95" class="fig8-vs-label">V<tspan baseline-shift="sub" font-size="9">S1</tspan></text>
+
+              <text x="180" y="22" text-anchor="middle" class="fig8-r-label">R<tspan baseline-shift="sub" font-size="9">OUT1</tspan></text>
+              <text x="180" y="68" class="fig8-value">1kΩ</text>
+            </g>
+            <g id="fig-two-stage-2">
+              <use href="#fig-two-base-shape" />
+              <text x="12" y="100" class="fig8-r-label">R<tspan baseline-shift="sub" font-size="9">IN2</tspan></text>
+              <text x="75" y="100" class="fig8-value">9kΩ</text>
+
+              <text x="150" y="95" class="fig8-vs-label">V<tspan baseline-shift="sub" font-size="9">S2</tspan></text>
+
+              <text x="180" y="22" text-anchor="middle" class="fig8-r-label">R<tspan baseline-shift="sub" font-size="9">OUT2</tspan></text>
+              <text x="180" y="68" class="fig8-value">3kΩ</text>
+            </g>
+            <g id="fig-two-stage-equiv">
+              <!-- External left terminals -->
+              <circle cx="10" cy="55" r="4" style="fill: var(--colour-label)" />
+              <circle cx="10" cy="155" r="4" style="fill: var(--colour-label)" />
+              <line x1="10" y1="55" x2="40" y2="55" class="coupling-diagram-wire" />
+              <line x1="10" y1="155" x2="40" y2="155" class="coupling-diagram-wire" />
+
+              <use href="#fig-two-stage-1" transform="translate(40,15)" />
+              <use href="#fig-two-stage-2" transform="translate(430,15)" />
+
+              <!-- Interstage coupling — CC (top rail only; bottom rail is plain) -->
+              <line x1="270" y1="55" x2="430" y2="55" class="coupling-diagram-wire" />
+              <line x1="270" y1="155" x2="430" y2="155" class="coupling-diagram-wire" />
+              <use href="#cap-shape" x="345" y="55" />
+              <text x="350" y="31" class="fig8-cc-label">C<tspan baseline-shift="sub" font-size="9">C</tspan></text>
+              <text x="350" y="89" class="fig8-value">1µF</text>
+
+              <!-- External right terminals -->
+              <circle cx="690" cy="55" r="4" style="fill: var(--colour-label)" />
+              <circle cx="690" cy="155" r="4" style="fill: var(--colour-label)" />
+              <line x1="660" y1="55" x2="690" y2="55" class="coupling-diagram-wire" />
+              <line x1="660" y1="155" x2="690" y2="155" class="coupling-diagram-wire" />
+
+            </g>
+          </defs>
+        </svg>
+        <svg id="circuitSvg" viewBox="0 0 700 250" xmlns="http://www.w3.org/2000/svg">
+          <use id="circuitRefUse" href="#fig-coupling-stages" />
+        </svg>
+      </div>
+    </div>
+
+    <!-- RIGHT: question -->
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <!-- Single reusable question panel — populated from QUESTIONS[cur] by renderQuestion() -->
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+
+          <div class="options" id="qOptions"></div>
+          <div class="match-wrap" id="qMatch" style="display:none">
+            <div class="match-pool-row" id="matchPoolRow">
+              <div class="match-pool-arrow">▶</div>
+              <div class="match-pool" id="matchPool"></div>
+            </div>
+            <div class="match-columns" id="matchColumns"></div>
+          </div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Summary -->
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS — see quiz-engine.js's own header comment for the full field
+    // reference. Add, remove, split or reorder questions by editing this
+    // array only — nothing in the engine needs to change.
+    // ══════════════════════════════════════════════════════════════════════
+
+    const QUESTIONS = [
+      {
+        // Objective: "Identify capacitive and transformer coupling in
+        // multistage transistor amplifiers given a schematic diagram" —
+        // uses the always-static #circuitCol diagram above (mirrors the
+        // textbook's own "Figure 2" 3-stage block diagram). 2 of the 4
+        // labelled points are genuinely both "interstage coupling", so
+        // this is a 4-option/3-column match, not a 1-to-1 one.
+        leftPanel: 'circuit',
+        circuitId: 'fig-coupling-stages',
+        circuitLabel: 'Figure 1 — 3-stage cascaded amplifier',
+        circuitViewBox: '0 0 700 210',
+        kind: 'match',
+        columns: () => ['Input coupling', 'Interstage coupling', 'Output coupling'],
+        text: () => `Look at <b style="color:var(--colour-ui-primary)">Figure 1</b>. <b style="color:var(--colour-ui-primary)">Place</b> each labelled capacitor under the type of coupling it provides.`,
+        hint: () => `"Interstage" just means "between two amplifier stages" — as opposed to between the signal source and the first stage, or between the last stage and the load.`,
+        options: () => shuffle([
+          { label: 'Capacitor A', col: 0 },
+          { label: 'Capacitor B', col: 1 },
+          { label: 'Capacitor C', col: 1 },
+          { label: 'Capacitor D', col: 2 },
+        ]),
+        correctExplain: (st) => {
+          const wrongCount = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).length;
+          return wrongCount === 0 ? 'All 4 capacitors correctly matched' : `${st.opts.length - wrongCount} of ${st.opts.length} capacitors correctly matched`;
+        },
+        working: () => `
+    <div class="working-line"><b style="color:var(--colour-ui-correct)">Capacitor A</b> sits between the signal source and Stage 1 — <b>input coupling</b>.</div>
+    <div class="working-line"><b style="color:var(--colour-ui-correct)">Capacitors B and C</b> each sit between two amplifier stages (Stage 1→2, Stage 2→3) — <b>interstage coupling</b>. A 3-stage amplifier has 2 interstage coupling capacitors, one per join.</div>
+    <div class="working-line"><b style="color:var(--colour-ui-correct)">Capacitor D</b> sits between the last stage and the load — <b>output coupling</b>.</div>
+    <div class="working-total">Every one of these does the same job wherever it sits: block DC, pass the AC signal.</div>`
+      },
+      {
+        // Objective: "List three methods for coupling stages in a
+        // multistage amplifier". The whiteboard also mentions a 4th
+        // "light/IR" method as an aside, separate from the textbook's own
+        // "three main ways" list — included here as a wrong option with an
+        // explanatory (not dismissive) working note, not as a 4th correct
+        // answer, to stay faithful to the objective's own wording.
+        kind: 'multi',
+        text: () => `<b style="color:var(--colour-ui-primary)">Click</b> the <b style="color:var(--colour-ui-correct)">three</b> main methods used to couple stages together in a multistage transistor amplifier.`,
+        hint: () => `Think about what physically sits between two stages to pass the signal from one to the next.`,
+        options: () => shuffle([
+          { label: 'Capacitive coupling', type: 'correct' },
+          { label: 'Transformer (magnetic) coupling', type: 'correct' },
+          { label: 'Direct coupling', type: 'correct' },
+          { label: 'Optical/infrared (IR) coupling', type: 'wrong' },
+          { label: 'Resistive-only coupling', type: 'wrong' },
+          { label: 'Wireless RF coupling', type: 'wrong' },
+        ]),
+        correctExplain: (st) => {
+          const nums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join(', ');
+          return `Options <b>${nums}</b> are the three main coupling methods`;
+        },
+        working: () => `
+    <div class="working-step">The three main coupling methods:</div>
+    <div class="working-line"><b style="color:var(--colour-ui-correct)">Capacitive coupling</b> — a series capacitor between stages.</div>
+    <div class="working-line"><b style="color:var(--colour-ui-correct)">Transformer (magnetic) coupling</b> — a transformer's primary/secondary windings link the stages.</div>
+    <div class="working-line"><b style="color:var(--colour-ui-correct)">Direct coupling</b> — stages wired straight together, no capacitor or transformer in between.</div>
+    <div class="working-step" style="margin-top:.6rem">Optical/infrared coupling is real (e.g. an opto-isolator between stages) but it's a less common, specialised method — not one of the three main ones this objective is asking for. "Resistive-only" and "wireless RF" coupling aren't standard multistage-amplifier coupling methods at all.</div>`
+      },
+      {
+        // Objective: "Describe the advantages, disadvantages and
+        // characteristics of capacitive and transformer coupling in
+        // multistage transistor amplifiers." Direct coupling's own
+        // adv/disadv aren't in the source material yet (see file header
+        // note) — only capacitive vs transformer are covered here.
+        kind: 'match',
+        columns: () => ['Capacitive Coupling', 'Transformer Coupling'],
+        text: () => `Each feature below describes either <b style="color:var(--colour-ui-primary)">capacitive</b> or <b style="color:var(--colour-ui-primary)">transformer</b> coupling. <b style="color:var(--colour-ui-primary)">Place</b> each one under the correct method.`,
+        hint: () => `Which method uses a physical winding/turns-ratio, and which one is just a single component in series with the signal path?`,
+        options: () => shuffle([
+          { label: `Uses a series capacitor between stages — blocks DC while still passing the AC signal`, col: 0 },
+          { label: `Small, light and inexpensive — the most commonly used coupling method`, col: 0 },
+          { label: `Low-frequency response is limited by the coupling capacitor's own reactance (Xc) — this sets f1`, col: 0 },
+          { label: `Uses a transformer's primary/secondary windings — magnetically linked, no direct electrical connection between stages`, col: 1 },
+          { label: `Can provide impedance matching between stages, via the transformer's turns ratio`, col: 1 },
+          { label: `Bulky, heavy and comparatively expensive; frequency response is limited at BOTH low and high frequencies`, col: 1 },
+        ]),
+        correctExplain: (st) => {
+          const wrongCount = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).length;
+          return wrongCount === 0 ? 'All 6 features correctly matched' : `${st.opts.length - wrongCount} of ${st.opts.length} features correctly matched`;
+        },
+        working: () => `
+    <div class="working-line"><b style="color:var(--colour-ui-primary)">Capacitive coupling</b> is just one component (a capacitor) in series with the signal path — cheap, small and light, which is why it's the default choice. Its downside is purely a frequency-response one: the smaller Xc gets as frequency rises, the better it passes the signal, but at low frequencies Xc grows large enough to start attenuating the signal — that's exactly what sets the lower roll-off frequency f1.</div>
+    <div class="working-line"><b style="color:var(--colour-ui-primary)">Transformer coupling</b> trades that simplicity for a genuine advantage capacitive coupling can't offer at all — impedance matching via the turns ratio — at the cost of size, weight, cost, and a frequency response that's limited at both ends (winding inductance/leakage and stray capacitance affect high AND low frequencies, not just low).</div>`
+      },
+      {
+        // Objective: "Calculate and measure the total gain of a
+        // capacitively coupled two stage transistor amplifier (without
+        // global feedback)". Plain multiply-the-ratios calculation —
+        // matches AV(Total) = AV1(loaded) x AV2(loaded) x ... from the
+        // textbook.
+        text: () => `A capacitively coupled <b style="color:var(--colour-ui-primary)">two-stage</b> amplifier has loaded voltage gains of A<sub>V1</sub> = 12 and A<sub>V2</sub> = 8. What is the overall gain A<sub>V(Total)</sub>?`,
+        hint: () => `AV(Total) = AV1(loaded) × AV2(loaded) × ... — the loaded gains of a cascaded amplifier multiply, they don't add.`,
+        options: () => shuffle([
+          { label: '96', type: 'correct' },
+          { label: '20' },
+          { label: '4' },
+          { label: '1.5' },
+        ]),
+        correctExplain: () => 'AV(Total) = AV1 × AV2 = 12 × 8 = 96',
+        working: () => `
+    <div class="working-step">AV(Total) = AV1(loaded) × AV2(loaded)</div>
+    <div class="working-line">AV(Total) = 12 × 8 = <b style="color:var(--colour-ui-correct)">96</b></div>
+    <div class="working-total">Each stage's own loaded gain already accounts for the next stage loading it down — so once you have both loaded gains, combining them is a straight multiplication. 20 is what you'd get by (incorrectly) adding the two gains instead.</div>`
+      },
+      {
+        // Whiteboard's own explicit red-ink "Note" (IMG_2902) — the one
+        // case where the combination rule flips from multiply to add.
+        text: () => `If the loaded gain of each stage is given in <b style="color:var(--colour-ui-primary)">dB</b> instead of a plain ratio, how do you find the overall gain of the cascaded amplifier?`,
+        hint: () => `dB is already a logarithmic (multiplicative-turned-additive) scale — that changes how you combine stage values.`,
+        options: () => shuffle([
+          { label: 'Add the dB values together', type: 'correct' },
+          { label: 'Multiply the dB values together' },
+          { label: 'Average the dB values' },
+          { label: 'Use only the highest single-stage dB value' },
+        ]),
+        correctExplain: () => 'When gain is expressed in dB, the stage values ADD rather than multiply',
+        working: () => `
+    <div class="working-line">Decibels are already a logarithmic representation of a ratio — multiplying two ratios corresponds to <b style="color:var(--colour-ui-correct)">adding</b> their dB values. So if AV1 = 20dB and AV2 = 15dB, the overall gain is 20 + 15 = 35dB — NOT 20 × 15.</div>
+    <div class="working-total">This only applies when the gains are already expressed in dB. If they're plain ratios (e.g. AV1 = 10), you multiply instead — see the previous question.</div>`
+      },
+      {
+        // Whiteboard's own dedicated Q&A (IMG_2906) — a genuine, commonly
+        // -held misconception the teacher specifically called out.
+        text: () => `Two <b style="color:var(--colour-ui-primary)">identical</b> amplifier stages are cascaded. Each stage, on its own, has a bandwidth of 20Hz to 20kHz. What is the overall bandwidth of the combined 2-stage amplifier?`,
+        hint: () => `Each stage's own -3dB point is where ITS gain has already dropped 3dB. What happens at that same frequency once a SECOND identical stage is added after it?`,
+        options: () => shuffle([
+          { label: 'Narrower than 20Hz to 20kHz', type: 'correct' },
+          { label: 'Also 20Hz to 20kHz' },
+          { label: 'Wider than 20Hz to 20kHz' },
+          { label: 'Exactly double — 10Hz to 40kHz' },
+        ]),
+        correctExplain: () => 'No — combining two stages with the same bandwidth makes the OVERALL bandwidth narrower, not the same',
+        working: () => `
+    <div class="working-line">At each stage's own original 20Hz/20kHz -3dB point, that ONE stage's gain is already down 3dB. Cascade a second identical stage, and at those same two frequencies you now get 3dB + 3dB = <b>6dB</b> down overall — past the -3dB point that actually DEFINES the amplifier's overall bandwidth.</div>
+    <div class="working-total">So the true overall -3dB points must sit further IN from 20Hz/20kHz, not at them — the combined bandwidth is <b style="color:var(--colour-ui-correct)">narrower</b> than either individual stage's own bandwidth, even though both stages are identical.</div>`
+      },
+      {
+        // Objective: "List the factors that affect the upper and lower
+        // roll-off frequencies in a multistage transistor amplifier."
+        // f1 side from IMG_2907/IMG_2913 (series Cc + the RT it works
+        // against); f2 side from IMG_2907 (parallel/shunt C) plus
+        // IMG_2910/IMG_2910-2 (BJT inter-electrode capacitance, stray C/L).
+        kind: 'match',
+        columns: () => ['Lower roll-off (f1)', 'Upper roll-off (f2)'],
+        text: () => `Each factor below affects either the <b style="color:var(--colour-ui-primary)">lower</b> roll-off frequency (f1) or the <b style="color:var(--colour-ui-primary)">upper</b> roll-off frequency (f2) of a multistage amplifier. <b style="color:var(--colour-ui-primary)">Place</b> each one correctly.`,
+        hint: () => `A capacitor in SERIES with the signal path behaves oppositely to a capacitor sitting in PARALLEL (shunt) across it, as frequency changes.`,
+        options: () => shuffle([
+          { label: `The value of the series interstage coupling capacitor (Cc)`, col: 0 },
+          { label: `The total series resistance in the coupling network (Rout of one stage + Rin of the next)`, col: 0 },
+          { label: `The transistor's own inter-electrode capacitance (e.g. Ccb, Cbe in a BJT)`, col: 1 },
+          { label: `Stray/parallel capacitance from wiring, PCB tracks or prototyping board tracks`, col: 1 },
+          { label: `Stray inductance from wiring or PCB tracks`, col: 1 },
+        ]),
+        correctExplain: (st) => {
+          const wrongCount = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).length;
+          return wrongCount === 0 ? 'All 5 factors correctly matched' : `${st.opts.length - wrongCount} of ${st.opts.length} factors correctly matched`;
+        },
+        working: () => `
+    <div class="working-line"><b style="color:var(--colour-ui-primary)">f1 (lower roll-off)</b> is set by components in SERIES with the signal — the coupling capacitor Cc and the total resistance it works against (RT = Rout(stage 1) + Rin(stage 2)). A series capacitor's reactance rises as frequency falls, so it's the LOW end of the response that a series cap affects.</div>
+    <div class="working-line"><b style="color:var(--colour-ui-primary)">f2 (upper roll-off)</b> is set by capacitance sitting in PARALLEL (shunt) across the signal path — a transistor's own inter-electrode capacitance, plus stray/unwanted capacitance from wiring and PCB tracks. A parallel capacitor's reactance falls as frequency rises, increasingly shorting the signal — that's the HIGH end of the response. Stray inductance is grouped with f2 here too, as one of the "other factors" affecting the high-frequency end alongside stray capacitance.</div>`
+      },
+      {
+        // Objective: "Calculate and measure the lower roll-off frequency
+        // of a capacitively coupled multistage amplifier (without global
+        // feedback)". f1 = 1 / (2*pi*RT*Cc), RT = Rout(1) + Rin(2) in
+        // series — straight from IMG_2913. Figure 8 (Thevenin-equivalent
+        // two-stage circuit) added per Don's own textbook photo — same
+        // RIN/VS/ROUT structure, values annotated only where this question
+        // actually gives one (ROUT1, CC, RIN2).
+        leftPanel: 'circuit',
+        circuitId: 'fig-two-stage-equiv',
+        circuitLabel: 'Figure 8 — equivalent circuit of two capacitively coupled amplifier stages',
+        circuitViewBox: '0 0 700 200',
+        text: () => `An interstage coupling capacitor C<sub>C</sub> = 1µF connects Stage 1 (R<sub>out</sub> = 1kΩ) to Stage 2 (R<sub>in</sub> = 9kΩ). What is the resulting lower roll-off frequency f1?`,
+        hint: () => `RT is the series total of the TWO resistors either side of the cap on the signal path — <b class="colour-resistor">R<sub>OUT1</sub></b> and <b class="colour-resistor">R<sub>IN2</sub></b>. Figure 8 also shows <b class="colour-resistor">R<sub>IN1</sub></b> and <b class="colour-resistor">R<sub>OUT2</sub></b>, but those sit on the OTHER side of each Thevenin source and never carry the coupling current, so they don't belong in RT.`,
+        options: () => shuffle([
+          { label: `f1 = ${frac('1', `2π × (<b class="colour-resistor">R<sub>OUT1</sub></b>+<b class="colour-resistor">R<sub>IN2</sub></b>) × <b class="colour-cap">C<sub>C</sub></b>`)} = ${frac('1', '2π × 10kΩ × 1µF')} ≈ 15.9Hz`, type: 'correct' },
+          { label: `f1 = ${frac('1', `2π × (<b class="colour-resistor">R<sub>IN1</sub></b>+<b class="colour-resistor">R<sub>IN2</sub></b>) × <b class="colour-cap">C<sub>C</sub></b>`)} = ${frac('1', '2π × 11kΩ × 1µF')} ≈ 14.5Hz` },
+          { label: `f1 = ${frac('1', `2π × (<b class="colour-resistor">R<sub>OUT1</sub></b>+<b class="colour-resistor">R<sub>OUT2</sub></b>) × <b class="colour-cap">C<sub>C</sub></b>`)} = ${frac('1', '2π × 4kΩ × 1µF')} ≈ 39.8Hz` },
+          { label: `f1 = ${frac('1', `2π × (<b class="colour-resistor">R<sub>IN1</sub></b>+<b class="colour-resistor">R<sub>OUT1</sub></b>+<b class="colour-resistor">R<sub>IN2</sub></b>+<b class="colour-resistor">R<sub>OUT2</sub></b>) × <b class="colour-cap">C<sub>C</sub></b>`)} = ${frac('1', '2π × 15kΩ × 1µF')} ≈ 10.6Hz` },
+        ]),
+        correctExplain: () => 'f1 = 1/(2π × RT × CC), RT = ROUT1+RIN2 = 1kΩ+9kΩ = 10kΩ, so f1 ≈ 15.9Hz',
+        working: () => `
+    <div class="working-step">Step 1 — total series resistance (only the two either side of CC on the signal path):</div>
+    <div class="working-line">RT = <b class="colour-resistor">R<sub>OUT1</sub></b> + <b class="colour-resistor">R<sub>IN2</sub></b> = 1kΩ + 9kΩ = <b>10kΩ</b></div>
+    <div class="working-step" style="margin-top:.6rem">Step 2 — apply the formula:</div>
+    <div class="working-line">f1 = ${frac('1', `2π × RT × <b class="colour-cap">C<sub>C</sub></b>`)} = ${frac('1', '2π × 10kΩ × 1µF')} ≈ <b style="color:var(--colour-ui-correct)">15.9Hz</b></div>
+    <div class="working-total"><b class="colour-resistor">R<sub>IN1</sub></b> (2kΩ) and <b class="colour-resistor">R<sub>OUT2</sub></b> (3kΩ) are real values in Figure 8, but they sit on the source side of each stage's own Thevenin model — the coupling capacitor's own charge/discharge path only ever sees <b class="colour-resistor">R<sub>OUT1</sub></b> and <b class="colour-resistor">R<sub>IN2</sub></b>, the two terminals it's actually wired between.</div>`
+      },
+      {
+        // Objective coverage: ties the interstage-coupling "characteristic"
+        // (blocks DC, passes AC) from IMG_2912 back to WHY it matters —
+        // biasing, not just definition.
+        text: () => `Why must an interstage coupling capacitor <b style="color:var(--colour-ui-primary)">block DC</b> while still passing the AC signal?`,
+        hint: () => `Think about what Stage 1's output DC voltage would do if it reached Stage 2's input directly.`,
+        options: () => shuffle([
+          { label: `Passing Stage 1's DC output straight into Stage 2's input would disturb Stage 2's own bias (Q-point)`, type: 'correct' },
+          { label: `It boosts the AC signal's amplitude before it reaches the next stage` },
+          { label: `It matches the input/output impedance between the two stages` },
+          { label: `It filters out unwanted high-frequency noise` },
+        ]),
+        correctExplain: () => `Blocking DC protects Stage 2's own bias point from Stage 1's DC output voltage`,
+        working: () => `
+    <div class="working-line">Stage 1's collector/drain sits at some DC operating voltage. If that DC reached Stage 2's base/gate directly, it would add to (or override) Stage 2's own carefully-set bias — shifting its Q-point, possibly right into saturation or cutoff.</div>
+    <div class="working-total">The coupling capacitor blocks that DC completely while still passing the AC signal through — <b>provided the capacitor is large enough</b> that its reactance stays low at the signal's operating frequency (too small a value pushes f1 up and starts attenuating the signal itself).</div>`
+      },
+      // ══════════════════════════════════════════════════════════════════
+      // Review questions (teacher's own "Amplifier Configurations - Part 2"
+      // Section 1 review set, Q1-28 minus Q23-25 — Figure 4's own complex
+      // two-channel preamp, excluded at the user's own request). Every
+      // answer cross-checked against the teacher's own marking guide AND,
+      // where a calculation is involved, independently re-derived from the
+      // circuit's own component values to confirm the guide's figure —
+      // every one matched exactly (see e.g. Q3, Q9, Q16-21's own working()
+      // for the re-derivation). Reuses this file's own established
+      // conventions throughout: leftPanel:'circuit'/circuitId for the
+      // labelled reference schematics, kind:'multi' for "give at least
+      // two/three" questions, plain single-select everywhere else.
+      // ══════════════════════════════════════════════════════════════════
+      {
+        // Review Q1 — general (why coupling caps exist at all), distinct
+        // from this file's own Q9 above (why they must ALSO pass AC while
+        // blocking DC) — a broader, prior question the source itself asks
+        // first, kept as its own question rather than merged with Q9.
+        text: () => `Why are inter-stage coupling capacitors used in multistage amplifiers?`,
+        hint: () => `Think about what a stage's own DC collector/drain voltage would do to the NEXT stage if it were allowed straight through.`,
+        options: () => shuffle([
+          { label: `To prevent DC passing between amplifier stages, which can affect the bias of both stages`, type: 'correct' },
+          { label: `To increase the overall voltage gain of the amplifier` },
+          { label: `To reduce the amplifier's total power consumption` },
+          { label: `To protect the transistors from ESD damage` },
+        ]),
+        correctExplain: () => `To prevent DC passing between stages, which would disturb both stages' own bias`,
+        working: () => `
+    <div class="working-line">Every amplifier stage sits at its own carefully-set DC operating point (Q-point). If one stage's DC output voltage reached the next stage's input directly, it would add to (or override) that stage's own bias — potentially pushing it into saturation or cutoff. A coupling capacitor blocks that DC completely while still passing the wanted AC signal through.</div>`
+      },
+      {
+        // Reworked from the source's own Q2-7 (Figure 1) — own values
+        // (R1=91k/R2=24k/R3=8k2/R4=3k9, C1=2µF in, C2=1µF out, β=120,
+        // +9V) rather than the handout's, and Q4/Q5/Q6's own three
+        // separate single-select "what happens if X" questions merged
+        // into one multi-select "which statements are true" reasoning
+        // question below — same underlying concepts, different shape.
+        leftPanel: 'circuit',
+        circuitId: 'fig-bjt-single-stage',
+        circuitLabel: 'BJT amplifier stage',
+        circuitViewBox: '-140 -30 620 620',
+        text: () => `Two capacitors are visible on this amplifier's own signal path. Which of them set its f1 (lower roll-off) frequency?`,
+        hint: () => `f1 is set by whichever capacitors sit in SERIES with the signal — check this circuit for exactly two, and notice there's no emitter bypass cap here at all.`,
+        options: () => shuffle([
+          { label: `Both C1 and C2`, type: 'correct' },
+          { label: `C1 only` },
+          { label: `C2 only` },
+          { label: `Neither — R1 through R4 set f1 instead` },
+        ]),
+        correctExplain: () => `Both C1 and C2 — the two series coupling capacitors`,
+        working: () => `
+    <div class="working-line">C1 (input coupling) and C2 (output coupling) both sit in series with the signal path, so each contributes its own reactance to the low-frequency roll-off. This particular stage has no emitter bypass capacitor at all (R4 sits bare) — contrast the JFET stage a few questions from here, where a THIRD capacitor (a source bypass) also joins in on setting f1.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        circuitId: 'fig-bjt-single-stage',
+        circuitLabel: 'BJT amplifier stage',
+        circuitViewBox: '-140 -30 620 620',
+        text: () => `Using this stage's own C1 (read its value off the diagram) and an input resistance of 13kΩ, calculate f1.`,
+        hint: () => `f1 = ${frac('1', '2π × R × C')} — the diagram tells you C1's own value.`,
+        options: () => shuffle([
+          { label: `f1 = ${frac('1', '2π × 13kΩ × 2µF')} ≈ 6.12Hz`, type: 'correct' },
+          { label: `f1 = ${frac('1', '2π × 13kΩ × 1µF')} ≈ 12.24Hz` },
+          { label: `f1 = 2π × 13kΩ × 2µF ≈ 163.4ms` },
+          { label: `f1 = ${frac('1', '2π × 13kΩ')} ≈ 12.24kHz` },
+        ]),
+        correctExplain: () => `f1 = 1/(2π × 13kΩ × C1) = 1/(2π × 13kΩ × 2µF) ≈ 6.12Hz`,
+        working: () => `
+    <div class="working-line">The diagram shows C1 = 2µF. f1 = ${frac('1', '2π × 13,000Ω × 0.000002F')} ≈ <b style="color:var(--colour-ui-correct)">6.12Hz</b></div>`
+      },
+      {
+        // Merges the source's own Q4/Q5/Q6 (three separate "what happens
+        // if X changes" single-select questions) into one multi-select
+        // reasoning question — same three underlying facts, tested at
+        // once instead of one drip-fed statement per question.
+        leftPanel: 'circuit',
+        circuitId: 'fig-bjt-single-stage',
+        circuitLabel: 'BJT amplifier stage',
+        circuitViewBox: '-140 -30 620 620',
+        kind: 'multi',
+        text: () => `<b style="color:var(--colour-ui-primary)">Click</b> every statement below that is TRUE of this amplifier.`,
+        hint: () => `f1 = 1/(2πRC) for EITHER series cap — think about what shrinking or growing each one does to that fraction, and whether either one has any business affecting f2 at all.`,
+        options: () => shuffle([
+          { label: `Shrinking C1 would raise f1`, type: 'correct' },
+          { label: `Growing C2 would also raise f1` },
+          { label: `Growing C1 has no effect on f2 whatsoever`, type: 'correct' },
+          { label: `Growing C2 has no effect on f2 whatsoever`, type: 'correct' },
+          { label: `Shrinking C2 would lower f2` },
+        ]),
+        correctExplain: (st) => {
+          const nums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join(', ');
+          return `Options <b>${nums}</b> are true`;
+        },
+        working: () => `
+    <div class="working-line">f1 = 1/(2πRC) for a series cap, so C sits on the denominator — <b style="color:var(--colour-ui-correct)">shrinking C1 raises f1</b> (the fraction gets bigger). Growing C2 would LOWER f1, not raise it, since a bigger C shrinks that same fraction — so that option is false.</div>
+    <div class="working-line" style="margin-top:.4rem">Neither C1 nor C2 has ANY effect on f2 — both are series capacitors, and f2 is set purely by parallel (shunt) capacitance elsewhere in the circuit (inter-electrode/stray capacitance, next question). "Shrinking C2 would lower f2" is false for exactly that reason — C2 doesn't touch f2 at all, in either direction.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        circuitId: 'fig-bjt-single-stage',
+        circuitLabel: 'BJT amplifier stage',
+        circuitViewBox: '-140 -30 620 620',
+        kind: 'multi',
+        text: () => `<b style="color:var(--colour-ui-primary)">Click</b> every factor below that affects the f2 frequency of this circuit.`,
+        hint: () => `All of the real answers are forms of PARALLEL (shunt) capacitance or something closely related to it, sitting across the signal path — not anything in series with it.`,
+        options: () => shuffle([
+          { label: `The transistor's own inter-electrode capacitance`, type: 'correct' },
+          { label: `Stray circuit/wiring capacitance`, type: 'correct' },
+          { label: `The transistor's transition frequency (FT)`, type: 'correct' },
+          { label: `The value of the input coupling capacitor (C1)` },
+          { label: `The value of the output coupling capacitor (C2)` },
+        ]),
+        correctExplain: (st) => {
+          const nums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join(', ');
+          return `Options <b>${nums}</b> all affect f2`;
+        },
+        working: () => `
+    <div class="working-line">f2 is set by the transistor's own <b style="color:var(--colour-ui-correct)">inter-electrode capacitance</b> (e.g. Ccb, Cbe), <b style="color:var(--colour-ui-correct)">stray circuit capacitance</b> from wiring/PCB tracks, and the transistor's own <b style="color:var(--colour-ui-correct)">transition frequency FT</b> (a datasheet spec describing how the device's own gain rolls off at high frequency) — all effects that only show up as frequency climbs.</div>
+    <div class="working-total">C1 and C2 are series coupling capacitors (Q2) — they set f1, never f2 (Q5-6 just showed this directly).</div>`
+      },
+      {
+        // Reworked from the source's own Q8-11 (Figure 2) — own values
+        // (RG=1M2/RD=4k7/RS=1k5, C1=220nF, RL=1k8, +18V), same genuine
+        // three-capacitor nuance the earlier BJT stage didn't have: a
+        // bypass cap ALSO contributes to f1, not just the two series
+        // coupling caps.
+        leftPanel: 'circuit',
+        circuitId: 'fig-jfet-single-stage',
+        circuitLabel: 'JFET amplifier stage',
+        circuitViewBox: '-140 -30 660 620',
+        kind: 'multi',
+        text: () => `<b style="color:var(--colour-ui-primary)">Click</b> every component below that affects the f1 frequency of this JFET amplifier.`,
+        hint: () => `This circuit has THREE capacitors, not two — don't forget the one sitting across RS.`,
+        options: () => shuffle([
+          { label: `C1 (input coupling)`, type: 'correct' },
+          { label: `C2 (output coupling)`, type: 'correct' },
+          { label: `C3 (source bypass)`, type: 'correct' },
+          { label: `RD` },
+          { label: `RL` },
+        ]),
+        correctExplain: () => `C1, C2 and C3 — all three capacitors affect f1 here`,
+        working: () => `
+    <div class="working-line">C1 and C2 are the familiar series coupling capacitors. But <b style="color:var(--colour-ui-correct)">C3</b> — the source bypass capacitor — ALSO affects f1: at low enough frequencies its reactance stops being small enough to effectively bypass RS any more, and the stage's gain starts dropping. A bypass capacitor contributes its own low-frequency roll-off, on top of whatever the series coupling caps are doing — the same point the BJT stage's own emitter bypass makes further down this quiz.</div>
+    <div class="working-total">RD and RL are plain resistors — they set gain/loading, not a frequency roll-off point by themselves.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        circuitId: 'fig-jfet-single-stage',
+        circuitLabel: 'JFET amplifier stage',
+        circuitViewBox: '-140 -30 660 620',
+        text: () => `Calculate this stage's own f1, considering C1 alone.`,
+        hint: () => `A JFET's gate draws no DC current, so the resistance C1 works against is simply RG on its own.`,
+        options: () => shuffle([
+          { label: `f1 = ${frac('1', '2π × 1M2Ω × 220nF')} ≈ 0.60Hz`, type: 'correct' },
+          { label: `f1 = ${frac('1', '2π × 1M2Ω × 220nF × 2')} ≈ 0.30Hz` },
+          { label: `f1 = 2π × 1M2Ω × 220nF ≈ 1.66s` },
+          { label: `f1 = ${frac('1', '2π × 4k7Ω × 220nF')} ≈ 154Hz` },
+        ]),
+        correctExplain: () => `f1 = 1/(2π × RG × C1) = 1/(2π × 1.2MΩ × 220nF) ≈ 0.60Hz`,
+        working: () => `
+    <div class="working-line">A JFET's own gate draws essentially zero DC bias current, so the input resistance C1 sees is simply <b class="colour-resistor">R<sub>G</sub></b> on its own — no divider network like a BJT's base needs.</div>
+    <div class="working-line">f1 = ${frac('1', '2π × R<sub>G</sub> × C<sub>1</sub>')} = ${frac('1', '2π × 1,200,000Ω × 0.00000022F')} ≈ <b style="color:var(--colour-ui-correct)">0.60Hz</b></div>`
+      },
+      {
+        leftPanel: 'circuit',
+        circuitId: 'fig-jfet-single-stage',
+        circuitLabel: 'JFET amplifier stage',
+        circuitViewBox: '-140 -30 660 620',
+        text: () => `If C1 were increased in value, what would happen to this stage's f1?`,
+        hint: () => `f1 = 1/(2πRC) — C sits on the bottom of that fraction.`,
+        options: () => shuffle([
+          { label: `f1 would go down — f1 and capacitance are inversely proportional`, type: 'correct' },
+          { label: `f1 would go up — f1 and capacitance are directly proportional` },
+          { label: `f1 would stay exactly the same` },
+          { label: `f1 would become undefined` },
+        ]),
+        correctExplain: () => `f1 goes down — capacitance and f1 are inversely proportional`,
+        working: () => `
+    <div class="working-line">C sits on the denominator of f1 = 1/(2πRC), so increasing C1 makes the whole fraction smaller — <b style="color:var(--colour-ui-correct)">f1 goes down</b>. Shrinking a series coupling capacitor always pushes f1 up; growing one always pulls it down.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        circuitId: 'fig-jfet-single-stage',
+        circuitLabel: 'JFET amplifier stage',
+        circuitViewBox: '-140 -30 660 620',
+        kind: 'multi',
+        text: () => `<b style="color:var(--colour-ui-primary)">Click</b> every factor below that affects the f2 frequency of this circuit.`,
+        hint: () => `Same two device-level factors as the BJT stage's own f2 (Q7) — this question just doesn't ask about FT as a third option this time.`,
+        options: () => shuffle([
+          { label: `The transistor's own inter-electrode capacitance`, type: 'correct' },
+          { label: `Stray circuit/wiring capacitance`, type: 'correct' },
+          { label: `The value of RG` },
+          { label: `The value of C1` },
+        ]),
+        correctExplain: () => `Inter-electrode capacitance and stray circuit capacitance — the same two f2 factors as any other transistor stage`,
+        working: () => `
+    <div class="working-line">Exactly the same two factors as Q7's own BJT circuit: the transistor's <b style="color:var(--colour-ui-correct)">inter-electrode capacitance</b> and <b style="color:var(--colour-ui-correct)">stray circuit capacitance</b> — both forms of unwanted PARALLEL capacitance that only bite as frequency climbs. RG and C1 are both on the series/f1 side of this circuit (Q8-10), with no bearing on f2 at all.</div>`
+      },
+      {
+        // Reworked from the source's own Q12-22 (Figure 3) — an entirely
+        // fresh set of component values (RB1=180k/RC=6k8/RB2=39k/RE=1k8,
+        // β=250, VCC=18V, C1=1.5µF, C2=82µF emitter bypass feeding the
+        // JFET stage above via RG=1M2/RD=4k7/RS=1k5, gm=4500µS, C3=220nF
+        // interstage), NOT the handout's own numbers. Every gain/f1
+        // figure below independently computed from THESE values via a
+        // standalone script, cross-checked twice before writing any of
+        // it in (re1≈18.0Ω, AV1≈376, RIN1≈3939Ω, f1(stage1)≈26.9Hz,
+        // AV2≈21.15, f1(stage2)≈0.60Hz, AV(Total)≈7962).
+        leftPanel: 'circuit',
+        circuitId: 'fig-two-stage-bjt-jfet',
+        circuitLabel: 'Two-stage BJT + JFET cascade',
+        circuitViewBox: '-140 -50 1150 650',
+        text: () => `C3 is a polarised (electrolytic) capacitor. Which of its two leads should connect to Q1's own collector, and why?`,
+        hint: () => `A polarised capacitor's positive lead always faces the HIGHER of the two DC voltages either side of it. Q2's own gate sits at close to 0V — a JFET gate draws no current, so there's no IR drop across RG to lift it any higher.`,
+        options: () => shuffle([
+          { label: `The positive lead — Q1's collector sits at a higher DC voltage than Q2's gate (with respect to common)`, type: 'correct' },
+          { label: `The negative lead — Q1's collector sits at a higher DC voltage than Q2's gate (with respect to common)` },
+          { label: `The positive lead — Q2's gate sits at a higher DC voltage than Q1's collector` },
+          { label: `Either lead — polarity doesn't matter for an interstage coupling capacitor` },
+        ]),
+        correctExplain: () => `The positive lead — Q1's collector sits at a higher DC voltage than Q2's own (near-0V) gate`,
+        working: () => `
+    <div class="working-line">Q1's collector sits at a real, positive DC operating voltage (set by RC and the bias network). Q2's gate, on the other hand, sits at close to 0V — RG simply ties it toward common, and since a JFET's gate draws no DC current there's no voltage drop across RG to lift it any higher. Q1's collector is therefore the higher-voltage side, so C3's <b style="color:var(--colour-ui-correct)">positive</b> lead belongs there.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        circuitId: 'fig-two-stage-bjt-jfet',
+        circuitLabel: 'Two-stage BJT + JFET cascade',
+        circuitViewBox: '-140 -50 1150 650',
+        kind: 'multi',
+        text: () => `Suppose C3 failed as a short circuit. <b style="color:var(--colour-ui-primary)">Click</b> every statement below that would then be TRUE.`,
+        hint: () => `A shorted C3 gives Q1's collector a brand new DC path straight into Q2's own gate network. Is RG small enough to actually pull any real current and change Q1's own collector voltage? And what does that same short do to Q2's gate?`,
+        options: () => shuffle([
+          { label: `Q1's own collector voltage barely changes — RG (1M2) is far too high to meaningfully load it`, type: 'correct' },
+          { label: `Q2's gate voltage rises to roughly match Q1's own collector voltage`, type: 'correct' },
+          { label: `Q2 is driven into cutoff, so there's no output signal at all`, type: 'correct' },
+          { label: `Q1's collector voltage drops to 0V, since C3 now shorts it straight to common through RG` },
+          { label: `Nothing changes anywhere — a shorted interstage cap has no effect at all` },
+        ]),
+        correctExplain: (st) => {
+          const nums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join(', ');
+          return `Options <b>${nums}</b> are all true`;
+        },
+        working: () => `
+    <div class="working-line">A shorted C3 opens up a new DC path from Q1's collector, through the short, into Q2's gate network. RG is a huge 1.2MΩ — utterly negligible next to RC (6.8kΩ) — so almost no extra current flows, and <b style="color:var(--colour-ui-correct)">Q1's own collector voltage barely changes</b>.</div>
+    <div class="working-line" style="margin-top:.4rem">A short is a direct connection, though — whatever DC sits on Q1's collector now appears directly on Q2's gate too, completely overriding the near-0V RG would otherwise hold it at. With the gate pulled up while the source sits much lower, V<sub>GS</sub> is driven strongly positive — well outside this JFET's normal range, <b style="color:var(--colour-ui-correct)">turning Q2 off</b> and killing the output signal entirely.</div>
+    <div class="working-total">Q1's collector voltage does NOT drop to 0V (RG is too high a resistance to pull it there), and this is very much a real, consequential fault — not a "no effect" one.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        circuitId: 'fig-two-stage-bjt-jfet',
+        circuitLabel: 'Two-stage BJT + JFET cascade',
+        circuitViewBox: '-140 -50 1150 650',
+        text: () => `Calculate the voltage gain of the first amplifier stage.`,
+        hint: () => `A<sub>V(loaded)</sub> = R<sub>C</sub>||R<sub>L</sub> / r<sub>e</sub> — and remember, the "load" the first stage actually sees is the SECOND stage's own input resistance (R<sub>G</sub>, since a JFET gate draws no bias current).`,
+        options: () => shuffle([
+          { label: `AV1 = RC||RG / re = 6.8kΩ||1.2MΩ / 18.0Ω ≈ 376`, type: 'correct' },
+          { label: `AV1 = RC / re = 6.8kΩ / 18.0Ω ≈ 377.8kΩ, i.e. not a real (dimensionless) gain figure` },
+          { label: `AV1 = RC||RG / RE = 6.8kΩ||1.2MΩ / 1.8kΩ ≈ 3.7` },
+          { label: `AV1 = RG / re = 1.2MΩ / 18.0Ω ≈ 66,667` },
+        ]),
+        correctExplain: () => `AV1(loaded) = RC||RG / re ≈ 376`,
+        working: () => `
+    <div class="working-step">Step 1 — re, from the emitter current:</div>
+    <div class="working-line">VB1 = VCC × RB2/(RB1+RB2) = 18 × 39k/219k ≈ 3.206V. VE1 = VB1 − 0.6 ≈ 2.606V. IE1 = VE1/RE = 2.606V/1.8kΩ ≈ 1.448mA. re = 26mV/IE1 ≈ 18.0Ω.</div>
+    <div class="working-step" style="margin-top:.6rem">Step 2 — apply AV(loaded) = RC||RL / re, where RL here is RG (the input resistance of the JFET stage that loads this one — a JFET gate draws no bias current, so its own Rin IS simply RG):</div>
+    <div class="working-line">RC||RG = 6.8kΩ||1.2MΩ ≈ 6.76kΩ (barely reduced at all — RG is so much bigger than RC that it hardly loads it). AV1 = 6.76kΩ/18.0Ω ≈ <b style="color:var(--colour-ui-correct)">376</b>.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        circuitId: 'fig-two-stage-bjt-jfet',
+        circuitLabel: 'Two-stage BJT + JFET cascade',
+        circuitViewBox: '-140 -50 1150 650',
+        text: () => `Calculate the f1 frequency of the first amplifier stage (ignore the effects of C2).`,
+        hint: () => `RIN here is the parallel combination of the WHOLE base bias network as the amplifier's input actually sees it: R<sub>B1</sub>||R<sub>B2</sub>||(β × r<sub>e</sub>).`,
+        options: () => shuffle([
+          { label: `RIN = RB1||RB2||(β×re) ≈ 3.939kΩ, so f1 = 1/(2π×3.939kΩ×1.5µF) ≈ 26.9Hz`, type: 'correct' },
+          { label: `RIN = RB1||RB2 ≈ 32.1kΩ, so f1 = 1/(2π×32.1kΩ×1.5µF) ≈ 3.3Hz` },
+          { label: `RIN = β×re ≈ 4.49kΩ, so f1 = 1/(2π×4.49kΩ×1.5µF) ≈ 23.6Hz` },
+          { label: `RIN = RC ≈ 6.8kΩ, so f1 = 1/(2π×6.8kΩ×1.5µF) ≈ 15.6Hz` },
+        ]),
+        correctExplain: () => `RIN = RB1||RB2||(β×re) ≈ 3.939kΩ; f1 ≈ 26.9Hz`,
+        working: () => `
+    <div class="working-step">Step 1 — RIN, the full input resistance C1 actually works against:</div>
+    <div class="working-line">β×re = 250 × 18.0Ω ≈ 4,491Ω. RB1||RB2 = 180k×39k/219k ≈ 32,055Ω. RIN = 32,055Ω||4,491Ω ≈ <b>3,939Ω</b>.</div>
+    <div class="working-step" style="margin-top:.6rem">Step 2 — apply the formula:</div>
+    <div class="working-line">f1 = ${frac('1', '2π × 3,939Ω × 1.5µF')} ≈ <b style="color:var(--colour-ui-correct)">26.9Hz</b></div>`
+      },
+      {
+        leftPanel: 'circuit',
+        circuitId: 'fig-two-stage-bjt-jfet',
+        circuitLabel: 'Two-stage BJT + JFET cascade',
+        circuitViewBox: '-140 -50 1150 650',
+        text: () => `Calculate the voltage gain of the second amplifier stage, if the gm of Q2 is 4500µS and the voltage gain of a common-source amplifier is given by gm × RD.`,
+        hint: () => `No load resistor is given beyond RD itself for this final stage, so this is simply gm × RD.`,
+        options: () => shuffle([
+          { label: `AV2 = gm × RD = 4500µS × 4k7Ω ≈ 21.15`, type: 'correct' },
+          { label: `AV2 = gm × RS = 4500µS × 1k5Ω ≈ 6.75` },
+          { label: `AV2 = RD / gm = 4700Ω / 0.0045S ≈ 1,044,444` },
+          { label: `AV2 = gm × (RD+RS) = 4500µS × 6k2Ω ≈ 27.9` },
+        ]),
+        correctExplain: () => `AV2 = gm × RD = 4500µS × 4.7kΩ ≈ 21.15`,
+        working: () => `
+    <div class="working-line">AV2 = gm × RD = 0.0045S × 4,700Ω ≈ <b style="color:var(--colour-ui-correct)">21.15</b> — straightforward substitution, no loading network to combine with RD since nothing external loads this final stage's own output beyond what C4 leads out to.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        circuitId: 'fig-two-stage-bjt-jfet',
+        circuitLabel: 'Two-stage BJT + JFET cascade',
+        circuitViewBox: '-140 -50 1150 650',
+        text: () => `Calculate the f1 frequency of the second amplifier stage (due to the effects of C3).`,
+        hint: () => `RT for C3 is the total series resistance either side of it: Stage 1's own output resistance (≈RC, since RE is bypassed) plus Stage 2's own input resistance (RG).`,
+        options: () => shuffle([
+          { label: `RT = RC+RG ≈ 1.207MΩ, so f1 = 1/(2π×1.207MΩ×220nF) ≈ 0.60Hz`, type: 'correct' },
+          { label: `RT = RD+RG ≈ 1.205MΩ, so f1 = 1/(2π×1.205MΩ×220nF) ≈ 0.60Hz` },
+          { label: `RT = RC+RD ≈ 11.5kΩ, so f1 = 1/(2π×11.5kΩ×220nF) ≈ 62.9Hz` },
+          { label: `RT = RG ≈ 1.2MΩ, so f1 = 1/(2π×1.2MΩ×220nF) ≈ 0.60Hz, but using RG alone rather than RC+RG` },
+        ]),
+        correctExplain: () => `RT = ROUT(stage1)+RIN(stage2) = RC+RG ≈ 1.207MΩ; f1 ≈ 0.60Hz`,
+        working: () => `
+    <div class="working-line">Stage 1's own output resistance (as seen looking back INTO its collector) is essentially RC (6.8kΩ) — RE's own contribution is bypassed out by C2. Stage 2's input resistance is RG (1.2MΩ, a JFET gate draws no current). RT = 6.8kΩ + 1.2MΩ ≈ 1.2068MΩ.</div>
+    <div class="working-line">f1 = ${frac('1', '2π × 1,206,800Ω × 220nF')} ≈ <b style="color:var(--colour-ui-correct)">0.60Hz</b> — coincidentally the same figure as this stage design's own standalone version earlier in this quiz, since RG (1.2MΩ) dominates RT so heavily in both cases that RC's own small contribution barely changes the result.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        circuitId: 'fig-two-stage-bjt-jfet',
+        circuitLabel: 'Two-stage BJT + JFET cascade',
+        circuitViewBox: '-140 -50 1150 650',
+        text: () => `What is the voltage gain of the entire (two-stage) amplifier?`,
+        hint: () => `AV(Total) = AV1(loaded) × AV2 — multiply the two stage gains you already calculated.`,
+        options: () => shuffle([
+          { label: `AV(T) = AV1(loaded) × AV2 = 376 × 21.15 ≈ 7962`, type: 'correct' },
+          { label: `AV(T) = AV1 + AV2 = 376 + 21.15 ≈ 397.2` },
+          { label: `AV(T) = AV1(loaded) / AV2 = 376 / 21.15 ≈ 17.8` },
+          { label: `AV(T) = √(AV1×AV2) = √(376×21.15) ≈ 89.2` },
+        ]),
+        correctExplain: () => `AV(T) = AV1(loaded) × AV2 = 376 × 21.15 ≈ 7962`,
+        working: () => `
+    <div class="working-line">AV(Total) = AV1(loaded) × AV2 ≈ 376.4 × 21.15 ≈ <b style="color:var(--colour-ui-correct)">7962</b> — the loaded gains of a cascaded amplifier multiply, exactly the same rule this file's own earlier question (2 stages, gains 12 and 8) already established.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        circuitId: 'fig-two-stage-bjt-jfet',
+        circuitLabel: 'Two-stage BJT + JFET cascade',
+        circuitViewBox: '-140 -50 1150 650',
+        text: () => `What is the f1 frequency of the entire (two-stage) amplifier?`,
+        hint: () => `Each stage has its OWN f1 — which single one of those actually determines where the COMBINED amplifier's own response starts rolling off first, as frequency falls?`,
+        options: () => shuffle([
+          { label: `Take the worst case f1, which was ≈26.9Hz (Stage 1's own f1)`, type: 'correct' },
+          { label: `Add the two f1 values together: 26.9Hz + 0.60Hz ≈ 27.5Hz` },
+          { label: `Average the two f1 values: (26.9Hz + 0.60Hz)/2 ≈ 13.8Hz` },
+          { label: `Take the lowest f1, which was ≈0.60Hz (Stage 2's own f1)` },
+        ]),
+        correctExplain: () => `The worst case (highest) individual f1 — ≈26.9Hz — sets the whole amplifier's own f1`,
+        working: () => `
+    <div class="working-line">As frequency falls from the amplifier's normal passband, whichever stage's own f1 is <b style="color:var(--colour-ui-correct)">highest</b> is the first one to actually start rolling off — Stage 1's own ≈26.9Hz, well above Stage 2's ≈0.60Hz. That "worst case" f1 is what actually determines where the COMBINED amplifier's response starts dropping, not an average or a sum of the two.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        circuitId: 'fig-two-stage-bjt-jfet',
+        circuitLabel: 'Two-stage BJT + JFET cascade',
+        circuitViewBox: '-140 -50 1150 650',
+        text: () => `What would happen at the output if capacitor C3 went open-circuit instead?`,
+        hint: () => `C3 is the ONLY signal path linking the two stages together — what happens to a signal that has no path through at all?`,
+        options: () => shuffle([
+          { label: `No output signal, because there's no connection between the stages`, type: 'correct' },
+          { label: `The output signal would just get much quieter` },
+          { label: `The output signal would become badly distorted but still present` },
+          { label: `No effect at all — C3 only matters for f1, not the signal path itself` },
+        ]),
+        correctExplain: () => `No output signal at all — an open C3 breaks the only link between the two stages`,
+        working: () => `
+    <div class="working-line">C3 is the sole coupling path from Stage 1's output to Stage 2's input — with it open-circuit, the AC signal has no way through to Stage 2 at all, so <b style="color:var(--colour-ui-correct)">no output signal</b> reaches the amplifier's own output, regardless of what Stage 1 itself is still doing correctly. A genuinely opposite fault mode from the shorted-C3 question above — same component, two very different failure symptoms.</div>`
+      },
+      {
+        // Review Q26 — general transformer-coupling question (adv), a
+        // "give at least two" multi-select, same shape as this file's own
+        // earlier "3 coupling methods" question.
+        kind: 'multi',
+        // Reworked from the source's own separate Q26 (advantages) and
+        // Q27 (disadvantages) — merged into a single sort-into-columns
+        // match question instead of two back-to-back multi-selects.
+        kind: 'match',
+        columns: () => ['Advantage', 'Disadvantage'],
+        text: () => `<b style="color:var(--colour-ui-primary)">Sort</b> each feature of transformer coupling below into the correct column.`,
+        hint: () => `Think about what a transformer can do that a plain capacitor never can (beyond just blocking DC), and what it costs you to get that.`,
+        options: () => shuffle([
+          { label: `Blocks DC between stages`, col: 0 },
+          { label: `Better efficiency — little power lost in a well-wound transformer`, col: 0 },
+          { label: `Genuine impedance matching, via the turns ratio`, col: 0 },
+          { label: `Poor low-frequency response`, col: 1 },
+          { label: `Distortion (core non-linearity, especially near saturation)`, col: 1 },
+          { label: `Bulky and expensive compared to a single capacitor`, col: 1 },
+        ]),
+        correctExplain: (st) => {
+          const wrongCount = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).length;
+          return wrongCount === 0 ? 'All 6 features correctly sorted' : `${st.opts.length - wrongCount} of ${st.opts.length} features correctly sorted`;
+        },
+        working: () => `
+    <div class="working-line">A transformer <b style="color:var(--colour-ui-correct)">blocks DC</b> between stages exactly like a coupling capacitor does (no direct electrical path through its windings), but it also offers two things a capacitor can't: better <b style="color:var(--colour-ui-correct)">efficiency</b>, and genuine <b style="color:var(--colour-ui-correct)">impedance matching</b> via its turns ratio.</div>
+    <div class="working-line" style="margin-top:.4rem">The real downsides: <b style="color:var(--colour-ui-correct)">poor low-frequency response</b> (winding inductance isn't infinite), <b style="color:var(--colour-ui-correct)">distortion</b>, and simply being <b style="color:var(--colour-ui-correct)">bulky and expensive</b> — this file's own earlier match-question already covers the frequency-response side in more depth (limited at BOTH low AND high frequencies, unlike capacitive coupling's own low-end-only limitation).</div>`
+      },
+      {
+        // Reworked from the source's own Q28 — own VCC (24V, not 20V).
+        leftPanel: 'circuit',
+        circuitId: 'fig-transformer-stage',
+        circuitLabel: 'Transformer-coupled output stage',
+        circuitViewBox: '-140 -50 700 650',
+        text: () => `When replacing Q1 in this circuit, what should the minimum VCE rating of the transistor be? Explain.`,
+        hint: () => `A transformer's own primary winding generates a back-EMF that can add ON TOP of the supply rail at the exact moment the transistor switches off — think about what that does to the collector's own voltage swing.`,
+        options: () => shuffle([
+          { label: `At least twice VCC (48V) — the primary's own back-EMF can swing Q1's collector up to twice VCC`, type: 'correct' },
+          { label: `Exactly VCC (24V) — the collector never exceeds the supply rail` },
+          { label: `Half of VCC (12V) — the transformer steps the collector voltage down` },
+          { label: `It doesn't matter, since the transformer fully isolates Q1 from any voltage spikes` },
+        ]),
+        correctExplain: () => `At least twice VCC (48V) — due to the primary winding's own back-EMF`,
+        working: () => `
+    <div class="working-line">Because of the back-EMF generated by T1's own primary winding as current through it changes, Q1's collector voltage can swing up to <b style="color:var(--colour-ui-correct)">twice VCC</b> — here, 2 × 24V = <b style="color:var(--colour-ui-correct)">48V</b>. A replacement transistor's own V<sub>CE</sub> rating needs enough headroom to survive that full swing, not just the steady-state 24V supply rail, or it risks breakdown at the exact moment the collector current is changing fastest.</div>`
+      },
+    ];
+
+    initQuizNav();
+    resetQuiz();
+    initQuizFromURL();
+  </script>
+</body>
+</html>

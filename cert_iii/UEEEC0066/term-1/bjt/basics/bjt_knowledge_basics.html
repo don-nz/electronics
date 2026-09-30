@@ -1,0 +1,1250 @@
+<!--
+  TEMPLATE FILE — read before cloning for a new weekly quiz.
+
+  This file uses a data-driven quiz engine: a single `QUESTIONS` array (in the
+  <script>, search "QUESTIONS —") drives one generic HTML panel and a generic
+  set of engine functions (renderQuestion, checkAnswer, nextQuestion, etc).
+  There is deliberately NO per-question HTML or per-question JS function.
+
+  MIGRATED to the shared engine, `assets/quiz-engine.js` (loaded via a plain
+  <script src> in <head>, BEFORE this file's own inline <script> — see that
+  file's own header comment for the load-order reasoning and the exact
+  bootstrap call shape). This was Phase 2 of a wider cert_iii-quiz migration
+  (see the project's own "assets/quiz-engine.js migration assessment"),
+  synthesized as the union of this file's own engine and digital_knowledge_
+  basics.html's — the two had independently drifted apart (this file never
+  gained kind:'match'/'bits'; the digital one never gained leftPanel:'viz',
+  the zoom modal, or the xy-ruler dev overlay) despite being cloned from the
+  same original template. Only this file's own circuit-simulation setup
+  (EXAMPLE_SETS/recompute/refreshLabels/setMode) and its Q5 interactive
+  visualizer IIFE remain inline — genuinely page-specific, not shared engine.
+  When cloning this file for a new quiz, keep the two-script-tag structure
+  (quiz-engine.js, then your own inline QUESTIONS[] + bootstrap calls) —
+  do NOT copy the old inline engine functions back in.
+
+  When cloning this file for a new quiz — even one that starts with just ONE
+  image and ONE question — KEEP THIS STRUCTURE. Do not revert to a hardcoded
+  per-question panel just because there's only one entry. The whole point of
+  this architecture is that adding question 2, 3, splitting a question into
+  two, or reordering them later is a pure edit of the QUESTIONS array, with
+  zero HTML/JS restructuring. Starting with one question and hardcoding it
+  "for now" recreates exactly the problem this file was refactored to avoid.
+
+  A `leftPanel` field per question ('circuit' | 'viz' | 'shapeGrid') swaps the
+  left-hand image between the static circuit SVG, an interactive visualizer
+  (see the Q5 IIFE), or a grid of clickable shapes (see Q8) — a clone with
+  only one static image can omit `leftPanel` (defaults to 'circuit') without
+  losing the array-driven engine. Add new left-panel modes the same way: a new
+  string value, a new container div, one more branch in swapLeftPanel()
+  (now in quiz-engine.js — keep it defensive/null-checked when you do).
+
+  A `kind:'multi'` field per question switches it from single-select
+  (A/B/C/D, one correct answer) to multi-select (any number of options can be
+  toggled on; correctness is a set match) — see Q8 for the pattern. Leave
+  `kind` unset for ordinary single-select questions.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BJT Knowledge Quiz 1</title>
+  <script src="../../../../assets/theme-init.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../../assets/quiz-common.css">
+  <script src="../../../../assets/breadcrumb.js" defer></script>
+  <script src="../../../../assets/quiz-engine.js"></script>
+    <style>
+        .progress-wrap { display: flex; gap: .4rem; align-items: center; margin-bottom: 1rem; }
+    </style>
+</head>
+
+<body>
+  <!-- Hidden defs: BJT symbol variants used by the shape-grid multi-select question.
+       All 12 share one neutral colour (var(--colour-bjt)) — deliberately NOT colour-coded
+       correct/incorrect, so the only way to tell them apart is the arrow logic itself. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <g id="bjt-base-frame">
+        <line x1="-17" y1="0" x2="0" y2="0" style="stroke: var(--colour-bjt)" stroke-width="2" />
+        <line x1="0" y1="-12" x2="0" y2="12" style="stroke: var(--colour-bjt)" stroke-width="2.5" />
+        <polyline points="14,-34 14,-20 0,-8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+        <polyline points="14,34 14,20 0,8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+      </g>
+      <!-- ── 8 valid symbols: standard/flipped × NPN/PNP × circle/no-circle ── -->
+      <g id="bjt-npn-standard-circle">
+        <use href="#bjt-base-frame" />
+        <circle cx="7" cy="0" r="24" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+        <polygon points="12,18 1,14 6,8" style="fill: var(--colour-bjt)" />
+      </g>
+      <g id="bjt-pnp-standard-circle">
+        <use href="#bjt-base-frame" />
+        <circle cx="7" cy="0" r="24" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+        <polygon points="2,-9 8,-20 13,-14" style="fill: var(--colour-bjt)" />
+      </g>
+      <g id="bjt-npn-flipped-circle">
+        <use href="#bjt-base-frame" />
+        <circle cx="7" cy="0" r="24" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+        <polygon points="12,-18 1,-14 6,-8" style="fill: var(--colour-bjt)" />
+      </g>
+      <g id="bjt-pnp-flipped-circle">
+        <use href="#bjt-base-frame" />
+        <circle cx="7" cy="0" r="24" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+        <polygon points="2,9 8,20 13,14" style="fill: var(--colour-bjt)" />
+      </g>
+      <g id="bjt-npn-standard-nocircle">
+        <use href="#bjt-base-frame" />
+        <polygon points="12,18 1,14 6,8" style="fill: var(--colour-bjt)" />
+      </g>
+      <g id="bjt-pnp-standard-nocircle">
+        <use href="#bjt-base-frame" />
+        <polygon points="2,-9 8,-20 13,-14" style="fill: var(--colour-bjt)" />
+      </g>
+      <g id="bjt-npn-flipped-nocircle">
+        <use href="#bjt-base-frame" />
+        <polygon points="12,-18 1,-14 6,-8" style="fill: var(--colour-bjt)" />
+      </g>
+      <g id="bjt-pnp-flipped-nocircle">
+        <use href="#bjt-base-frame" />
+        <polygon points="2,9 8,20 13,14" style="fill: var(--colour-bjt)" />
+      </g>
+      <!-- ── 4 invalid symbols: arrow on the base lead, or two arrows instead of one ── -->
+      <g id="bjt-error-base-arrow-in">
+        <use href="#bjt-base-frame" />
+        <circle cx="7" cy="0" r="24" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+        <polygon points="-4,-4 2,0 -4,4" style="fill: var(--colour-bjt)" />
+      </g>
+      <g id="bjt-error-base-arrow-out">
+        <use href="#bjt-base-frame" />
+        <circle cx="7" cy="0" r="24" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+        <polygon points="-10,0 -4,-4 -4,4" style="fill: var(--colour-bjt)" />
+      </g>
+      <g id="bjt-error-double-in">
+        <use href="#bjt-base-frame" />
+        <circle cx="7" cy="0" r="24" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+        <polygon points="2,-9 8,-20 13,-14" style="fill: var(--colour-bjt)" />
+        <polygon points="2,9 8,20 13,14" style="fill: var(--colour-bjt)" />
+      </g>
+      <g id="bjt-error-double-out">
+        <use href="#bjt-base-frame" />
+        <circle cx="7" cy="0" r="24" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+        <polygon points="12,-18 1,-14 6,-8" style="fill: var(--colour-bjt)" />
+        <polygon points="12,18 1,14 6,8" style="fill: var(--colour-bjt)" />
+      </g>
+      <!-- ── B/E/C-labelled variants for the terminal-labelling question. Both symbols
+           are emitter-at-bottom (npn-standard, pnp-flipped); only the label placement
+           differs. Correct positions: B=base lead (left), C=top diagonal, E=bottom
+           diagonal (the one with the arrow). Each "swap" variant exchanges two of the
+           three labels — a plausible mislabelling, not random noise. ── -->
+      <g id="bjt-npn-labels-correct">
+        <use href="#bjt-npn-standard-circle" />
+        <text x="-20" y="4"  text-anchor="end"   font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">B</text>
+        <text x="22" y="-24" text-anchor="start" font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">C</text>
+        <text x="22" y="32"  text-anchor="start" font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">E</text>
+      </g>
+      <g id="bjt-npn-labels-swap-ec">
+        <use href="#bjt-npn-standard-circle" />
+        <text x="-20" y="4"  text-anchor="end"   font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">B</text>
+        <text x="22" y="-24" text-anchor="start" font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">E</text>
+        <text x="22" y="32"  text-anchor="start" font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">C</text>
+      </g>
+      <g id="bjt-npn-labels-swap-be">
+        <use href="#bjt-npn-standard-circle" />
+        <text x="-20" y="4"  text-anchor="end"   font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">E</text>
+        <text x="22" y="-24" text-anchor="start" font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">C</text>
+        <text x="22" y="32"  text-anchor="start" font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">B</text>
+      </g>
+      <g id="bjt-npn-labels-swap-bc">
+        <use href="#bjt-npn-standard-circle" />
+        <text x="-20" y="4"  text-anchor="end"   font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">C</text>
+        <text x="22" y="-24" text-anchor="start" font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">B</text>
+        <text x="22" y="32"  text-anchor="start" font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">E</text>
+      </g>
+      <g id="bjt-pnp-labels-correct">
+        <use href="#bjt-pnp-flipped-circle" />
+        <text x="-20" y="4"  text-anchor="end"   font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">B</text>
+        <text x="22" y="-24" text-anchor="start" font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">C</text>
+        <text x="22" y="32"  text-anchor="start" font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">E</text>
+      </g>
+      <g id="bjt-pnp-labels-swap-ec">
+        <use href="#bjt-pnp-flipped-circle" />
+        <text x="-20" y="4"  text-anchor="end"   font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">B</text>
+        <text x="22" y="-24" text-anchor="start" font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">E</text>
+        <text x="22" y="32"  text-anchor="start" font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">C</text>
+      </g>
+      <g id="bjt-pnp-labels-swap-be">
+        <use href="#bjt-pnp-flipped-circle" />
+        <text x="-20" y="4"  text-anchor="end"   font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">E</text>
+        <text x="22" y="-24" text-anchor="start" font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">C</text>
+        <text x="22" y="32"  text-anchor="start" font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">B</text>
+      </g>
+      <g id="bjt-pnp-labels-swap-bc">
+        <use href="#bjt-pnp-flipped-circle" />
+        <text x="-20" y="4"  text-anchor="end"   font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">C</text>
+        <text x="22" y="-24" text-anchor="start" font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">B</text>
+        <text x="22" y="32"  text-anchor="start" font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">E</text>
+      </g>
+      <!-- ── Physical package pin-order question: TO-92 (correct package) vs
+           TO-126 (wrong package, larger with a mounting tab) — each shown
+           with a different C/B/E lead order, only one combination is right. ── -->
+      <g id="to92-body">
+        <path d="M -14,0 L -14,-12 A 14,14 0 0 1 14,-12 L 14,0 Z" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+        <line x1="-8" y1="0" x2="-8" y2="20" style="stroke: var(--colour-bjt)" stroke-width="2" />
+        <line x1="0"  y1="0" x2="0"  y2="20" style="stroke: var(--colour-bjt)" stroke-width="2" />
+        <line x1="8"  y1="0" x2="8"  y2="20" style="stroke: var(--colour-bjt)" stroke-width="2" />
+      </g>
+      <g id="to126-body">
+        <rect x="-16" y="-14" width="32" height="18" rx="2" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+        <rect x="-6" y="-24" width="12" height="10" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" />
+        <circle cx="0" cy="-19" r="2.5" fill="none" style="stroke: var(--colour-bjt)" stroke-width="1.5" />
+        <line x1="-8" y1="4" x2="-8" y2="22" style="stroke: var(--colour-bjt)" stroke-width="2" />
+        <line x1="0"  y1="4" x2="0"  y2="22" style="stroke: var(--colour-bjt)" stroke-width="2" />
+        <line x1="8"  y1="4" x2="8"  y2="22" style="stroke: var(--colour-bjt)" stroke-width="2" />
+      </g>
+      <g id="to92-cbe"><use href="#to92-body" />
+        <text x="-8" y="30" text-anchor="middle" font-size="12" font-weight="bold" style="fill: var(--colour-bjt)">C</text>
+        <text x="0"  y="30" text-anchor="middle" font-size="12" font-weight="bold" style="fill: var(--colour-bjt)">B</text>
+        <text x="8"  y="30" text-anchor="middle" font-size="12" font-weight="bold" style="fill: var(--colour-bjt)">E</text>
+      </g>
+      <g id="to92-ebc"><use href="#to92-body" />
+        <text x="-8" y="30" text-anchor="middle" font-size="12" font-weight="bold" style="fill: var(--colour-bjt)">E</text>
+        <text x="0"  y="30" text-anchor="middle" font-size="12" font-weight="bold" style="fill: var(--colour-bjt)">B</text>
+        <text x="8"  y="30" text-anchor="middle" font-size="12" font-weight="bold" style="fill: var(--colour-bjt)">C</text>
+      </g>
+      <g id="to92-bce"><use href="#to92-body" />
+        <text x="-8" y="30" text-anchor="middle" font-size="12" font-weight="bold" style="fill: var(--colour-bjt)">B</text>
+        <text x="0"  y="30" text-anchor="middle" font-size="12" font-weight="bold" style="fill: var(--colour-bjt)">C</text>
+        <text x="8"  y="30" text-anchor="middle" font-size="12" font-weight="bold" style="fill: var(--colour-bjt)">E</text>
+      </g>
+      <g id="to92-ceb"><use href="#to92-body" />
+        <text x="-8" y="30" text-anchor="middle" font-size="12" font-weight="bold" style="fill: var(--colour-bjt)">C</text>
+        <text x="0"  y="30" text-anchor="middle" font-size="12" font-weight="bold" style="fill: var(--colour-bjt)">E</text>
+        <text x="8"  y="30" text-anchor="middle" font-size="12" font-weight="bold" style="fill: var(--colour-bjt)">B</text>
+      </g>
+      <g id="to92-bec"><use href="#to92-body" />
+        <text x="-8" y="30" text-anchor="middle" font-size="12" font-weight="bold" style="fill: var(--colour-bjt)">B</text>
+        <text x="0"  y="30" text-anchor="middle" font-size="12" font-weight="bold" style="fill: var(--colour-bjt)">E</text>
+        <text x="8"  y="30" text-anchor="middle" font-size="12" font-weight="bold" style="fill: var(--colour-bjt)">C</text>
+      </g>
+      <g id="to92-ecb"><use href="#to92-body" />
+        <text x="-8" y="30" text-anchor="middle" font-size="12" font-weight="bold" style="fill: var(--colour-bjt)">E</text>
+        <text x="0"  y="30" text-anchor="middle" font-size="12" font-weight="bold" style="fill: var(--colour-bjt)">C</text>
+        <text x="8"  y="30" text-anchor="middle" font-size="12" font-weight="bold" style="fill: var(--colour-bjt)">B</text>
+      </g>
+      <g id="to126-cbe"><use href="#to126-body" />
+        <text x="-8" y="32" text-anchor="middle" font-size="12" font-weight="bold" style="fill: var(--colour-bjt)">C</text>
+        <text x="0"  y="32" text-anchor="middle" font-size="12" font-weight="bold" style="fill: var(--colour-bjt)">B</text>
+        <text x="8"  y="32" text-anchor="middle" font-size="12" font-weight="bold" style="fill: var(--colour-bjt)">E</text>
+      </g>
+      <g id="to126-ebc"><use href="#to126-body" />
+        <text x="-8" y="32" text-anchor="middle" font-size="12" font-weight="bold" style="fill: var(--colour-bjt)">E</text>
+        <text x="0"  y="32" text-anchor="middle" font-size="12" font-weight="bold" style="fill: var(--colour-bjt)">B</text>
+        <text x="8"  y="32" text-anchor="middle" font-size="12" font-weight="bold" style="fill: var(--colour-bjt)">C</text>
+      </g>
+    </defs>
+  </svg>
+<div class="crumb" id="crumb" data-current="Fundamentals"></div>
+  <header>
+    <h1>BJT Knowledge</h1>
+    <p>Conceptual Questions · NPN Transistor · BC549</p>
+  </header>
+
+  <div class="quiz-wrap" id="quizWrap">
+
+    <!-- LEFT: circuit diagram -->
+    <div class="circuit-col">
+      <!-- Mode toggle: built in but not surfaced yet -->
+      <div class="mode-toggle" style="display:none">
+        <div class="mode-seg" id="modeSeg">
+          <button id="modeExample1" class="active" onclick="setMode('example1')">Example 1</button>
+          <button id="modeExample2" onclick="setMode('example2')">Example 2</button>
+          <button id="modeExample3" onclick="setMode('example3')">Example 3</button>
+          <button id="modeRandomise" onclick="setMode('randomise')">Randomise</button>
+        </div>
+      </div>
+      <div class="circuit-panel" onclick="openModal()" title="Click to zoom">
+        <div class="panel-label">Circuit Diagram — <span id="panelVoltLabel">12 V</span> Supply</div>
+        <div class="zoom-hint">
+          <svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.8" fill="none" />
+            <line x1="12.5" y1="12.5" x2="17" y2="17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            <line x1="6" y1="8" x2="10" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+            <line x1="8" y1="6" x2="8" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+          </svg>
+          Zoom
+        </div>
+
+        <svg id="circuitSvg" viewBox="-90 0 610 480" xmlns="http://www.w3.org/2000/svg"
+          font-family="'Share Tech Mono',monospace">
+
+          <!-- ════════════════════ DEFINITIONS ════════════════════ -->
+
+          <defs>
+            <filter id="glow">
+              <feGaussianBlur stdDeviation="2" result="b" />
+              <feMerge>
+                <feMergeNode in="b" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+
+            <!-- ══ NPN BJT SHAPE ══ -->
+            <g id="bjt-npn-shape">
+              <circle cx="7" cy="0" r="24" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2"
+                filter="url(#glow)" />
+              <line x1="-17" y1="0" x2="0" y2="0" style="stroke: var(--colour-bjt)" stroke-width="2" />
+              <!-- base lead -->
+              <line x1="0" y1="-12" x2="0" y2="12" style="stroke: var(--colour-bjt)" stroke-width="2.5" />
+              <!-- base bar -->
+              <polyline points="14,-34 14,-20 0,-8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+              <!-- collector arm -->
+              <polyline points="14,34 14,20 0,8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+              <!-- emitter arm -->
+              <polygon points="12,18 1,14 6,8" style="fill: var(--colour-bjt)" />
+              <!-- NPN arrow, tip pointing away from base -->
+            </g>
+
+          </defs>
+
+          <!-- ════════════════════ CIRCUIT GROUP ════════════════════ -->
+
+          <g id="circuitGroup" transform="translate(0,5)">
+
+          <!-- ════════════════════ BJT DATASHEET REFERENCE TABLE ════════════════════ -->
+
+          <g id="datasheetTable" transform="translate(-90,0)">
+            <rect x="0" y="0" width="130" height="145" rx="4" style="fill: rgba(0,0,0,.25)" stroke="var(--colour-bjt)" stroke-width="1" />
+            <text x="6" y="13" style="fill: var(--colour-text)" text-anchor="start" font-size="9" font-weight="bold" letter-spacing=".03em">BC549 — TYPICAL RATINGS</text>
+            <line x1="6" y1="19" x2="124" y2="19" style="stroke: var(--colour-border)" stroke-width="1" />
+
+            <text x="6" y="32" style="fill: var(--colour-bjt)" font-size="12">V<tspan baseline-shift="sub" font-size="6.5">BE</tspan>(on)</text>
+            <text x="124" y="32" style="fill: var(--colour-text)" text-anchor="end" font-size="12">0.6 V typ</text>
+
+            <text x="6" y="49" style="fill: var(--colour-bjt)" font-size="12">V<tspan baseline-shift="sub" font-size="6.5">CE</tspan>(sat)</text>
+            <text x="124" y="49" style="fill: var(--colour-text)" text-anchor="end" font-size="12">0.2 V typ</text>
+
+            <text x="6" y="66" style="fill: var(--colour-bjt)" font-size="12">V<tspan baseline-shift="sub" font-size="6.5">CEO</tspan>(max)</text>
+            <text x="124" y="66" style="fill: var(--colour-text)" text-anchor="end" font-size="12">30 V</text>
+
+            <text x="6" y="83" style="fill: var(--colour-bjt)" font-size="12">I<tspan baseline-shift="sub" font-size="6.5">C</tspan>(max)</text>
+            <text x="124" y="83" style="fill: var(--colour-text)" text-anchor="end" font-size="12">100 mA</text>
+
+            <text x="6" y="100" style="fill: var(--colour-bjt)" font-size="12">P<tspan baseline-shift="sub" font-size="6.5">D</tspan>(max)</text>
+            <text x="124" y="100" style="fill: var(--colour-text)" text-anchor="end" font-size="12">500 mW</text>
+
+            <text x="6" y="117" style="fill: var(--colour-bjt)" font-size="12">h<tspan baseline-shift="sub" font-size="6.5">FE</tspan> (β)</text>
+            <text x="124" y="117" style="fill: var(--colour-text)" text-anchor="end" font-size="12">110–800</text>
+
+            <text x="6" y="134" style="fill: var(--colour-bjt)" font-size="12">I<tspan baseline-shift="sub" font-size="6.5">CBO</tspan></text>
+            <text x="124" y="134" style="fill: var(--colour-text)" text-anchor="end" font-size="12">&lt;15 nA</text>
+          </g>
+
+          <!-- ════════════════════ WIRES ════════════════════ -->
+
+          <!-- ── LEFT VERTICAL ── -->
+          <line x1="140" y1="50" x2="140" y2="255" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC down to Base node -->
+
+          <!-- ── RIGHT VERTICAL ── -->
+          <line x1="340" y1="50" x2="340" y2="221" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC down to Collector -->
+          <line x1="340" y1="289" x2="340" y2="435" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Emitter pin down to GND -->
+
+          <!-- ── TOP HORIZONTAL ── -->
+          <line x1="100" y1="50" x2="380" y2="50" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC rail (RB column to RC column) -->
+
+          <!-- ── BASE HORIZONTAL ── -->
+          <line x1="140" y1="255" x2="309" y2="255" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Base node across to transistor base pin -->
+
+          <!-- ── BOTTOM HORIZONTAL ── -->
+          <line x1="100" y1="435" x2="380" y2="435" style="stroke: var(--colour-series)" stroke-width="2" /><!-- GND rail -->
+
+          <!-- ════════════════════ NODES ════════════════════ -->
+
+          <!-- ── VCC and Base ── -->
+          <circle cx="140" cy="50" r="5" style="fill: var(--colour-series)" />
+
+          <!-- ── VE and GND ── -->
+          <circle cx="340" cy="435" r="5" style="fill: var(--colour-series)" />
+
+          <!-- ── NODE B (corner junction: RB below meets horizontal to BJT) ── -->
+          <circle cx="340" cy="50" r="5" style="fill: var(--colour-series)" />
+
+          <!-- ── NODE B (corner junction: RB below meets horizontal to BJT) ── -->
+          <circle cx="140" cy="255" r="5" style="fill: var(--colour-series)" />
+          <g id="nodeB_lbl" transform="translate(110,255)">
+            <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5" />
+            <text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14" font-weight="bold">B</text>
+          </g>
+
+          <!-- ── NODE C ── -->
+          <g id="nodeC_lbl" transform="translate(370,205)">
+            <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5" />
+            <text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14" font-weight="bold">C</text>
+          </g>
+
+          <!-- ── NODE E ── -->
+          <g id="nodeE_lbl" transform="translate(370,305)">
+            <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5" />
+            <text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14" font-weight="bold">E</text>
+          </g>
+
+          <!-- ════════════════════ VCC ════════════════════ -->
+
+          <g id="vccGroup" transform="translate(180,-1)">
+            <line x1="60" y1="50" x2="60" y2="30" style="stroke: var(--colour-supply)" stroke-width="2" />
+            <line x1="20" y1="30" x2="100" y2="30" style="stroke: var(--colour-supply)" stroke-width="2" />
+            <text x="20" y="15" style="fill: var(--colour-voltage-label)" text-anchor="start" font-size="15" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">CC</tspan></text>
+            <!-- hand-drawn "+" -->
+            <line x1="70" y1="10" x2="70" y2="20" style="stroke: var(--colour-text)" stroke-width="1.0" />
+            <line x1="66" y1="15" x2="74" y2="15" style="stroke: var(--colour-text)" stroke-width="1.0" />
+            <text id="vccValue" x="80" y="20" style="fill: var(--colour-text)" text-anchor="start" font-size="14" font-weight="bold">12 V</text>
+          </g>
+
+          <!-- ════════════════════ GND SYMBOL ════════════════════ -->
+
+          <g id="gndGroup" transform="translate(240,435)">
+            <line x1="0" y1="0" x2="0" y2="15" style="stroke: var(--colour-gnd)" stroke-width="2" />
+            <line x1="-14" y1="15" x2="14" y2="15" style="stroke: var(--colour-gnd)" stroke-width="2" />
+            <line x1="-9" y1="20" x2="9" y2="20" style="stroke: var(--colour-gnd)" stroke-width="1.5" />
+            <line x1="-4" y1="25" x2="4" y2="25" style="stroke: var(--colour-gnd)" stroke-width="1.5" />
+          </g>
+
+          <!-- ════════════════════ Q1 (BJT) — NPN ════════════════════ -->
+
+          <g id="q1Group" transform="translate(326,255)">
+            <use href="#bjt-npn-shape" />
+            <text id="nm-q1" x="-25" y="-15" fill="var(--colour-bjt-labels)" text-anchor="middle" font-size="14" font-weight="bold">Q1</text>
+            <text id="lbl-q1" x="-20" y="25" fill="var(--colour-bjt-labels)" text-anchor="end" font-size="12">BC549</text>
+          </g>
+
+          <!-- ════════════════════ RESISTORS ════════════════════ -->
+
+          <!-- ══ RB (base resistor) ══ -->
+          <g id="rbGroup" transform="translate(125,110)">
+            <rect id="box-rb" x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)"
+              stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+            <text id="nm-rb" x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">RB</text>
+            <text id="lbl-rb" x="65" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16">100kΩ</text>
+          </g>
+
+          <!-- ══ RC (collector resistor) ══ -->
+          <g id="rcGroup" transform="translate(325,80)">
+            <rect id="box-rc" x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)"
+              stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+            <text id="nm-rc" x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">RC</text>
+            <text id="lbl-rc" x="60" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16">1.0kΩ</text>
+          </g>
+
+          </g><!-- /circuitGroup -->
+
+          <!-- ══ XY RULER (dev tool, off by default) ══ -->
+          <g id="xyRuler" display="none"></g>
+        </svg>
+      </div>
+      <div id="q5VizPanel" style="display:none">
+        <p class="transfer-title">Transfer Characteristics — <span style="text-transform: none">β</span> = 200, <span class="colour-bjt">VBE</span> = 0.6V, RC = 1kΩ, VCC = 12V</p>
+        <div class="q5-visualizer">
+          <div class="q5v-header">
+            <span class="q5v-header-title">BJT Biasing Interactive</span>
+            <button class="q5v-reset" onclick="q5vReset()">↺ Reset</button>
+          </div>
+
+          <!-- C–B Junction (top) — colour-scale fill bar -->
+          <div class="q5v-box q5v-box-magenta">
+            <div class="q5v-box-row">
+              <div>
+                <div class="q5v-box-title">C–B JUNCTION</div>
+                <div class="q5v-box-sub">DYNAMIC COLLECTOR VOLTAGE (V<sub>C</sub> = V<sub>CC</sub> − I<sub>C</sub>R<sub>C</sub>)</div>
+              </div>
+            </div>
+
+            <!-- Fill bar: magenta grows in from the left as VC rises, white shows through the rest -->
+            <div id="q5-track-VC" class="vc-track-container">
+              <div id="q5-fill-VC" class="vc-fill" style="width: 100%;"></div>
+              <div id="q5-label-VC" class="vc-indicator-val" style="left: calc(100% - 60px); color: #ffffff;">V<sub>C</sub> = 12.0V</div>
+            </div>
+          </div>
+
+          <!-- Schematic SVG with Embedded Base Line Slider -->
+          <div class="q5v-schematic">
+            <!-- Interactive Slider overlay on top of the Base line -->
+            <input type="range" id="q5-slide-B" class="vb-line-slider" min="0" max="5" step="0.01" value="0">
+
+            <svg id="q5v-svg" viewBox="0 0 540 220" xmlns="http://www.w3.org/2000/svg" font-family="'Share Tech Mono',monospace">
+              <defs>
+                <filter id="q5v-glow" x="-50%" y="-50%" width="200%" height="200%">
+                  <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+                  <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                </filter>
+                <g id="q5v-bjt">
+                  <circle cx="7" cy="0" r="24" fill="none" style="stroke:var(--colour-bjt)" stroke-width="2" filter="url(#q5v-glow)"/>
+                  <line x1="-17" y1="0" x2="0" y2="0" style="stroke:var(--colour-bjt)" stroke-width="2"/>
+                  <line x1="0" y1="-12" x2="0" y2="12" style="stroke:var(--colour-bjt)" stroke-width="2.5"/>
+                  <polyline points="14,-34 14,-20 0,-8" style="stroke:var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round"/>
+                  <polyline points="14,34 14,20 0,8" style="stroke:var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round"/>
+                  <polygon points="12,18 1,14 6,8" style="fill:var(--colour-bjt)"/>
+                </g>
+              </defs>
+              <!-- Static background wires -->
+              <line x1="414" y1="0"   x2="414" y2="76"  stroke="rgba(var(--colour-label-rgb),0.15)" stroke-width="6" stroke-linecap="round"/>
+              <line x1="414" y1="144" x2="414" y2="220" stroke="rgba(var(--colour-label-rgb),0.15)" stroke-width="6" stroke-linecap="round"/>
+              <line x1="85"  y1="110" x2="383" y2="110" stroke="rgba(var(--colour-label-rgb),0.15)" stroke-width="6" stroke-linecap="round"/>
+              <!-- Animated current wires -->
+              <line id="q5v-wC" class="q5v-wire q5v-flow" x1="414" y1="0"   x2="414" y2="76"  stroke="var(--q5v-green)" stroke-width="6" stroke-linecap="round"/>
+              <line id="q5v-wE" class="q5v-wire q5v-flow" x1="414" y1="144" x2="414" y2="220" stroke="var(--q5v-green)" stroke-width="6" stroke-linecap="round"/>
+              <line id="q5v-wB" class="q5v-wire q5v-flow" x1="85"  y1="110" x2="383" y2="110" stroke="var(--q5v-green)" stroke-width="6" stroke-linecap="round"/>
+              <!-- BJT symbol -->
+              <use href="#q5v-bjt" x="400" y="110"/>
+              <!-- Base voltage scale ticks (0V–5V) -->
+              <line x1="105" y1="100" x2="105" y2="120" stroke="var(--q5v-dim)" stroke-width="2"/>
+              <text x="105" y="140" fill="var(--q5v-dim)" font-size="11" font-weight="bold" text-anchor="middle">0V</text>
+              <line x1="135" y1="98"  x2="135" y2="128" stroke="var(--q5v-cyan)" stroke-width="3"/>
+              <text x="135" y="140" fill="var(--q5v-cyan)" font-size="12" font-weight="bold" text-anchor="middle">0.6V</text>
+              <line x1="352" y1="100" x2="352" y2="120" stroke="var(--q5v-dim)" stroke-width="2"/>
+              <text x="352" y="140" fill="var(--q5v-dim)" font-size="11" font-weight="bold" text-anchor="middle">5.0V</text>
+
+              <!-- Voltage readouts -->
+              <g id="q5v-readouts" transform="translate(0, 0)">
+                <text x="0" y="115" fill="var(--colour-text-strong)" font-weight="bold" font-size="18">V<tspan baseline-shift="sub" font-size="11">B</tspan>=<tspan id="q5v-vb">0.60V</tspan></text>
+                <text x="430" y="40"  fill="var(--q5v-magenta)" font-weight="bold" font-size="18">V<tspan baseline-shift="sub" font-size="11">BC</tspan>=<tspan id="q5v-vbc">0.00V</tspan></text>
+                <text id="q5v-bc-tag" x="430" y="80"  fill="var(--q5v-green)" font-size="14" font-weight="bold">REVERSE-BIASED</text>
+                <text id="q5v-be-tag"  x="430" y="155" fill="var(--q5v-green)" font-size="14" font-weight="bold">FORWARD-BIASED</text>
+                <text x="430" y="195" fill="var(--q5v-cyan)" font-weight="bold" font-size="18">V<tspan baseline-shift="sub" font-size="11">BE</tspan>=<tspan id="q5v-vbe">0.60V</tspan></text>
+                <text id="q5v-be-tag2" x="430" y="170" fill="var(--q5v-red)" font-size="14" font-weight="bold" style="display:none"></text>
+
+                <!-- Collector current, near the collector wire -->
+                <text id="q5v-ic" x="350" y="40" fill="var(--q5v-magenta)" font-weight="bold" font-size="15" text-anchor="middle">I<tspan baseline-shift="sub" font-size="10">C</tspan>=<tspan id="q5v-ic-val">0.0mA</tspan></text>
+
+                <!-- Base current, in the open space below the base wire -->
+                <text id="q5v-ib" x="180" y="80" fill="var(--colour-text-strong)" font-weight="bold" font-size="15" text-anchor="middle">I<tspan baseline-shift="sub" font-size="10">B</tspan>=<tspan id="q5v-ib-val">0μA</tspan></text>
+
+                <!-- Emitter current, near the emitter wire -->
+                <text id="q5v-ie" x="320" y="195" fill="var(--q5v-cyan)" font-weight="bold" font-size="15">I<tspan baseline-shift="sub" font-size="10">E</tspan>=<tspan id="q5v-ie-val">0.0mA</tspan></text>
+              </g>
+            </svg>
+          </div>
+
+          <!-- B–E Junction (bottom) -->
+          <div class="q5v-box q5v-box-cyan">
+            <div class="q5v-box-row">
+              <div>
+                <div class="q5v-box-title">B–E JUNCTION</div>
+                <div class="q5v-box-sub">FORWARD-BIASED when V<sub>BE</sub> = V<sub>B</sub> − V<sub>E</sub> ≥ 0.6V</div>
+              </div>
+              <span id="q5-val-VE" class="q5v-vol" style="color:var(--q5v-cyan)">V<sub>E</sub> = 0.0V</span>
+            </div>
+            <div class="q5v-slider-wrap">
+              <input type="range" id="q5-slide-E" class="q5v-slider" min="-1" max="5" step="0.1" value="-0.6">
+              <div class="q5v-slider-zero-tick" style="left: 16.6667%;"></div>
+            </div>
+            <div class="q5v-slider-range"><span>−1V</span><span>5V</span></div>
+          </div>
+
+          <!-- Status badge -->
+          <div id="q5v-status" class="q5v-badge q5v-active">
+            <div class="q5v-badge-line">ACTIVE REGION: V<sub>C</sub> &gt; V<sub>B</sub> &gt; V<sub>E</sub> → Normal Flow!</div>
+          </div>
+        </div>
+      </div>
+      <div id="qShapeGridPanel" style="display:none">
+        <div class="panel-label">Click the shapes to select your answer</div>
+        <div class="shape-grid" id="shapeGridCells"></div>
+      </div>
+    </div>
+
+    <!-- ════════════════════ QUESTION FRAMEWORK ════════════════════ -->
+
+    <!-- RIGHT: question -->
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <!-- Single reusable question panel — populated from QUESTIONS[cur] by renderQuestion() -->
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+          <div class="options" id="qOptions"></div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Summary -->
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Zoom modal -->
+    <div class="diagram-modal" id="diagramModal" onclick="handleModalClick(event)">
+      <div class="modal-inner" id="modalInner">
+        <div class="modal-header">
+          <span class="modal-title" id="modalVoltLabel">Circuit Diagram — 12 V Supply</span>
+          <button class="modal-close" onclick="closeModal()">✕ Close</button>
+        </div>
+        <svg id="modalSvg" viewBox="-90 0 610 480" xmlns="http://www.w3.org/2000/svg"
+          font-family="'Share Tech Mono',monospace"></svg>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ══════════════════════════════════════════════════════════════════════
+    // CIRCUIT CONFIGURATION
+    // ══════════════════════════════════════════════════════════════════════
+
+    // Topology: fixed-bias NPN. VCC —RB— Base; VCC —RC— Collector; Emitter — GND.
+    const VBE = 0.6; // silicon NPN base-emitter drop
+
+    const EXAMPLE_SETS = {
+      example1: { vcc: 12, rb: 228000, rc: 1000, beta: 200 },
+      example2: { vcc: 15, rb: 480000, rc: 2200, beta: 200 },
+      example3: { vcc:  9, rb: 210000, rc:  680, beta: 200 }
+    };
+    let quizMode = 'example1';
+    let V = { ...EXAMPLE_SETS.example1 };
+
+    // ══════════════════════════════════════════════════════════════════════
+    // CIRCUIT SIMULATION
+    // ══════════════════════════════════════════════════════════════════════
+
+    const RB_POOL = [47000, 56000, 68000, 82000, 100000, 120000, 150000, 180000, 220000];
+    const RC_POOL = [470, 560, 680, 820, 1000, 1200, 1500, 1800, 2200];
+    const VCC_POOL = [9, 12, 15];
+    function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+    function randomValues() {
+      return { vcc: pick(VCC_POOL), rb: pick(RB_POOL), rc: pick(RC_POOL), beta: 200 };
+    }
+
+    // LETTERS and frac() now come from the shared assets/quiz-engine.js.
+    function fmtO0(v) { return v >= 1000 ? parseFloat((v / 1000).toFixed(2)) + 'kΩ' : parseFloat(v.toFixed(2)) + 'Ω'; }
+    function fmtO0Parts(v) { if (v >= 1000) return { num: String(parseFloat((v / 1000).toFixed(2))), unit: ' kΩ' }; return { num: String(parseFloat(v.toFixed(2))), unit: ' Ω' }; }
+    function fmtA(a) { const x = Math.abs(a); if (x >= 1) return parseFloat(a.toFixed(3)) + ' A'; if (x >= 0.001) return parseFloat((a * 1000).toFixed(2)) + ' mA'; return parseFloat((a * 1e6).toFixed(1)) + ' µA'; }
+
+    let IB, IC;
+    function recompute() {
+      IB = (V.vcc - VBE) / V.rb;
+      IC = V.beta * IB;
+    }
+
+    function refreshLabels() {
+      const rb = fmtO0Parts(V.rb);
+      const rc = fmtO0Parts(V.rc);
+      document.getElementById('lbl-rb').innerHTML =
+        `<tspan fill="var(--colour-text)">${rb.num}</tspan><tspan fill="var(--colour-resistor-labels)">${rb.unit}</tspan>`;
+      document.getElementById('lbl-rc').innerHTML =
+        `<tspan fill="var(--colour-text)">${rc.num}</tspan><tspan fill="var(--colour-resistor-labels)">${rc.unit}</tspan>`;
+      document.getElementById('vccValue').innerHTML =
+        `<tspan fill="var(--colour-text)">${V.vcc}</tspan><tspan fill="var(--colour-supply)"> V</tspan>`;
+      document.getElementById('panelVoltLabel').textContent = V.vcc + ' V';
+      const mt = document.getElementById('modalVoltLabel');
+      if (mt) mt.textContent = `Circuit Diagram — ${V.vcc} V Supply`;
+    }
+
+    function setMode(mode) {
+      quizMode = mode;
+      V = (mode === 'randomise') ? randomValues() : { ...EXAMPLE_SETS[mode] };
+      recompute();
+      refreshLabels();
+      ['example1', 'example2', 'example3', 'randomise'].forEach(m => {
+        const b = document.getElementById('mode' + m.charAt(0).toUpperCase() + m.slice(1));
+        if (b) b.classList.toggle('active', m === mode);
+      });
+      resetQuiz();
+    }
+
+    // Overrides quiz-engine.js's own generic showSummary() — this page's
+    // summary panel additionally shows which VCC/RB/RC values the quiz was
+    // run with (V.vcc/rb/rc, from setMode() above), which no other quiz
+    // page has a use for, so it isn't part of the shared version. A plain
+    // `function` declaration here simply shadows the shared one for this
+    // page only — no shared-engine change needed for a single-page extra.
+    function showSummary() {
+      document.getElementById('qPanel').style.display = 'none';
+      document.getElementById('summaryPanel').style.display = 'block';
+      swapLeftPanel('circuit');
+      const vals = `<div class="summary-values">
+    <span style="color:var(--colour-supply);font-weight:bold">V<sub>CC</sub></span> = <span style="color:var(--colour-supply)">${V.vcc} V</span>&nbsp;&nbsp;&nbsp;
+    <span style="color:var(--colour-resistor-labels);font-weight:bold">R<sub>B</sub></span> = <span style="color:var(--colour-resistor-labels)">${fmtO0(V.rb)}</span>&nbsp;&nbsp;
+    <span style="color:var(--colour-resistor-labels);font-weight:bold">R<sub>C</sub></span> = <span style="color:var(--colour-resistor-labels)">${fmtO0(V.rc)}</span>
+  </div>`;
+      const items = QUESTIONS.map((data, i) => {
+        const st = Q[i];
+        const ans = selectedLabel(data, st);
+        const ok = isAnswerCorrect(data, st);
+        const colour = ok ? 'var(--colour-ui-correct)' : '#ff3366';
+        const mark = ok ? '✓' : '✗';
+        return `<div class="summary-item">
+      <div class="summary-item-head"><span class="summary-qnum">Q${i + 1}</span><span class="summary-question">${data.text()}</span></div>
+      <div class="summary-answer" style="color:${colour}">You answered: ${ans} &nbsp; ${mark}</div>
+      <div class="working-box visible">${st.ans ? data.working(st) : ''}</div>
+    </div>`;
+      }).join('');
+      document.getElementById('summaryContent').innerHTML = vals + items;
+      QUESTIONS.forEach((_, i) => { const d = document.getElementById('dot-' + i); if (d) d.className = 'progress-dot done'; });
+      document.getElementById('progressLabel').textContent = 'Complete';
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS — the template. Add, remove, split or reorder questions by
+    // editing this array only — nothing in the engine below needs to change.
+    //
+    // Each entry:
+    //   leftPanel           'circuit' (default) | 'viz' | 'shapeGrid' — which
+    //                       left-hand image to show for this question
+    //   kind                'multi' for multi-select (any number of options
+    //                       toggled on); omit for ordinary single-select
+    //   text()              question prompt (HTML string)
+    //   hint()               hint shown under the prompt (HTML string)
+    //   options()            returns a shuffled array of
+    //                       { label, type: 'correct'|'wrong', shapeId? }
+    //                       (shapeId is only used by leftPanel:'shapeGrid' —
+    //                       it names a <g id="..."> in the hidden defs <svg>
+    //                       near the top of <body>)
+    //   correctExplain(st)   short HTML fragment used in the result banner
+    //   working(st)          full worked-solution HTML shown after answering
+    //
+    // text/hint/options take no arguments; correctExplain/working receive the
+    // question's live state `st` ({ sel, ans, cor, opts }) so they can report
+    // on what was actually selected/shuffled (see Q8's shape numbering) —
+    // ordinary questions can just ignore the argument. All fields are
+    // functions (even when static) so a question can freely start simple and
+    // later reference live values (V, IB, IC, etc) without changing shape.
+    //
+    // Cloning this file for a new quiz: keep this array-of-one-object-per-
+    // question shape even if you're starting with a single question. Add the
+    // 2nd/3rd/Nth entry (or split an existing one into two) by editing this
+    // array only — do not add HTML panels or per-question functions.
+    // ══════════════════════════════════════════════════════════════════════
+
+    const QUESTIONS = [
+      {
+        // Multi-select example: leftPanel:'shapeGrid' shows numbered, clickable
+        // symbol variants instead of the circuit image; kind:'multi' lets the
+        // student toggle any number of them on/off before checking.
+        leftPanel: 'shapeGrid',
+        kind: 'multi',
+        text: () => '<b style="color:var(--colour-ui-primary)">Click</b> every shape below that is a <b class="colour-bjt">valid</b> BJT transistor symbol. There are <b style="color:var(--colour-ui-correct)">8 correct</b> shapes among the 12 shown.',
+        hint: () => 'A valid symbol has exactly one arrow, sitting on an emitter/collector lead — never the base lead — pointing away from the base for NPN or toward the base for PNP. The circle is optional, and it doesn\'t matter which side (top or bottom) that lead is drawn on, as long as the arrow\'s direction relative to the base is still correct.',
+        options: () => shuffle([
+          { label: 'NPN, standard, circle',  type: 'correct', shapeId: 'bjt-npn-standard-circle' },
+          { label: 'PNP, standard, circle',  type: 'correct', shapeId: 'bjt-pnp-standard-circle' },
+          { label: 'NPN, flipped, circle',   type: 'correct', shapeId: 'bjt-npn-flipped-circle' },
+          { label: 'PNP, flipped, circle',   type: 'correct', shapeId: 'bjt-pnp-flipped-circle' },
+          { label: 'NPN, standard, no circle', type: 'correct', shapeId: 'bjt-npn-standard-nocircle' },
+          { label: 'PNP, standard, no circle', type: 'correct', shapeId: 'bjt-pnp-standard-nocircle' },
+          { label: 'NPN, flipped, no circle',  type: 'correct', shapeId: 'bjt-npn-flipped-nocircle' },
+          { label: 'PNP, flipped, no circle',  type: 'correct', shapeId: 'bjt-pnp-flipped-nocircle' },
+          { label: 'Arrow on base lead, pointing in',  type: 'wrong', shapeId: 'bjt-error-base-arrow-in' },
+          { label: 'Arrow on base lead, pointing out', type: 'wrong', shapeId: 'bjt-error-base-arrow-out' },
+          { label: 'Two arrows, both pointing in',     type: 'wrong', shapeId: 'bjt-error-double-in' },
+          { label: 'Two arrows, both pointing out',    type: 'wrong', shapeId: 'bjt-error-double-out' }
+        ]),
+        correctExplain: (st) => {
+          const nums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(n => n).join(', ');
+          return `Shapes <b>${nums}</b> are the valid BJT symbols`;
+        },
+        working: (st) => {
+          const correctNums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join(', ');
+          const wrongNums = st.opts.map((o, i) => o.type === 'wrong' ? i + 1 : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-step">Valid symbols — shapes ${correctNums}:</div>
+    <div class="working-line">Each has exactly one arrow, on an emitter/collector diagonal, pointing <b style="color:var(--colour-ui-correct)">away</b> from the base for NPN or <b style="color:var(--colour-ui-correct)">toward</b> the base for PNP. The circle is a drawing style, not a rule — both circled and uncircled forms are valid.</div>
+    <div class="working-line" style="margin-top:.4rem">"Flipped" versions (arrow-bearing lead drawn on top instead of bottom, or vice versa) are just as valid — only the arrow's direction <em>relative to the base</em> matters, not which physical side of the symbol it's drawn on.</div>
+    <div class="working-step" style="margin-top:.6rem">Invalid symbols — shapes ${wrongNums}:</div>
+    <div class="working-line">Each breaks the one-arrow-on-the-emitter rule: two of them put the arrow directly on the <b style="color:var(--colour-ui-wrong)">base lead</b> — an arrow never belongs there — and the other two put <b style="color:var(--colour-ui-wrong)">two arrows</b> on the symbol at once, when a real BJT only ever has one.</div>`;
+        }
+      },
+      {
+        // Same shapeGrid/multi-select method as the previous question, reusing
+        // its 8 valid shapeIds — but the pass/fail split here is NPN vs PNP,
+        // not valid vs invalid.
+        leftPanel: 'shapeGrid',
+        kind: 'multi',
+        text: () => 'All 8 shapes below are valid BJT symbols. <b style="color:var(--colour-ui-primary)">Click</b> every shape that is specifically a <b class="colour-bjt">PNP</b> transistor.',
+        hint: () => 'Every shape here already has a correctly placed single arrow, so validity isn\'t the question this time. Look at which way each arrow points relative to the base: a PNP arrow points <em>toward</em> the base; an NPN arrow points <em>away</em> from it. The circle, and which side the arrow-bearing lead is drawn on, don\'t matter.',
+        options: () => shuffle([
+          { label: 'NPN, standard, circle',    type: 'wrong',   shapeId: 'bjt-npn-standard-circle' },
+          { label: 'PNP, standard, circle',    type: 'correct', shapeId: 'bjt-pnp-standard-circle' },
+          { label: 'NPN, flipped, circle',     type: 'wrong',   shapeId: 'bjt-npn-flipped-circle' },
+          { label: 'PNP, flipped, circle',     type: 'correct', shapeId: 'bjt-pnp-flipped-circle' },
+          { label: 'NPN, standard, no circle', type: 'wrong',   shapeId: 'bjt-npn-standard-nocircle' },
+          { label: 'PNP, standard, no circle', type: 'correct', shapeId: 'bjt-pnp-standard-nocircle' },
+          { label: 'NPN, flipped, no circle',  type: 'wrong',   shapeId: 'bjt-npn-flipped-nocircle' },
+          { label: 'PNP, flipped, no circle',  type: 'correct', shapeId: 'bjt-pnp-flipped-nocircle' }
+        ]),
+        correctExplain: (st) => {
+          const nums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(n => n).join(', ');
+          return `Shapes <b>${nums}</b> are the PNP symbols`;
+        },
+        working: (st) => {
+          const correctNums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join(', ');
+          const wrongNums = st.opts.map((o, i) => o.type === 'wrong' ? i + 1 : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-step">PNP symbols — shapes ${correctNums}:</div>
+    <div class="working-line">Each has its single arrow pointing <b style="color:var(--colour-ui-correct)">toward</b> the base — the defining feature of a PNP symbol, regardless of whether the arrow-bearing lead is drawn on top or bottom, or whether the circle is present.</div>
+    <div class="working-step" style="margin-top:.6rem">NPN symbols — shapes ${wrongNums}:</div>
+    <div class="working-line">Each has its arrow pointing <b style="color:var(--colour-ui-wrong)">away</b> from the base instead. These are still valid, correctly-drawn symbols — just the wrong transistor type for this question.</div>`;
+        }
+      },
+      {
+        // Reuses the previous question's two emitter-bottom shapeIds
+        // (bjt-npn-standard-circle, bjt-pnp-flipped-circle), but the shapeGrid
+        // symbols here are that symbol plus B/E/C text labels layered on top
+        // (see the bjt-*-labels-* defs) — correctness now hinges on label
+        // placement, not the symbol geometry itself.
+        leftPanel: 'shapeGrid',
+        kind: 'multi',
+        text: () => 'Each shape below is an NPN or PNP symbol with its <b class="colour-bjt">Base (B)</b>, <b class="colour-bjt">Emitter (E)</b> and <b class="colour-bjt">Collector (C)</b> leads labelled. <b style="color:var(--colour-ui-primary)">Click</b> every shape where all three labels are correct. There are <b style="color:var(--colour-ui-correct)">2 correct</b> shapes among the 8 shown — one NPN, one PNP.',
+        hint: () => 'Both symbols here are drawn with the emitter at the bottom. The base label belongs on the short straight lead (not one of the diagonals); the emitter label belongs on whichever diagonal lead carries the arrow; the collector label belongs on the other diagonal lead. Check all three positions on each shape individually — don\'t assume a mistake only happens between neighbouring labels.',
+        options: () => shuffle([
+          { label: 'NPN, correctly labelled', type: 'correct', shapeId: 'bjt-npn-labels-correct' },
+          { label: 'PNP, correctly labelled', type: 'correct', shapeId: 'bjt-pnp-labels-correct' },
+          { label: 'NPN, E/C swapped',        type: 'wrong',   shapeId: 'bjt-npn-labels-swap-ec' },
+          { label: 'NPN, B/E swapped',        type: 'wrong',   shapeId: 'bjt-npn-labels-swap-be' },
+          { label: 'NPN, B/C swapped',        type: 'wrong',   shapeId: 'bjt-npn-labels-swap-bc' },
+          { label: 'PNP, E/C swapped',        type: 'wrong',   shapeId: 'bjt-pnp-labels-swap-ec' },
+          { label: 'PNP, B/E swapped',        type: 'wrong',   shapeId: 'bjt-pnp-labels-swap-be' },
+          { label: 'PNP, B/C swapped',        type: 'wrong',   shapeId: 'bjt-pnp-labels-swap-bc' }
+        ]),
+        correctExplain: (st) => {
+          const nums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(n => n).join(', ');
+          return `Shapes <b>${nums}</b> have all three labels correct`;
+        },
+        working: (st) => {
+          const correctNums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join(', ');
+          const wrongNums = st.opts.map((o, i) => o.type === 'wrong' ? i + 1 : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-step">Correctly labelled — shapes ${correctNums}:</div>
+    <div class="working-line">In both, <b style="color:var(--colour-ui-correct)">B</b> sits on the short straight base lead, <b style="color:var(--colour-ui-correct)">E</b> sits on the diagonal lead carrying the arrow (the bottom lead here, for both NPN and PNP), and <b style="color:var(--colour-ui-correct)">C</b> sits on the remaining diagonal lead (the top one).</div>
+    <div class="working-step" style="margin-top:.6rem">Incorrectly labelled — shapes ${wrongNums}:</div>
+    <div class="working-line">Each has exactly two of its three labels swapped with each other: either <b style="color:var(--colour-ui-wrong)">E and C</b> (the two current-carrying leads mixed up), <b style="color:var(--colour-ui-wrong)">B and E</b>, or <b style="color:var(--colour-ui-wrong)">B and C</b>. Checking each label against its own rule individually — rather than judging the shape as a whole — is the only reliable way to catch these.</div>`;
+        }
+      },
+      {
+        // Physical-package companion to the schematic B/E/C labelling question
+        // above: same idea (check the shape AND the lead order), but for the
+        // real TO-92 package instead of the circuit symbol. TO-126 shapes are
+        // always wrong here regardless of their printed order.
+        // TO-92 lead order is NOT a universal standard — it varies by
+        // manufacturer and region. Rather than stating an order in the
+        // question text, this question shows an ORIGINAL mock datasheet
+        // excerpt (fictional "Meridian Semiconductor" branding — not a copy
+        // of any real manufacturer's document; the header+diagrams+legend
+        // layout it mimics is an industry-wide functional convention, not
+        // protected expression) and makes students cross-reference the
+        // schematic's pin numbers against the package diagram's pin
+        // positions themselves — the actual skill, not a memorised order.
+        // E-B-C is correct here (confirmed against the course's BC549
+        // reference 2026-08 — an earlier version of this question wrongly
+        // used C-B-E).
+        leftPanel: 'shapeGrid',
+        kind: 'multi',
+        text: () => `<b style="color:var(--colour-ui-primary)">Click</b> every diagram below that correctly shows a <b class="colour-bjt">TO-92</b> package with its leads labelled Collector, Base and Emitter in the order given by the datasheet excerpt below (flat face toward you, pins pointing down). <b style="color:var(--colour-ui-correct)">Only 1</b> of the 8 shapes is <b style="color:var(--colour-ui-correct)">fully correct</b>.
+    <div class="mock-datasheet">
+      <div class="mock-datasheet-header">
+        <span class="mock-datasheet-brand">MERIDIAN SEMICONDUCTOR</span>
+        <span class="mock-datasheet-partno">BC549 · NPN SILICON · TO-92</span>
+      </div>
+      <div class="mock-datasheet-diagrams">
+        <div class="mock-datasheet-diagram-col">
+          <svg viewBox="-32 -36 96 76" width="88" height="70">
+            <use href="#bjt-npn-standard-circle" />
+            <text x="-20" y="4"  text-anchor="end"   font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">2</text>
+            <text x="22" y="-24" text-anchor="start" font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">1</text>
+            <text x="22" y="32"  text-anchor="start" font-size="13" font-weight="bold" style="fill: var(--colour-bjt)">3</text>
+          </svg>
+          <div class="mock-datasheet-caption">Schematic symbol</div>
+        </div>
+        <div class="mock-datasheet-diagram-col">
+          <svg viewBox="-32 -36 96 76" width="70" height="70">
+            <use href="#to92-body" />
+            <text x="-8" y="30" text-anchor="middle" font-size="12" font-weight="bold" style="fill: var(--colour-bjt)">3</text>
+            <text x="0"  y="30" text-anchor="middle" font-size="12" font-weight="bold" style="fill: var(--colour-bjt)">2</text>
+            <text x="8"  y="30" text-anchor="middle" font-size="12" font-weight="bold" style="fill: var(--colour-bjt)">1</text>
+          </svg>
+          <div class="mock-datasheet-caption">TO-92 package<br>(flat face toward viewer, leads down)</div>
+        </div>
+      </div>
+    </div>`,
+        hint: () => 'The schematic tells you which pin NUMBER is which terminal. The package diagram tells you where each pin NUMBER physically sits, left to right. Match the two together to work out the physical Collector/Base/Emitter order yourself — then check each shape below lead-by-lead against that order. TO-92 pinout is not the same across manufacturers, so this cross-referencing (not a memorised letter order) is the actual skill — always confirm against the specific datasheet for whatever device is in hand.',
+        options: () => shuffle([
+          { label: 'TO-92, C-B-E',  type: 'wrong',   shapeId: 'to92-cbe' },
+          { label: 'TO-92, E-B-C',  type: 'correct', shapeId: 'to92-ebc' },
+          { label: 'TO-92, B-C-E',  type: 'wrong',   shapeId: 'to92-bce' },
+          { label: 'TO-92, C-E-B',  type: 'wrong',   shapeId: 'to92-ceb' },
+          { label: 'TO-92, B-E-C',  type: 'wrong',   shapeId: 'to92-bec' },
+          { label: 'TO-92, E-C-B',  type: 'wrong',   shapeId: 'to92-ecb' },
+          { label: 'TO-126, C-B-E', type: 'wrong',   shapeId: 'to126-cbe' },
+          { label: 'TO-126, E-B-C', type: 'wrong',   shapeId: 'to126-ebc' }
+        ]),
+        correctExplain: (st) => {
+          const nums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(n => n).join(', ');
+          return `Shape <b>${nums}</b> shows a TO-92 with the correct E-B-C lead order (per the datasheet excerpt above)`;
+        },
+        working: (st) => {
+          const correctNums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join(', ');
+          const wrongNums = st.opts.map((o, i) => o.type === 'wrong' ? i + 1 : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-step">Reading the datasheet excerpt:</div>
+    <div class="working-line">The schematic doesn't spell out which pin number is which terminal — you read that the same way you did in Q3: the short straight lead is the <b style="color:var(--colour-ui-correct)">base</b>, and the diagonal lead carrying the arrow is the <b style="color:var(--colour-ui-correct)">emitter</b>. That makes pin <b style="color:var(--colour-ui-correct)">2</b> the base, pin <b style="color:var(--colour-ui-correct)">3</b> the emitter, and pin <b style="color:var(--colour-ui-correct)">1</b> (the only lead left) the collector. The package diagram shows those same three numbers physically arranged <b style="color:var(--colour-ui-correct)">3, 2, 1</b> from left to right. Combining the two: left to right is Emitter, Base, Collector — <b style="color:var(--colour-ui-correct)">E-B-C</b>.</div>
+    <div class="working-step" style="margin-top:.6rem">Correct — shape ${correctNums}:</div>
+    <div class="working-line">This is a <b style="color:var(--colour-ui-correct)">TO-92</b> package (the small dome-topped plastic body) with its three leads labelled <b style="color:var(--colour-ui-correct)">E-B-C</b> from left to right, viewed with the flat face toward you and the pins pointing down — matching what the datasheet excerpt gives for this specific device.</div>
+    <div class="working-line" style="margin-top:.4rem">TO-92 lead order is <em>not</em> a universal standard — other manufacturers and regions place the leads differently even within the same package outline. Always cross-reference the actual datasheet for the transistor in hand rather than assuming an order from memory.</div>
+    <div class="working-step" style="margin-top:.6rem">Incorrect — shapes ${wrongNums}:</div>
+    <div class="working-line">Most of these are TO-92 packages with the leads in one of the other five possible orders — an easy mistake if you don't check lead-by-lead instead of glancing at the whole shape. The remaining two are <b style="color:var(--colour-ui-wrong)">TO-126</b> packages instead — a larger package with a metal mounting tab and hole (used for higher-power transistors) — so even the one labelled "E-B-C" is still wrong here, since it's the wrong package entirely.</div>`;
+        }
+      },
+      {
+        leftPanel: 'circuit',
+        text: () => 'The circuit shown represents what type of BJT?',
+        hint: () => 'Look at the arrow direction on the emitter inside the transistor symbol. Then trace where V<sub>CC</sub> connects in the circuit.',
+        options: () => shuffle([
+          { label: 'NPN with a positive supply rail', type: 'correct' },
+          { label: 'NPN with a negative supply rail', type: 'wrong' },
+          { label: 'PNP with a positive supply rail', type: 'wrong' },
+          { label: 'PNP with a negative supply rail', type: 'wrong' }
+        ]),
+        correctExplain: () => '<b>NPN</b> with a <b>positive</b> supply rail',
+        working: () => `
+    <div class="working-step">Identifying NPN vs PNP:</div>
+    <div class="working-line">Look at the arrow on the emitter line inside the BJT circle. In an <b style="color:var(--colour-bjt)">NPN</b> transistor the arrow points <em>away</em> from the base bar — outward toward the emitter terminal. A common mnemonic: <b style="color:var(--colour-bjt)">N</b>ot <b style="color:var(--colour-bjt)">P</b>ointing i<b style="color:var(--colour-bjt)">N</b>.</div>
+    <div class="working-line" style="margin-top:.5rem">In a <b style="color:var(--colour-bjt)">PNP</b> transistor the arrow reverses — it points <em>toward</em> the base bar.</div>
+
+    <div class="working-step">Identifying positive vs negative supply:</div>
+    <div class="working-line"><span class="colour-supply">V<sub>CC</sub></span> connects at the <em>top</em> of the circuit, feeding the collector through <span class="colour-resistor">R<sub>C</sub></span>. The emitter returns to <b style="color:var(--colour-gnd)">GND</b> (0 V) at the <em>bottom</em>. Conventional current flows from <span class="colour-supply">V<sub>CC</sub></span> downward through the transistor to ground — this is a <b style="color:var(--colour-supply)">positive supply</b> configuration.</div>
+    <div class="working-line" style="margin-top:.5rem">A <em>negative</em> supply configuration would have the emitter connected to a negative rail (<span style="color:var(--colour-supply)">−V<sub>CC</sub></span>) with the collector returning toward 0 V, or alternatively use a PNP with the emitter at the positive rail and the collector returning to <b style="color:var(--colour-gnd)">GND</b>.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        text: () => 'A BJT is a <span style="color:var(--colour-bjt)">?</span> amplifier.',
+        hint: () => 'Think about what quantity at the input (base) controls the output (collector). Look at what h<sub>FE</sub> describes on the datasheet.',
+        options: () => shuffle([
+          { label: 'Current', type: 'correct' },
+          { label: 'Voltage', type: 'wrong' },
+          { label: 'Amplitude', type: 'wrong' },
+          { label: 'Frequency', type: 'wrong' }
+        ]),
+        correctExplain: () => 'A BJT is a <b>current</b> amplifier',
+        working: () => `
+    <div class="working-line">A BJT (Bipolar Junction Transistor) is a <b style="color:var(--colour-bjt)">current amplifier</b>. A small base current I<sub>B</sub> controls a much larger collector current I<sub>C</sub>.</div>
+
+    <div class="working-step">Current gain (from the datasheet):</div>
+    <div class="working-formula-row"><span class="colour-bjt">h<sub>FE</sub></span> = <span class="colour-bjt">β</span> = ${frac('<span class="colour-current">I<sub>C</sub></span>', '<span class="colour-current">I<sub>B</sub></span>')}</div>
+    <div class="working-label">For the BC549:</div>
+    <div class="working-total"><span class="colour-bjt">h<sub>FE</sub></span> = 110 to 800 — a small I<sub>B</sub> produces a collector current up to 800× larger</div>
+
+    <div class="working-line" style="margin-top:.6rem">Compare this to a <b>voltage amplifier</b> (e.g. an op-amp or FET), where an input <em>voltage</em> controls the output. In a BJT, it is the input <em>current</em> that is the controlling quantity — hence the name <b style="color:var(--colour-bjt)">current amplifier</b>.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        text: () => 'A BJT is classified as an <span style="color:var(--colour-bjt)">active</span> device rather than a passive one. Why?',
+        hint: () => 'Compare it to a resistor or capacitor — think about what a transistor needs to be connected to before it can do anything useful at all.',
+        options: () => shuffle([
+          { label: 'It needs an external DC power supply to operate, and can amplify a signal using that supply', type: 'correct' },
+          { label: 'It only works with AC signals, never DC', type: 'wrong' },
+          { label: 'It dissipates no power when it is operating', type: 'wrong' },
+          { label: 'It has only two terminals, like a resistor or diode', type: 'wrong' }
+        ]),
+        correctExplain: () => 'A BJT needs an external <b>DC power supply</b> to operate',
+        working: () => `
+    <div class="working-line">Passive components — resistors, capacitors, inductors — only ever react to whatever voltage or current is already present in a circuit; they never need their own separate power source to do their basic job. A BJT is different: it needs an external <b style="color:var(--colour-bjt)">DC power supply</b> (<span class="colour-supply">V<sub>CC</sub></span>) connected before it can do anything at all, and once correctly biased, it can use that supply to amplify a signal — delivering more power at the output than was put in at the input. That ability to add power drawn from an external source is exactly what makes a device "active."</div>
+    <div class="working-step" style="margin-top:.6rem">Why the others are wrong:</div>
+    <div class="working-line">A BJT works perfectly well with DC control signals too (e.g. as a simple switch) — it isn't AC-only. It absolutely does dissipate power as heat while operating, which is exactly why power transistors need heatsinks. And it has three terminals — base, collector, emitter — not two; a two-terminal device like a resistor or diode is a classic example of a <em>passive</em> component instead.</div>`
+      },
+      {
+        leftPanel: 'circuit',
+        text: () => `β = ${V.beta} and <span class="colour-current">I<sub>B</sub></span> = <span class="colour-current">${fmtA(IB)}</span>. What is <span class="colour-current">I<sub>C</sub></span>?`,
+        hint: () => 'I<sub>C</sub> = β × I<sub>B</sub>. The base current was found using Ohm\'s Law: I<sub>B</sub> = (V<sub>CC</sub> − V<sub>BE</sub>) / R<sub>B</sub>.',
+        options: () => shuffle([
+          { label: fmtA(IC),           type: 'correct' },
+          { label: fmtA(IB),           type: 'wrong' },
+          { label: fmtA(IB / V.beta),  type: 'wrong' },
+          { label: fmtA(V.vcc / V.rc), type: 'wrong' }
+        ]),
+        correctExplain: () => `<span class="colour-current">I<sub>C</sub></span> = β × I<sub>B</sub> = ${V.beta} × ${fmtA(IB)} = <b>${fmtA(IC)}</b>`,
+        working: () => `
+    <div class="working-step">Step 1 — Find I<sub>B</sub> using Ohm's Law:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>B</sub></span> = ${frac('<span class="colour-supply">V<sub>CC</sub></span> − <span class="colour-bjt">V<sub>BE</sub></span>', '<span class="colour-resistor">R<sub>B</sub></span>')}</div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>B</sub></span> = ${frac(`${V.vcc} V − 0.6 V`, fmtO0(V.rb))}</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>B</sub></span> = ${frac(`${(V.vcc - VBE).toFixed(1)} V`, fmtO0(V.rb))}</div>
+    <div class="working-total"><span class="colour-current">I<sub>B</sub></span> = <span class="colour-result">${fmtA(IB)}</span></div>
+
+    <div class="working-step">Step 2 — Apply the current gain:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>C</sub></span> = β × <span class="colour-current">I<sub>B</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>C</sub></span> = ${V.beta} × ${fmtA(IB)}</div>
+    <div class="working-total"><span class="colour-current">I<sub>C</sub></span> = <span class="colour-result">${fmtA(IC)}</span></div>`
+      },
+      {
+        leftPanel: 'circuit',
+        text: () => `<span class="colour-current">I<sub>B</sub></span> = ${fmtA(IB)} and <span class="colour-current">I<sub>C</sub></span> = ${fmtA(IC)} for this circuit. What is <span class="colour-current">I<sub>E</sub></span>?`,
+        hint: () => 'Conventional current flows into the transistor through both the base and collector leads, and all of it must leave through the emitter — I<sub>E</sub> = I<sub>C</sub> + I<sub>B</sub>.',
+        options: () => shuffle([
+          { label: fmtA(IC + IB), type: 'correct' },
+          { label: fmtA(IC),      type: 'wrong' },
+          { label: fmtA(IC - IB), type: 'wrong' },
+          { label: fmtA(IB),      type: 'wrong' }
+        ]),
+        correctExplain: () => `<span class="colour-current">I<sub>E</sub></span> = I<sub>C</sub> + I<sub>B</sub> = ${fmtA(IC)} + ${fmtA(IB)} = <b>${fmtA(IC + IB)}</b>`,
+        working: () => `
+    <div class="working-step">Kirchhoff's Current Law at the transistor:</div>
+    <div class="working-line">Current flows <em>into</em> the transistor through both the base and the collector leads. With nowhere else to go, all of it must flow back <em>out</em> through the emitter: <span class="colour-current">I<sub>E</sub></span> = <span class="colour-current">I<sub>C</sub></span> + <span class="colour-current">I<sub>B</sub></span>.</div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>E</sub></span> = ${fmtA(IC)} + ${fmtA(IB)}</div>
+    <div class="working-total"><span class="colour-current">I<sub>E</sub></span> = <span class="colour-result">${fmtA(IC + IB)}</span></div>
+    <div class="working-step" style="margin-top:.6rem">Why I<sub>E</sub> ≈ I<sub>C</sub> is a common shortcut:</div>
+    <div class="working-line">Since β is large (${V.beta} here), <span class="colour-current">I<sub>B</sub></span> is tiny compared to <span class="colour-current">I<sub>C</sub></span> — so I<sub>E</sub> ends up only slightly bigger than I<sub>C</sub>. That's why "I<sub>E</sub> ≈ I<sub>C</sub>" is a reasonable approximation for quick estimates, but the exact relationship is always I<sub>E</sub> = I<sub>C</sub> + I<sub>B</sub>.</div>`
+      },
+      {
+        leftPanel: 'viz',
+        text: () => 'Look at the heading above the interactive diagram: "β = 200, <b class="colour-bjt">V<sub>BE</sub></b> = 0.6V, R<sub>C</sub> = 1kΩ, V<sub>CC</sub> = 12V". Which of these values represents the transistor\'s current gain?',
+        hint: () => 'Current gain relates a change in output current (I<sub>C</sub>) to a change in input current (I<sub>B</sub>) — it isn\'t a voltage or a resistance.',
+        options: () => shuffle([
+          { label: 'β (the current gain, IC/IB)',     type: 'correct' },
+          { label: 'VCC (the supply voltage)',         type: 'wrong' },
+          { label: 'RC (the collector resistor)',      type: 'wrong' },
+          { label: 'VBE (the 0.6V turn-on threshold)', type: 'wrong' }
+        ]),
+        correctExplain: () => '<b>β</b> is the current gain, I<sub>C</sub> / I<sub>B</sub>',
+        working: () => `
+    <div class="working-step">β is the current gain:</div>
+    <div class="working-line">β (also written h<sub>FE</sub>) is the ratio of collector current to base current: β = <span class="colour-current">I<sub>C</sub></span> / <span class="colour-current">I<sub>B</sub></span>. It's a fixed property of the transistor itself — it doesn't change with <span class="colour-supply">V<sub>CC</sub></span> or <span class="colour-resistor">R<sub>C</sub></span>.</div>
+
+    <div class="working-step" style="margin-top:.6rem">Why the others aren't gain:</div>
+    <div class="working-line"><span class="colour-supply">V<sub>CC</sub></span> is the supply voltage and <span class="colour-resistor">R<sub>C</sub></span> is the collector resistor — together with β they help set the actual operating point, but neither one describes how much the transistor itself amplifies <span class="colour-current">I<sub>B</sub></span> into <span class="colour-current">I<sub>C</sub></span>. <span class="colour-bjt">V<sub>BE</sub></span> = 0.6V is just the turn-on voltage for the <span class="colour-bjt">B-E</span> junction — a threshold, not a gain.</div>`
+      },
+      {
+        leftPanel: 'viz',
+        text: () => 'Try moving the 2 sliders on the interactive image. Based on the results you see, which answer best describes the state a circuit needs to be in for a NPN transistor to be in the <em>active region</em>?',
+        hint: () => 'A junction is <b>forward-biased</b> when its P-type side is at higher potential than its N-type side. Check the polarity markers (+/−) in the diagram for each junction.',
+        options: () => shuffle([
+          { label: 'B-E forward-biased (VBE > 0.6V); B-C reverse-biased', type: 'correct' },
+          { label: 'Both junctions forward-biased (saturation)',           type: 'wrong' },
+          { label: 'Both junctions reverse-biased (cutoff)',               type: 'wrong' },
+          { label: 'B-E reverse-biased (VBE < −0.6V); B-C forward-biased', type: 'wrong' }
+        ]),
+        correctExplain: () => '<b class="colour-bjt">B-E</b> junction forward-biased; <b class="colour-bjt">B-C</b> junction reverse-biased',
+        working: () => `
+    <div class="working-step"><span class="colour-bjt">B-E</span> Junction — Forward-biased:</div>
+    <div class="working-line">The base (P-type) is held at ≈ 0.6 V above the emitter (N-type) by <span class="colour-supply">V<sub>CC</sub></span> through <span class="colour-resistor">R<sub>B</sub></span>. The P-side is at higher potential → <b style="color:var(--colour-ui-correct)">forward-biased</b>. Conventional current I<sub>B</sub> flows base → emitter.</div>
+
+    <div class="working-step" style="margin-top:.6rem"><span class="colour-bjt">B-C</span> Junction — Reverse-biased:</div>
+    <div class="working-line">The collector (N-type) sits near <span class="colour-supply">V<sub>CC</sub></span> through <span class="colour-resistor">R<sub>C</sub></span>, far above the base (P-type). The N-side is at higher potential → <b style="color:var(--colour-ui-wrong)">reverse-biased</b>. This reverse bias allows a large <span class="colour-current">I<sub>C</sub></span> to be controlled by the small <span class="colour-current">I<sub>B</sub></span>.</div>`
+      },
+      {
+        leftPanel: 'viz',
+        text: () => 'Using the same interactive image, drag <span class="colour-bjt">V<sub>B</sub></span> well past 0.6V (with <span class="colour-voltage">V<sub>E</sub></span> fixed) until the status badge reads <em>SATURATION</em>. Based on your observations, what best describes the behaviour of a BJT in saturation?',
+        hint: () => 'Watch the I<sub>C</sub> readout and the status badge as V<sub>B</sub> keeps increasing. Does I<sub>C</sub> keep climbing in proportion, or does it stall near a fixed value?',
+        options: () => shuffle([
+          { label: 'IC is near its maximum — increasing IB further has little effect, since the circuit (VCC and RC), not β, now sets the current', type: 'correct' },
+          { label: 'The transistor turns off and IC drops to zero',                type: 'wrong' },
+          { label: 'IC keeps increasing in direct proportion to IB (IC = β × IB)',  type: 'wrong' },
+          { label: 'VCE increases toward VCC as more current flows',               type: 'wrong' }
+        ]),
+        correctExplain: () => '<b>I<sub>C</sub></b> is set by the circuit, not β, once saturated',
+        working: () => `
+    <div class="working-step">Saturation — IC is capped by the circuit:</div>
+    <div class="working-line">Once <span class="colour-bjt">V<sub>B</sub></span> is pushed high enough, <span class="colour-current">I<sub>C</sub></span> stops growing with <span class="colour-current">I<sub>B</sub></span> and flattens out near <span class="working-formula-row" style="display:inline">(<span class="colour-supply">V<sub>CC</sub></span> − <span class="colour-vce">V<sub>CE(sat)</sub></span>) / <span class="colour-resistor">R<sub>C</sub></span></span> — the maximum current <span class="colour-resistor">R<sub>C</sub></span> and <span class="colour-supply">V<sub>CC</sub></span> can physically supply.</div>
+
+    <div class="working-step" style="margin-top:.6rem">Why β stops mattering:</div>
+    <div class="working-line">In the <em>active</em> region <span class="colour-current">I<sub>C</sub></span> = β × <span class="colour-current">I<sub>B</sub></span> — the transistor is the limiting factor. In <em>saturation</em>, the transistor could pass more current if β alone decided it, but the external circuit simply can't supply any more — so extra <span class="colour-current">I<sub>B</sub></span> has almost no effect on <span class="colour-current">I<sub>C</sub></span>.</div>`
+      },
+      {
+        leftPanel: 'viz',
+        text: () => 'As <span class="colour-current">I<sub>C</sub></span> increases, <span class="colour-voltage">V<sub>C</sub></span> decreases — even though <span class="colour-supply">V<sub>CC</sub></span> and <span class="colour-resistor">R<sub>C</sub></span> haven\'t changed. Which law explains why the voltage drop across <span class="colour-resistor">R<sub>C</sub></span> directly reduces <span class="colour-voltage">V<sub>C</sub></span>?',
+        hint: () => 'Ohm\'s Law tells you the <em>size</em> of the drop across R<sub>C</sub> (V = IR). Something else explains why that drop has to come directly out of V<sub>C</sub>, given V<sub>CC</sub> is fixed.',
+        options: () => shuffle([
+          { label: "Kirchhoff's Voltage Law", type: 'correct' },
+          { label: "Ohm's Law",               type: 'wrong' },
+          { label: "Kirchhoff's Current Law", type: 'wrong' },
+          { label: "Thevenin's Theorem",      type: 'wrong' }
+        ]),
+        correctExplain: () => '<b>Kirchhoff\'s Voltage Law</b> — the loop voltages must always add up to <span class="colour-supply">V<sub>CC</sub></span>',
+        working: () => `
+    <div class="working-step">Kirchhoff's Voltage Law (KVL):</div>
+    <div class="working-line">Around any closed loop, the voltage supplied must equal the voltages dropped: <span class="colour-supply">V<sub>CC</sub></span> = <span class="colour-current">I<sub>C</sub></span> × <span class="colour-resistor">R<sub>C</sub></span> + <span class="colour-voltage">V<sub>C</sub></span> (this is the same formula shown above the <span class="colour-bjt">C-B</span> junction box on the interactive diagram). Since <span class="colour-supply">V<sub>CC</sub></span> is fixed, whatever extra voltage <span class="colour-resistor">R<sub>C</sub></span> drops has to come directly out of <span class="colour-voltage">V<sub>C</sub></span>.</div>
+
+    <div class="working-step" style="margin-top:.6rem">Where Ohm's Law fits in:</div>
+    <div class="working-line">Ohm's Law (V = IR) is what lets you calculate <em>how big</em> the drop across <span class="colour-resistor">R<sub>C</sub></span> is once you know <span class="colour-current">I<sub>C</sub></span>. But it doesn't by itself say anything about <span class="colour-voltage">V<sub>C</sub></span> — it's KVL that ties that drop back to a fixed-supply loop and forces <span class="colour-voltage">V<sub>C</sub></span> to give up the difference.</div>`
+      }
+    ];
+
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUIZ ENGINE — now shared: assets/quiz-engine.js (loaded in <head>)
+    // provides shuffle/frac/isMulti/isAnswerCorrect/selectedLabel/
+    // buildProgressDots/renderOptions/renderShapeGrid/selectOption/
+    // renderQuestion/checkAnswer/nextQuestion/backQuestion/swapLeftPanel/
+    // goToQuestion/resetQuiz/showSummary/openModal/closeModal/goBack/
+    // buildXYRuler/setXY/jump/jumpToSummary — nothing here should need to
+    // change when questions are added/reordered. Only this page's own
+    // circuit-simulation setup and Q5 visualizer widget remain below.
+    // ══════════════════════════════════════════════════════════════════════
+
+    initQuizNav();
+    setMode('example1'); // calls resetQuiz() internally, after applying V
+
+
+    // ── Q5 interactive biasing visualizer ──
+    (function () {
+      const trackVC = document.getElementById('q5-track-VC');
+      const fillVC  = document.getElementById('q5-fill-VC');
+      const labelVC = document.getElementById('q5-label-VC');
+      const sB      = document.getElementById('q5-slide-B');
+      const sE      = document.getElementById('q5-slide-E');
+      const dispVE  = document.getElementById('q5-val-VE');
+      const svgVB   = document.getElementById('q5v-vb');
+      const svgVBC  = document.getElementById('q5v-vbc');
+      const svgVBE  = document.getElementById('q5v-vbe');
+      const bcTag   = document.getElementById('q5v-bc-tag');
+      const beTag   = document.getElementById('q5v-be-tag');
+      const beTag2  = document.getElementById('q5v-be-tag2');
+      const icVal   = document.getElementById('q5v-ic-val');
+      const ibVal   = document.getElementById('q5v-ib-val');
+      const ieVal   = document.getElementById('q5v-ie-val');
+      const wB      = document.getElementById('q5v-wB');
+      const wC      = document.getElementById('q5v-wC');
+      const wE      = document.getElementById('q5v-wE');
+      const badge   = document.getElementById('q5v-status');
+      const viz     = document.querySelector('.q5-visualizer');
+      const getVar  = name => getComputedStyle(viz).getPropertyValue(name).trim();
+      const isLight = () => document.documentElement.getAttribute('data-theme') === 'light';
+
+      const β = 200, VCC = 12, RC = 1000;
+
+      function setWires(color, vAnim, hAnim) {
+        [wC, wE].forEach(w => { w.setAttribute('stroke', color); w.style.animation = vAnim; });
+        wB.setAttribute('stroke', color); wB.style.animation = hAnim;
+      }
+
+      function update() {
+        const vb = parseFloat(sB.value);
+        const ve = parseFloat(sE.value);
+        const vbe = vb - ve;
+
+        // ── Calculate Currents & Saturation Limits ──
+        const ib_uA = vbe >= 0.6 ? Math.min((vbe - 0.6) * 100, 320) : 0;
+        const ic_act_mA = (ib_uA / 1000) * β;
+
+        // Absolute maximum collector current limited by VCC - VE
+        const ic_sat_max_mA = Math.max(0, (VCC - ve - 0.2) / RC * 1000);
+
+        // Determine actual IC and dependent VC
+        const ic_mA = Math.min(ic_act_mA, ic_sat_max_mA);
+        const vc_calc = VCC - (ic_mA / 1000) * RC;
+        const vc = Math.max(ve + 0.2, Math.min(VCC, vc_calc));
+
+        const sat = (ic_act_mA >= ic_sat_max_mA && ib_uA > 0);
+
+        // Magenta fill grows left→right with VC (0V = all white, 12V = all magenta).
+        const vcPct = Math.max(0, Math.min(100, (vc / 12) * 100));
+        fillVC.style.width = `${vcPct}%`;
+
+        // Label hugs the magenta/white boundary line, offset 60px to whichever
+        // side is the larger (background) colour, so its own colour is the other one.
+        const lowerHalf = vcPct <= 50;
+        const linePx = (vcPct / 100) * trackVC.getBoundingClientRect().width;
+        const labelPx = lowerHalf ? linePx + 60 : linePx - 60;
+        labelVC.style.left = `${labelPx}px`;
+        labelVC.style.color = lowerHalf ? getVar('--q5v-magenta') : getVar('--colour-text-strong');
+        labelVC.style.textShadow = isLight() ? 'none' : (lowerHalf
+          ? '0 0 6px rgba(255, 0, 127, 0.6)'
+          : '0 0 6px rgba(255, 255, 255, 0.7)');
+        labelVC.innerHTML = `V<sub>C</sub> = ${vc.toFixed(1)}V`;
+
+        dispVE.innerHTML = `V<sub>E</sub> = ${ve.toFixed(1)}V`;
+
+        // Cyan fill grows left→right with VE (-1V = all white, 5V = all cyan).
+        const vePct = ((ve + 1) / 6) * 100;
+        sE.style.background = `linear-gradient(to right, var(--q5v-cyan) 0%, var(--q5v-cyan) ${vePct}%, #ffffff ${vePct}%, #ffffff 100%)`;
+        svgVB.textContent = `${vb.toFixed(2)}V`;
+        icVal.textContent = `${ic_mA.toFixed(1)}mA`;
+        ibVal.textContent = `${ib_uA.toFixed(0)}μA`;
+        ieVal.textContent = `${(ic_mA + ib_uA / 1000).toFixed(1)}mA`;
+
+        const vbc = vb - vc;
+        svgVBC.textContent = `${vbc >= 0 ? '+' : ''}${vbc.toFixed(2)}V`;
+        svgVBE.textContent = `${vbe >= 0 ? '+' : ''}${vbe.toFixed(2)}V`;
+
+        const bcForward = vbc > 0;
+        bcTag.textContent = bcForward ? 'FORWARD-BIASED' : 'REVERSE-BIASED';
+        bcTag.setAttribute('fill', bcForward ? getVar('--q5v-red') : getVar('--q5v-green'));
+
+        let beOff = false, subThr = false;
+        if (ib_uA > 0) {
+          beTag.textContent = 'FORWARD-BIASED'; beTag.setAttribute('fill', getVar('--q5v-green'));
+          beTag2.style.display = 'none';
+        } else if (vbe > 0) {
+          beTag.textContent = 'SUB-THRESHOLD'; beTag.setAttribute('fill', getVar('--q5v-orange'));
+          beTag2.style.display = 'none';
+          beOff = true; subThr = true;
+        } else {
+          beTag.textContent = 'CUT-OFF OR'; beTag.setAttribute('fill', getVar('--q5v-red'));
+          beTag2.textContent = 'REVERSE-BIASED'; beTag2.style.display = '';
+          beOff = true;
+        }
+
+        if (beOff && !subThr) {
+          setWires(getVar('--q5v-red'), 'none', '0s');
+          badge.className = 'q5v-badge q5v-alert';
+          badge.innerHTML = `<div class="q5v-badge-header">CUTOFF — NO CURRENT</div>
+            <div class="q5v-badge-line">B-E junction off (V<sub>BE</sub> = ${vbe.toFixed(2)}V) — IB = 0, IC = 0</div>`;
+        } else if (subThr) {
+          setWires(getVar('--q5v-orange'), 'q5vFlowDown 3s linear infinite', 'q5vFlowRight 3s linear infinite');
+          badge.className = 'q5v-badge q5v-warning';
+          badge.innerHTML = `<div class="q5v-badge-line">SUB-THRESHOLD: V<sub>BE</sub> = +${vbe.toFixed(2)}V (weak leakage)</div>`;
+        } else if (sat) {
+          setWires(getVar('--q5v-magenta'), 'q5vFlowDown 1.5s linear infinite', 'q5vFlowRight 1.5s linear infinite');
+          badge.className = 'q5v-badge q5v-saturated';
+          badge.innerHTML = `<div class="q5v-badge-header">SATURATION — IC ≈ ${ic_sat_max_mA.toFixed(1)} mA</div>
+            <div class="q5v-badge-line">Current is flowing — but IC is set by the circuit (V<sub>CC</sub> &amp; R<sub>C</sub>), not by β</div>
+            <div class="q5v-badge-line">Increasing IB further produces little extra IC</div>`;
+        } else {
+          setWires(getVar('--q5v-green'), 'q5vFlowDown 0.8s linear infinite', 'q5vFlowRight 0.8s linear infinite');
+          badge.className = 'q5v-badge q5v-active';
+          badge.innerHTML = `<div class="q5v-badge-line">ACTIVE REGION: V<sub>C</sub> &gt; V<sub>B</sub> &gt; V<sub>E</sub> → Normal Flow!</div>`;
+        }
+      }
+
+      function reset() { sB.value = "0"; sE.value = "-0.6"; update(); }
+      window.q5vReset = reset;
+
+      sB.addEventListener('input', update);
+      sE.addEventListener('input', update);
+      window.addEventListener('resize', update);
+      update();
+    })();
+
+    initQuizFromURL();
+  </script>
+</body>
+</html>

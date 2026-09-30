@@ -1,0 +1,163 @@
+<!--
+  "Identify the gate from its truth table" drill — 3-INPUT companion to
+  digital_gate_identification.html. Same mechanic, same engine, extended
+  to 3-input (8-row) truth tables for the 6 gates that actually generalise
+  to extra inputs: AND, OR, NAND, NOR, XOR, XNOR. NOT is deliberately
+  SKIPPED here (not just given a 3-input table) — it's structurally a
+  1-input gate, there's no such thing as a "3-input NOT", so it has
+  nothing to test in this file; the 2-input file already covers it.
+
+  6 questions, one per gate, same QUESTIONS-array-shuffle technique as the
+  2-input file (resetQuiz() calls shuffle(QUESTIONS) on the array itself,
+  not each question's own gate pick) — guarantees all 6 appear exactly
+  once per playthrough, order randomised.
+
+  XOR/XNOR truth tables use the standard PARITY generalisation to 3+
+  inputs (the unambiguous extension, since XOR is associative — this is
+  also how real 3-input/4-input XOR ICs behave, not a project-specific
+  simplification): XOR = 1 when an ODD number of inputs are 1 (one or
+  three high); XNOR = 1 when an EVEN number are 1 (zero or two high).
+  AND/OR/NAND/NOR generalise the obvious way (AND: all three must be 1;
+  OR: any one of the three; NAND/NOR: their exact complements).
+
+  All 6 gate names offered as answer options every question (not a
+  curated subset) — same full-discrimination-drill choice as the 2-input
+  file. Only needs LETTERS through 'F' this time (6 gates, not 7).
+
+  Otherwise a straight copy of digital_gate_identification.html's engine —
+  see that file's own header comment for the fuller rationale (why
+  QUESTIONS itself gets shuffled rather than each question's own gate;
+  why this is the leanest possible v2-engine copy in the project, no
+  circuit/leftPanel, single-select only).
+
+  Migrated to the shared cert_iii/assets/quiz-engine.js engine, same
+  recipe as digital_gate_identification.html: local `const LETTERS`
+  removed (shared engine's own already goes to 8), RESET_EXTRA =
+  () => shuffle(QUESTIONS) supplies the per-restart reshuffle.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../../assets/theme-init.js"></script>
+  <script src="../../../../assets/quiz-engine.js"></script>
+  <title>Digital Electronics — Identify the Gate (3-Input)</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../../assets/quiz-common.css">
+  <script src="../../../../assets/breadcrumb.js" defer></script>
+  <style>
+    .progress-wrap { display: flex; gap: .4rem; align-items: center; margin-bottom: 1rem; }
+    .gate-table-wrap { max-width: 240px; margin: .8rem auto; }
+    .gate-table-wrap .bits-table td.out-col { font-weight: 700; color: var(--colour-gain); }
+  </style>
+</head>
+
+<body>
+  <div class="crumb" id="crumb" data-current="Identify the Gate (3-Input)"></div>
+  <header>
+    <h1>Digital Electronics</h1>
+    <p>Identify the Gate · 3-Input Truth Tables</p>
+  </header>
+
+  <div class="quiz-wrap single-col" id="quizWrap">
+
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <!-- Single reusable question panel — populated from QUESTIONS[cur] by renderQuestion() -->
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+          <div class="options" id="qOptions"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Summary -->
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ══════════════════════════════════════════════════════════════════════
+    // GATES — the 6 gates that generalise to 3 inputs (NOT skipped — it's
+    // structurally 1-input, nothing to test here; see digital_gate_
+    // identification.html for it). XOR/XNOR use the standard odd/even-
+    // parity generalisation.
+    // ══════════════════════════════════════════════════════════════════════
+
+    const GATES = [
+      { key: 'AND', rows: [[0,0,0,0],[0,0,1,0],[0,1,0,0],[0,1,1,0],[1,0,0,0],[1,0,1,0],[1,1,0,0],[1,1,1,1]],
+        rule: 'Output is 1 ONLY when EVERY input is 1 — extending the 2-input rule to three inputs makes it even stricter: unanimous agreement across all three.' },
+      { key: 'OR', rows: [[0,0,0,0],[0,0,1,1],[0,1,0,1],[0,1,1,1],[1,0,0,1],[1,0,1,1],[1,1,0,1],[1,1,1,1]],
+        rule: 'Output is 1 if ANY input is 1 — same rule as the 2-input version, just with a third input to check. Only 0 when all three are 0.' },
+      { key: 'NAND', rows: [[0,0,0,1],[0,0,1,1],[0,1,0,1],[0,1,1,1],[1,0,0,1],[1,0,1,1],[1,1,0,1],[1,1,1,0]],
+        rule: 'The exact inverse of 3-input AND — every row is flipped compared to AND\'s own table. Output is 0 only when every input is 1.' },
+      { key: 'NOR', rows: [[0,0,0,1],[0,0,1,0],[0,1,0,0],[0,1,1,0],[1,0,0,0],[1,0,1,0],[1,1,0,0],[1,1,1,0]],
+        rule: 'The exact inverse of 3-input OR — every row is flipped compared to OR\'s own table. Output is 1 only when every input is 0.' },
+      { key: 'XOR', rows: [[0,0,0,0],[0,0,1,1],[0,1,0,1],[0,1,1,0],[1,0,0,1],[1,0,1,0],[1,1,0,0],[1,1,1,1]],
+        rule: 'With three inputs, XOR generalises to an ODD-PARITY rule: output is 1 whenever an ODD number of inputs are 1 (one, or all three) — and 0 when an even number are 1 (zero or two).' },
+      { key: 'XNOR', rows: [[0,0,0,1],[0,0,1,0],[0,1,0,0],[0,1,1,1],[1,0,0,0],[1,0,1,1],[1,1,0,1],[1,1,1,0]],
+        rule: 'The exact inverse of 3-input XOR — an EVEN-PARITY rule: output is 1 whenever an EVEN number of inputs are 1 (zero or two) — and 0 when an odd number are 1 (one or three).' },
+    ];
+
+    function gateTableHTML(gate) {
+      const bodyRows = gate.rows.map(r => `<tr>${r.map((v, i) => `<td${i === r.length - 1 ? ' class="out-col"' : ''}>${v}</td>`).join('')}</tr>`).join('');
+      return `<div class="gate-table-wrap"><table class="bits-table"><thead><tr><th>A</th><th>B</th><th>C</th><th>Q</th></tr></thead><tbody>${bodyRows}</tbody></table></div>`;
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS — one per gate, in a fixed default order. resetQuiz()
+    // shuffles this array's ORDER (not each question's gate) so every
+    // playthrough covers all 6 exactly once.
+    // ══════════════════════════════════════════════════════════════════════
+
+    const QUESTIONS = GATES.map(gate => ({
+      text: () => `${gateTableHTML(gate)}Which logic gate produces this 3-input truth table?`,
+      hint: () => 'Check exactly when Q is 1 and when it\'s 0 across all eight input combinations, then compare against each gate\'s defining rule.',
+      options: () => shuffle(GATES.map(g => ({ label: g.key, type: g.key === gate.key ? 'correct' : 'wrong' }))),
+      correctExplain: () => gate.key,
+      working: () => `<div class="working-total">${gate.rule}</div>`,
+    }));
+
+    RESET_EXTRA = () => shuffle(QUESTIONS);
+
+    initQuizNav();
+    resetQuiz();
+    initQuizFromURL();
+  </script>
+</body>
+
+</html>

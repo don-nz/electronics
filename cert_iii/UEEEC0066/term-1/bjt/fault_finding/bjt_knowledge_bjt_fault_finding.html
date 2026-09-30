@@ -1,0 +1,281 @@
+<!--
+  TEMPLATE FILE — read before cloning for a new weekly quiz.
+
+  This file uses a data-driven quiz engine: a single `QUESTIONS` array (in the
+  <script>, search "QUESTIONS —") drives one generic HTML panel and a generic
+  set of engine functions (renderQuestion, checkAnswer, nextQuestion, etc).
+  There is deliberately NO per-question HTML or per-question JS function.
+
+  When cloning this file for a new quiz — even one that starts with just ONE
+  question — KEEP THIS STRUCTURE. Do not revert to a hardcoded per-question
+  panel just because there's only one entry.
+
+  A `leftPanel` field per question ('none' | 'shapeGrid') swaps the left-hand
+  column between nothing (question collapses to a single centred column) and
+  a grid of clickable boxes — either SVG shapes (set `shapeId` on the option)
+  or plain text labels (set `label` only, no `shapeId` — see Q1's symptom
+  boxes, copied from digital_knowledge_logic_gates.html's own Q1).
+
+  A `kind` field per question selects the interaction — see quiz-engine.js's
+  own header comment for the full list (unset=single-select, 'multi',
+  'match', 'bits', 'truth', 'fill').
+
+  Built on the shared cert_iii/assets/quiz-engine.js engine from the start
+  (project convention for all new quizzes — see MEMORY.md). This quiz covers
+  general fault-finding procedure/theory NOT already covered by the sibling
+  files in this folder: bjt_fault_interactive_resistor.html and
+  bjt_fault_interactive_internal.html (click-the-circuit DC fault testbeds),
+  bjt_knowledge_choose_replacement.html (datasheet/replacement selection),
+  and park_bjt_knowledge_bjt_fault_finding.html (the original 14-question
+  file, parked — specific AC/DC fault-symptom scenarios + datasheets, zero
+  topic overlap with this file's general-procedure content).
+
+  Being built one question at a time, direct from the teacher's own class
+  notes, in conversation with the user — do not batch-draft the remaining
+  topics ahead of that process.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../../assets/theme-init.js"></script>
+  <script src="../../../../assets/quiz-engine.js"></script>
+  <title>BJT Knowledge Quiz — Fault-Finding &amp; Testing BJTs</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../../assets/quiz-common.css">
+  <script src="../../../../assets/breadcrumb.js" defer></script>
+  <style>
+    /* Q1's symptom-name boxes are longer strings than the digital quiz's
+       gate names — keep the shared 4-column default on desktop/tablet, but
+       drop to 1 column on phone width so labels like "Incorrect phase
+       relationship between input and output" don't get crushed. */
+    @media (max-width: 480px) {
+      #shapeGridCells { grid-template-columns: 1fr; }
+    }
+
+    /* Q2 — an ORDERING question, repurposing kind:'match' (no dedicated
+       "sequence" kind exists in the engine). Each of the 4 diagnostic steps
+       gets its own column labelled '1st'..'4th'; grading is the engine's
+       default per-item place[i]===cor[i] check, which already means
+       "exactly the right step in exactly the right slot" — no engine
+       changes needed. The engine always lays match-columns out as a
+       side-by-side grid (up to 4 per row); overridden here to stack as
+       single-column numbered ROWS instead, per the requested "box of
+       options at the top, numbered rows below" layout. !important beats
+       the inline grid-template-columns the engine sets on every render. */
+    #matchColumns { grid-template-columns: 1fr !important; }
+    #matchColumns .match-column {
+      display: flex;
+      align-items: center;
+      gap: .8rem;
+      min-height: auto;
+    }
+    #matchColumns .match-col-arrow { display: none; }
+    #matchColumns .match-col-title {
+      flex: 0 0 auto;
+      min-width: 3.4rem;
+      margin-bottom: 0;
+    }
+    #matchColumns .match-col-items { flex: 1 1 auto; min-height: 0; }
+  </style>
+</head>
+
+<body>
+  <div class="crumb" id="crumb" data-current="Fault-Finding &amp; Testing BJTs"></div>
+  <header>
+    <h1>BJT Amplifier: Fault-Finding &amp; Testing BJTs</h1>
+    <p>Diagnosing Faulty Circuits · Fault Symptoms · Component Faults · Diode &amp; BJT Identification</p>
+  </header>
+
+  <div class="quiz-wrap" id="quizWrap">
+
+    <!-- LEFT: shape grid (only shown for leftPanel:'shapeGrid' questions) -->
+    <div class="circuit-col">
+      <div id="qShapeGridPanel" style="display:none">
+        <div class="panel-label">Click the boxes to select your answer</div>
+        <div class="shape-grid" id="shapeGridCells"></div>
+      </div>
+    </div>
+
+    <!-- RIGHT: question -->
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <!-- Single reusable question panel — populated from QUESTIONS[cur] by renderQuestion() -->
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+          <div class="options" id="qOptions"></div>
+          <div class="match-wrap" id="qMatch" style="display:none">
+            <div class="match-pool-row" id="matchPoolRow">
+              <div class="match-pool-arrow">▶</div>
+              <div class="match-pool" id="matchPool"></div>
+            </div>
+            <div class="match-columns" id="matchColumns"></div>
+          </div>
+          <div class="bits-wrap" id="qBits" style="display:none">
+            <table class="bits-table">
+              <thead>
+                <tr>
+                  <th rowspan="2">Value</th>
+                  <th>2<sup>3</sup></th>
+                  <th>2<sup>2</sup></th>
+                  <th>2<sup>1</sup></th>
+                  <th>2<sup>0</sup></th>
+                </tr>
+                <tr>
+                  <th>8</th>
+                  <th>4</th>
+                  <th>2</th>
+                  <th>1</th>
+                </tr>
+              </thead>
+              <tbody id="bitsBody"></tbody>
+            </table>
+          </div>
+          <div class="bits-wrap" id="qTruth" style="display:none">
+            <div class="truth-toggle" id="truthToggle" style="display:none"></div>
+            <table class="bits-table">
+              <thead>
+                <tr>
+                  <th id="truthInputHead" colspan="3">Inputs</th>
+                  <th id="truthOutputHead">Output</th>
+                </tr>
+                <tr id="truthColLabels"></tr>
+              </thead>
+              <tbody id="truthBody"></tbody>
+            </table>
+          </div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Summary -->
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS — see quiz-engine.js's own header comment for the full field
+    // reference. Add, remove, split or reorder questions by editing this
+    // array only — nothing in the engine needs to change.
+    // ══════════════════════════════════════════════════════════════════════
+
+    const QUESTIONS = [
+      {
+        // Multi-select shape-grid with plain-text boxes (no shapeId) — the
+        // four AC-signal fault symptoms from the teacher's class notes,
+        // plus one extra genuine symptom (hum/noise), mixed in with three
+        // distractors that are real fault-finding observations but belong
+        // to OTHER diagnostic categories (DC voltages, visual inspection) —
+        // the same "don't lump related-but-different categories together"
+        // lesson as digital_knowledge_logic_gates.html's own Q1.
+        leftPanel: 'shapeGrid',
+        kind: 'multi',
+        text: () => `A BJT amplifier can fail in several ways. <span style="color:var(--colour-ui-primary)">Click</span> every box below that describes an <span style="color:var(--colour-ui-primary)">AC output signal</span> symptom of a faulty amplifier circuit.`,
+        hint: () => `Think about what you'd actually see on an oscilloscope connected to the output. The wrong boxes describe real fault-finding observations too — just not ones you'd see by looking at the AC signal itself.`,
+        options: () => shuffle([
+          { label: 'Output amplitude is smaller, larger, or missing than expected', type: 'correct' },
+          { label: 'Signal is clipping', type: 'correct' },
+          { label: 'Signal is distorted', type: 'correct' },
+          { label: 'Signal is the incorrect phase', type: 'correct' },
+          { label: 'Excessive noise or hum on the signal', type: 'correct' },
+          { label: 'DC bias voltages read outside their expected range', type: 'wrong' },
+          { label: 'Transistor case is unusually hot to touch', type: 'wrong' },
+          { label: 'Circuit draws excessive current from the supply', type: 'wrong' }
+        ]),
+        correctExplain: (st) => {
+          const nums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(n => n).join(', ');
+          return `Boxes <b>${nums}</b> are AC output signal symptoms`;
+        },
+        working: (st) => {
+          const correctNums = st.opts.map((o, i) => o.type === 'correct' ? i + 1 : null).filter(Boolean).join(', ');
+          const wrongNums = st.opts.map((o, i) => o.type === 'wrong' ? i + 1 : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-step">AC output signal symptoms — boxes ${correctNums}:</div>
+    <div class="working-line">A faulty amplifier can produce an output that's the <b style="color:var(--colour-ui-correct)">wrong amplitude</b> (too small, too large, or missing entirely), <b style="color:var(--colour-ui-correct)">clipped</b> (flattened at the top and/or bottom, usually from a bias fault pushing the transistor into cutoff or saturation), <b style="color:var(--colour-ui-correct)">distorted</b> (the wrong shape, without necessarily clipping), the <b style="color:var(--colour-ui-correct)">wrong phase</b> (compared to what the circuit's configuration should produce), or carrying <b style="color:var(--colour-ui-correct)">extra noise/hum</b> it shouldn't have (e.g. a failing decoupling or bypass capacitor).</div>
+    <div class="working-step" style="margin-top:.6rem">Not AC signal symptoms — boxes ${wrongNums}:</div>
+    <div class="working-line">These are all real things you might find while fault-finding, but you'd catch them a different way: <b style="color:var(--colour-ui-wrong)">DC bias voltages</b> are checked with a DMM at the quiescent (no-signal) points, not read off the AC waveform. A <b style="color:var(--colour-ui-wrong)">hot case</b> or <b style="color:var(--colour-ui-wrong)">excessive supply current</b> are things you'd notice during visual inspection or a DC check — not symptoms of the signal itself.</div>`;
+        }
+      },
+      {
+        // kind:'match' repurposed as an ORDERING question — see this file's
+        // own <style> block (#matchColumns override) for how the engine's
+        // normal side-by-side column grid gets turned into stacked numbered
+        // rows for this one question. Each option's `col` is its correct
+        // 0-indexed position (0='1st' ... 3='4th'); grading is the engine's
+        // default exact place[i]===cor[i] check.
+        leftPanel: 'none',
+        kind: 'match',
+        columns: () => ['1st', '2nd', '3rd', '4th'],
+        text: () => `There's a sensible <span style="color:var(--colour-ui-primary)">order</span> to follow when diagnosing a faulty BJT amplifier circuit. <span style="color:var(--colour-ui-primary)">Place</span> each step below into the row for when it should be done.`,
+        hint: () => `Start with what costs nothing and risks nothing, then escalate to checks that need power applied. The last step is only needed when the earlier power-on checks aren't an option. If you change your mind, click a placed step to send it back to the pool above.`,
+        options: () => shuffle([
+          { label: 'Visual inspection', col: 0 },
+          { label: 'Use a DMM to check quiescent (DC) voltages', col: 1 },
+          { label: 'Use an oscilloscope to check the AC signals', col: 2 },
+          { label: 'Cold testing (if power cannot be applied)', col: 3 }
+        ]),
+        correctExplain: (st) => {
+          const wrongCount = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).length;
+          return wrongCount === 0 ? 'All 4 steps in the right order' : `${st.opts.length - wrongCount} of ${st.opts.length} steps in the right order`;
+        },
+        working: (st) => {
+          const mistakes = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).map(o => o.label);
+          const mistakeLine = mistakes.length
+            ? `<div class="working-step" style="margin-top:.6rem">Out of order:</div><div class="working-line">${mistakes.join(', ')}</div>`
+            : '';
+          return `
+    <div class="working-step">1st — Visual inspection:</div>
+    <div class="working-line">Free, safe, and can be done with the power off. Look for obviously burnt, bulging, cracked or discoloured components, dry/cracked solder joints, and loose connections before you touch a meter.</div>
+    <div class="working-step" style="margin-top:.6rem">2nd — DMM quiescent (DC) voltages:</div>
+    <div class="working-line">With no input signal applied, power the circuit up and check the DC bias points (VCC, VC, VB, VE, VBE) against what the circuit should read. This narrows the fault down to a stage, or even a single component, before you go anywhere near the AC signal.</div>
+    <div class="working-step" style="margin-top:.6rem">3rd — Oscilloscope AC signals:</div>
+    <div class="working-line">Once the DC bias checks out (or has pointed you at a stage), apply a signal and check the AC waveform in and out of that stage — amplitude, clipping, distortion and phase all show up here.</div>
+    <div class="working-step" style="margin-top:.6rem">4th — Cold testing:</div>
+    <div class="working-line">Only needed if the circuit can't safely be powered up at all (e.g. a suspected short that could damage something further). With the power off, use a DMM's resistance/diode-test function to check individual components in isolation.</div>
+    ${mistakeLine}`;
+        }
+      }
+    ];
+
+    initQuizNav();
+    resetQuiz();
+    initQuizFromURL();
+  </script>
+</body>
+</html>

@@ -1,0 +1,1882 @@
+<!--
+  EXPLORATORY TESTBED — external RESISTOR faults (R1/R2/RC/RE, each
+  either fully OPEN-circuit or gone HIGH in value), the third fault
+  family in this series after the external-component testbed
+  (bjt_fault_interactive.html — C1/C2 open, R1 high) and the
+  internal-BJT-lead testbed (bjt_fault_interactive_internal.html —
+  base/emitter/collector open/short). Originally built with a SHORT
+  fault alongside OPEN for each resistor (matching the internal-lead
+  file's own open/short pairing) — corrected once the user re-read the
+  actual class notes, which pair OPEN with HIGH instead. The 4 short
+  questions were replaced with HIGH ones at their same array positions
+  (preserving the fixed randomised question order); the short-circuit
+  visual machinery (short-R1/R2/RC/RE groups, syncResistorShort()) was
+  removed entirely since nothing uses it any more.
+
+  Fault markers: data.openResistor shows a small X (fault-x-<key>) and
+  data.highResistor shows a distinct up-arrow (fault-high-<key>, added
+  directly by the user on RE first, then rolled out to R1/R2/RC) — two
+  separate symbols, not shared, so OPEN and HIGH read as visually
+  distinct fault types at a glance (see syncResistorFaults()). The
+  resistor's own on-screen label always stays at its nominal printed
+  value either way, matching the external-component testbed's own
+  R1-high fault (which shows no marker at all — a technician can't see
+  a drifted value, only measure its effect). HIGH faults use a mult=2
+  convention (double the nominal value) for all four resistors, matching
+  that same file's own R1: 120kΩ→240kΩ precedent exactly.
+
+  Same static CE voltage-divider reference circuit (ce-fault-circuit),
+  same WIRES/NODES/PRETEND METERS convention, and the same generalised
+  interactive-circuit engine (ALL_INTERACTIVE_KEYS / TARGET_GROUP_ID /
+  wireComponentClicks / paintComponent / syncInteractiveVisuals /
+  syncMeterValues / syncScopeShapes) as the other two files — see the
+  internal-lead file's own header comment for the full HEALTHY circuit-
+  value derivation (VTH=1.33V, RTH=13.3kΩ, IB≈10.8µA, IE≈IC≈2.2mA,
+  VB≈1.2V, VE≈0.6V, VC≈8.1V, VBE=0.6V — the teacher's course-standard
+  value).
+
+  Several fault-analysis subtleties worth knowing when reading the
+  QUESTIONS array: R1-open remains its own standalone full-cutoff case
+  (VB pinned to a clean 0V, everything downstream dead) — with no SHORT
+  faults left in this file, it no longer has a DC-identical twin the way
+  it did against R2-short in the original design. RC's own two faults
+  (open/high) are the SMALLEST-footprint faults in this file — RC sits
+  outside the base-bias
+  feedback loop entirely, so RC-open leaves VB/VE/IE untouched and
+  RC-high leaves ALL of VB/VE/IC/IE untouched, only VC (and, for
+  RC-high, the AC gain) moving. RC-high is also the ONLY fault anywhere
+  in this file where the output gets BIGGER rather than smaller or dead
+  — Av=RC/(RE+re′) roughly doubles along with RC itself. R2-high is
+  surprisingly the most dramatic HIGH fault of the four (current more
+  than doubles, VC nearly halves) since R2 sets VTH directly — a bigger
+  swing than R1-high's own comparatively modest, well-documented
+  behaviour (see the external-component testbed's own header comment).
+  RE-open produces a genuinely FLOATING VE (shown as "float", not a
+  clean 0V) since there's no ground return at all, distinct from every
+  other fault in this file, all of which keep a clean, stable reading of
+  some kind.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../../assets/theme-init.js"></script>
+  <title>BJT Knowledge Quiz — Resistor Fault Circuit (Exploratory)</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../../assets/quiz-common.css">
+  <script src="../../../../assets/breadcrumb.js" defer></script>
+  <style>
+    .progress-wrap { display: flex; gap: .4rem; align-items: center; margin-bottom: 1rem; }
+    /* This page has no click-to-zoom modal (removed) — quiz-common.css's
+       shared .circuit-panel still sets cursor:zoom-in unconditionally for
+       every other page that DOES have one, so override it back to default
+       here rather than changing that shared rule for one page. */
+    .circuit-panel { cursor: default; }
+    @media(min-width:900px) {
+      .quiz-wrap { display: grid;
+        /* A fixed 760px cap (rather than a percentage, like quiz-common.css's
+           own shared default of minmax(340px,52%)) meant the RIGHT column
+           kept shrinking as a proportion of ever-wider viewports once the
+           left column maxed out — squeezing the question column's own
+           nav-button row down to ~300px around 900-1400px wide, narrow
+           enough to wrap the Restart button onto its own line despite
+           plenty of total screen width. A percentage cap keeps both
+           columns' proportions consistent at any width ≥900px instead. */
+        grid-template-columns: minmax(340px, 50%) 1fr;
+        gap: 1.2rem;
+        align-items: start; }
+    }
+    /* Interactive-circuit questions (see interactiveCircuit flag) —
+       .comp-interactive is added/removed per-target by
+       syncInteractiveVisuals(), only on whichever of the 12 possible
+       targets (6 components, 4 meters, 2 scopes) the CURRENT question
+       actually uses. Hover
+       affordance uses filter, NOT stroke — any CSS rule (even this
+       non-!important one) always wins over a presentation attribute set
+       via JS, so a stroke-based hover rule on the same hl-<key> rect
+       paintComponent() manages would silently override its selection-
+       state colour for as long as the mouse stayed put after a click
+       (this was a real, reported bug: deselecting while still hovering
+       left the highlight box visibly stuck, only clearing once the
+       mouse moved to a different component and this rule stopped
+       applying — filter never touches the same attribute, so it can't
+       fight with paintComponent() no matter how the two overlap). */
+    .comp-interactive { cursor: pointer; }
+    .comp-interactive:hover { filter: brightness(1.15); }
+  </style>
+</head>
+
+<body>
+  <!-- Hidden defs: one static CE voltage-divider reference circuit, same
+       WIRES/NODES convention and component values as bjt_knowledge_ac_
+       parameters.html's own ce-divider-ac (see this file's header
+       comment). -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <filter id="glow">
+        <feGaussianBlur stdDeviation="2" result="b" />
+        <feMerge>
+          <feMergeNode in="b" />
+          <feMergeNode in="SourceGraphic" />
+        </feMerge>
+      </filter>
+
+      <g id="bjt-npn-shape-large">
+        <circle cx="7" cy="0" r="48" fill="var(--colour-panel)" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+        <line id="bjt-base" x1="-42" y1="0" x2="0" y2="0" style="stroke: var(--colour-bjt)" stroke-width="2" />
+        <line x1="0" y1="-12" x2="0" y2="12" style="stroke: var(--colour-bjt)" stroke-width="2.5" />
+        <!-- Ids match actual circuit wiring, not just "which one's on
+             top" — this lead runs up to RC/VCC in ce-fault-circuit, so
+             it's the collector; the mirror-image one below runs down to
+             RE/GND, so it's the emitter. (Previously swapped — caught
+             when a short-CB arc built to reach "bjt-collector" visually
+             landed on the RE/GND-wired lead instead.) -->
+        <polyline id="bjt-collector" points="14,-48 14,-20 0,-8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+        <polyline id="bjt-emitter" points="14,48 14,20 0,8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+        <polygon points="12,18 1,14 6,8" style="fill: var(--colour-bjt)" />
+      </g>
+
+      <!-- ══ VOLTMETER SHAPE ══ -->
+      <g id="meter-shape">
+        <circle cx="0" cy="0" r="30" style="fill: var(--colour-meter-fill); stroke: var(--colour-red)" stroke-width="1.5" filter="url(#glow)" />
+        <line x1="-15" y1="-20" x2="15" y2="-20" style="stroke: var(--colour-red)" stroke-width="1.5"/>
+        <line x1="-15" y1="-14" x2="15" y2="-14" style="stroke: var(--colour-red)" stroke-width="1.5" stroke-dasharray="3,2"/>
+      </g>
+
+      <!-- ══ PRETEND AMMETER BADGE — defined once, instanced with <use> ══ -->
+      <g id="ammeter-shape">
+        <circle cx="0" cy="0" r="30" style="fill: var(--colour-ammeter-fill); stroke: var(--colour-current)"
+          stroke-width="1.5" filter="url(#glow)" />
+      </g>
+
+      <!-- ══ PROBE WIRE — 30px dashed stub ══ -->
+      <line id="probe-wire" x1="0" y1="0" x2="30" y2="0"
+        style="stroke: var(--colour-red)" stroke-width="1.5" stroke-dasharray="4,3" opacity=".8" />
+
+      <!-- ══ COUPLING CAPACITOR SHAPE — two plates ══ -->
+      <g id="cap-shape">
+        <rect x="-6" y="-12" width="12" height="24" style="fill: var(--colour-bg)" />
+        <line x1="-4" y1="-12" x2="-4" y2="12" style="stroke: var(--colour-capacitor)" stroke-width="2.5" />
+        <line x1="4" y1="-12" x2="4" y2="12" style="stroke: var(--colour-capacitor)" stroke-width="2.5" />
+      </g>
+
+      <!-- ══ OSCILLOSCOPE SHAPE ══ -->
+      <!-- 1. BASE SCOPE (No waveforms) -->
+      <g id="scope-base">
+        <rect x="-35" y="-25" width="70" height="50" rx="6" ry="6" style="fill: var(--colour-meter-fill); stroke: var(--colour-scope)" stroke-width="1.5" filter="url(#glow)"></rect>
+        <rect x="-28" y="-18" width="56" height="36" rx="3" ry="3" style="fill: #0d1117; stroke: var(--colour-scope)" stroke-width="1" opacity="0.8"></rect>
+        <line x1="-26" y1="0" x2="26" y2="0" style="stroke: var(--colour-scope)" stroke-width="0.75" stroke-dasharray="2,2" opacity="0.4"></line>
+        <line x1="0" y1="-16" x2="0" y2="16" style="stroke: var(--colour-scope)" stroke-width="0.75" stroke-dasharray="2,2" opacity="0.4"></line>
+      </g>
+
+      <!-- 2. WAVEFORM CH1 (Yellow Input) -->
+      <path id="wave-ch1" d="M -26 0 C -23.4 -14, -18.2 -14, -15.6 0 C -13 14, -7.8 14, -5.2 0 C -2.6 -14, 2.6 -14, 5.2 0 C 7.8 14, 13 14, 15.6 0 C 18.2 -14, 23.4 -14, 26 0" style="stroke: var(--colour-scope-input); fill: none;" stroke-width="1.0" stroke-linecap="round" stroke-linejoin="round"></path>
+      <line id="flat-ch1" x1="26" y1="0" x2="26" y2="0" style="stroke: var(--colour-scope-input)" stroke-width="0.75"></line>
+
+      <!-- 3. WAVEFORM CH2 (Cyan Output) -->
+      <path id="wave-ch2" d="M -26 0 C -23.4 14, -18.2 14, -15.6 0 C -13 -14, -7.8 -14, -5.2 0 C -2.6 14, 2.6 14, 5.2 0 C 7.8 -14, 13 -14, 15.6 0 C 18.2 14, 23.4 14, 26 0" style="stroke: var(--colour-scope-output); fill: none;" stroke-width="1.0" stroke-linecap="round" stroke-linejoin="round"></path>
+      <line id="flat-ch2" x1="-26" y1="0" x2="26" y2="0" style="stroke: var(--colour-scope-output)" stroke-width="0.75"></line>
+
+      <!-- ══ 3 COMBINATION SHAPES ══ -->
+
+      <!-- Combination A: Channel 1 Only -->
+      <!-- Scaled down from wave-ch1's own native amplitude, purely so the
+           scope icon has visible headroom (this file never actually shows
+           a healthy amplified output — Q1's output is dead, Q2's revealed
+           output is unity-gain, see scope-ch2-small-only's own comment). -->
+      <g id="scope-ch1-only">
+        <use href="#scope-base"></use>
+        <g clip-path="url(#scope-screen-clip)">
+          <use href="#wave-ch1" transform="scale(1, 0.45)"></use>
+        </g>
+      </g>
+
+      <!-- Combination A: Channel 1 Only -->
+      <g id="scope-ch1-flat-only">
+        <use href="#scope-base"></use>
+        <g clip-path="url(#scope-screen-clip)">
+          <use href="#flat-ch1"></use>
+        </g>
+      </g>
+
+      <!-- Combination B: Channel 2 Only -->
+      <g id="scope-ch2-only">
+        <use href="#scope-base"></use>
+        <g clip-path="url(#scope-screen-clip)">
+          <use href="#wave-ch2"></use>
+        </g>
+      </g>
+
+      <g id="scope-ch2-flat-only">
+        <use href="#scope-base"></use>
+        <g clip-path="url(#scope-screen-clip)">
+          <use href="#flat-ch2"></use>
+        </g>
+      </g>
+
+      <!-- Combination D: Channel 2, collapsed-gain amplitude — re′ = VT/IE
+           balloons to ≈1.5kΩ as IE collapses to ≈17.3µA (R1-high fault),
+           so Av = RC/(RE+re′) ≈ 1800/1773 ≈ 1.02 — essentially UNITY
+           gain, not the healthy ~6.3x. Matched to scope-ch1-only's own
+           0.45 scale (near enough 1:1 that the ~2% difference isn't worth
+           drawing) rather than bigger-than-input, so the icon reads as
+           "the amplifier has stopped amplifying" — still alive (distinct
+           from Q1's fully-dead flat line), just no longer gaining. -->
+      <g id="scope-ch2-small-only">
+        <use href="#scope-base"></use>
+        <g clip-path="url(#scope-screen-clip)">
+          <use href="#wave-ch2" transform="scale(1, 0.45)"></use>
+        </g>
+      </g>
+
+      <!-- ══ SCOPE WIRES ══ -->
+      <!-- Single master wire starting at the top edge of the scope -->
+      <marker id="probe-node-dot"
+              viewBox="-6 -6 12 12"
+              refX="0" refY="0"
+              markerWidth="12" markerHeight="12">
+        <circle cx="0" cy="0" r="2" style="fill: var(--colour-series); stroke: none;" />
+      </marker>
+
+      <!-- Master Wire using stroke-opacity instead of element opacity -->
+      <line id="scope-wire-v" x1="0" y1="-25" x2="0" y2="-90"
+            style="stroke: var(--colour-scope); stroke-width: 1.5; stroke-dasharray: 4,3; stroke-opacity: 0.8;"
+            marker-end="url(#probe-node-dot)" />
+          <!-- TOP CENTER    - no translate
+              TOP RIGHT     - transform="translate(25, 0)
+              TOP LEFT      - transform="translate(-25, 0)
+              BOTTOM CENTER - transform="scale(1, -1)
+              BOTTOM RIGHT  - transform="scale(1, -1) translate(-25, 0)
+              BOTTOM LEFT   - transform="scale(1, -1) translate(25, 0)
+          -->
+
+          <g id="ac-source-shape">
+        <circle cx="0" cy="0" r="24" fill="none" style="stroke: var(--colour-signal)" stroke-width="2" filter="url(#glow)" />
+        <path d="M -16,0 C -11,-14 -5,-14 0,0 C 5,14 11,14 16,0" fill="none" style="stroke: var(--colour-signal)" stroke-width="2.5" stroke-linecap="round" />
+      </g>
+
+      <g id="cap-shape">
+        <rect x="-4" y="-12" width="8" height="24" style="fill: var(--colour-panel)" />
+        <line x1="-4" y1="-12" x2="-4" y2="12" style="stroke: var(--colour-capacitor)" stroke-width="2.5" />
+        <line x1="4" y1="-12" x2="4" y2="12" style="stroke: var(--colour-capacitor)" stroke-width="2.5" />
+      </g>
+
+      <!-- Node/meter shapes — same convention as bjt_npn_troubleshoot_dc.html/
+           bjt_pnp_troubleshoot_ac.html's own PRETEND METERS, ported in here
+           so this knowledge quiz's reference circuit reads the same way as
+           the two DC/AC troubleshooter simulators. This file's own meters
+           are static (always show the healthy reading, never update) —
+           dropped the "Pretend"/live-value id plumbing those files need,
+           kept just the visual shapes. -->
+      <g id="node-shape">
+        <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5" />
+      </g>
+      <line id="probe-wire" x1="0" y1="0" x2="30" y2="0" style="stroke: var(--colour-red)" stroke-width="1.5"
+        stroke-dasharray="4,3" opacity=".8" />
+      <g id="meter-shape">
+        <circle cx="0" cy="0" r="30" style="fill: var(--colour-meter-fill); stroke: var(--colour-red)"
+          stroke-width="1.5" filter="url(#glow)" />
+        <line x1="-15" y1="-20" x2="15" y2="-20" style="stroke: var(--colour-red)" stroke-width="1.5" />
+        <line x1="-15" y1="-14" x2="15" y2="-14" style="stroke: var(--colour-red)" stroke-width="1.5"
+          stroke-dasharray="3,2" />
+      </g>
+
+      <!-- ══════════════════════════════════════════════════════════════════
+           CE-FAULT-CIRCUIT — same coordinates/values as bjt_knowledge_ac_
+           parameters.html's ce-divider-ac. NODE B/C/E marked with the
+           HEALTHY reference reading at each point — every fault question
+           reasons about how a given fault shifts these three numbers.
+           ══════════════════════════════════════════════════════════════ -->
+    </defs>
+  </svg>
+
+  <div class="crumb" id="crumb" data-current="Resistor Fault Circuit (Exploratory)"></div>
+  <header>
+    <h1>BJT Amplifier: Resistor Fault Circuit (Exploratory)</h1>
+    <p>Click-the-Circuit Format · R1/R2/RC/RE Open &amp; High Faults · Testbed</p>
+  </header>
+
+  <div class="quiz-wrap">
+
+    <!-- LEFT: circuit diagram -->
+    <div class="circuit-col">
+      <div class="circuit-panel">
+        <div class="panel-label" id="circuitRefLabel">Reference Circuit</div>
+        <svg id="circuitRefSvg" viewBox="-10 -135 690 695" xmlns="http://www.w3.org/2000/svg">
+      <g id="ce-fault-circuit">
+
+        <!-- ════════════════════ WIRES ════════════════════ -->
+
+        <!-- ── CENTER VERTICAL (R1/R2) ── -->
+        <line x1="200" y1="-70" x2="200" y2="535" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC rail down to GND -->
+
+        <!-- ── RIGHT VERTICAL (RC/RE── -->
+        <line x1="440" y1="-70" x2="440" y2="535" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC rail down to GND -->
+
+        <!-- ── VCC HORIZONTAL ── -->
+        <line x1="160" y1="-70" x2="480" y2="-70" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC rail (R1 column to RC column) -->
+        <circle cx="200" cy="-70" r="5" style="fill: var(--colour-series)" />
+        <circle cx="440" cy="-70" r="5" style="fill: var(--colour-series)" />
+
+        <!-- ── BOTTOM HORIZONTAL ── -->
+        <line x1="30" y1="535" x2="600" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="200" cy="535" r="5" style="fill: var(--colour-series)" />
+        <circle cx="440" cy="535" r="5" style="fill: var(--colour-series)" />
+
+        <!-- ── LEFT HORIZONTAL ── -->
+        <line x1="54" y1="245" x2="410" y2="245" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Source to Base node -->
+
+        <!-- ── RIGHT HORIZONTAL (Output) ── -->
+        <line x1="440" y1="165" x2="600" y2="165" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Collector pin, through C2, to output -->
+
+        <!-- ════════════════════ NODES — B/C/E probe points ════════════════════
+             Small circled-letter markers on the wire itself, same convention
+             as bjt_npn_troubleshoot_dc.html/bjt_pnp_troubleshoot_ac.html —
+             see PRETEND METERS below for the healthy-reading readouts these
+             connect to. -->
+
+        <circle cx="200" cy="245" r="5" style="fill: var(--colour-series)" />
+        <g transform="translate(225,270)">
+          <use href="#node-shape" />
+          <text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14" font-weight="bold">B</text>
+        </g>
+
+        <circle cx="440" cy="165" r="5" style="fill: var(--colour-series)" />
+        <g transform="translate(415,165)">
+          <use href="#node-shape" />
+          <text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14" font-weight="bold">C</text>
+        </g>
+
+        <circle cx="440" cy="310" r="5" style="fill: var(--colour-series)" />
+        <g transform="translate(465,310)">
+          <use href="#node-shape" />
+          <text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14" font-weight="bold">E</text>
+        </g>
+
+        <!-- ════════════════════ VOLTMETERS METERS  ════════════════════ -->
+
+        <g id="meterVB" transform="translate(295,300)">
+          <use href="#meter-shape" />
+          <text x="-45" y="-10" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">B</tspan></text>
+          <text id="meterVBValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">1.2</text>
+          <text id="meterVBUnit" x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle" font-size="14">V</text>
+          <rect id="hl-VB" x="-34" y="-36" width="68" height="72" rx="10" fill="none" stroke="transparent" stroke-width="2.5" />
+          <text id="badge-VB" x="42" y="-24" text-anchor="middle" font-size="16" font-weight="bold"></text>
+          <!-- Up/down ghost vs the healthy reading — same arrow+delta
+               convention as bjt_npn_troubleshoot_dc.html's own addGhost(),
+               hidden until a question's meterOverride supplies up/delta
+               (see syncMeterValues()). -->
+          <g id="meterVBGhost" display="none" transform="translate(0,55)">
+            <text id="meterVBGhostText" text-anchor="middle" font-weight="bold" font-family="'Share Tech Mono',monospace">
+              <tspan id="meterVBGhostArrow" font-size="18"></tspan>
+              <tspan id="meterVBGhostDelta" font-size="13" dx="-3"></tspan>
+            </text>
+          </g>
+        </g>
+
+        <g id="meterVC" transform="translate(340,175)">
+          <use href="#meter-shape" />
+          <text x="-45" y="-10" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">C</tspan></text>
+          <text id="meterVCValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">8.1</text>
+          <text id="meterVCUnit" x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle" font-size="14">V</text>
+          <rect id="hl-VC" x="-34" y="-36" width="68" height="72" rx="10" fill="none" stroke="transparent" stroke-width="2.5" />
+          <text id="badge-VC" x="42" y="-24" text-anchor="middle" font-size="16" font-weight="bold"></text>
+          <g id="meterVCGhost" display="none" transform="translate(0,55)">
+            <text id="meterVCGhostText" text-anchor="middle" font-weight="bold" font-family="'Share Tech Mono',monospace">
+              <tspan id="meterVCGhostArrow" font-size="18"></tspan>
+              <tspan id="meterVCGhostDelta" font-size="13" dx="-3"></tspan>
+            </text>
+          </g>
+        </g>
+
+        <g id="meterVE" transform="translate(535,310)">
+          <use href="#meter-shape" />
+          <text x="-45" y="-10" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">E</tspan></text>
+          <text id="meterVEValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">0.6</text>
+          <text id="meterVEUnit" x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle" font-size="14">V</text>
+          <rect id="hl-VE" x="-34" y="-36" width="68" height="72" rx="10" fill="none" stroke="transparent" stroke-width="2.5" />
+          <text id="badge-VE" x="42" y="-24" text-anchor="middle" font-size="16" font-weight="bold"></text>
+          <g id="meterVEGhost" display="none" transform="translate(0,55)">
+            <text id="meterVEGhostText" text-anchor="middle" font-weight="bold" font-family="'Share Tech Mono',monospace">
+              <tspan id="meterVEGhostArrow" font-size="18"></tspan>
+              <tspan id="meterVEGhostDelta" font-size="13" dx="-3"></tspan>
+            </text>
+          </g>
+        </g>
+
+        <!-- ════════════════════ AMMETERS METERS  ════════════════════ -->
+
+        <g id="ammeterICGroup" transform="translate(440,-10)">
+          <use href="#ammeter-shape" />
+          <text x="-45" y="-10" style="fill: var(--colour-current)" text-anchor="middle" font-size="14" font-weight="bold">I<tspan baseline-shift="sub" font-size="10">C</tspan></text>
+          <text id="ammeterICValue" x="0" y="-2" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">2.17</text>
+          <text id="ammeterICUnit" x="0" y="15" style="fill: var(--colour-current)" text-anchor="middle"
+            font-size="12">mA</text>
+          <rect id="hl-IC" x="-34" y="-36" width="68" height="72" rx="10" fill="none" stroke="transparent" stroke-width="2.5" />
+          <text id="badge-IC" x="42" y="-24" text-anchor="middle" font-size="16" font-weight="bold"></text>
+          <!-- To the right, not below like the VB/VC/VE ghosts — the
+               ammeter sits close to the GND rail (55px below), not enough
+               headroom for a two-glyph ghost without touching it. -->
+          <g id="ammeterICGroupGhost" display="none" transform="translate(40,4)">
+            <text id="ammeterICGroupGhostText" text-anchor="start" font-weight="bold" font-family="'Share Tech Mono',monospace">
+              <tspan id="ammeterICGroupGhostArrow" font-size="18"></tspan>
+              <tspan id="ammeterICGroupGhostDelta" font-size="13" dx="-3"></tspan>
+            </text>
+          </g>
+        </g>
+        <g id="ammeterIEGroup" transform="translate(440,480)">
+          <use href="#ammeter-shape" />
+          <text x="-45" y="-10" style="fill: var(--colour-current)" text-anchor="middle" font-size="14" font-weight="bold">I<tspan baseline-shift="sub" font-size="10">E</tspan></text>
+          <text id="ammeterValue" x="0" y="-2" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">2.18</text>
+          <text id="ammeterUnit" x="0" y="15" style="fill: var(--colour-current)" text-anchor="middle"
+            font-size="12">mA</text>
+          <rect id="hl-IE" x="-34" y="-36" width="68" height="72" rx="10" fill="none" stroke="transparent" stroke-width="2.5" />
+          <text id="badge-IE" x="42" y="-24" text-anchor="middle" font-size="16" font-weight="bold"></text>
+          <!-- To the right, not below like the VB/VC/VE ghosts — the
+               ammeter sits close to the GND rail (55px below), not enough
+               headroom for a two-glyph ghost without touching it. -->
+          <g id="ammeterIEGroupGhost" display="none" transform="translate(40,4)">
+            <text id="ammeterIEGroupGhostText" text-anchor="start" font-weight="bold" font-family="'Share Tech Mono',monospace">
+              <tspan id="ammeterIEGroupGhostArrow" font-size="18"></tspan>
+              <tspan id="ammeterIEGroupGhostDelta" font-size="13" dx="-3"></tspan>
+            </text>
+          </g>
+        </g>
+        <!-- ════════════════════ AC INPUT COMPONENTS ════════════════════ -->
+
+        <circle cx="50" cy="245" r="5" style="fill: var(--colour-signal)" />
+        <text x="20" y="248" style="fill: var(--colour-signal)" text-anchor="middle" font-size="16" font-weight="bold">input</text>
+
+        <g id="comp-C1" transform="translate(120,245)">
+          <use href="#cap-shape" />
+          <text x="0" y="-25" fill="var(--colour-capacitor-labels)" text-anchor="middle" font-size="13" font-weight="bold">C1</text>
+          <rect id="hl-C1" x="-16" y="-42" width="32" height="60" rx="6" fill="none" stroke="transparent" stroke-width="2.5" />
+          <text id="badge-C1" x="26" y="-24" text-anchor="middle" font-size="16" font-weight="bold"></text>
+        </g>
+
+        <!-- ════════════════════ AC OUTPUT COMPONENTS ════════════════════ -->
+
+        <g id="comp-C2" transform="translate(530,165)">
+          <use href="#cap-shape" />
+          <text x="0" y="-25" fill="var(--colour-capacitor-labels)" text-anchor="middle" font-size="13" font-weight="bold">C2</text>
+          <rect id="hl-C2" x="-16" y="-42" width="32" height="60" rx="6" fill="none" stroke="transparent" stroke-width="2.5" />
+          <text id="badge-C2" x="26" y="-24" text-anchor="middle" font-size="16" font-weight="bold"></text>
+        </g>
+        <circle cx="600" cy="165" r="5" style="fill: var(--colour-signal)" />
+        <text x="614" y="170" style="fill: var(--colour-signal)" text-anchor="start" font-size="16" font-weight="bold">output</text>
+
+
+          <!-- ════════════════════ SCOPES ════════════════════ -->
+          <!-- Both used to share id="scopeOutput" (harmless duplicate, since
+               nothing queried it by id) — given distinct comp-SCOPE_IN/
+               comp-SCOPE_OUT ids now that they're selectable targets too. -->
+          <!-- ════ Scope input  ════ -->
+          <g id="comp-SCOPE_IN" transform="translate(50,155)">
+            <use href="#scope-wire-v" transform="scale(1, -1) translate(25, 0)"></use>
+            <!-- Render Channel 1 shape -->
+            <use id="scopeShape-SCOPE_IN" href="#scope-ch1-only"></use>
+            <rect id="hl-SCOPE_IN" x="-40" y="-30" width="80" height="60" rx="8" fill="none" stroke="transparent" stroke-width="2.5" />
+            <text id="badge-SCOPE_IN" x="42" y="-24" text-anchor="middle" font-size="16" font-weight="bold"></text>
+          </g>
+
+          <!-- ════ Scope output  ════ -->
+          <g id="comp-SCOPE_OUT" transform="translate(580,75)">
+            <use href="#scope-wire-v" transform="scale(1, -1) translate(0, 0)"></use>
+            <!-- Render Channel 2 shape -->
+            <use id="scopeShape-SCOPE_OUT" href="#scope-ch2-flat-only"></use>
+            <rect id="hl-SCOPE_OUT" x="-40" y="-30" width="80" height="60" rx="8" fill="none" stroke="transparent" stroke-width="2.5" />
+            <text id="badge-SCOPE_OUT" x="48" y="-24" text-anchor="middle" font-size="16" font-weight="bold"></text>
+          </g>
+
+        <!-- ════════════════════ VCC ════════════════════ -->
+
+        <g transform="translate(490,-80)">
+          <text x="0" y="15" style="fill: var(--colour-voltage-label)" text-anchor="start" font-size="15" font-weight="bold">
+            V<tspan baseline-shift="sub" font-size="10">CC</tspan>
+             <tspan style="fill: var(--colour-text)" font-size="14">+ 12 V</tspan>
+          </text>
+        </g>
+
+        <text x="120" y="560" fill="var(--colour-gnd)" text-anchor="middle" font-size="14" font-weight="bold">Common</text>
+
+        <!-- ════════════════════ Q1 — NPN ════════════════════ -->
+
+        <g transform="translate(426,246)">
+          <use href="#bjt-npn-shape-large" />
+          <text x="60" y="-35" fill="var(--colour-bjt-labels)" text-anchor="middle" font-size="14" font-weight="bold">Q1</text>
+          <text x="-30" y="45" fill="var(--colour-bjt-labels)" text-anchor="end" font-size="12">BC549</text>
+          <text x="60" y="0" fill="var(--colour-bjt-labels)" text-anchor="start" font-size="14" font-weight="bold">β = 200</text>
+        </g>
+
+        <!-- ════════════════════ RESISTORS ════════════════════ -->
+        <!-- Two distinct fault markers per resistor, overlaid on the body:
+             an X (fault-x-<key>) for OPEN, shown when data.openResistor
+             names this key; an up-arrow (fault-high-<key>) for HIGH,
+             shown when data.highResistor names this key (see
+             syncResistorFaults()). The resistor's own printed label never
+             changes either way — the marker is the only on-screen cue
+             that anything's wrong at all. -->
+
+        <g id="comp-R1" transform="translate(185,50)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R1</text>
+          <text x="65" y="40" text-anchor="middle" font-size="16"><tspan fill="var(--colour-text)">120</tspan><tspan fill="var(--colour-resistor-labels)"> kΩ</tspan></text>
+          <rect id="hl-R1" x="-28" y="-8" width="66" height="96" rx="6" fill="none" stroke="transparent" stroke-width="2.5" />
+          <text id="badge-R1" x="48" y="10" text-anchor="middle" font-size="16" font-weight="bold"></text>
+          <g id="fault-x-R1" transform="translate(15,40)" display="none">
+            <line x1="-10" y1="-10" x2="10" y2="10" style="stroke: var(--colour-ui-wrong)" stroke-width="3.5" stroke-linecap="round" />
+            <line x1="-10" y1="10" x2="10" y2="-10" style="stroke: var(--colour-ui-wrong)" stroke-width="3.5" stroke-linecap="round" />
+          </g>
+          <g id="fault-high-R1" transform="translate(15,40)" display="none">
+            <line x1="0" y1="-25" x2="0" y2="25" style="stroke: var(--colour-ui-wrong)" stroke-width="3.5" stroke-linecap="round" />
+            <line x1="0" y1="-25" x2="10" y2="0" style="stroke: var(--colour-ui-wrong)" stroke-width="3.5" stroke-linecap="round" />
+            <line x1="0" y1="-25" x2="-10" y2="0" style="stroke: var(--colour-ui-wrong)" stroke-width="3.5" stroke-linecap="round" />
+          </g>
+        </g>
+
+        <g id="comp-R2" transform="translate(185,345)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R2</text>
+          <text x="65" y="40" text-anchor="middle" font-size="16"><tspan fill="var(--colour-text)">15</tspan><tspan fill="var(--colour-resistor-labels)"> kΩ</tspan></text>
+          <rect id="hl-R2" x="-28" y="-8" width="66" height="96" rx="6" fill="none" stroke="transparent" stroke-width="2.5" />
+          <text id="badge-R2" x="48" y="10" text-anchor="middle" font-size="16" font-weight="bold"></text>
+          <g id="fault-x-R2" transform="translate(15,40)" display="none">
+            <line x1="-10" y1="-10" x2="10" y2="10" style="stroke: var(--colour-ui-wrong)" stroke-width="3.5" stroke-linecap="round" />
+            <line x1="-10" y1="10" x2="10" y2="-10" style="stroke: var(--colour-ui-wrong)" stroke-width="3.5" stroke-linecap="round" />
+          </g>
+          <g id="fault-high-R2" transform="translate(15,40)" display="none">
+            <line x1="0" y1="-25" x2="0" y2="25" style="stroke: var(--colour-ui-wrong)" stroke-width="3.5" stroke-linecap="round" />
+            <line x1="0" y1="-25" x2="10" y2="0" style="stroke: var(--colour-ui-wrong)" stroke-width="3.5" stroke-linecap="round" />
+            <line x1="0" y1="-25" x2="-10" y2="0" style="stroke: var(--colour-ui-wrong)" stroke-width="3.5" stroke-linecap="round" />
+          </g>
+        </g>
+
+        <g id="comp-RC" transform="translate(425,50)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">RC</text>
+          <text x="65" y="40" text-anchor="middle" font-size="16"><tspan fill="var(--colour-text)">1.8</tspan><tspan fill="var(--colour-resistor-labels)"> kΩ</tspan></text>
+          <rect id="hl-RC" x="-28" y="-8" width="66" height="96" rx="6" fill="none" stroke="transparent" stroke-width="2.5" />
+          <text id="badge-RC" x="48" y="10" text-anchor="middle" font-size="16" font-weight="bold"></text>
+          <g id="fault-x-RC" transform="translate(15,40)" display="none">
+            <line x1="-10" y1="-10" x2="10" y2="10" style="stroke: var(--colour-ui-wrong)" stroke-width="3.5" stroke-linecap="round" />
+            <line x1="-10" y1="10" x2="10" y2="-10" style="stroke: var(--colour-ui-wrong)" stroke-width="3.5" stroke-linecap="round" />
+          </g>
+          <g id="fault-high-RC" transform="translate(15,40)" display="none">
+            <line x1="0" y1="-25" x2="0" y2="25" style="stroke: var(--colour-ui-wrong)" stroke-width="3.5" stroke-linecap="round" />
+            <line x1="0" y1="-25" x2="10" y2="0" style="stroke: var(--colour-ui-wrong)" stroke-width="3.5" stroke-linecap="round" />
+            <line x1="0" y1="-25" x2="-10" y2="0" style="stroke: var(--colour-ui-wrong)" stroke-width="3.5" stroke-linecap="round" />
+          </g>
+        </g>
+
+        <g id="comp-RE" transform="translate(425,345)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">RE</text>
+          <text x="65" y="40" text-anchor="middle" font-size="16"><tspan fill="var(--colour-text)">270</tspan><tspan fill="var(--colour-resistor-labels)"> Ω</tspan></text>
+          <rect id="hl-RE" x="-28" y="-8" width="66" height="96" rx="6" fill="none" stroke="transparent" stroke-width="2.5" />
+          <text id="badge-RE" x="48" y="10" text-anchor="middle" font-size="16" font-weight="bold"></text>
+          <g id="fault-x-RE" transform="translate(15,40)" display="none">
+            <line x1="-10" y1="-10" x2="10" y2="10" style="stroke: var(--colour-ui-wrong)" stroke-width="3.5" stroke-linecap="round" />
+            <line x1="-10" y1="10" x2="10" y2="-10" style="stroke: var(--colour-ui-wrong)" stroke-width="3.5" stroke-linecap="round" />
+          </g>
+          <g id="fault-high-RE" transform="translate(15,40)" display="none">
+            <line x1="0" y1="-25" x2="0" y2="25" style="stroke: var(--colour-ui-wrong)" stroke-width="3.5" stroke-linecap="round" />
+            <line x1="0" y1="-25" x2="10" y2="0" style="stroke: var(--colour-ui-wrong)" stroke-width="3.5" stroke-linecap="round" />
+            <line x1="0" y1="-25" x2="-10" y2="0" style="stroke: var(--colour-ui-wrong)" stroke-width="3.5" stroke-linecap="round" />
+          </g>
+        </g>
+
+      </g>
+          <g id="xyRuler" display="none"></g>
+        </svg>
+      </div>
+    </div>
+
+    <!-- RIGHT: question -->
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <!-- Single reusable question panel — populated from QUESTIONS[cur] by renderQuestion() -->
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+          <div class="options" id="qOptions"></div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Summary -->
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+
+  </div>
+
+  <script>
+    const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
+    const DEFAULT_VIEWBOX = '-10 -100 690 670';
+    // Stacked numerator/denominator fraction, same helper + .working-frac
+    // CSS (already in quiz-common.css) as bjt_npn_troubleshoot_dc.html's
+    // own fault-analysis workings.
+    function frac(num, den) { return `<span class="working-frac"><span class="num">${num}</span><span class="den">${den}</span></span>`; }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS — see bjt_knowledge_basics.html's header comment for the
+    // full field reference. External resistor faults (R1/R2/RC/RE, open
+    // and short) — see this file's own header comment for the cross-
+    // question relationships (R1-open≡R2-short, R1-short≈R2-open, RC's
+    // own faults being the smallest-footprint pair, RE-open's floating
+    // VE). VCE_sat=0.2V used throughout for any fault landing the
+    // transistor in saturation, matching this project's own established
+    // convention (bjt_npn_troubleshoot_dc.html and the original
+    // bjt_knowledge_bjt_fault_finding.html both use the same value).
+    // ══════════════════════════════════════════════════════════════════════
+
+    const QUESTIONS = [
+      {
+        // RE HIGH: RE doubles in value (270Ω→540Ω, mult=2 — same
+        // magnitude convention as R1-high in the external-component
+        // testbed). Per the teacher's own course model, the base-bias
+        // divider is treated as STIFF enough that VB (and hence VE)
+        // don't move when RE changes — only the emitter current (via
+        // Ohm's Law directly on the now-bigger RE) and everything
+        // downstream of it respond. This is a coarser, teaching-level
+        // simplification of the full Thevenin recompute (which would
+        // give small but real shifts in VB/VE too — see R1-high/R2-high
+        // for where that full recompute IS used) — matched here
+        // specifically because the teacher's own worked answer for this
+        // exact question states VB and VE unchanged, IC/IE down, VC up.
+        //   IE = IC = VE / RE = 0.6 V / 540 Ω = 1.11 mA (was 2.18 mA)
+        //   VC = 12 V − 1.11 mA × 1.8 kΩ = 10.00 V (up from 8.10 V)
+        // VB/VE stay at their healthy 1.2 V / 0.6 V — genuinely UNAFFECTED
+        // in this model, not just "too small a shift to show".
+        circuitLabel: 'Common Emitter (voltage-divider bias, RE unbypassed)',
+        kind: 'multi',
+        interactiveCircuit: true,
+        highResistor: 'RE',
+        meterOverride: (answered) => answered
+          ? {
+            VB: { value: '1.2', unit: 'V' },
+            VC: { value: '10.00', unit: 'V', up: true, delta: '+1.90V' },
+            VE: { value: '0.6', unit: 'V' },
+            IC: { value: '1.11', unit: 'mA', up: false, delta: '−1.06mA' },
+            IE: { value: '1.11', unit: 'mA', up: false, delta: '−1.07mA' },
+          }
+          : {
+            VB: { value: '?', unit: 'V' }, VC: { value: '?', unit: 'V' },
+            VE: { value: '?', unit: 'V' }, IC: { value: '?', unit: 'mA' }, IE: { value: '?', unit: 'mA' },
+          },
+        scopeOverride: (answered) => answered ? { SCOPE_OUT: 'scope-ch2-only' } : null,
+        text: () => 'Fault: <b style="color:var(--colour-resistor-labels)">RE</b> has gone <b style="color:var(--colour-ui-wrong)">HIGH</b> in value.',
+        hint: () => 'The base divider is comparatively stiff against RE\'s own value — treat VB, and hence VE, as fixed at their healthy readings. If VE stays the same but RE doubles, what does Ohm\'s Law say has to happen to IE?',
+        options: () => shuffle([
+          { key: 'VB', label: 'VB meter', type: 'wrong' },
+          { key: 'VC', label: 'VC meter', type: 'correct' },
+          { key: 'VE', label: 'VE meter', type: 'wrong' },
+          { key: 'IC', label: 'IC ammeter', type: 'correct' },
+          { key: 'IE', label: 'IE ammeter', type: 'correct' },
+          { key: 'SCOPE_OUT', label: 'Output scope', type: 'correct' },
+          { key: 'SCOPE_IN', label: 'Input scope', type: 'wrong' },
+        ]),
+        correctExplain: (st) => {
+          const keys = st.opts.map(o => o.type === 'correct' ? o.key : null).filter(Boolean).join(', ');
+          return `${keys} — VB and VE are held fixed by the stiff divider, so only the emitter current (and everything downstream of it) responds`;
+        },
+        working: (st) => {
+          const wrongKeys = st.opts.map(o => o.type === 'wrong' ? o.key : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-section">Identifying the fault:</div>
+    <div class="diagnosis-block">
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 1: VB and VE stay exactly at their healthy values</div>
+        <div class="symptom-body">The divider (<span class="colour-resistor">R<sub>1</sub></span>/<span class="colour-resistor">R<sub>2</sub></span>) is treated as stiff enough that its own output voltage doesn't depend on what <span class="colour-resistor">R<sub>E</sub></span> happens to be — <span class="colour-voltage">V<sub>B</sub></span> stays at 1.2 V, and since <span class="colour-bjt">V<sub>BE</sub></span> is fixed, <span class="colour-voltage">V<sub>E</sub></span> stays at 0.6 V too. Neither one has any path back to <span class="colour-resistor">R<sub>E</sub></span>'s own value in this model.</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 2: the SAME emitter voltage now has to push current through a BIGGER resistor</div>
+        <div class="symptom-body">With <span class="colour-voltage">V<sub>E</sub></span> unchanged and <span class="colour-resistor">R<sub>E</sub></span> doubled, Ohm's Law (<span class="colour-current">I<sub>E</sub></span> = <span class="colour-voltage">V<sub>E</sub></span>/<span class="colour-resistor">R<sub>E</sub></span>) forces the current to roughly halve — a direct, mechanical consequence of the fixed-VE model, not a base-drive calculation.</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 3: less collector current means less drop across RC, so VC rises</div>
+        <div class="symptom-body">Same reasoning as every other fault in this file that drops collector current: less current through <span class="colour-resistor">R<sub>C</sub></span> means less voltage dropped across it, so <span class="colour-voltage">V<sub>C</sub></span> moves up toward <span class="colour-supply">V<sub>CC</sub></span>.</div>
+      </div>
+    </div>
+    <div class="working-section">Applying the formulas:</div>
+
+    <div class="working-step">Emitter voltage — held fixed by the stiff divider, not recalculated:</div>
+    <div class="working-line"><span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-result">0.6 V</span> (unchanged from healthy)</div>
+
+    <div class="working-step">Emitter current — Ohm's Law directly on the new RE:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>E</sub></span> = ${frac('<span class="colour-voltage">V<sub>E</sub></span>', '<span class="colour-resistor">R<sub>E</sub></span>')}</div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>E</sub></span> = ${frac('0.6 V', '540 Ω')}</div>
+    <div class="working-total"><span class="colour-current">I<sub>E</sub></span> = <span class="colour-result">1.11 mA</span></div>
+    <div class="working-line">(<span class="colour-current">I<sub>C</sub></span> tracks <span class="colour-current">I<sub>E</sub></span> closely enough here that both ammeters read the same 1.11 mA.)</div>
+
+    <div class="working-step">Collector voltage:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-supply">V<sub>CC</sub></span> − <span class="colour-current">I<sub>C</sub></span> × <span class="colour-resistor">R<sub>C</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>C</sub></span> = 12 V − 1.11 mA × 1.8 kΩ</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-result">10.00 V</span></div>
+
+    <div class="working-step" style="margin-top:.6rem">Output scope:</div>
+    <div class="working-line">A bigger RE and a lower IE both push re′ up and gain down — a real, visible reduction, though the closest available trace is the same full-scale shape used for smaller shifts elsewhere in this file.</div>
+    <div class="working-step" style="margin-top:.6rem">${wrongKeys} — untouched:</div>
+    <div class="working-line"><span class="colour-voltage">V<sub>B</sub></span> and <span class="colour-voltage">V<sub>E</sub></span> stay healthy for the reason above, and the input scope is upstream of the whole amplifier regardless of what's wrong inside it.</div>`;
+        }
+      },
+      {
+        // R2 OPEN: no pull-down on the base at all — R1 alone drives it,
+        // overdriving the transistor into the SAME deep saturation as
+        // R1-short (RC+RE limited, not base-drive limited), but this
+        // time VB is a computable, modest value since R1's own 120kΩ
+        // genuinely limits how much base current is available (unlike
+        // the R1-short case, where R1 provides no limiting at all).
+        // Verified self-consistent: available IB from R1 given this VB
+        // (≈82µA) comfortably exceeds the ≈29µA minimum needed to
+        // sustain the saturation-clamped IC, confirming saturation
+        // rather than active-mode operation.
+        circuitLabel: 'Common Emitter (voltage-divider bias, RE unbypassed)',
+        kind: 'multi',
+        interactiveCircuit: true,
+        openResistor: 'R2',
+        meterOverride: (answered) => answered
+          ? {
+            VB: { value: '2.14', unit: 'V', up: true, delta: '+0.94V' },
+            VC: { value: '1.74', unit: 'V', up: false, delta: '−6.36V' },
+            VE: { value: '1.54', unit: 'V', up: true, delta: '+0.94V' },
+            IC: { value: '5.62', unit: 'mA', up: true, delta: '+3.45mA' },
+            IE: { value: '5.70', unit: 'mA', up: true, delta: '+3.52mA' },
+          }
+          : {
+            VB: { value: '?', unit: 'V' }, VC: { value: '?', unit: 'V' },
+            VE: { value: '?', unit: 'V' }, IC: { value: '?', unit: 'mA' }, IE: { value: '?', unit: 'mA' },
+          },
+        text: () => 'Fault: <b style="color:var(--colour-resistor-labels)">R2</b> has failed <b style="color:var(--colour-ui-wrong)">OPEN</b>-circuit.',
+        hint: () => 'With no pull-down left on the base, R1 alone is driving it — hard. Check whether the collector circuit can actually sustain the collector current that much base drive would demand in normal (active-mode) operation.',
+        options: () => shuffle([
+          { key: 'VB', label: 'VB meter', type: 'correct' },
+          { key: 'VC', label: 'VC meter', type: 'correct' },
+          { key: 'VE', label: 'VE meter', type: 'correct' },
+          { key: 'IC', label: 'IC ammeter', type: 'correct' },
+          { key: 'IE', label: 'IE ammeter', type: 'correct' },
+          { key: 'SCOPE_OUT', label: 'Output scope', type: 'correct' },
+          { key: 'SCOPE_IN', label: 'Input scope', type: 'wrong' },
+        ]),
+        correctExplain: (st) => {
+          const keys = st.opts.map(o => o.type === 'correct' ? o.key : null).filter(Boolean).join(', ');
+          return `${keys} — R1 overdrives the base with nothing left to oppose it, saturating the transistor`;
+        },
+        working: (st) => {
+          const wrongKeys = st.opts.map(o => o.type === 'wrong' ? o.key : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-section">Identifying the fault:</div>
+    <div class="diagnosis-block">
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 1: Base voltage rises well above normal (VB ↑ +0.94 V), not toward VCC</div>
+        <div class="symptom-body">Unlike R1-shorted (which pins the base essentially to <span class="colour-supply">V<sub>CC</sub></span>), R1 itself is still fully intact here — its own 120 kΩ genuinely limits how much current can reach the base. The result is a real, computable overdrive voltage, not a dead pin to the rail.</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 2: Still enough to force deep saturation</div>
+        <div class="symptom-body">Checking the numbers: R1 alone can supply roughly 82 µA of base current here, but saturating this collector circuit only needs about 29 µA — comfortably less. Since there's more base drive available than the collector-emitter path can ever convert into current (limited by <span class="colour-resistor">R<sub>C</sub></span>+<span class="colour-resistor">R<sub>E</sub></span>), the transistor saturates, landing on the exact same <span class="colour-current">I<sub>E</sub></span> an R1-short fault gives.</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">IC and IE genuinely disagree here — unlike R1-short</div>
+        <div class="symptom-body">Because R1 is still intact, its own current IS computable — and it's NOT negligible compared to IE (about 1.4%), so subtracting it out gives a slightly smaller IC (5.62 mA) than IE (5.70 mA), a real, calculable split rather than an "unknowable" one.</div>
+      </div>
+    </div>
+    <div class="working-section">Applying the formulas:</div>
+
+    <div class="working-step">Deep saturation — IE limited by RC+RE, not by base drive:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>E</sub></span> = ${frac('<span class="colour-supply">V<sub>CC</sub></span> − <span class="colour-bjt">V<sub>CE(sat)</sub></span>', '<span class="colour-resistor">R<sub>C</sub></span> + <span class="colour-resistor">R<sub>E</sub></span>')}</div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>E</sub></span> = ${frac('12 V − 0.2 V', '1.8 kΩ + 270 Ω')}</div>
+    <div class="working-total"><span class="colour-current">I<sub>E</sub></span> = <span class="colour-result">5.70 mA</span></div>
+
+    <div class="working-step">Emitter voltage:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-current">I<sub>E</sub></span> × <span class="colour-resistor">R<sub>E</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>E</sub></span> = 5.70 mA × 270 Ω</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-result">1.54 V</span></div>
+
+    <div class="working-step">Collector voltage:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-voltage">V<sub>E</sub></span> + <span class="colour-bjt">V<sub>CE(sat)</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>C</sub></span> = 1.54 V + 0.2 V</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-result">1.74 V</span></div>
+
+    <div class="working-step">Base voltage:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-voltage">V<sub>E</sub></span> + <span class="colour-bjt">V<sub>BE</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>B</sub></span> = 1.54 V + 0.6 V</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-result">2.14 V</span></div>
+
+    <div class="working-step">IC ammeter — the small but real base current genuinely subtracts from IE:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>B</sub></span> = ${frac('<span class="colour-supply">V<sub>CC</sub></span> − <span class="colour-voltage">V<sub>B</sub></span>', '<span class="colour-resistor">R<sub>1</sub></span>')}</div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>B</sub></span> = ${frac('12 V − 2.14 V', '120 kΩ')}</div>
+    <div class="working-total"><span class="colour-current">I<sub>B</sub></span> = <span class="colour-result">82.2 µA</span></div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>C</sub></span> = <span class="colour-current">I<sub>E</sub></span> − <span class="colour-current">I<sub>B</sub></span> = 5.70 mA − 0.0822 mA</div>
+    <div class="working-total"><span class="colour-current">I<sub>C</sub></span> = <span class="colour-result">5.62 mA</span></div>
+
+    <div class="working-step" style="margin-top:.6rem">Output scope:</div>
+    <div class="working-line">A saturated transistor has no linear region left to amplify through — the output is dead.</div>
+    <div class="working-step" style="margin-top:.6rem">${wrongKeys} — untouched:</div>
+    <div class="working-line">The input scope probes the external signal source directly, upstream of the whole amplifier — nothing happening inside the amplifier can reach back and change what the signal generator itself is producing.</div>`;
+        }
+      },
+      {
+        // R1 OPEN: no path from VCC to the base at all — R2 alone pulls
+        // the base toward ground, and since VE can never go negative
+        // (its only path is through RE to ground), VBE can never become
+        // positive, so the transistor is fully cut off. R2 itself then
+        // carries no current either (nothing pulls against it once the
+        // transistor stops drawing), so it drops nothing — VB settles at
+        // a clean, exact 0V, not just "low".
+        circuitLabel: 'Common Emitter (voltage-divider bias, RE unbypassed)',
+        kind: 'multi',
+        interactiveCircuit: true,
+        openResistor: 'R1',
+        meterOverride: (answered) => answered
+          ? {
+            VB: { value: '0.0', unit: 'V', up: false, delta: '−1.20V' },
+            VC: { value: '12.0', unit: 'V', up: true, delta: '+3.90V' },
+            VE: { value: '0.0', unit: 'V', up: false, delta: '−0.60V' },
+            IC: { value: '0.00', unit: 'mA', up: false, delta: '−2.17mA' },
+            IE: { value: '0.00', unit: 'mA', up: false, delta: '−2.18mA' },
+          }
+          : {
+            VB: { value: '?', unit: 'V' }, VC: { value: '?', unit: 'V' },
+            VE: { value: '?', unit: 'V' }, IC: { value: '?', unit: 'mA' }, IE: { value: '?', unit: 'mA' },
+          },
+        text: () => 'Fault: <b style="color:var(--colour-resistor-labels)">R1</b> has failed <b style="color:var(--colour-ui-wrong)">OPEN</b>-circuit.',
+        hint: () => 'With no path from VCC through R1, only R2 is left pulling the base — toward WHICH rail? And if the base can never rise above ground, can the base-emitter junction ever forward-bias at all?',
+        options: () => shuffle([
+          { key: 'VB', label: 'VB meter', type: 'correct' },
+          { key: 'VC', label: 'VC meter', type: 'correct' },
+          { key: 'VE', label: 'VE meter', type: 'correct' },
+          { key: 'IC', label: 'IC ammeter', type: 'correct' },
+          { key: 'IE', label: 'IE ammeter', type: 'correct' },
+          { key: 'SCOPE_OUT', label: 'Output scope', type: 'correct' },
+          { key: 'SCOPE_IN', label: 'Input scope', type: 'wrong' },
+        ]),
+        correctExplain: (st) => {
+          const keys = st.opts.map(o => o.type === 'correct' ? o.key : null).filter(Boolean).join(', ');
+          return `${keys} — with no pull-up left, R2 grounds the base and the transistor is fully cut off`;
+        },
+        working: (st) => {
+          const wrongKeys = st.opts.map(o => o.type === 'wrong' ? o.key : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-section">Identifying the fault:</div>
+    <div class="diagnosis-block">
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 1: Base voltage crashes to a clean, exact 0 V</div>
+        <div class="symptom-body">With <span class="colour-resistor">R<sub>1</sub></span> open, nothing pulls the base UP from <span class="colour-supply">V<sub>CC</sub></span> any more — only <span class="colour-resistor">R<sub>2</sub></span> remains, pulling it DOWN toward ground. Once the transistor is fully cut off (see Symptom 2), <span class="colour-resistor">R<sub>2</sub></span> itself carries no current either, so it drops nothing — the base settles at a clean 0 V, not just "low".</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 2: The transistor is fully cut off (IC, IE both 0.00 mA)</div>
+        <div class="symptom-body"><span class="colour-current">I<sub>E</sub></span> can only flow out through <span class="colour-resistor">R<sub>E</sub></span> to ground, which forces <span class="colour-voltage">V<sub>E</sub></span> ≥ 0 V always. With <span class="colour-voltage">V<sub>B</sub></span> pulled to 0 V too, <span class="colour-bjt">V<sub>BE</sub></span> = <span class="colour-voltage">V<sub>B</sub></span> − <span class="colour-voltage">V<sub>E</sub></span> can never become positive — no forward bias is possible, so <span class="colour-current">I<sub>B</sub></span> = <span class="colour-current">I<sub>C</sub></span> = <span class="colour-current">I<sub>E</sub></span> = 0 exactly.</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">Worth noting: this is DC-identical to a completely different fault — R2 shorted</div>
+        <div class="symptom-body">Pinning the base to ground gives the exact same result whether R1 breaks open (removing the pull-up) or R2 fails shorted (force-grounding the base directly) — same lesson as this project's own base-open/emitter-open pair: identical meter readings, genuinely different root causes.</div>
+      </div>
+    </div>
+    <div class="working-section">Applying the formulas:</div>
+
+    <div class="working-step">Collector current (fully cut off):</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>C</sub></span> = β × <span class="colour-current">I<sub>B</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>C</sub></span> = 200 × 0 A</div>
+    <div class="working-total"><span class="colour-current">I<sub>C</sub></span> = <span class="colour-result">0.00 mA</span></div>
+
+    <div class="working-step">Emitter current:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>E</sub></span> = <span class="colour-current">I<sub>B</sub></span> + <span class="colour-current">I<sub>C</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>E</sub></span> = 0 A + 0 A</div>
+    <div class="working-total"><span class="colour-current">I<sub>E</sub></span> = <span class="colour-result">0.00 mA</span></div>
+
+    <div class="working-step">Emitter voltage:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-current">I<sub>E</sub></span> × <span class="colour-resistor">R<sub>E</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>E</sub></span> = 0.00 mA × 270 Ω</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-result">0.0 V</span></div>
+
+    <div class="working-step">Collector voltage:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-supply">V<sub>CC</sub></span> − <span class="colour-current">I<sub>C</sub></span> × <span class="colour-resistor">R<sub>C</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>C</sub></span> = 12 V − 0.00 mA × 1.8 kΩ</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-result">12.0 V</span></div>
+
+    <div class="working-step" style="margin-top:.6rem">Output scope:</div>
+    <div class="working-line">A fully cut-off transistor can't amplify anything — the output is completely dead.</div>
+    <div class="working-step" style="margin-top:.6rem">${wrongKeys} — untouched:</div>
+    <div class="working-line">The input scope probes the external signal source directly, upstream of the whole amplifier — nothing happening inside a cut-off transistor can reach back and change what the signal generator itself is producing.</div>`;
+        }
+      },
+      {
+        // RC OPEN: the base-emitter loop doesn't touch RC or the
+        // collector at all, so it's UNCHANGED — matching this project's
+        // own established convention (bjt_knowledge_bjt_fault_finding.
+        // html's own RC-open question) that IB/IE stay healthy and only
+        // VCE (hence VC) collapses toward saturation. The IC ammeter,
+        // though, sits IN SERIES with RC itself — with the wire
+        // literally broken, it reads a true, exact 0.00mA, even while
+        // the IE ammeter (a physically different point in the circuit)
+        // keeps reading its healthy value. Smallest-footprint OPEN fault
+        // in this file, mirroring why "collector lead open" was smallest
+        // in the internal-lead testbed — RC sits outside the base-bias
+        // feedback loop entirely.
+        circuitLabel: 'Common Emitter (voltage-divider bias, RE unbypassed)',
+        kind: 'multi',
+        interactiveCircuit: true,
+        openResistor: 'RC',
+        meterOverride: (answered) => answered
+          ? {
+            VB: { value: '1.2', unit: 'V' },
+            VC: { value: '0.8', unit: 'V', up: false, delta: '−7.30V' },
+            VE: { value: '0.6', unit: 'V' },
+            IC: { value: '0.00', unit: 'mA', up: false, delta: '−2.17mA' },
+            IE: { value: '2.18', unit: 'mA' },
+          }
+          : {
+            VB: { value: '?', unit: 'V' }, VC: { value: '?', unit: 'V' },
+            VE: { value: '?', unit: 'V' }, IC: { value: '?', unit: 'mA' }, IE: { value: '?', unit: 'mA' },
+          },
+        text: () => 'Fault: <b style="color:var(--colour-resistor-labels)">RC</b> has failed <b style="color:var(--colour-ui-wrong)">OPEN</b>-circuit.',
+        hint: () => 'The base-bias network (R1, R2, the base-emitter junction, RE) never touches RC at all — does an RC fault have any way to reach back and change what that loop is doing? Then think about what happens to a transistor that\'s still fully "on" but has nowhere to push its collector current.',
+        options: () => shuffle([
+          { key: 'VB', label: 'VB meter', type: 'wrong' },
+          { key: 'VC', label: 'VC meter', type: 'correct' },
+          { key: 'VE', label: 'VE meter', type: 'wrong' },
+          { key: 'IC', label: 'IC ammeter', type: 'correct' },
+          { key: 'IE', label: 'IE ammeter', type: 'wrong' },
+          { key: 'SCOPE_OUT', label: 'Output scope', type: 'correct' },
+          { key: 'SCOPE_IN', label: 'Input scope', type: 'wrong' },
+        ]),
+        correctExplain: (st) => {
+          const keys = st.opts.map(o => o.type === 'correct' ? o.key : null).filter(Boolean).join(', ');
+          return `${keys} only — the base-emitter loop never needed RC at all`;
+        },
+        working: (st) => {
+          const wrongKeys = st.opts.map(o => o.type === 'wrong' ? o.key : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-section">Identifying the fault:</div>
+    <div class="diagnosis-block">
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 1: VB, VE and IE are all perfectly HEALTHY</div>
+        <div class="symptom-body">The base-bias loop (<span class="colour-resistor">R<sub>1</sub></span>/<span class="colour-resistor">R<sub>2</sub></span> → base → junction → emitter → <span class="colour-resistor">R<sub>E</sub></span> → ground) doesn't route through <span class="colour-resistor">R<sub>C</sub></span> anywhere — so it keeps running exactly as designed, still demanding its usual base and emitter current.</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 2: The transistor, starved of anywhere to push collector current, is forced toward saturation</div>
+        <div class="symptom-body">The base bias still calls for the usual collector current — but with <span class="colour-resistor">R<sub>C</sub></span> broken, there's no external path to supply it at all. The transistor collapses into saturation, its own <span class="colour-current">V<sub>CE</sub></span> dropping to <span class="colour-bjt">V<sub>CE(sat)</sub></span> — pulling <span class="colour-voltage">V<sub>C</sub></span> down close to <span class="colour-voltage">V<sub>E</sub></span>.</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">The IC ammeter and IE ammeter genuinely disagree here</div>
+        <div class="symptom-body">The IC ammeter sits physically IN SERIES with the now-broken <span class="colour-resistor">R<sub>C</sub></span> — it reads a true, exact 0.00 mA (nothing CAN flow through a break). The IE ammeter sits somewhere completely different (in series with <span class="colour-resistor">R<sub>E</sub></span>), on a loop that's still running normally — a nice reminder that "IC" and "current through RC" are only the same thing while RC is healthy.</div>
+      </div>
+    </div>
+    <div class="working-section">Applying the formulas:</div>
+
+    <div class="working-step">Base-emitter loop — unchanged from healthy, no recalculation needed:</div>
+    <div class="working-line"><span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-result">1.2 V</span>, <span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-result">0.6 V</span>, <span class="colour-current">I<sub>E</sub></span> = <span class="colour-result">2.18 mA</span> — nothing here depends on RC.</div>
+
+    <div class="working-step">Collector current — no path exists at all:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>C</sub></span> = 0 A <span class="working-line" style="display:inline">(broken wire, not a calculation)</span></div>
+
+    <div class="working-step">Collector voltage — forced toward saturation by the missing path:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-voltage">V<sub>E</sub></span> + <span class="colour-bjt">V<sub>CE(sat)</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>C</sub></span> = 0.6 V + 0.2 V</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-result">0.8 V</span></div>
+
+    <div class="working-step" style="margin-top:.6rem">Output scope:</div>
+    <div class="working-line">With the transistor pushed right to the edge of saturation, there's no headroom left to swing an AC signal through without instantly clipping — the output is effectively dead.</div>
+    <div class="working-step" style="margin-top:.6rem">${wrongKeys} — untouched:</div>
+    <div class="working-line"><span class="colour-voltage">V<sub>B</sub></span>, <span class="colour-voltage">V<sub>E</sub></span> and <span class="colour-current">I<sub>E</sub></span> stay healthy for the reason above, and the input scope is upstream of the whole amplifier regardless of what's wrong inside it.</div>`;
+        }
+      },
+      {
+        // RC HIGH: the SMALLEST footprint of any fault in this file — RC
+        // doubles (1.8kΩ→3.6kΩ, mult=2) without touching the base-
+        // emitter loop OR the actual current magnitude flowing through
+        // it (the IC ammeter reads the SAME healthy current, since the
+        // transistor still demands exactly what it always did — only
+        // RC's own resistance changed, not the current through it).
+        //   VC=12-2.169m×3600=4.19V (down from 8.10V)
+        // The AC side is the interesting part: Av=RC/(RE+re′) DOUBLES
+        // right along with RC — the ONLY fault anywhere in this file
+        // where the output gets BIGGER, not smaller or dead. Still
+        // reusing the standard full-scale trace (no "bigger" icon exists
+        // to draw), documented the same way R1-high documents its own
+        // too-subtle-to-shrink case, just in the opposite direction.
+        circuitLabel: 'Common Emitter (voltage-divider bias, RE unbypassed)',
+        kind: 'multi',
+        interactiveCircuit: true,
+        highResistor: 'RC',
+        meterOverride: (answered) => answered
+          ? {
+            VB: { value: '1.2', unit: 'V' },
+            VC: { value: '4.19', unit: 'V', up: false, delta: '−3.91V' },
+            VE: { value: '0.6', unit: 'V' },
+            IC: { value: '2.17', unit: 'mA' },
+            IE: { value: '2.18', unit: 'mA' },
+          }
+          : {
+            VB: { value: '?', unit: 'V' }, VC: { value: '?', unit: 'V' },
+            VE: { value: '?', unit: 'V' }, IC: { value: '?', unit: 'mA' }, IE: { value: '?', unit: 'mA' },
+          },
+        scopeOverride: (answered) => answered ? { SCOPE_OUT: 'scope-ch2-only' } : null,
+        text: () => 'Fault: <b style="color:var(--colour-resistor-labels)">RC</b> has gone <b style="color:var(--colour-ui-wrong)">HIGH</b> in value.',
+        hint: () => 'Does the transistor\'s own base-emitter loop care what RC\'s resistance is? Does the CURRENT the transistor demands actually change just because RC itself changed? And separately — what happens to the AC output when a BIGGER resistor turns the SAME current swing into voltage?',
+        options: () => shuffle([
+          { key: 'VB', label: 'VB meter', type: 'wrong' },
+          { key: 'VC', label: 'VC meter', type: 'correct' },
+          { key: 'VE', label: 'VE meter', type: 'wrong' },
+          { key: 'IC', label: 'IC ammeter', type: 'wrong' },
+          { key: 'IE', label: 'IE ammeter', type: 'wrong' },
+          { key: 'SCOPE_OUT', label: 'Output scope', type: 'correct' },
+          { key: 'SCOPE_IN', label: 'Input scope', type: 'wrong' },
+        ]),
+        correctExplain: (st) => {
+          const keys = st.opts.map(o => o.type === 'correct' ? o.key : null).filter(Boolean).join(', ');
+          return `${keys} only — the smallest footprint of any fault in this quiz, and the only one where the output gets BIGGER`;
+        },
+        working: (st) => {
+          const wrongKeys = st.opts.map(o => o.type === 'wrong' ? o.key : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-section">Identifying the fault:</div>
+    <div class="diagnosis-block">
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 1: Only VC and the output scope move — even the IC ammeter reads healthy</div>
+        <div class="symptom-body">A bigger <span class="colour-resistor">R<sub>C</sub></span> doesn't touch the base-bias loop, so <span class="colour-voltage">V<sub>B</sub></span>, <span class="colour-voltage">V<sub>E</sub></span> and <span class="colour-current">I<sub>E</sub></span> stay exactly healthy. The transistor still demands precisely the same collector current it always did — <span class="colour-resistor">R<sub>C</sub></span>'s own resistance never entered that calculation. So the IC ammeter, measuring that SAME current, still reads its healthy value — only the VOLTAGE across the now-bigger <span class="colour-resistor">R<sub>C</sub></span> changes.</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 2: VC drops further, simply because the same current crosses a bigger resistor</div>
+        <div class="symptom-body">Same <span class="colour-current">I<sub>C</sub></span>, double the <span class="colour-resistor">R<sub>C</sub></span>, so the voltage dropped across it roughly doubles too, pulling <span class="colour-voltage">V<sub>C</sub></span> down further from <span class="colour-supply">V<sub>CC</sub></span>. Still comfortably active (nowhere near saturation).</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 3: the AC output gets BIGGER — the only fault in this whole quiz that does</div>
+        <div class="symptom-body">Voltage gain Av = R<sub>C</sub>/(R<sub>E</sub>+re′) scales directly with R<sub>C</sub> — doubling it roughly DOUBLES the gain. Every other "affected output" fault in this quiz either kills the output (cutoff/saturation) or shrinks it; this is the one case where the amplifier genuinely gets MORE sensitive, not less.</div>
+      </div>
+    </div>
+    <div class="working-section">Applying the formulas:</div>
+
+    <div class="working-step">Base-emitter loop and IC ammeter — unchanged from healthy, no recalculation needed:</div>
+    <div class="working-line"><span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-result">1.2 V</span>, <span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-result">0.6 V</span>, <span class="colour-current">I<sub>C</sub></span> = <span class="colour-result">2.17 mA</span>, <span class="colour-current">I<sub>E</sub></span> = <span class="colour-result">2.18 mA</span> — none of these depend on RC's own resistance.</div>
+
+    <div class="working-step">Collector voltage:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-supply">V<sub>CC</sub></span> − <span class="colour-current">I<sub>C</sub></span> × <span class="colour-resistor">R<sub>C</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>C</sub></span> = 12 V − 2.17 mA × 3.6 kΩ</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-result">4.19 V</span></div>
+
+    <div class="working-step" style="margin-top:.6rem">Output scope:</div>
+    <div class="working-line">Av = RC/(RE+re′) roughly doubles right along with RC — a genuinely BIGGER output, not a smaller or dead one, even though no icon exists to draw it literally larger.</div>
+    <div class="working-step" style="margin-top:.6rem">${wrongKeys} — untouched:</div>
+    <div class="working-line"><span class="colour-voltage">V<sub>B</sub></span>, <span class="colour-voltage">V<sub>E</sub></span>, <span class="colour-current">I<sub>C</sub></span> and <span class="colour-current">I<sub>E</sub></span> all stay healthy for the reason above, and the input scope is upstream of the whole amplifier regardless of what's wrong inside it.</div>`;
+        }
+      },
+      {
+        // R2 HIGH: R2 doubles in value (15kΩ→30kΩ, mult=2). Unlike
+        // R1-high, R2 sits on the GROUND side of the divider — doubling
+        // it pulls VTH itself up sharply (VTH=VCC×R2/(R1+R2), and a
+        // bigger R2 wins a bigger share of that ratio), not down. This
+        // is the most DRAMATIC of the four HIGH faults despite using the
+        // exact same mult=2 convention as the others:
+        //   VTH=12×30/150=2.4V (was 1.333V), RTH=120×30/150=24kΩ
+        //   IB=(2.4-0.6)/(24k+54.27k)=23.0µA (was 10.85µA — MORE than
+        //   doubled, the opposite direction from every other HIGH fault)
+        //   IC=4.60mA, IE=4.62mA (both roughly double healthy)
+        //   VE=4.62m×270=1.25V, VC=12-4.60m×1800=3.72V (nearly HALVED)
+        //   VB=1.25+0.6=1.85V
+        // Still comfortably active (VCE=3.72-1.25=2.47V, well clear of
+        // saturation). Interestingly Av=RC/(RE+re′) barely moves (re′
+        // shrinks as IE grows, offsetting RE staying fixed) — a nice
+        // teaching point that the DC operating point and the AC gain can
+        // move almost independently of each other.
+        circuitLabel: 'Common Emitter (voltage-divider bias, RE unbypassed)',
+        kind: 'multi',
+        interactiveCircuit: true,
+        highResistor: 'R2',
+        meterOverride: (answered) => answered
+          ? {
+            VB: { value: '1.85', unit: 'V', up: true, delta: '+0.65V' },
+            VC: { value: '3.72', unit: 'V', up: false, delta: '−4.38V' },
+            VE: { value: '1.25', unit: 'V', up: true, delta: '+0.65V' },
+            IC: { value: '4.60', unit: 'mA', up: true, delta: '+2.43mA' },
+            IE: { value: '4.62', unit: 'mA', up: true, delta: '+2.44mA' },
+          }
+          : {
+            VB: { value: '?', unit: 'V' }, VC: { value: '?', unit: 'V' },
+            VE: { value: '?', unit: 'V' }, IC: { value: '?', unit: 'mA' }, IE: { value: '?', unit: 'mA' },
+          },
+        scopeOverride: (answered) => answered ? { SCOPE_OUT: 'scope-ch2-only' } : null,
+        text: () => 'Fault: <b style="color:var(--colour-resistor-labels)">R2</b> has gone <b style="color:var(--colour-ui-wrong)">HIGH</b> in value.',
+        hint: () => 'R2 sets the GROUND side of the base divider — a bigger R2 wins a bigger share of VCC, pulling VTH UP rather than down. Compare how much more dramatic this is than R1 doing the "same" mult=2 increase.',
+        options: () => shuffle([
+          { key: 'VB', label: 'VB meter', type: 'correct' },
+          { key: 'VC', label: 'VC meter', type: 'correct' },
+          { key: 'VE', label: 'VE meter', type: 'correct' },
+          { key: 'IC', label: 'IC ammeter', type: 'correct' },
+          { key: 'IE', label: 'IE ammeter', type: 'correct' },
+          { key: 'SCOPE_OUT', label: 'Output scope', type: 'correct' },
+          { key: 'SCOPE_IN', label: 'Input scope', type: 'wrong' },
+        ]),
+        correctExplain: (st) => {
+          const keys = st.opts.map(o => o.type === 'correct' ? o.key : null).filter(Boolean).join(', ');
+          return `${keys} — R2 pulls VTH sharply upward, driving significantly MORE current, not less`;
+        },
+        working: (st) => {
+          const wrongKeys = st.opts.map(o => o.type === 'wrong' ? o.key : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-section">Identifying the fault:</div>
+    <div class="diagnosis-block">
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 1: current goes UP, not down — the opposite direction from R1-high</div>
+        <div class="symptom-body">R1 and R2 sit on OPPOSITE sides of the same divider — a bigger R1 starves the base (less current), but a bigger R2 wins a bigger share of <span class="colour-supply">V<sub>CC</sub></span>, pulling <span class="colour-voltage">V<sub>TH</sub></span> UP and driving MORE current, not less.</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 2: the most dramatic HIGH fault in this file, despite the same mult=2</div>
+        <div class="symptom-body">Every HIGH fault in this quiz uses the same "double the value" convention, yet this one nearly HALVES <span class="colour-voltage">V<sub>C</sub></span> while R1-high or RE-high only nudge their readings — R2 simply has more leverage over <span class="colour-voltage">V<sub>TH</sub></span> than R1 or RE have over their own terms.</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 3: despite the big DC shift, the AC gain barely moves</div>
+        <div class="symptom-body">Av = R<sub>C</sub>/(R<sub>E</sub>+re′) — re′ shrinks as I<sub>E</sub> grows, nearly cancelling out any change in the denominator, so the output looks almost the same on the scope even though the DC operating point moved dramatically. The DC bias point and the AC gain don't always move together.</div>
+      </div>
+    </div>
+    <div class="working-section">Applying the formulas:</div>
+
+    <div class="working-step">Thevenin base voltage — R2 wins a much bigger share of VCC:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>TH</sub></span> = <span class="colour-supply">V<sub>CC</sub></span> × ${frac('<span class="colour-resistor">R2</span>', '<span class="colour-resistor">R<sub>1</sub></span> + <span class="colour-resistor">R2</span>')}</div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>TH</sub></span> = 12 V × ${frac('30 kΩ', '120 kΩ + 30 kΩ')}</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>TH</sub></span> = <span class="colour-result">2.40 V</span></div>
+
+    <div class="working-step">Thevenin resistance:</div>
+    <div class="working-formula-row"><span class="colour-resistor">R<sub>TH</sub></span> = ${frac('<span class="colour-resistor">R<sub>1</sub></span> × <span class="colour-resistor">R2</span>', '<span class="colour-resistor">R<sub>1</sub></span> + <span class="colour-resistor">R2</span>')}</div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-resistor">R<sub>TH</sub></span> = ${frac('120 kΩ × 30 kΩ', '120 kΩ + 30 kΩ')}</div>
+    <div class="working-total"><span class="colour-resistor">R<sub>TH</sub></span> = <span class="colour-result">24.0 kΩ</span></div>
+
+    <div class="working-step">Base current:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>B</sub></span> = ${frac('<span class="colour-voltage">V<sub>TH</sub></span> − <span class="colour-bjt">V<sub>BE</sub></span>', '<span class="colour-resistor">R<sub>TH</sub></span> + (β+1)<span class="colour-resistor">R<sub>E</sub></span>')}</div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>B</sub></span> = ${frac('2.40 V − 0.6 V', '24.0 kΩ + (201 × 270 Ω)')}</div>
+    <div class="working-total"><span class="colour-current">I<sub>B</sub></span> = <span class="colour-result">23.0 µA</span></div>
+
+    <div class="working-step">Collector and emitter current:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>C</sub></span> = β × <span class="colour-current">I<sub>B</sub></span> = 200 × 23.0 µA</div>
+    <div class="working-total"><span class="colour-current">I<sub>C</sub></span> = <span class="colour-result">4.60 mA</span></div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>E</sub></span> = <span class="colour-current">I<sub>B</sub></span> + <span class="colour-current">I<sub>C</sub></span> = 23.0 µA + 4.60 mA</div>
+    <div class="working-total"><span class="colour-current">I<sub>E</sub></span> = <span class="colour-result">4.62 mA</span></div>
+
+    <div class="working-step">Emitter, base and collector voltage:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-current">I<sub>E</sub></span> × <span class="colour-resistor">R<sub>E</sub></span> = 4.62 mA × 270 Ω</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-result">1.25 V</span></div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-voltage">V<sub>E</sub></span> + <span class="colour-bjt">V<sub>BE</sub></span> = 1.25 V + 0.6 V</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-result">1.85 V</span></div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-supply">V<sub>CC</sub></span> − <span class="colour-current">I<sub>C</sub></span> × <span class="colour-resistor">R<sub>C</sub></span> = 12 V − 4.60 mA × 1.8 kΩ</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-result">3.72 V</span></div>
+
+    <div class="working-step" style="margin-top:.6rem">Output scope:</div>
+    <div class="working-line">Despite the dramatic DC shift, re′ shrinks as IE grows, nearly cancelling the effect on Av — the output trace looks almost unchanged from healthy.</div>
+    <div class="working-step" style="margin-top:.6rem">${wrongKeys} — untouched:</div>
+    <div class="working-line">The input scope probes the external signal source directly, upstream of the whole amplifier — nothing happening inside the amplifier can reach back and change what the signal generator itself is producing.</div>`;
+        }
+      },
+      {
+        // R1 HIGH: R1 doubles in value (120kΩ→240kΩ, mult=2 — the exact
+        // same fault already established in the external-component
+        // testbed this project built first). Doubling R1 raises RTH and
+        // drops VTH, but VTH still clears VBE with real headroom
+        // (0.706V vs 0.6V, i.e. ~0.106V, not the ~0.006V the OLD
+        // VBE=0.7V assumption gave) — a real but MODERATE base-current
+        // drop, not a collapse. Matches that file's own derivation
+        // exactly: VTH=0.706V, RTH=14.12kΩ, IB≈1.55µA, IE≈IC≈0.31mA,
+        // VB≈0.68V, VE≈0.08V, VC≈11.44V. SCOPE_OUT: gain drops too (re′
+        // grows as IE falls), but not dramatically enough to visibly
+        // shrink the trace — same "honest, not artificially shrunk"
+        // choice as that file's own reveal.
+        circuitLabel: 'Common Emitter (voltage-divider bias, RE unbypassed)',
+        kind: 'multi',
+        interactiveCircuit: true,
+        highResistor: 'R1',
+        meterOverride: (answered) => answered
+          ? {
+            VB: { value: '0.68', unit: 'V', up: false, delta: '−0.52V' },
+            VC: { value: '11.44', unit: 'V', up: true, delta: '+3.34V' },
+            VE: { value: '0.08', unit: 'V', up: false, delta: '−0.52V' },
+            IC: { value: '0.31', unit: 'mA', up: false, delta: '−1.86mA' },
+            IE: { value: '0.31', unit: 'mA', up: false, delta: '−1.87mA' },
+          }
+          : {
+            VB: { value: '?', unit: 'V' }, VC: { value: '?', unit: 'V' },
+            VE: { value: '?', unit: 'V' }, IC: { value: '?', unit: 'mA' }, IE: { value: '?', unit: 'mA' },
+          },
+        scopeOverride: (answered) => answered ? { SCOPE_OUT: 'scope-ch2-only' } : null,
+        text: () => 'Fault: <b style="color:var(--colour-resistor-labels)">R1</b> has gone <b style="color:var(--colour-ui-wrong)">HIGH</b> in value.',
+        hint: () => 'R1 sits directly in the base bias divider — doubling it reduces the current available to drive the base, but trace the chain: does that reduction reach every one of these six readings, or does something have no path back to it at all?',
+        options: () => shuffle([
+          { key: 'VB', label: 'VB meter', type: 'correct' },
+          { key: 'VC', label: 'VC meter', type: 'correct' },
+          { key: 'VE', label: 'VE meter', type: 'correct' },
+          { key: 'IC', label: 'IC ammeter', type: 'correct' },
+          { key: 'IE', label: 'IE ammeter', type: 'correct' },
+          { key: 'SCOPE_OUT', label: 'Output scope', type: 'correct' },
+          { key: 'SCOPE_IN', label: 'Input scope', type: 'wrong' },
+        ]),
+        correctExplain: (st) => {
+          const keys = st.opts.map(o => o.type === 'correct' ? o.key : null).filter(Boolean).join(', ');
+          return `${keys} — a doubled R1 reduces base drive across the board, but leaves real headroom, nowhere near cutoff`;
+        },
+        working: (st) => {
+          const wrongKeys = st.opts.map(o => o.type === 'wrong' ? o.key : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-section">Identifying the fault:</div>
+    <div class="diagnosis-block">
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 1: every DC reading shifts by a real but MODEST amount</div>
+        <div class="symptom-body">R1 sits directly in the base-bias divider — doubling it drops <span class="colour-voltage">V<sub>TH</sub></span> from 1.33V to 0.706V. That's still comfortably above <span class="colour-bjt">V<sub>BE</sub></span> (0.6V), so the junction stays properly forward-biased — current drops by roughly 7x, not to zero.</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 2: nowhere near cutoff, unlike R1-open</div>
+        <div class="symptom-body">This is the same resistor, the same direction of change (more resistance), taken to two very different degrees — R1-open is the LIMIT of R1-high pushed all the way to infinite resistance. Here, doubling still leaves real forward-bias headroom (0.106V), so the transistor stays solidly active.</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 3: the AC output is affected too, just too subtly to visibly shrink</div>
+        <div class="symptom-body">Gain (∝1/re′) drops as IE falls, so SCOPE_OUT genuinely changes — but not dramatically enough to represent as a visibly smaller trace at this icon's scale, so the honest choice is the same full-scale shape used for a healthy reading.</div>
+      </div>
+    </div>
+    <div class="working-section">Applying the formulas:</div>
+
+    <div class="working-step">Thevenin base voltage — R1 now much bigger, so R2's share shrinks:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>TH</sub></span> = <span class="colour-supply">V<sub>CC</sub></span> × ${frac('<span class="colour-resistor">R2</span>', '<span class="colour-resistor">R<sub>1</sub></span> + <span class="colour-resistor">R2</span>')}</div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>TH</sub></span> = 12 V × ${frac('15 kΩ', '240 kΩ + 15 kΩ')}</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>TH</sub></span> = <span class="colour-result">0.706 V</span></div>
+
+    <div class="working-step">Thevenin resistance:</div>
+    <div class="working-formula-row"><span class="colour-resistor">R<sub>TH</sub></span> = ${frac('<span class="colour-resistor">R<sub>1</sub></span> × <span class="colour-resistor">R2</span>', '<span class="colour-resistor">R<sub>1</sub></span> + <span class="colour-resistor">R2</span>')}</div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-resistor">R<sub>TH</sub></span> = ${frac('240 kΩ × 15 kΩ', '240 kΩ + 15 kΩ')}</div>
+    <div class="working-total"><span class="colour-resistor">R<sub>TH</sub></span> = <span class="colour-result">14.12 kΩ</span></div>
+
+    <div class="working-step">Base current:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>B</sub></span> = ${frac('<span class="colour-voltage">V<sub>TH</sub></span> − <span class="colour-bjt">V<sub>BE</sub></span>', '<span class="colour-resistor">R<sub>TH</sub></span> + (β+1)<span class="colour-resistor">R<sub>E</sub></span>')}</div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>B</sub></span> = ${frac('0.706 V − 0.6 V', '14.12 kΩ + (201 × 270 Ω)')}</div>
+    <div class="working-total"><span class="colour-current">I<sub>B</sub></span> = <span class="colour-result">1.55 µA</span></div>
+
+    <div class="working-step">Collector and emitter current:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>C</sub></span> = β × <span class="colour-current">I<sub>B</sub></span> = 200 × 1.55 µA</div>
+    <div class="working-total"><span class="colour-current">I<sub>C</sub></span> = <span class="colour-result">0.31 mA</span></div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>E</sub></span> = <span class="colour-current">I<sub>B</sub></span> + <span class="colour-current">I<sub>C</sub></span> = 1.55 µA + 0.31 mA</div>
+    <div class="working-total"><span class="colour-current">I<sub>E</sub></span> = <span class="colour-result">0.31 mA</span></div>
+
+    <div class="working-step">Emitter, base and collector voltage:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-current">I<sub>E</sub></span> × <span class="colour-resistor">R<sub>E</sub></span> = 0.31 mA × 270 Ω</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-result">0.08 V</span></div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-voltage">V<sub>E</sub></span> + <span class="colour-bjt">V<sub>BE</sub></span> = 0.08 V + 0.6 V</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-result">0.68 V</span></div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-supply">V<sub>CC</sub></span> − <span class="colour-current">I<sub>C</sub></span> × <span class="colour-resistor">R<sub>C</sub></span> = 12 V − 0.31 mA × 1.8 kΩ</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-result">11.44 V</span></div>
+
+    <div class="working-step" style="margin-top:.6rem">Output scope:</div>
+    <div class="working-line">Gain drops as IE falls, but not dramatically enough to show as a visibly smaller trace — the honest choice is the same full-scale shape as healthy.</div>
+    <div class="working-step" style="margin-top:.6rem">${wrongKeys} — untouched:</div>
+    <div class="working-line">The input scope probes the external signal source directly, upstream of the whole amplifier — nothing happening inside the amplifier can reach back and change what the signal generator itself is producing.</div>`;
+        }
+      },
+      {
+        // RE OPEN: the natural LIMIT of RE-high's own "stiff divider"
+        // model (see that question) taken to RE→∞. VB and VE are STILL
+        // held fixed at their healthy values (1.2V/0.6V — the divider
+        // doesn't feed back from RE either way, open or high), and
+        // IE=VE/RE now genuinely hits exactly 0 as RE→∞, giving IC=0 and
+        // VC=VCC exactly — matches the teacher's own notes precisely:
+        // "VB VE - same, IC=0, VC=VCC". This REPLACES an earlier, more
+        // rigorous first-principles version of this question (which
+        // computed VB as the divider's true UNLOADED voltage, ≈1.33V,
+        // and left VE as a genuinely undefined "float") — that version
+        // was internally consistent but didn't match how the course
+        // actually teaches this fault, so it was dropped in favour of
+        // the same simplified model already confirmed for RE-high.
+        circuitLabel: 'Common Emitter (voltage-divider bias, RE unbypassed)',
+        kind: 'multi',
+        interactiveCircuit: true,
+        openResistor: 'RE',
+        meterOverride: (answered) => answered
+          ? {
+            VB: { value: '1.2', unit: 'V' },
+            VC: { value: '12.0', unit: 'V', up: true, delta: '+3.90V' },
+            VE: { value: '0.6', unit: 'V' },
+            IC: { value: '0.00', unit: 'mA', up: false, delta: '−2.17mA' },
+            IE: { value: '0.00', unit: 'mA', up: false, delta: '−2.18mA' },
+          }
+          : {
+            VB: { value: '?', unit: 'V' }, VC: { value: '?', unit: 'V' },
+            VE: { value: '?', unit: 'V' }, IC: { value: '?', unit: 'mA' }, IE: { value: '?', unit: 'mA' },
+          },
+        text: () => 'Fault: <b style="color:var(--colour-resistor-labels)">RE</b> has failed <b style="color:var(--colour-ui-wrong)">OPEN</b>-circuit.',
+        hint: () => 'Same stiff-divider reasoning as RE going high, just taken to the extreme — VB and VE are held fixed at their healthy readings. If VE stays the same but RE is now infinite, what does Ohm\'s Law say IE has to be?',
+        options: () => shuffle([
+          { key: 'VB', label: 'VB meter', type: 'wrong' },
+          { key: 'VC', label: 'VC meter', type: 'correct' },
+          { key: 'VE', label: 'VE meter', type: 'wrong' },
+          { key: 'IC', label: 'IC ammeter', type: 'correct' },
+          { key: 'IE', label: 'IE ammeter', type: 'correct' },
+          { key: 'SCOPE_OUT', label: 'Output scope', type: 'correct' },
+          { key: 'SCOPE_IN', label: 'Input scope', type: 'wrong' },
+        ]),
+        correctExplain: (st) => {
+          const keys = st.opts.map(o => o.type === 'correct' ? o.key : null).filter(Boolean).join(', ');
+          return `${keys} — VB and VE are held fixed by the stiff divider, so only the emitter current (now zero) and everything downstream of it responds`;
+        },
+        working: (st) => {
+          const wrongKeys = st.opts.map(o => o.type === 'wrong' ? o.key : null).filter(Boolean).join(', ');
+          return `
+    <div class="working-section">Identifying the fault:</div>
+    <div class="diagnosis-block">
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 1: VB and VE stay exactly at their healthy values</div>
+        <div class="symptom-body">Same stiff-divider reasoning as RE going high — the divider's own output doesn't depend on <span class="colour-resistor">R<sub>E</sub></span>, so <span class="colour-voltage">V<sub>B</sub></span> stays at 1.2 V and <span class="colour-voltage">V<sub>E</sub></span> stays at 0.6 V, regardless of whether <span class="colour-resistor">R<sub>E</sub></span> is doubled or fully open.</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 2: the SAME emitter voltage across an INFINITE resistance forces IE to exactly zero</div>
+        <div class="symptom-body">Ohm's Law (<span class="colour-current">I<sub>E</sub></span> = <span class="colour-voltage">V<sub>E</sub></span>/<span class="colour-resistor">R<sub>E</sub></span>) taken to its limit: as <span class="colour-resistor">R<sub>E</sub></span> → ∞, <span class="colour-current">I<sub>E</sub></span> → 0 exactly — this is the same model as RE-high, just pushed all the way to a full break.</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 3: zero collector current means VC rises all the way to VCC</div>
+        <div class="symptom-body">With <span class="colour-current">I<sub>C</sub></span> = 0, nothing drops across <span class="colour-resistor">R<sub>C</sub></span> at all, so <span class="colour-voltage">V<sub>C</sub></span> rises to meet <span class="colour-supply">V<sub>CC</sub></span> directly.</div>
+      </div>
+    </div>
+    <div class="working-section">Applying the formulas:</div>
+
+    <div class="working-step">Emitter voltage — held fixed by the stiff divider, not recalculated:</div>
+    <div class="working-line"><span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-result">0.6 V</span> (unchanged from healthy)</div>
+
+    <div class="working-step">Emitter current — Ohm's Law with RE now infinite:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>E</sub></span> = ${frac('<span class="colour-voltage">V<sub>E</sub></span>', '<span class="colour-resistor">R<sub>E</sub></span>')} = ${frac('0.6 V', '∞')}</div>
+    <div class="working-total"><span class="colour-current">I<sub>E</sub></span> = <span class="colour-result">0.00 mA</span></div>
+    <div class="working-line">(<span class="colour-current">I<sub>C</sub></span> follows <span class="colour-current">I<sub>E</sub></span> to the same 0.00 mA.)</div>
+
+    <div class="working-step">Collector voltage:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-supply">V<sub>CC</sub></span> − <span class="colour-current">I<sub>C</sub></span> × <span class="colour-resistor">R<sub>C</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>C</sub></span> = 12 V − 0.00 mA × 1.8 kΩ</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-result">12.0 V</span></div>
+
+    <div class="working-step" style="margin-top:.6rem">Output scope:</div>
+    <div class="working-line">A fully cut-off transistor can't amplify anything — the output is completely dead.</div>
+    <div class="working-step" style="margin-top:.6rem">${wrongKeys} — untouched:</div>
+    <div class="working-line"><span class="colour-voltage">V<sub>B</sub></span> and <span class="colour-voltage">V<sub>E</sub></span> stay healthy for the reason above, and the input scope is upstream of the whole amplifier regardless of what's wrong inside it.</div>`;
+        }
+      },
+    ];
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUIZ ENGINE — generic; driven entirely by QUESTIONS[] via index.
+    // ══════════════════════════════════════════════════════════════════════
+
+    function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+    function isMulti(data) { return data.kind === 'multi'; }
+    function isAnswerCorrect(data, st) {
+      if (!isMulti(data)) return st.sel === st.cor;
+      const a = [...st.sel].sort((x, y) => x - y), b = [...st.cor].sort((x, y) => x - y);
+      return a.length === b.length && a.every((v, i) => v === b[i]);
+    }
+    function selectedLabel(data, st) {
+      if (!isMulti(data)) return (st.sel != null && st.opts[st.sel]) ? st.opts[st.sel].label : '—';
+      return st.sel.length ? [...st.sel].sort((a, b) => a - b).map(i => LETTERS[i]).join(', ') : '—';
+    }
+
+    let Q = [];
+    let cur = 0;
+
+    function buildProgressDots() {
+      document.getElementById('progressDots').innerHTML =
+        QUESTIONS.map((_, i) => `<div class="progress-dot" id="dot-${i}"></div>`).join('');
+    }
+
+    function updateProgress() {
+      QUESTIONS.forEach((_, i) => {
+        const d = document.getElementById('dot-' + i);
+        d.className = 'progress-dot';
+        if (i === cur) d.classList.add('active'); else if (Q[i].ans) d.classList.add('done');
+      });
+      document.getElementById('progressLabel').textContent = (cur + 1) + ' / ' + QUESTIONS.length;
+    }
+
+    function renderOptions() {
+      const st = Q[cur], data = QUESTIONS[cur];
+      const multi = isMulti(data);
+      const c = document.getElementById('qOptions'); c.innerHTML = '';
+      st.opts.forEach((opt, i) => {
+        const btn = document.createElement('button'); btn.className = 'option-btn';
+        btn.innerHTML = `<span class="option-letter">${LETTERS[i]}</span><span>${opt.label}</span>`;
+        if (st.ans) {
+          btn.disabled = true;
+          if (multi) {
+            const selected = st.sel.includes(i);
+            if (opt.type === 'correct') { btn.classList.add(selected ? 'correct' : 'missed'); if (selected) btn.innerHTML += `<span class="result-icon">✓</span>`; }
+            else { btn.classList.add(selected ? 'wrong' : 'dimmed'); if (selected) btn.innerHTML += `<span class="result-icon">✗</span>`; }
+          } else {
+            if (i === st.cor) { btn.classList.add('correct'); btn.innerHTML += `<span class="result-icon">✓</span>`; }
+            else if (i === st.sel) { btn.classList.add('wrong'); btn.innerHTML += `<span class="result-icon">✗</span>`; }
+            else btn.classList.add('dimmed');
+          }
+        } else {
+          if (multi ? st.sel.includes(i) : i === st.sel) btn.classList.add('selected');
+          btn.addEventListener('click', () => selectOption(i));
+        }
+        c.appendChild(btn);
+      });
+    }
+
+    function selectOption(i) {
+      const st = Q[cur], data = QUESTIONS[cur];
+      if (st.ans) return;
+      if (isMulti(data)) {
+        const pos = st.sel.indexOf(i);
+        if (pos >= 0) st.sel.splice(pos, 1); else st.sel.push(i);
+      } else {
+        st.sel = i;
+      }
+      renderQuestion();
+    }
+
+    // ── INTERACTIVE CIRCUIT (any question with interactiveCircuit:true) ──
+    // Wires EVERY selectable thing on the circuit — the 6 components
+    // (C1/C2/R1/R2/RC/RE), the 4 DC meters (VB/VC/VE/IE), and the 2
+    // scope icons (SCOPE_IN/SCOPE_OUT) — up to the SAME st.sel/
+    // selectOption() state every other multi-select question already
+    // uses. Originally just the 6 components (Q1); generalised so a
+    // question can pick ANY subset of this whole universe as its own
+    // options() list (e.g. "which meters/scopes would show an affected
+    // reading" uses VB/VC/VE/IE/SCOPE_OUT/SCOPE_IN instead). Each key
+    // maps to its own real SVG group id — components/scopes use
+    // comp-<key>, but the meters/ammeter keep their own pre-existing
+    // meterVB/meterVC/meterVE/ammeterIEGroup ids rather than being renamed.
+    const ALL_INTERACTIVE_KEYS = ['C1', 'C2', 'R1', 'R2', 'RC', 'RE', 'VB', 'VC', 'VE', 'IC', 'IE', 'SCOPE_IN', 'SCOPE_OUT'];
+    const TARGET_GROUP_ID = {
+      C1: 'comp-C1', C2: 'comp-C2', R1: 'comp-R1', R2: 'comp-R2', RC: 'comp-RC', RE: 'comp-RE',
+      VB: 'meterVB', VC: 'meterVC', VE: 'meterVE', IC: 'ammeterICGroup', IE: 'ammeterIEGroup',
+      SCOPE_IN: 'comp-SCOPE_IN', SCOPE_OUT: 'comp-SCOPE_OUT',
+    };
+
+    function wireComponentClicks() {
+      ALL_INTERACTIVE_KEYS.forEach(key => {
+        const g = document.getElementById(TARGET_GROUP_ID[key]);
+        if (!g) return;
+        g.addEventListener('click', () => {
+          const data = QUESTIONS[cur], st = Q[cur];
+          if (!data.interactiveCircuit || st.ans) return;
+          const idx = st.opts.findIndex(o => o.key === key);
+          if (idx >= 0) selectOption(idx);
+        });
+      });
+    }
+
+    // Colour a single target's highlight frame + badge for its current
+    // state — selection-pending (blue), or post-answer correct/wrong/missed
+    // (same green/red/amber convention as every option-btn elsewhere).
+    function paintComponent(key, idx, st, answered) {
+      const hl = document.getElementById('hl-' + key), badge = document.getElementById('badge-' + key);
+      if (!hl || !badge) return;
+      const selected = st.sel.includes(idx);
+      const isCorrect = st.opts[idx].type === 'correct';
+      if (!answered) {
+        hl.setAttribute('stroke', selected ? 'var(--colour-ui-primary)' : 'transparent');
+        hl.setAttribute('fill', selected ? 'rgba(var(--colour-ui-primary-rgb),.1)' : 'none');
+        badge.textContent = selected ? '✓' : '';
+        badge.setAttribute('fill', 'var(--colour-ui-primary)');
+      } else if (isCorrect) {
+        hl.setAttribute('stroke', selected ? 'var(--colour-ui-correct)' : 'var(--colour-ui-restart)');
+        hl.setAttribute('stroke-dasharray', selected ? 'none' : '4,3');
+        hl.setAttribute('fill', selected ? 'rgba(var(--colour-ui-correct-rgb),.12)' : 'none');
+        badge.textContent = selected ? '✓' : '?';
+        badge.setAttribute('fill', selected ? 'var(--colour-ui-correct)' : 'var(--colour-ui-restart)');
+      } else {
+        hl.setAttribute('stroke', selected ? 'var(--colour-ui-wrong)' : 'transparent');
+        hl.setAttribute('stroke-dasharray', 'none');
+        hl.setAttribute('fill', selected ? 'rgba(var(--colour-ui-wrong-rgb),.12)' : 'none');
+        badge.textContent = selected ? '✗' : '';
+        badge.setAttribute('fill', 'var(--colour-ui-wrong)');
+      }
+      if (!answered || isCorrect) hl.removeAttribute('stroke-dasharray');
+    }
+
+    // Single pass over the WHOLE interactive universe, every render,
+    // whether the current question is interactive or not — for each key,
+    // either paint it (if it's actually one of the CURRENT question's own
+    // options) or blank it back out (if it isn't, e.g. every question
+    // that isn't interactiveCircuit at all, or an interactive question
+    // that only uses SOME of the 12 possible keys — Q1 doesn't touch
+    // VB/VC/VE/IE/SCOPE_*, and the meter question doesn't touch the 6
+    // components, so both need the OTHER half explicitly reset, not just
+    // left however the previous question happened to leave them).
+    function syncInteractiveVisuals(data, st) {
+      ALL_INTERACTIVE_KEYS.forEach(key => {
+        const g = document.getElementById(TARGET_GROUP_ID[key]);
+        const idx = (data.interactiveCircuit && st.opts) ? st.opts.findIndex(o => o.key === key) : -1;
+        if (g) g.classList.toggle('comp-interactive', idx >= 0);
+        if (idx >= 0) {
+          paintComponent(key, idx, st, st.ans);
+        } else {
+          const hl = document.getElementById('hl-' + key), badge = document.getElementById('badge-' + key);
+          if (hl) { hl.setAttribute('stroke', 'transparent'); hl.setAttribute('fill', 'none'); hl.removeAttribute('stroke-dasharray'); }
+          if (badge) badge.textContent = '';
+        }
+      });
+    }
+
+    // ── METER VALUES — dynamic per question ──
+    // VB/VC/VE/IE always showed one hardcoded HEALTHY reading before —
+    // now overridable per-question (e.g. "?" until answered, then the
+    // real faulted number) via an optional data.meterOverride(answered)
+    // function returning {VB:{value,unit}, ...} for whichever meters it
+    // cares about. Every question that doesn't define one falls back to
+    // HEALTHY_METERS unchanged.
+    // IC = β×IB = 200×10.848µA ≈ 2.17mA — genuinely a hair below IE's
+    // 2.18mA (IC = IE − IB), not the same rounded figure copy-pasted from
+    // the IE ammeter's own placeholder. VBE=0.6V (the teacher's course-
+    // standard value, updated project-wide from the earlier 0.7V).
+    const HEALTHY_METERS = {
+      VB: { value: '1.2', unit: 'V' }, VC: { value: '8.1', unit: 'V' },
+      VE: { value: '0.6', unit: 'V' }, IC: { value: '2.17', unit: 'mA' }, IE: { value: '2.18', unit: 'mA' },
+    };
+    const METER_TEXT_ID = {
+      VB: ['meterVBValue', 'meterVBUnit'], VC: ['meterVCValue', 'meterVCUnit'],
+      VE: ['meterVEValue', 'meterVEUnit'], IC: ['ammeterICValue', 'ammeterICUnit'], IE: ['ammeterValue', 'ammeterUnit'],
+    };
+    // Up/down ghost — arrow + delta shown beside a meter once its
+    // question's meterOverride reveals a real (non-healthy) reading, same
+    // CLR_UP/CLR_DOWN + ⬆/⬇ convention as bjt_npn_troubleshoot_dc.html's
+    // own addGhost(). That file computes deltas live from a circuit
+    // engine; this one has no such engine (values are curated per
+    // question), so a meterOverride entry just states its own `up`
+    // (boolean) and `delta` (pre-formatted string like "+3.4V") directly
+    // alongside `value`/`unit` — reusing TARGET_GROUP_ID for the group id
+    // since it already maps VB/VC/VE/IE to meterVB/meterVC/meterVE/
+    // ammeterIEGroup.
+    function addGhost(groupId, wentUp, deltaStr) {
+      const g = document.getElementById(groupId + 'Ghost'); if (!g) return;
+      const clr = wentUp ? 'var(--colour-up)' : 'var(--colour-down)';
+      document.getElementById(groupId + 'GhostText').setAttribute('fill', clr);
+      document.getElementById(groupId + 'GhostArrow').textContent = wentUp ? '⬆' : '⬇';
+      document.getElementById(groupId + 'GhostDelta').textContent = deltaStr;
+      g.setAttribute('display', 'inline');
+    }
+    function removeGhost(groupId) {
+      const g = document.getElementById(groupId + 'Ghost'); if (g) g.setAttribute('display', 'none');
+    }
+    function syncMeterValues(data, st) {
+      const override = data.meterOverride ? data.meterOverride(st.ans) : null;
+      Object.keys(METER_TEXT_ID).forEach(key => {
+        const state = (override && override[key]) ? override[key] : HEALTHY_METERS[key];
+        const [valId, unitId] = METER_TEXT_ID[key];
+        const valEl = document.getElementById(valId), unitEl = document.getElementById(unitId);
+        if (valEl) valEl.textContent = state.value;
+        if (unitEl) unitEl.textContent = state.unit;
+        if (state.up !== undefined) addGhost(TARGET_GROUP_ID[key], state.up, state.delta);
+        else removeGhost(TARGET_GROUP_ID[key]);
+      });
+    }
+
+    // ── SCOPE WAVEFORMS — dynamic per question ──
+    // SCOPE_IN/SCOPE_OUT always showed one hardcoded pair of shapes before
+    // (healthy wave in, flat line out — exactly Q1's own C1/C2-open
+    // premise). Now overridable per-question via an optional
+    // data.scopeOverride(answered) hook, same "conceal until answered"
+    // convention as meterOverride — before a question is answered, any
+    // scope that's one of ITS OWN clickable options stays at the neutral
+    // Q1-matching default rather than revealing early (an interactive
+    // question that includes SCOPE_OUT as a clickable option would
+    // otherwise give the answer away visually before the student commits
+    // to one), then reveals the fault-accurate shape once answered.
+    const HEALTHY_SCOPES = { SCOPE_IN: 'scope-ch1-only', SCOPE_OUT: 'scope-ch2-flat-only' };
+    const SCOPE_SHAPE_ID = { SCOPE_IN: 'scopeShape-SCOPE_IN', SCOPE_OUT: 'scopeShape-SCOPE_OUT' };
+    function syncScopeShapes(data, st) {
+      const override = data.scopeOverride ? data.scopeOverride(st.ans) : null;
+      Object.keys(SCOPE_SHAPE_ID).forEach(key => {
+        const shapeId = (override && override[key]) ? override[key] : HEALTHY_SCOPES[key];
+        const el = document.getElementById(SCOPE_SHAPE_ID[key]);
+        if (el) el.setAttribute('href', '#' + shapeId);
+      });
+    }
+
+    // ── RESISTOR FAULTS — visual only, not clickable/gradable ──
+    // Optional data.openResistor OR data.highResistor: 'R1'|'R2'|'RC'|'RE'
+    // both show the same small X marker overlaid on that resistor's own
+    // body (see the fault-x-<key> groups inside each comp-<key> group).
+    // Deliberately shared visual for two different fault types: an X
+    // reads as "current no longer takes this resistor's own printed
+    // value" whether that's because it's fully open (openResistor) or
+    // because its actual value has drifted HIGH of what's printed
+    // (highResistor, e.g. R1: 120kΩ→240kΩ) — the resistor's own on-screen
+    // label always stays at its NOMINAL printed value either way (a real
+    // technician can't see a drifted value, only measure its effect), so
+    // the X is the only visual cue either fault happened at all;
+    // everything else the student learns comes from the numbers. 'inline',
+    // not '' when showing — clearing an inline style would just fall back
+    // to the markup's own display="none" attribute (a real cascade trap
+    // hit and fixed earlier in this project's own BJT-lead fault markers).
+    const RESISTOR_KEYS = ['R1', 'R2', 'RC', 'RE'];
+    function syncResistorFaults(data) {
+      RESISTOR_KEYS.forEach(key => {
+        const xMark = document.getElementById('fault-x-' + key);
+        if (xMark) xMark.style.display = (data.openResistor === key) ? 'inline' : 'none';
+        const highMark = document.getElementById('fault-high-' + key);
+        if (highMark) highMark.style.display = (data.highResistor === key) ? 'inline' : 'none';
+      });
+    }
+
+    // This quiz only ever shows the one static ce-fault-circuit, so it's
+    // rendered as real inline SVG content directly inside circuitRefSvg
+    // now (not a <defs>+<use> reference swapped by id) — needed so Q1's
+    // own components are individually clickable, which a <use>-cloned
+    // shadow tree can't support (a click on any part of a <use> instance
+    // only ever targets the <use> element itself, not its internal
+    // children). showCircuitRef() no longer swaps WHICH circuit is shown,
+    // just the label/viewBox.
+    function showCircuitRef(id, label, viewBox) {
+      document.getElementById('circuitRefLabel').textContent = label || 'Reference Circuit';
+      document.getElementById('circuitRefSvg').setAttribute('viewBox', viewBox || DEFAULT_VIEWBOX);
+      if (xyOn) buildXYRuler();
+    }
+
+    /* ─── DEV: xy ruler overlay, for lining up SVG coordinates by eye ────────
+       Console:   setXY(1) / setXY(0)     URL: ?xy=1 */
+    let xyOn = false;
+    function buildXYRuler() {
+      const g = document.getElementById('xyRuler');
+      if (!g) return;
+      const vb = document.getElementById('circuitRefSvg').viewBox.baseVal;
+      const offX = vb.x, offY = vb.y, W = vb.width, H = vb.height;
+      const hy = offY + H - 10, vx = offX + 10, col = '#ff00ff';
+      let svg = `<line x1="${offX}" y1="${hy}" x2="${offX + W}" y2="${hy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+      for (let x = 0; x <= W; x += 10) {
+        const gx = offX + x, major = (Math.round(gx) % 50 === 0), len = major ? 10 : 5;
+        svg += `<line x1="${gx}" y1="${hy - len}" x2="${gx}" y2="${hy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+        if (major) svg += `<text x="${gx}" y="${hy - 13}" fill="${col}" font-size="8" text-anchor="middle">${Math.round(gx)}</text>`;
+      }
+      svg += `<line x1="${vx}" y1="${offY}" x2="${vx}" y2="${offY + H}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+      for (let y = 0; y <= H; y += 10) {
+        const gy = offY + y, major = (Math.round(gy) % 50 === 0), len = major ? 10 : 5;
+        svg += `<line x1="${vx}" y1="${gy}" x2="${vx + len}" y2="${gy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
+        if (major) svg += `<text x="${vx + 13}" y="${gy + 3}" fill="${col}" font-size="8" text-anchor="start">${Math.round(gy)}</text>`;
+      }
+      g.innerHTML = svg;
+    }
+    function setXY(on) {
+      xyOn = on;
+      const g = document.getElementById('xyRuler');
+      if (!g) return;
+      if (on) buildXYRuler();
+      g.setAttribute('display', on ? 'inline' : 'none');
+    }
+    window.setXY = setXY;
+
+    function renderQuestion() {
+      const data = QUESTIONS[cur], st = Q[cur];
+      const multi = isMulti(data);
+
+      document.getElementById('qNum').textContent = 'Q' + (cur + 1);
+      document.getElementById('qText').innerHTML = data.text();
+      document.getElementById('qHint').innerHTML = data.hint();
+
+      // Any interactiveCircuit question has no separate option list at
+      // all — the circuit diagram itself is the click surface (see
+      // wireComponentClicks()/syncInteractiveVisuals()). Every other
+      // question keeps the normal button list.
+      document.getElementById('qOptions').style.display = data.interactiveCircuit ? 'none' : '';
+      if (!data.interactiveCircuit) renderOptions();
+      syncInteractiveVisuals(data, st);
+      syncMeterValues(data, st);
+      syncScopeShapes(data, st);
+      syncResistorFaults(data);
+
+      const selList = document.getElementById('qSelectedList');
+      if (multi) {
+        selList.style.display = '';
+        const selectedNames = data.interactiveCircuit
+          ? [...st.sel].sort((a, b) => a - b).map(i => st.opts[i].key)
+          : [...st.sel].sort((a, b) => a - b).map(i => LETTERS[i]);
+        selList.textContent = st.sel.length
+          ? `Selected: ${selectedNames.join(', ')}`
+          : (data.interactiveCircuit ? 'Click the meters on the circuit to select your answer (look for ?).' : 'Click the options above to select your answer.');
+      } else {
+        selList.style.display = 'none';
+      }
+
+      const banner = document.getElementById('qBanner');
+      if (st.ans) {
+        const ok = isAnswerCorrect(data, st);
+        banner.className = 'result-banner ' + (ok ? 'correct' : 'wrong');
+        document.getElementById('qIcon').textContent = ok ? '✓' : '✗';
+        document.getElementById('qBannerText').innerHTML = ok ? `Correct! ${data.correctExplain(st)}` : `The correct answer is ${data.correctExplain(st)}`;
+      } else {
+        banner.className = 'result-banner';
+      }
+
+      const working = document.getElementById('qWorking');
+      working.className = 'working-box' + (st.ans ? ' visible' : '');
+      document.getElementById('qWorkingContent').innerHTML = st.ans ? data.working(st) : '';
+
+      document.getElementById('qBack').style.display = cur > 0 ? 'inline-block' : 'none';
+      const check = document.getElementById('qCheck');
+      check.style.display = st.ans ? 'none' : 'inline-block';
+      check.disabled = st.ans || (multi ? st.sel.length === 0 : st.sel === null);
+      const isLast = cur === QUESTIONS.length - 1;
+      document.getElementById('qNext').style.display = (st.ans && !isLast) ? 'inline-block' : 'none';
+      document.getElementById('qSummary').style.display = (st.ans && isLast) ? 'inline-block' : 'none';
+
+      showCircuitRef('ce-fault-circuit', data.circuitLabel);
+      updateProgress();
+    }
+
+    function checkAnswer() {
+      const st = Q[cur], data = QUESTIONS[cur];
+      if (st.ans) return;
+      if (isMulti(data) ? st.sel.length === 0 : st.sel === null) return;
+      st.ans = true;
+      renderQuestion();
+      document.getElementById('qBanner').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function scrollToQuestionTop() {
+      document.getElementById('qPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function nextQuestion() { if (cur < QUESTIONS.length - 1) { cur++; renderQuestion(); scrollToQuestionTop(); } }
+
+    function backQuestion() {
+      if (cur <= 0) return;
+      cur--;
+      for (let i = cur; i < QUESTIONS.length; i++) {
+        Q[i].ans = false;
+        Q[i].sel = isMulti(QUESTIONS[i]) ? [] : null;
+      }
+      renderQuestion();
+      scrollToQuestionTop();
+    }
+
+    function goToQuestion(n) {
+      cur = Math.max(0, Math.min(QUESTIONS.length - 1, n - 1));
+      document.getElementById('summaryPanel').style.display = 'none';
+      document.getElementById('qPanel').style.display = 'flex';
+      renderQuestion();
+      scrollToQuestionTop();
+    }
+
+    function resetQuiz() {
+      Q = QUESTIONS.map(data => {
+        const opts = data.options();
+        if (isMulti(data)) {
+          const cor = opts.map((o, i) => o.type === 'correct' ? i : -1).filter(i => i >= 0);
+          return { sel: [], ans: false, cor, opts };
+        }
+        return { sel: null, ans: false, cor: opts.findIndex(o => o.type === 'correct'), opts };
+      });
+      cur = 0;
+      document.getElementById('summaryPanel').style.display = 'none';
+      document.getElementById('qPanel').style.display = 'flex';
+      renderQuestion();
+    }
+
+    function showSummary() {
+      document.getElementById('qPanel').style.display = 'none';
+      document.getElementById('summaryPanel').style.display = 'block';
+      showCircuitRef('ce-fault-circuit', 'Common Emitter (voltage-divider bias, RE unbypassed)');
+      const items = QUESTIONS.map((data, i) => {
+        const st = Q[i];
+        const ans = selectedLabel(data, st);
+        const ok = isAnswerCorrect(data, st);
+        const colour = ok ? 'var(--colour-ui-correct)' : '#ff3366';
+        const mark = ok ? '✓' : '✗';
+        return `<div class="summary-item">
+      <div class="summary-item-head"><span class="summary-qnum">Q${i + 1}</span><span class="summary-question">${data.text()}</span></div>
+      <div class="summary-answer" style="color:${colour}">You answered: ${ans} &nbsp; ${mark}</div>
+      <div class="working-box visible">${st.ans ? data.working(st) : ''}</div>
+    </div>`;
+      }).join('');
+      document.getElementById('summaryContent').innerHTML = items;
+      QUESTIONS.forEach((_, i) => { const d = document.getElementById('dot-' + i); if (d) d.className = 'progress-dot done'; });
+      document.getElementById('progressLabel').textContent = 'Complete';
+    }
+
+
+    buildProgressDots();
+    wireComponentClicks();
+    resetQuiz();
+
+    function goBack(e) { e.preventDefault(); history.back(); }
+    if (history.length > 1) {
+      document.getElementById('menuLink').style.display = '';
+    }
+
+    function jump(n, answered) {
+      if (n < 1 || n > QUESTIONS.length) { console.warn('jump: no question', n); return; }
+      for (let i = 0; i < n - 1; i++) {
+        Q[i].sel = Array.isArray(Q[i].cor) ? [...Q[i].cor] : Q[i].cor;
+        Q[i].ans = true;
+      }
+      goToQuestion(n);
+      if (answered) {
+        Q[cur].sel = Array.isArray(Q[cur].cor) ? [...Q[cur].cor] : Q[cur].cor;
+        checkAnswer();
+      }
+    }
+    window.jump = jump;
+
+    function jumpToSummary() {
+      QUESTIONS.forEach((_, i) => {
+        if (Q[i].ans) return;
+        Q[i].sel = Array.isArray(Q[i].cor) ? [...Q[i].cor] : Q[i].cor;
+        Q[i].ans = true;
+      });
+      showSummary();
+    }
+    window.jumpToSummary = jumpToSummary;
+
+    {
+      const p = new URLSearchParams(location.search);
+      if (p.has('q')) { if (p.get('q') === 's') jumpToSummary(); else jump(+p.get('q'), p.has('ans')); }
+      if (p.has('xy')) setXY(+p.get('xy') === 1);
+    }
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,1619 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../../assets/theme-init.js"></script>
+  <title>BJT Voltage Divider Troubleshooter</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../../assets/quiz-common.css">
+  <script src="../../../../assets/breadcrumb.js" defer></script>
+    <style>
+    .progress-wrap {
+      display: flex;
+      gap: .4rem;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
+    .progress-dot.done {
+      background: var(--colour-progress);
+      border-color: var(--colour-progress);
+    }
+
+    .option-btn.correct {
+      border-color: var(--colour-progress);
+      background: rgba(0, 255, 153, .08);
+      color: var(--colour-progress);
+    }
+
+    .option-btn.wrong {
+      border-color: #ff3d9a;
+      background: rgba(255, 61, 154, .08);
+      color: #ff3d9a;
+    }
+
+    .result-banner.correct {
+      display: flex;
+      background: rgba(0, 255, 153, .08);
+      border: 1px solid rgba(0, 255, 153, .3);
+      color: var(--colour-progress);
+    }
+
+    .result-banner.wrong {
+      display: flex;
+      background: rgba(255, 61, 154, .08);
+      border: 1px solid rgba(255, 61, 154, .3);
+      color: #ff3d9a;
+    }
+
+    .working-total {
+      margin-top: .5rem;
+      border-top: 1px solid var(--colour-border);
+      padding: .5rem 0 .5rem 1.5rem;
+      font-size: .95rem;
+    }
+
+    .colour-bjt {
+      color: var(--colour-bjt);
+    }
+
+    .btn-check {
+      background: rgba(0, 255, 153, .1);
+      border-color: rgba(0, 255, 153, .4);
+      color: var(--colour-progress);
+    }
+
+    .btn-shuffle {
+      background: rgba(255, 107, 53, .1);
+      border-color: rgba(255, 107, 53, .4);
+      color: #ff6b35;
+      margin-left: auto;
+    }
+
+    .btn-summary {
+      background: rgba(167, 139, 250, .12);
+      border-color: rgba(167, 139, 250, .4);
+      color: #a78bfa;
+    }
+
+    .modal-inner {
+      position: relative;
+      background: rgba(0, 0, 0, .35);
+      border: 1px solid var(--colour-border);
+      border-radius: 6px;
+      padding: .8rem;
+      max-width: min(92vw, 700px);
+      max-height: 92vh;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: .5rem;
+      box-shadow: 0 0 60px rgba(0, 229, 255, .08);
+      cursor: zoom-out;
+    }
+
+    .modal-close {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: .68rem;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      cursor: pointer;
+      background: rgba(255, 61, 154, .08);
+      border: 1px solid rgba(255, 61, 154, .35);
+      color: #ff3d9a;
+      border-radius: 3px;
+      padding: .3rem .7rem;
+      transition: background .15s;
+    }
+    </style>
+</head>
+
+<body>
+<div class="crumb" id="crumb" data-current="Troubleshooter"></div>
+  <header>
+    <h1>BJT Voltage Divider Troubleshooter</h1>
+    <p>Virtual Multimeter Readout · Single-Stage NPN Bias</p>
+  </header>
+
+  <div class="quiz-wrap">
+
+    <!-- LEFT: circuit diagram -->
+    <div class="circuit-col">
+      <div class="mode-toggle">
+        <div class="mode-seg" id="modeSeg">
+          <button id="modeExample1" class="active" onclick="setMode('example1')">Example 1</button>
+          <button id="modeExample2" onclick="setMode('example2')">Example 2</button>
+          <button id="modeExample3" onclick="setMode('example3')">Example 3</button>
+          <button id="modeRandomise" onclick="setMode('randomise')">Randomise</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="circuit-panel" onclick="openModal()" title="Click to zoom">
+          <div class="panel-label">Circuit Diagram — <span id="panelVoltLabel">12 V</span> Supply</div>
+          <div class="zoom-hint">
+            <svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.8" fill="none" />
+              <line x1="12.5" y1="12.5" x2="17" y2="17" stroke="currentColor" stroke-width="1.8"
+                stroke-linecap="round" />
+              <line x1="6" y1="8" x2="10" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+              <line x1="8" y1="6" x2="8" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+            </svg>
+            Zoom
+          </div>
+
+          <svg id="circuitSvg" viewBox="-90 0 660 560" xmlns="http://www.w3.org/2000/svg"
+            font-family="'Share Tech Mono',monospace">
+
+            <!-- ════════════════════ DEFINITIONS ════════════════════ -->
+
+            <defs>
+              <filter id="glow">
+                <feGaussianBlur stdDeviation="2" result="b" />
+                <feMerge>
+                  <feMergeNode in="b" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+
+              <!-- ══ NPN BJT SHAPE — defined once, instanced with <use> ══ -->
+              <g id="bjt-npn-shape">
+                <circle cx="7" cy="0" r="24" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2"
+                  filter="url(#glow)" />
+                <line x1="-17" y1="0" x2="0" y2="0" style="stroke: var(--colour-bjt)" stroke-width="2" />
+                <!-- base lead -->
+                <line x1="0" y1="-12" x2="0" y2="12" style="stroke: var(--colour-bjt)" stroke-width="2.5" />
+                <!-- base bar -->
+                <polyline points="14,-34 14,-20 0,-8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+                <!-- collector -->
+                <polyline points="14,34 14,20 0,8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+                <!-- emitter -->
+                <polygon points="12,18 1,14 6,8" style="fill: var(--colour-bjt)" />
+                <!-- NPN arrow: tip at outer emitter end, wings symmetric about the slant -->
+              </g>
+
+              <!-- ══ PROBE WIRE — 30px dashed stub; rotate() on <use> points it in any direction ══ -->
+              <line id="probe-wire" x1="0" y1="0" x2="30" y2="0" style="stroke: var(--colour-red)" stroke-width="1.5"
+                stroke-dasharray="4,3" opacity=".8" />
+
+              <!-- ══ VOLTMETER SHAPE ══ -->
+              <g id="meter-shape">
+                <circle cx="0" cy="0" r="30" style="fill: var(--colour-meter-fill); stroke: var(--colour-red)"
+                  stroke-width="1.5" filter="url(#glow)" />
+                <line x1="-15" y1="-20" x2="15" y2="-20" style="stroke: var(--colour-red)" stroke-width="1.5" />
+                <line x1="-15" y1="-14" x2="15" y2="-14" style="stroke: var(--colour-red)" stroke-width="1.5"
+                  stroke-dasharray="3,2" />
+              </g>
+
+              <!-- ══ PRETEND AMMETER BADGE — defined once, instanced with <use> ══ -->
+              <g id="ammeter-shape">
+                <circle cx="0" cy="0" r="30" style="fill: var(--colour-ammeter-fill); stroke: var(--colour-current)"
+                  stroke-width="1.5" filter="url(#glow)" />
+              </g>
+            </defs>
+
+            <!-- ════════════════════ CIRCUIT GROUP ════════════════════ -->
+
+            <g id="circuitGroup" transform="translate(10,5)">
+
+              <!-- ════════════════════ BJT DATASHEET REFERENCE TABLE ════════════════════ -->
+
+              <g id="datasheetTable" transform="translate(-100,0)">
+                <rect x="0" y="0" width="130" height="145" rx="4" style="fill: rgba(0,0,0,.25)"
+                  stroke="var(--colour-bjt)" stroke-width="1" />
+                <text x="6" y="13" style="fill: var(--colour-text)" text-anchor="start" font-size="9" font-weight="bold"
+                  letter-spacing=".03em">BC547 — TYPICAL RATINGS</text>
+                <line x1="6" y1="19" x2="134" y2="19" style="stroke: var(--colour-border)" stroke-width="1" />
+
+                <text x="6" y="32" style="fill: var(--colour-bjt)" font-size="12">V<tspan baseline-shift="sub"
+                    font-size="6.5">BE</tspan>(on)</text>
+                <text x="124" y="32" style="fill: var(--colour-text)" text-anchor="end" font-size="12">0.6 V typ</text>
+
+                <text x="6" y="49" style="fill: var(--colour-bjt)" font-size="12">V<tspan baseline-shift="sub"
+                    font-size="6.5">CE</tspan>(sat)</text>
+                <text x="124" y="49" style="fill: var(--colour-text)" text-anchor="end" font-size="12">0.2 V typ</text>
+
+                <text x="6" y="66" style="fill: var(--colour-bjt)" font-size="12">V<tspan baseline-shift="sub"
+                    font-size="6.5">CEO</tspan>(max)</text>
+                <text x="124" y="66" style="fill: var(--colour-text)" text-anchor="end" font-size="12">45 V</text>
+
+                <text x="6" y="83" style="fill: var(--colour-bjt)" font-size="12">I<tspan baseline-shift="sub"
+                    font-size="6.5">C</tspan>(max)</text>
+                <text x="124" y="83" style="fill: var(--colour-text)" text-anchor="end" font-size="12">100 mA</text>
+
+                <text x="6" y="100" style="fill: var(--colour-bjt)" font-size="12">P<tspan baseline-shift="sub"
+                    font-size="6.5">D</tspan>(max)</text>
+                <text x="124" y="100" style="fill: var(--colour-text)" text-anchor="end" font-size="12">500 mW</text>
+
+                <text x="6" y="117" style="fill: var(--colour-bjt)" font-size="12">h<tspan baseline-shift="sub"
+                    font-size="6.5">FE</tspan> (β)</text>
+                <text x="124" y="117" style="fill: var(--colour-text)" text-anchor="end" font-size="12">110–800</text>
+
+                <text x="6" y="134" style="fill: var(--colour-bjt)" font-size="12">I<tspan baseline-shift="sub"
+                    font-size="6.5">CBO</tspan></text>
+                <text x="124" y="134" style="fill: var(--colour-text)" text-anchor="end" font-size="12">&lt;15 nA</text>
+              </g>
+
+              <!-- ════════════════════ WIRES ════════════════════ -->
+
+              <!-- ── LEFT VERTICAL (base-bias rail, x=100) ── -->
+              <line x1="100" y1="50" x2="100" y2="80" style="stroke: var(--colour-series)" stroke-width="2" />
+              <!-- VCC rail down to R1 -->
+              <line x1="100" y1="160" x2="100" y2="255" style="stroke: var(--colour-series)" stroke-width="2" />
+              <!-- R1 down to Base node -->
+              <line x1="100" y1="255" x2="100" y2="350" style="stroke: var(--colour-series)" stroke-width="2" />
+              <!-- Base node down to R2 -->
+              <line x1="100" y1="430" x2="100" y2="520" style="stroke: var(--colour-series)" stroke-width="2" />
+              <!-- R2 down to GND rail -->
+
+              <!-- ── RIGHT VERTICAL (collector/emitter rail, x=340) ── -->
+              <line x1="340" y1="50" x2="340" y2="80" style="stroke: var(--colour-series)" stroke-width="2" />
+              <!-- VCC rail down to RC -->
+              <line x1="340" y1="160" x2="340" y2="221" style="stroke: var(--colour-series)" stroke-width="2" />
+              <!-- RC down to Collector pin -->
+              <line x1="340" y1="289" x2="340" y2="350" style="stroke: var(--colour-series)" stroke-width="2" />
+              <!-- Emitter pin down to RE -->
+              <line x1="340" y1="430" x2="340" y2="460" style="stroke: var(--colour-series)" stroke-width="2" />
+              <!-- RE down to ammeter (wire broken for ammeter) -->
+              <line x1="340" y1="500" x2="340" y2="520" style="stroke: var(--colour-series)" stroke-width="2" />
+              <!-- ammeter down to GND rail -->
+
+              <!-- ── TOP HORIZONTAL ── -->
+              <line x1="100" y1="50" x2="340" y2="50" style="stroke: var(--colour-series)" stroke-width="2" />
+              <!-- VCC rail (R1 column to RC column) -->
+
+              <!-- ── BOTTOM HORIZONTAL ── -->
+              <line x1="100" y1="520" x2="340" y2="520" style="stroke: var(--colour-series)" stroke-width="2" />
+              <!-- GND rail (R2 column to RE column) -->
+
+              <!-- ── CENTRE HORIZONTAL ── -->
+              <line x1="100" y1="255" x2="309" y2="255" style="stroke: var(--colour-series)" stroke-width="2" />
+              <!-- Base node across to transistor base pin -->
+
+              <!-- ════════════════════ NODES ════════════════════ -->
+
+              <!-- ── NODE B  ── -->
+              <circle cx="100" cy="255" r="5" style="fill: var(--colour-series)" />
+              <g id="nodeB_lbl" transform="translate(70,255)">
+                <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5" />
+                <text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14"
+                  font-weight="bold">B</text>
+              </g>
+
+              <!-- ── NODE C ── -->
+              <g id="nodeC_lbl" transform="translate(370,205)">
+                <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5" />
+                <text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14"
+                  font-weight="bold">C</text>
+              </g>
+
+              <!-- ── NODE E ── -->
+              <g id="nodeE_lbl" transform="translate(370,305)">
+                <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5" />
+                <text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14"
+                  font-weight="bold">E</text>
+              </g>
+
+              <!-- ════════════════════ VCC ════════════════════ -->
+
+              <g id="vccGroup" transform="translate(180,-1)">
+                <line x1="40" y1="50" x2="40" y2="30" style="stroke: var(--colour-supply)" stroke-width="2" />
+                <line x1="0" y1="30" x2="80" y2="30" style="stroke: var(--colour-supply)" stroke-width="2" />
+                <text x="0" y="15" style="fill: var(--colour-supply)" text-anchor="start" font-size="15"
+                  font-weight="bold">V<tspan baseline-shift="sub" font-size="10">CC</tspan></text>
+                <!-- hand-drawn "+" -->
+                <line x1="50" y1="10" x2="50" y2="20" style="stroke: var(--colour-text)" stroke-width="1.0" />
+                <line x1="46" y1="15" x2="54" y2="15" style="stroke: var(--colour-text)" stroke-width="1.0" />
+                <text id="vccValue" x="60" y="20" style="fill: var(--colour-text)" text-anchor="start" font-size="14"
+                  font-weight="bold">12V</text>
+              </g>
+
+              <!-- ════════════════════ GND SYMBOL ════════════════════ -->
+
+              <g id="gndGroup" transform="translate(220,521)">
+                <line x1="0" y1="0" x2="0" y2="15" style="stroke: var(--colour-ground)" stroke-width="2" />
+                <line x1="-14" y1="15" x2="14" y2="15" style="stroke: var(--colour-ground)" stroke-width="2" />
+                <line x1="-9" y1="20" x2="9" y2="20" style="stroke: var(--colour-ground)" stroke-width="1.5" />
+                <line x1="-4" y1="25" x2="4" y2="25" style="stroke: var(--colour-ground)" stroke-width="1.5" />
+              </g>
+
+              <!-- ════════════════════ Q1 — NPN ════════════════════ -->
+
+              <g id="q1Group" transform="translate(326,255)">
+                <use href="#bjt-npn-shape" />
+                <text id="nm-q1" x="-25" y="-15" fill="var(--colour-bjt-labels)" text-anchor="middle" font-size="14"
+                  font-weight="bold">Q1</text>
+                <text id="lbl-q1" x="-20" y="25" fill="var(--colour-bjt-labels)" text-anchor="end"
+                  font-size="12">BC547</text>
+              </g>
+
+              <!--═══════════════════ RESISTORS ════════════════════ -->
+
+              <!-- ══ R1 ══ -->
+              <g id="r1Group" transform="translate(85,80)">
+                <rect id="box-r1" x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)"
+                  stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+                <text id="nm-r1" x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16"
+                  font-weight="bold">R1</text>
+                <text id="lbl-r1" x="60" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle"
+                  font-size="14">10.00kΩ</text>
+              </g>
+
+              <!-- ══ R2 ══ -->
+              <g id="r2Group" transform="translate(85,350)">
+                <rect id="box-r2" x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)"
+                  stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+                <text id="nm-r2" x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16"
+                  font-weight="bold">R2</text>
+                <text id="lbl-r2" x="60" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle"
+                  font-size="14">2.20kΩ</text>
+              </g>
+
+              <!-- ══ RC ══ -->
+              <g id="rcGroup" transform="translate(325,80)">
+                <rect id="box-rc" x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)"
+                  stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+                <text id="nm-rc" x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16"
+                  font-weight="bold">RC</text>
+                <text id="lbl-rc" x="60" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle"
+                  font-size="14">1.00kΩ</text>
+              </g>
+
+              <!-- ══ RE ══ -->
+              <g id="reGroup" transform="translate(325,350)">
+                <rect id="box-re" x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)"
+                  stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+                <text id="nm-re" x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16"
+                  font-weight="bold">RE</text>
+                <text id="lbl-re" x="60" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle"
+                  font-size="14">470.00Ω</text>
+              </g>
+
+              <!-- ════════════════════ PRETEND METERS ════════════════════ -->
+
+              <!-- ── V_B — probes Base node to GND ── -->
+              <g id="meterVB" transform="translate(-5,255)">
+                <use href="#probe-wire" transform="rotate(0) translate(30,0)" />
+                <use href="#meter-shape" />
+                <text x="20" y="-35" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14"
+                  font-weight="bold">V<tspan baseline-shift="sub" font-size="10">B</tspan></text>
+                <text id="meterVBValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle" font-size="15"
+                  font-weight="bold">—</text>
+                <text id="meterVBUnit" x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle"
+                  font-size="14">V</text>
+              </g>
+
+              <!-- ── V_C — probes Collector node to GND ── -->
+              <g id="meterVC" transform="translate(440,180)">
+                <use href="#probe-wire" transform="rotate(161) translate(30,0)" />
+                <use href="#meter-shape" />
+                <text x="20" y="-35" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14"
+                  font-weight="bold">V<tspan baseline-shift="sub" font-size="10">C</tspan></text>
+                <text id="meterVCValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle" font-size="15"
+                  font-weight="bold">—</text>
+                <text id="meterVCUnit" x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle"
+                  font-size="14">V</text>
+              </g>
+
+              <!-- ── V_E — probes Emitter node to GND ── -->
+              <g id="meterVE" transform="translate(440,335)">
+                <use href="#probe-wire" transform="rotate(200) translate(30,0)" />
+                <use href="#meter-shape" />
+                <text x="20" y="-35" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14"
+                  font-weight="bold">V<tspan baseline-shift="sub" font-size="10">E</tspan></text>
+                <text id="meterVEValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle" font-size="15"
+                  font-weight="bold">—</text>
+                <text id="meterVEUnit" x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle"
+                  font-size="14">V</text>
+              </g>
+
+              <!-- ── Ammeter — broken into the wire between RE and GND, reads I_E ── -->
+              <g id="ammeterGroup" transform="translate(340,475)">
+                <use href="#ammeter-shape" />
+                <text x="40" y="-20" style="fill: var(--colour-current)" text-anchor="middle" font-size="14"
+                  font-weight="bold">I<tspan baseline-shift="sub" font-size="10">E</tspan></text>
+                <text id="ammeterValue" x="0" y="-2" style="fill: var(--colour-text)" text-anchor="middle"
+                  font-size="15" font-weight="bold">—</text>
+                <text id="ammeterUnit" x="0" y="15" style="fill: var(--colour-current)" text-anchor="middle"
+                  font-size="12">A</text>
+              </g>
+
+              <!-- ════════════════════ VCE INDICATOR (revealed on Q1) ════════════════════ -->
+
+              <g id="vceInd" transform="translate(350,227)">
+                <text x="20" y="20" style="fill: var(--colour-voltage-label)" text-anchor="start" font-size="14"
+                  font-weight="bold">V<tspan baseline-shift="sub" font-size="10">CE</tspan></text>
+                <text x="20" y="45" text-anchor="start" font-size="15" font-weight="bold">
+                  <tspan id="vceNum" style="fill: var(--colour-text)">?</tspan>
+                  <tspan id="vceUnit" style="fill: var(--colour-supply)" font-size="15" dx="2">V</tspan>
+                </text>
+              </g>
+
+              <!-- ════════════════════ FAULT GHOSTS - IF NO CHANGE EMPTY ════════════════════ -->
+              <!-- Each ghost's delta tspan uses dx="-4" to sit close behind
+                   its arrow — the ⬆/⬇ glyphs carry a lot of their own
+                   built-in right-side whitespace, so even a negative dx
+                   still leaves a clear gap rather than touching (checked
+                   down to dx="-12" before any visible crowding started). -->
+
+              <g id="meterVBGhost" display="none" transform="translate(-10,310)">
+                <text id="meterVBGhostText" text-anchor="middle" font-weight="bold"
+                  font-family="'Share Tech Mono',monospace">
+                  <tspan id="meterVBGhostArrow" font-size="22"></tspan>
+                  <tspan id="meterVBGhostDelta" font-size="14" dx="-4"></tspan>
+                </text>
+              </g>
+              <g id="meterVCGhost" display="none" transform="translate(465,210)">
+                <text id="meterVCGhostText" text-anchor="start" font-weight="bold"
+                  font-family="'Share Tech Mono',monospace">
+                  <tspan id="meterVCGhostArrow" font-size="22"></tspan>
+                  <tspan id="meterVCGhostDelta" font-size="14" dx="-4"></tspan>
+                </text>
+              </g>
+              <g id="meterVEGhost" display="none" transform="translate(465,370)">
+                <text id="meterVEGhostText" text-anchor="start" font-weight="bold"
+                  font-family="'Share Tech Mono',monospace">
+                  <tspan id="meterVEGhostArrow" font-size="22"></tspan>
+                  <tspan id="meterVEGhostDelta" font-size="14" dx="-4"></tspan>
+                </text>
+              </g>
+              <g id="ammeterGroupGhost" display="none" transform="translate(420 ,480)">
+                <text id="ammeterGroupGhostText" text-anchor="middle" font-weight="bold"
+                  font-family="'Share Tech Mono',monospace">
+                  <tspan id="ammeterGroupGhostArrow" font-size="22"></tspan>
+                  <tspan id="ammeterGroupGhostDelta" font-size="14" dx="-4"></tspan>
+                </text>
+              </g>
+              <g id="vceGhostGroup" display="none" transform="translate(440 ,270)">
+                <text id="vceGhostText" text-anchor="start" font-weight="bold"
+                  font-family="'Share Tech Mono',monospace">
+                  <tspan id="vceGhostArrow" font-size="22" font-weight="bold"></tspan>
+                  <tspan id="vceGhostDelta" font-size="14" dx="-4"></tspan>
+                </text>
+              </g>
+
+
+            </g><!-- /circuitGroup -->
+          </svg>
+        </div>
+      </div>
+
+      <!-- Zoom modal -->
+      <div class="diagram-modal" id="diagramModal" onclick="handleModalClick(event)">
+        <div class="modal-inner" id="modalInner">
+          <div class="modal-header">
+            <span class="modal-title" id="modalVoltLabel">Circuit Diagram — 12 V Supply</span>
+            <button class="modal-close" onclick="closeModal()">✕ Close</button>
+          </div>
+          <svg id="modalSvg" viewBox="-90 0 660 560" xmlns="http://www.w3.org/2000/svg"
+            font-family="'Share Tech Mono',monospace"></svg>
+        </div>
+      </div>
+    </div><!-- /circuit-col -->
+
+    <!-- RIGHT: question — read the pretend meters, same question style as bjt_quiz_1 -->
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel">1 / 9</span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+        <div class="q-panel" id="q1Panel">
+          <div class="q-header">
+            <div class="q-num">Q1</div>
+            <div>
+              <div class="q-text" id="q1Text">What is the <span
+                  style="color:var(--colour-voltage-label)">collector-emitter voltage</span> V<sub>CE</sub> in this
+                circuit?</div>
+              <div class="q-hint" id="q1Hint">Read V<sub>C</sub> and V<sub>E</sub> straight off the meters — both are
+                measured with respect to ground.</div>
+            </div>
+          </div>
+          <div class="options" id="q1Options"></div>
+          <div class="result-banner" id="q1Banner"><span id="q1Icon"></span>&nbsp;<span id="q1BannerText"></span></div>
+          <div class="working-box" id="q1Working">
+            <div class="working-title">Worked Solution</div>
+            <div id="q1WorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-check" id="q1Check" onclick="checkQ1()" disabled>Check</button>
+            <button class="btn btn-next" id="q1Next" onclick="showQuestion(2)" style="display:none">Next →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ New Question</button>
+          </div>
+        </div>
+
+        <!-- Q2..Q(N+1) — one question per FAULT_POOL entry, in fixed pool
+             order, generated by buildFaultPanels() so the panel markup can
+             never drift out of sync with the pool itself. -->
+        <div id="faultPanels" style="display:contents"></div>
+
+        <!-- Summary -->
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ New Question</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ══════════════════════════════════════════════════════════════════════
+    // CIRCUIT CONFIGURATION — same component sets and topology as bjt_quiz_1
+    // ══════════════════════════════════════════════════════════════════════
+
+    const VBE = 0.6; // silicon NPN base-emitter drop, assumed constant
+
+    const EXAMPLE_SETS = {
+      example1: { vcc: 12, r1: 10000, r2: 2200, rc: 1690, re: 470 },
+      example2: { vcc: 15, r1: 22000, r2: 4700, rc: 2200, re: 1000 },
+      example3: { vcc: 9, r1: 4700, r2: 1000, rc: 470, re: 220 }
+    };
+    let quizMode = 'example1';
+    let V = { ...EXAMPLE_SETS.example1 };
+
+    // ── curated resistor/supply pools for Randomise mode ──
+    const R1_POOL = [4700, 6800, 8200, 10000, 12000, 15000, 18000, 22000, 27000, 33000, 39000, 47000];
+    const R2_POOL = [1000, 1200, 1500, 1800, 2200, 2700, 3300, 3900, 4700, 5600, 6800, 8200];
+    const RC_POOL = [220, 270, 330, 390, 470, 560, 680, 820, 1000, 1200, 1500, 1800, 2200];
+    const RE_POOL = [100, 120, 150, 180, 220, 270, 330, 390, 470, 560, 680, 820, 1000];
+    const VCC_POOL = [9, 12, 15, 18, 20];
+    function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+    // Retries until the combination keeps Q1 in the active region AND every
+    // fault in FAULT_POOL lands on a sane reading for this exact draw. That
+    // second check matters because question order is fixed (Q3 is always
+    // "R2 high", etc.) — there's no fallback to a different fault the way
+    // there would be if the fault-per-question mapping were picked at
+    // random, so the draw itself has to be one where all 8 are valid.
+    function randomValues() {
+      for (let attempt = 0; attempt < 60; attempt++) {
+        const vals = { vcc: pick(VCC_POOL), r1: pick(R1_POOL), r2: pick(R2_POOL), rc: pick(RC_POOL), re: pick(RE_POOL) };
+        const vb = vals.vcc * vals.r2 / (vals.r1 + vals.r2);
+        const ve = vb - VBE;
+        if (ve < 0.3) continue;
+        const ie = ve / vals.re;
+        const vc = vals.vcc - ie * vals.rc;
+        if (vc - ve < 1 || vc > vals.vcc - 0.3) continue;
+        if (!FAULT_POOL.every(f => isValidFaultResult(calcFaultedCircuit(f, vals), vals))) continue;
+        return vals;
+      }
+      return { ...EXAMPLE_SETS.example1 };
+    }
+
+    function fmtO0(v) { return v >= 1000 ? parseFloat((v / 1000).toFixed(2)) + 'kΩ' : parseFloat(v.toFixed(2)) + 'Ω'; }
+    function fmtO0Parts(v) { if (v >= 1000) return { num: String(parseFloat((v / 1000).toFixed(2))), unit: ' kΩ' }; return { num: String(parseFloat(v.toFixed(2))), unit: ' Ω' }; }
+    // Full-precision formatting for question options/workings (as in bjt_quiz_1).
+    // A handful of faults below (cutoff, open-circuit) land exactly on zero,
+    // so that's special-cased rather than falling through to "0.0 µV".
+    function fmtV(v) { const a = Math.abs(v); if (a >= 1) return parseFloat(v.toFixed(2)) + ' V'; if (a >= 0.001) return parseFloat((v * 1000).toFixed(2)) + ' mV'; return parseFloat((v * 1e6).toFixed(1)) + ' µV'; }
+    function fmtA(a) { const x = Math.abs(a); if (x >= 1) return parseFloat(a.toFixed(3)) + ' A'; if (x >= 0.001) return parseFloat((a * 1000).toFixed(2)) + ' mA'; return parseFloat((a * 1e6).toFixed(1)) + ' µA'; }
+    function frac(num, den) { return `<span class="working-frac"><span class="num">${num}</span><span class="den">${den}</span></span>`; }
+    // Short {num,unit} pairs for the two-line meter badges.
+    function fmtVShort(v) {
+      const a = Math.abs(v);
+      if (a >= 1) return { num: String(parseFloat(v.toFixed(2))), unit: 'V' };
+      if (a >= 0.001) return { num: String(parseFloat((v * 1000).toFixed(2))), unit: 'mV' };
+      return { num: String(parseFloat((v * 1e6).toFixed(1))), unit: 'µV' };
+    }
+    function fmtAShort(a) {
+      const x = Math.abs(a);
+      if (x >= 1) return { num: String(parseFloat(a.toFixed(3))), unit: 'A' };
+      if (x >= 0.001) return { num: String(parseFloat((a * 1000).toFixed(2))), unit: 'mA' };
+      return { num: String(parseFloat((a * 1e6).toFixed(1))), unit: 'µA' };
+    }
+
+    // ── derived (recomputed whenever the value set changes) ──
+    // calcCircuit() is the same voltage-divider-bias maths as the plain quiz,
+    // parameterised so it can be re-run on a faulted component set without
+    // touching the healthy globals below.
+    function calcCircuit(Vs) {
+      const vb = Vs.vcc * Vs.r2 / (Vs.r1 + Vs.r2);  // voltage-divider rule (base current assumed negligible)
+      const ve = vb - VBE;                       // silicon base-emitter drop
+      const ie = ve / Vs.re;                      // Ohm's law on RE
+      const vc = Vs.vcc - ie * Vs.rc;              // I_C ≈ I_E, since I_B is small
+      const vce = vc - ve;
+      return { vb, ve, ie, vc, vce };
+    }
+    let VB, VE, IE, IC, VRC, VC, VCE;
+    function recompute() {
+      const h = calcCircuit(V);
+      VB = h.vb; VE = h.ve; IE = h.ie; IC = h.ie; VRC = h.ie * V.rc; VC = h.vc; VCE = h.vce;
+    }
+
+    // ── update the resistor/VCC labels and the pretend meter badges ──
+    function refreshLabels() {
+      ['r1', 'r2', 'rc', 're'].forEach(r => {
+        const p = fmtO0Parts(V[r]);
+        document.getElementById('lbl-' + r).innerHTML =
+          `<tspan fill="var(--colour-text)">${p.num}</tspan><tspan fill="var(--colour-resistor-labels)">${p.unit}</tspan>`;
+      });
+      document.getElementById('vccValue').innerHTML = `<tspan fill="var(--colour-text)">${V.vcc}</tspan><tspan fill="var(--colour-supply)"> V</tspan>`;
+      document.getElementById('panelVoltLabel').textContent = V.vcc + ' V';
+      const mt = document.getElementById('modalVoltLabel');
+      if (mt) mt.textContent = `Circuit Diagram — ${V.vcc} V Supply`;
+
+      const vb = fmtVShort(VB), vc = fmtVShort(VC), ve = fmtVShort(VE), ie = fmtAShort(IE);
+      document.getElementById('meterVBValue').textContent = vb.num;
+      document.getElementById('meterVBUnit').textContent = vb.unit;
+      document.getElementById('meterVCValue').textContent = vc.num;
+      document.getElementById('meterVCUnit').textContent = vc.unit;
+      document.getElementById('meterVEValue').textContent = ve.num;
+      document.getElementById('meterVEUnit').textContent = ve.unit;
+      document.getElementById('ammeterValue').textContent = ie.num;
+      document.getElementById('ammeterUnit').textContent = ie.unit;
+    }
+
+    function setMode(mode) {
+      quizMode = mode;
+      V = (mode === 'randomise') ? randomValues() : { ...EXAMPLE_SETS[mode] };
+      recompute();
+      refreshLabels();
+      ['example1', 'example2', 'example3', 'randomise'].forEach(m => {
+        const b = document.getElementById('mode' + m.charAt(0).toUpperCase() + m.slice(1));
+        if (b) b.classList.toggle('active', m === mode);
+      });
+      resetQuiz();
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTION ENGINE — Q1 checks the student can read V_CE off the meters
+    // before fault questions start changing what the meters show.
+    // ══════════════════════════════════════════════════════════════════════
+
+    const LETTERS = ['A', 'B', 'C', 'D'];
+    const Q = {};
+    let cur = 'q1';
+    // QIDS/QUIZ_QUESTION_COUNT are declared just below FAULT_POOL, once it
+    // exists — Q1 is the healthy read-the-meters check, and Q2..Q(N+1) are
+    // one fault-diagnosis question per FAULT_POOL entry, in fixed pool order.
+
+    function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+    function buildQ1Options() {
+      // correct: VC - VE
+      // distractors: summed instead of subtracted, confused with V_RC (VCC-VC), used VCC instead of VC
+      return shuffle([
+        { label: fmtV(VCE), type: 'correct' },
+        { label: fmtV(VC + VE), type: 'wrong' },
+        { label: fmtV(V.vcc - VC), type: 'wrong' },
+        { label: fmtV(V.vcc - VE), type: 'wrong' },
+      ]);
+    }
+
+    function renderOptions(qid) {
+      const st = Q[qid], c = document.getElementById(qid + 'Options'); c.innerHTML = '';
+      st.opts.forEach((opt, i) => {
+        const btn = document.createElement('button'); btn.className = 'option-btn';
+        btn.innerHTML = `<span class="option-letter">${LETTERS[i]}</span><span>${opt.label}</span>`;
+        btn.addEventListener('click', () => selectOption(qid, i));
+        c.appendChild(btn);
+      });
+    }
+    function selectOption(qid, i) {
+      if (Q[qid].ans) return;
+      Q[qid].sel = i;
+      document.getElementById(qid + 'Check').disabled = false;
+      document.querySelectorAll('#' + qid + 'Options .option-btn').forEach((b, idx) => b.classList.toggle('selected', idx === i));
+    }
+    function markOptions(qid, sel, cor, ok) {
+      document.querySelectorAll('#' + qid + 'Options .option-btn').forEach((btn, i) => {
+        btn.disabled = true;
+        if (i === cor) { btn.classList.remove('selected'); btn.classList.add('correct'); btn.innerHTML += `<span class="result-icon">✓</span>`; }
+        else if (i === sel && !ok) { btn.classList.remove('selected'); btn.classList.add('wrong'); btn.innerHTML += `<span class="result-icon">✗</span>`; }
+        else btn.classList.add('dimmed');
+      });
+    }
+    function setBanner(qid, ok, correctText) {
+      const banner = document.getElementById(qid + 'Banner');
+      document.getElementById(qid + 'Icon').textContent = ok ? '✓' : '✗';
+      if (ok) { banner.className = 'result-banner correct'; document.getElementById(qid + 'BannerText').innerHTML = `Correct! ${correctText}`; }
+      else { banner.className = 'result-banner wrong'; document.getElementById(qid + 'BannerText').innerHTML = `The correct answer is ${correctText}`; }
+      banner.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function checkQ1() {
+      const st = Q.q1; if (st.ans || st.sel === null) return; st.ans = true;
+      const ok = st.sel === st.cor;
+      markOptions('q1', st.sel, st.cor, ok);
+      setBanner('q1', ok, `V<sub>CE</sub> = ${fmtV(VCE)}`);
+      showQ1Working();
+      document.getElementById('vceNum').textContent = VCE.toFixed(2);
+      document.getElementById('q1Check').style.display = 'none';
+      document.getElementById('q1Next').style.display = 'inline-block';
+      updateProgress();
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // FAULT ENGINE — once Q1 confirms the student can read the healthy
+    // circuit, a fault is drawn from the pool and the meters switch to
+    // showing its symptom (faulted reading + an up/down ghost vs healthy).
+    // The full resistor fault pool: each of R1, R2, RC, RE can drift high
+    // or fail open — 8 scenarios total.
+    // ══════════════════════════════════════════════════════════════════════
+
+    const CLR_UP = 'var(--colour-up)';
+    const CLR_DOWN = 'var(--colour-down)';
+
+    const FAULT_POOL = [
+      { key: 'r1', label: '<span class="colour-resistor">R<sub>1</sub></span>', type: 'high', mult: 2 },
+      { key: 'r1', label: '<span class="colour-resistor">R<sub>1</sub></span>', type: 'open' },
+      { key: 'r2', label: '<span class="colour-resistor">R<sub>2</sub></span>', type: 'high', mult: 1.5 },
+      { key: 'r2', label: '<span class="colour-resistor">R<sub>2</sub></span>', type: 'open' },
+      { key: 'rc', label: '<span class="colour-resistor">R<sub>C</sub></span>', type: 'high', mult: 1.5 },
+      { key: 're', label: '<span class="colour-resistor">R<sub>E</sub></span>', type: 'high', mult: 3 }, // solder joint degraded / resistor drifted high
+      { key: 're', label: '<span class="colour-resistor">R<sub>E</sub></span>', type: 'open' },
+    ];
+    shuffle(FAULT_POOL); // randomise fault order each session
+
+    // Q1 (healthy check) + one question per pool entry, in shuffled pool order.
+    const QIDS = ['q1', ...FAULT_POOL.map((_, i) => 'q' + (i + 2))];
+    const QUIZ_QUESTION_COUNT = QIDS.length;
+
+    const VCE_SAT = 0.2; // typical BJT collector-emitter saturation voltage
+
+    // Computes the faulted circuit's node voltages/current for a given fault.
+    // 'high' faults reuse calcCircuit() with that one component scaled up —
+    // the same active-region maths still holds. 'open' faults are special-
+    // cased per component instead: an infinite resistance would just divide
+    // calcCircuit() by infinity or send a value to +/-Infinity, which isn't
+    // what actually happens on the bench. Each case below reflects the real
+    // fault behaviour:
+    //   R1 open  → no path from VCC to the base; R2 pulls it to ground and
+    //              the transistor cuts off entirely.
+    //   R2 open  → no pull-down on the base; R1 drives it hard and the
+    //              transistor is overdriven into saturation instead.
+    //   RC open  → base/emitter loop is untouched, but with no path for
+    //              collector current the collector floats up to VCC.
+    //   RE open  → no path for emitter current either; with nothing flowing,
+    //              the base-emitter junction can't hold its usual 0.6V drop,
+    //              so the emitter floats up close to (unaffected) V_B.
+    // Vset defaults to the live component set, but accepts an explicit one
+    // too — randomValues() needs to validate a candidate draw against every
+    // fault in the pool *before* that draw becomes the live V.
+    function calcFaultedCircuit(fault, Vset) {
+      Vset = Vset || V;
+      const { key, type, mult } = fault;
+      if (type === 'high') return calcCircuit({ ...Vset, [key]: Vset[key] * mult });
+      const healthy = calcCircuit(Vset);
+      if (key === 'r1') return { vb: 0, ve: 0, ie: 0, vc: Vset.vcc, vce: Vset.vcc };
+      if (key === 'r2') {
+        const ie = (Vset.vcc - VCE_SAT) / (Vset.rc + Vset.re);
+        const ve = ie * Vset.re;
+        const vc = ve + VCE_SAT;
+        const vb = ve + VBE;
+        return { vb, ve, ie, vc, vce: VCE_SAT };
+      }
+      if (key === 'rc') {
+        const vth = Vset.vcc * Vset.r2 / (Vset.r1 + Vset.r2);       // Thévenin voltage of R1/R2 divider
+        const rth = Vset.r1 * Vset.r2 / (Vset.r1 + Vset.r2);        // Thévenin resistance (R1 ∥ R2)
+        const ie  = (vth - VBE) / (rth + Vset.re);                    // IB = IE since IC = 0
+        const ve  = ie * Vset.re;
+        const vb  = ve + VBE;
+        return { vb, ve, ie, vc: Vset.vcc, vce: Vset.vcc - ve };
+      }
+      return { vb: healthy.vb, ve: healthy.vb, ie: 0, vc: Vset.vcc, vce: Vset.vcc - healthy.vb }; // key === 're'
+    }
+
+    // Guards Randomise mode: an extreme random component combo could in
+    // principle push a "high" fault (R1/R2 especially) to a negative or
+    // otherwise nonsensical reading — randomValues() rejects those draws
+    // outright now that question order (and so the fault-per-question
+    // mapping) is fixed rather than picked at random per-session.
+    function isValidFaultResult(r, Vset) {
+      Vset = Vset || V;
+      return [r.vb, r.ve, r.vc, r.ie].every(isFinite) &&
+        r.ve >= -0.05 && r.ie >= -0.0001 && r.vc <= Vset.vcc + 0.05 && (r.vc - r.ve) >= -0.05;
+    }
+
+    // Each entry maps a meter's SVG group to its value/unit text ids, its
+    // formatter, and how to read the healthy reading back out of the globals.
+    const METER_MAP = [
+      { group: 'meterVB', value: 'meterVBValue', unit: 'meterVBUnit', fmt: fmtVShort, healthy: () => VB, faulted: fc => fc.vb },
+      { group: 'meterVC', value: 'meterVCValue', unit: 'meterVCUnit', fmt: fmtVShort, healthy: () => VC, faulted: fc => fc.vc },
+      { group: 'meterVE', value: 'meterVEValue', unit: 'meterVEUnit', fmt: fmtVShort, healthy: () => VE, faulted: fc => fc.ve },
+      { group: 'ammeterGroup', value: 'ammeterValue', unit: 'ammeterUnit', fmt: fmtAShort, healthy: () => IE, faulted: fc => fc.ie },
+    ];
+
+    // Ghost: arrow + delta, in CLR_UP/CLR_DOWN, shown below each meter circle
+    // (or below the ammeter) — same idea as the resistor troubleshooter's
+    // addGhost(), but toggling the static placeholder declared in the SVG
+    // under the "QUESTION 2" comment, rather than building DOM nodes at runtime.
+    // Sets fill only, not stroke — the markup used to also carry a
+    // stroke-width="0.8" with stroke set to the same colour as fill, which
+    // gave the bold text a soft halo/blurred look rather than a crisp edge.
+    function addGhost(groupId, wentUp, deltaStr) {
+      const g = document.getElementById(groupId + 'Ghost'); if (!g) return;
+      const clr = wentUp ? CLR_UP : CLR_DOWN;
+      const text = document.getElementById(groupId + 'GhostText');
+      text.setAttribute('fill', clr);
+      document.getElementById(groupId + 'GhostArrow').textContent = wentUp ? '⬆' : '⬇';
+      document.getElementById(groupId + 'GhostDelta').textContent = deltaStr;
+      g.setAttribute('display', 'inline');
+    }
+    function removeGhost(groupId) {
+      const g = document.getElementById(groupId + 'Ghost'); if (g) g.setAttribute('display', 'none');
+    }
+    function removeAllGhosts() { METER_MAP.forEach(m => removeGhost(m.group)); }
+
+    // Applies a fault: recomputes the circuit with that component's value
+    // adjusted, then updates every meter to the faulted reading — with a
+    // ghost on any meter that moved detectably (>0.05% change) from healthy.
+    function showFault(fault) {
+      const fc = calcFaultedCircuit(fault);
+      METER_MAP.forEach(m => {
+        const hv = m.healthy(), fv = m.faulted(fc);
+        const f = m.fmt(fv);
+        document.getElementById(m.value).textContent = f.num;
+        document.getElementById(m.unit).textContent = f.unit;
+        const changed = (hv === 0 && fv !== 0) || (hv !== 0 && Math.abs(fv - hv) / Math.abs(hv) > 0.0005);
+        if (!changed) { removeGhost(m.group); return; }
+        const wentUp = fv > hv;
+        const d = m.fmt(Math.abs(fv - hv));
+        addGhost(m.group, wentUp, (wentUp ? '+' : '−') + d.num + d.unit);
+      });
+      const fVce = fc.vce;
+      document.getElementById('vceNum').textContent = fVce.toFixed(2);
+      const hVce = VCE;
+      const vceChanged = (hVce === 0 && fVce !== 0) || (hVce !== 0 && Math.abs(fVce - hVce) / Math.abs(hVce) > 0.0005);
+      if (vceChanged) {
+        const wentUp = fVce > hVce;
+        const clr = wentUp ? CLR_UP : CLR_DOWN;
+        const vceGhostText = document.getElementById('vceGhostText');
+        vceGhostText.setAttribute('fill', clr);
+        const delta = Math.abs(fVce - hVce).toFixed(2);
+        document.getElementById('vceGhostArrow').textContent = wentUp ? '⬆' : '⬇';
+        document.getElementById('vceGhostDelta').textContent = (wentUp ? '+' : '−') + delta + 'V';
+        document.getElementById('vceGhostGroup').setAttribute('display', 'inline');
+      } else {
+        document.getElementById('vceGhostGroup').setAttribute('display', 'none');
+      }
+    }
+    function clearFault() {
+      refreshLabels(); // restores every meter to the healthy reading
+      removeAllGhosts();
+      document.getElementById('vceNum').textContent = (Q.q1 && Q.q1.ans) ? VCE.toFixed(2) : '?';
+      document.getElementById('vceGhostGroup').setAttribute('display', 'none');
+    }
+
+    function faultVerb(type) { return type === 'high' ? 'gone high' : 'gone open'; }
+    function faultLabel(f) { return `${f.label} has ${faultVerb(f.type)}`; }
+
+    // Wrong answers are just the other 7 scenarios in FAULT_POOL — every
+    // distractor is a real, plausible fault, not hand-written text.
+    function buildFaultOptions(fault) {
+      const correctLabel = faultLabel(fault);
+      const pool = FAULT_POOL.filter(f => faultLabel(f) !== correctLabel);
+      const wrongs = shuffle([...pool]).slice(0, 3).map(faultLabel);
+      return shuffle([
+        { label: correctLabel, type: 'correct' },
+        ...wrongs.map(w => ({ label: w, type: 'wrong' })),
+      ]);
+    }
+
+    // Builds question n's fault + options once per quiz session (n=2 is
+    // FAULT_POOL[0], n=3 is FAULT_POOL[1], … — fixed order). Safe to call
+    // repeatedly: a no-op once Q[qid] already has its options.
+    function ensureFaultQuestionBuilt(n) {
+      const qid = 'q' + n;
+      if (Q[qid] && Q[qid].opts && Q[qid].opts.length) return;
+      const fault = FAULT_POOL[n - 2];
+      const opts = buildFaultOptions(fault);
+      Q[qid] = { sel: null, ans: false, cor: opts.findIndex(o => o.type === 'correct'), opts, fault };
+      renderOptions(qid);
+    }
+
+    // Builds question n if needed, then points the live meters at its fault.
+    function showFaultQuestion(n) {
+      ensureFaultQuestionBuilt(n);
+      showFault(Q['q' + n].fault);
+    }
+
+    function checkFault(n) {
+      const qid = 'q' + n;
+      const st = Q[qid]; if (!st || st.ans || st.sel === null) return; st.ans = true;
+      const ok = st.sel === st.cor;
+      markOptions(qid, st.sel, st.cor, ok);
+      setBanner(qid, ok, faultLabel(st.fault));
+      showFaultWorking(qid, st.fault);
+      document.getElementById(qid + 'Check').style.display = 'none';
+      const isLast = n === QUIZ_QUESTION_COUNT;
+      const advance = document.getElementById(qid + (isLast ? 'Summary' : 'Next'));
+      if (advance) advance.style.display = 'inline-block';
+      updateProgress();
+    }
+    // One tailored explanation per key+type — the mechanism genuinely
+    // differs (simple Ohm's-law scaling vs. cutoff vs. saturation vs. a
+    // floating node), so these aren't worth trying to generate generically.
+    // One tailored explanation per key+type, each walking the same
+    // voltage-divider → V_E → I_E → V_C chain as bjt_quiz_1's Q1-Q4 workings
+    // (Formula: / Substituting values: / result in .cr) — just applied to
+    // whichever quantities this particular fault actually disturbs. 'high'
+    // faults still solve the normal active-region formulas with one
+    // resistor scaled; 'open' faults substitute the special-cased formula
+    // that actually applies (cutoff, saturation, or a zero-current branch).
+    const FAULT_EXPLANATIONS = {
+      r1_high: (h, f, fault) => `
+    <div class="working-section">Identifying the fault:</div>
+    <div class="diagnosis-block">
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 1: Base &amp; Emitter voltages have both dropped (<span class="colour-voltage">V<sub>B</sub></span> ↓ <span class="colour-result">${fmtV(f.vb - h.vb)}</span>, <span class="colour-voltage">V<sub>E</sub></span> ↓ <span class="colour-result">${fmtV(f.ve - h.ve)}</span>)</div>
+        <div class="symptom-body">The base voltage divider sets the operating reference. Because <span class="colour-voltage">V<sub>B</sub></span> dropped from its healthy value (${fmtV(h.vb)}) down to ${fmtV(f.vb)}, the divider ratio has shifted downward — <span class="colour-resistor">R<sub>1</sub></span> has increased in resistance, choking off voltage from the <span class="colour-supply">${V.vcc}&thinsp;V</span> rail and letting <span class="colour-resistor">R<sub>2</sub></span> pull the base closer to ground.<br>Because the B‑E junction maintains its normal diode drop (<span class="colour-bjt">V<sub>BE</sub></span> ≈ 0.6&thinsp;V), <span class="colour-voltage">V<sub>E</sub></span> is dragged down lockstep with the base by that exact same offset.</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 2: Emitter current has dropped heavily (<span class="colour-current">I<sub>E</sub></span> ↓ <span class="colour-result">${fmtA(f.ie - h.ie)}</span>)</div>
+        <div class="symptom-body">By Ohm's Law (<span class="colour-current">I<sub>E</sub></span> = <span class="colour-voltage">V<sub>E</sub></span> / <span class="colour-resistor">R<sub>E</sub></span>), the voltage pushing across the healthy <span class="colour-resistor">${fmtO0(V.re)}</span> emitter resistor has been reduced to just <span class="colour-result">${fmtV(f.ve)}</span>. Less voltage across the same resistance dictates a large reduction in loop current.</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 3: Collector voltage has risen significantly (<span class="colour-voltage">V<sub>C</sub></span> ↑ +<span class="colour-result">${fmtV(f.vc - h.vc)}</span>)</div>
+        <div class="symptom-body">Because <span class="colour-current">I<sub>C</sub></span> ≈ <span class="colour-current">I<sub>E</sub></span>, the drop in loop current means far less current passes through <span class="colour-resistor">R<sub>C</sub></span>. A smaller current reduces the voltage drop across <span class="colour-resistor">R<sub>C</sub></span> (<span class="colour-voltage">V<sub>RC</sub></span> = <span class="colour-current">I<sub>C</sub></span> × <span class="colour-resistor">R<sub>C</sub></span>), allowing the collector voltage to rise up toward the supply rail, resting at <span class="colour-result">${fmtV(f.vc)}</span>.</div>
+      </div>
+    </div>
+    <div class="working-section">Applying the formulas:</div>
+
+    <div class="working-step">Voltage divider (with the faulted <span class="colour-resistor">R<sub>1</sub></span>):</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-supply">V<sub>CC</sub></span> × ${frac('<span class="colour-resistor">R2</span>', '<span class="colour-resistor">R<sub>1</sub></span> + <span class="colour-resistor">R2</span>')}</div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>B</sub></span> = ${V.vcc} V × ${frac(fmtO0(V.r2), fmtO0(V.r1 * fault.mult) + ' + ' + fmtO0(V.r2))}</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-result">${fmtV(f.vb)}</span></div>
+
+    <div class="working-line">Less of <span class="colour-supply">V<sub>CC</sub></span> now reaches the base, so <span class="colour-voltage">V<sub>B</sub></span> falls from ${fmtV(h.vb)}.</div>
+    <div class="working-step">Emitter voltage:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-voltage">V<sub>B</sub></span> − <span class="colour-bjt">V<sub>BE</sub>(on)</span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>E</sub></span> = ${fmtV(f.vb)} − 0.6 V</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-result">${fmtV(f.ve)}</span></div>
+
+    <div class="working-step">Emitter current:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>E</sub></span> = ${frac('<span class="colour-voltage">V<sub>E</sub></span>', '<span class="colour-resistor">R<sub>E</sub></span>')}</div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>E</sub></span> = ${frac(fmtV(f.ve), fmtO0(V.re))}</div>
+    <div class="working-total"><span class="colour-current">I<sub>E</sub></span> = <span class="colour-result">${fmtA(f.ie)}</span></div>
+
+    <div class="working-step">Collector voltage:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-supply">V<sub>CC</sub></span> − <span class="colour-current">I<sub>E</sub></span><span class="colour-resistor">R<sub>C</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>C</sub></span> = ${V.vcc} V − (${fmtA(f.ie)} × ${fmtO0(V.rc)})</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-result">${fmtV(f.vc)}</span></div>
+
+    <div class="working-step">Collector-emitter voltage:</div>
+    <div class="working-formula-row"><span class="colour-vce">V<sub>CE</sub></span> = <span class="colour-voltage">V<sub>C</sub></span> − <span class="colour-voltage">V<sub>E</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-vce">V<sub>CE</sub></span> = ${fmtV(f.vc)} − ${fmtV(f.ve)}</div>
+    <div class="working-total"><span class="colour-vce">V<sub>CE</sub></span> = <span class="colour-result">${fmtV(f.vce)}</span></div>`,
+
+      r1_open: (h, f) => `
+    <div class="working-section">Identifying the fault:</div>
+    <div class="diagnosis-block">
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 1: Base &amp; Emitter voltages have dropped completely to zero (<span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-result">${fmtV(f.vb)}</span>, <span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-result">${fmtV(f.ve)}</span>)</div>
+        <div class="symptom-body">Because <span class="colour-resistor">R<sub>1</sub></span> has gone open-circuit, no current can flow from the <span class="colour-supply">${V.vcc}&thinsp;V</span> rail into the divider network. The base node is left tied to ground exclusively through the healthy <span class="colour-resistor">R<sub>2</sub></span>, which drains all remaining charge — pulling <span class="colour-voltage">V<sub>B</sub></span> firmly to 0&thinsp;V.<br>Without a positive base voltage to overcome the 0.6&thinsp;V forward bias threshold (<span class="colour-bjt">V<sub>BE</sub></span>), the transistor cannot turn on, so <span class="colour-voltage">V<sub>E</sub></span> also drops to ground through <span class="colour-resistor">R<sub>E</sub></span>.</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 2: Emitter current drops completely to zero (<span class="colour-current">I<sub>E</sub></span> = <span class="colour-result">${fmtA(f.ie)}</span>)</div>
+        <div class="symptom-body">Since the transistor is completely cut off, no current passes through the collector-to-emitter channel. By Ohm's Law (<span class="colour-current">I<sub>E</sub></span> = <span class="colour-voltage">V<sub>E</sub></span> / <span class="colour-resistor">R<sub>E</sub></span>), a voltage drop of 0&thinsp;V across <span class="colour-resistor">R<sub>E</sub></span> yields exactly zero current flowing through the loop.</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 3: Collector voltage floats all the way up to the supply rail (<span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-result">${fmtV(f.vc)}</span>)</div>
+        <div class="symptom-body">With the transistor acting like an open switch, <span class="colour-current">I<sub>C</sub></span> = 0. By Ohm's Law: <span class="colour-voltage">V<sub>RC</sub></span> = <span class="colour-current">I<sub>C</sub></span> × <span class="colour-resistor">R<sub>C</sub></span> = 0&thinsp;A × <span class="colour-resistor">${fmtO0(V.rc)}</span> = 0&thinsp;V. Since no voltage is dropped across <span class="colour-resistor">R<sub>C</sub></span>, <span class="colour-voltage">V<sub>C</sub></span> rises to match the full supply rail. Consequently <span class="colour-vce">V<sub>CE</sub></span> = <span class="colour-voltage">V<sub>C</sub></span> − <span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-result">${fmtV(f.vce)}</span> — the maximum possible value.</div>
+      </div>
+    </div>
+    <div class="working-section">Applying the formulas:</div>
+
+    <div class="working-step">Voltage divider (<span class="colour-resistor">R<sub>1</sub></span> open = infinite resistance):</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-supply">V<sub>CC</sub></span> × ${frac('<span class="colour-resistor">R2</span>', '<span class="colour-resistor">R<sub>1</sub></span> + <span class="colour-resistor">R2</span>')} = <span class="colour-supply">V<sub>CC</sub></span> × ${frac('<span class="colour-resistor">R2</span>', '∞')} → <span class="colour-result">0.00 V</span></div>
+    <div class="working-line">With no path from <span class="colour-supply">V<sub>CC</sub></span> to the base at all, <span class="colour-resistor">R<sub>2</sub></span> pulls it straight to <span class="colour-ground">ground</span>, and with no forward bias across the base-emitter junction the transistor <b>cuts off</b> entirely.</div>
+    <div class="working-label">Emitter current (transistor off):</div>
+    <div class="working-total"><span class="colour-current">I<sub>E</sub></span> = <span class="colour-result">${fmtA(f.ie)}</span></div>
+
+    <div class="working-step">Emitter voltage (no current, no drop across <span class="colour-resistor">R<sub>E</sub></span>):</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-current">I<sub>E</sub></span> × <span class="colour-resistor">R<sub>E</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>E</sub></span> = 0 A × ${fmtO0(V.re)}</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-result">${fmtV(f.ve)}</span></div>
+
+    <div class="working-step">Collector voltage (no current, no drop across <span class="colour-resistor">R<sub>C</sub></span>):</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-supply">V<sub>CC</sub></span> − <span class="colour-current">I<sub>E</sub></span><span class="colour-resistor">R<sub>C</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>C</sub></span> = ${V.vcc} V − 0 V</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-result">${fmtV(f.vc)}</span></div>
+
+    <div class="working-step">Collector-emitter voltage:</div>
+    <div class="working-formula-row"><span class="colour-vce">V<sub>CE</sub></span> = <span class="colour-voltage">V<sub>C</sub></span> − <span class="colour-voltage">V<sub>E</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-vce">V<sub>CE</sub></span> = ${fmtV(f.vc)} − ${fmtV(f.ve)}</div>
+    <div class="working-total"><span class="colour-vce">V<sub>CE</sub></span> = <span class="colour-result">${fmtV(f.vce)}</span></div>`,
+
+      r2_high: (h, f, fault) => `
+    <div class="working-section">Identifying the fault:</div>
+    <div class="diagnosis-block">
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 1: Base &amp; Emitter voltages have both risen (<span class="colour-voltage">V<sub>B</sub></span> ↑ +<span class="colour-result">${fmtV(f.vb - h.vb)}</span>, <span class="colour-voltage">V<sub>E</sub></span> ↑ +<span class="colour-result">${fmtV(f.ve - h.ve)}</span>)</div>
+        <div class="symptom-body">The base voltage divider sets <span class="colour-voltage">V<sub>B</sub></span>. Because it rose from its healthy value (${fmtV(h.vb)}) up to ${fmtV(f.vb)}, the divider ratio has changed — specifically, the bottom resistor <span class="colour-resistor">R<sub>2</sub></span> has increased, pulling <span class="colour-voltage">V<sub>B</sub></span> up closer to the <span class="colour-supply">${V.vcc}&thinsp;V</span> rail.<br>Because the B‑E junction acts as a fixed diode drop (<span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-voltage">V<sub>B</sub></span> − 0.6&thinsp;V), <span class="colour-voltage">V<sub>E</sub></span> is forced to follow <span class="colour-voltage">V<sub>B</sub></span> upward by that exact same offset.</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 2: Emitter current has increased (<span class="colour-current">I<sub>E</sub></span> ↑ +<span class="colour-result">${fmtA(f.ie - h.ie)}</span>)</div>
+        <div class="symptom-body">By Ohm's Law (<span class="colour-current">I<sub>E</sub></span> = <span class="colour-voltage">V<sub>E</sub></span> / <span class="colour-resistor">R<sub>E</sub></span>), <span class="colour-voltage">V<sub>E</sub></span> was forced up by the faulty divider while <span class="colour-resistor">R<sub>E</sub></span> is unchanged, so the current through <span class="colour-resistor">R<sub>E</sub></span> increased. Because <span class="colour-current">I<sub>C</sub></span> ≈ <span class="colour-current">I<sub>E</sub></span>, this extra current drops more voltage across <span class="colour-resistor">R<sub>C</sub></span>, pulling <span class="colour-voltage">V<sub>C</sub></span> down to <span class="colour-result">${fmtV(f.vc)}</span>.</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 3: Transistor is heavily biased but not yet saturated (<span class="colour-vce">V<sub>CE</sub></span> = <span class="colour-result">${fmtV(f.vce)}</span>)</div>
+        <div class="symptom-body">Even though <span class="colour-vce">V<sub>CE</sub></span> dropped significantly, it is still at <span class="colour-result">${fmtV(f.vce)}</span>, well above the datasheet saturation limit of <span class="colour-vce">V<sub>CE(sat)</sub></span> = ${VCE_SAT} V. The transistor is still in its active region, just driven much harder than normal because of <span class="colour-resistor">R<sub>2</sub></span>'s increased value.</div>
+      </div>
+    </div>
+    <div class="working-section">Applying the formulas:</div>
+    <div class="working-step">Voltage divider (with the faulted <span class="colour-resistor">R<sub>2</sub></span>):</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-supply">V<sub>CC</sub></span> × ${frac('<span class="colour-resistor">R2</span>', '<span class="colour-resistor">R<sub>1</sub></span> + <span class="colour-resistor">R2</span>')}</div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>B</sub></span> = ${V.vcc} V × ${frac(fmtO0(V.r2 * fault.mult), fmtO0(V.r1) + ' + ' + fmtO0(V.r2 * fault.mult))}</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-result">${fmtV(f.vb)}</span></div>
+    <div class="working-line">More of <span class="colour-supply">V<sub>CC</sub></span> now reaches the base, so <span class="colour-voltage">V<sub>B</sub></span> rises from ${fmtV(h.vb)}.</div>
+
+    <div class="working-step">Emitter voltage:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-voltage">V<sub>B</sub></span> − <span class="colour-bjt">V<sub>BE</sub>(on)</span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>E</sub></span> = ${fmtV(f.vb)} − 0.6 V</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-result">${fmtV(f.ve)}</span></div>
+
+    <div class="working-step">Emitter current:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>E</sub></span> = ${frac('<span class="colour-voltage">V<sub>E</sub></span>', '<span class="colour-resistor">R<sub>E</sub></span>')}</div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>E</sub></span> = ${frac(fmtV(f.ve), fmtO0(V.re))}</div>
+    <div class="working-total"><span class="colour-current">I<sub>E</sub></span> = <span class="colour-result">${fmtA(f.ie)}</span></div>
+
+    <div class="working-step">Collector voltage:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-supply">V<sub>CC</sub></span> − <span class="colour-current">I<sub>E</sub></span><span class="colour-resistor">R<sub>C</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>C</sub></span> = ${V.vcc} V − (${fmtA(f.ie)} × ${fmtO0(V.rc)})</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-result">${fmtV(f.vc)}</span></div>
+
+    <div class="working-step">Collector-emitter voltage:</div>
+    <div class="working-formula-row"><span class="colour-vce">V<sub>CE</sub></span> = <span class="colour-voltage">V<sub>C</sub></span> − <span class="colour-voltage">V<sub>E</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-vce">V<sub>CE</sub></span> = ${fmtV(f.vc)} − ${fmtV(f.ve)}</div>
+    <div class="working-total"><span class="colour-vce">V<sub>CE</sub></span> = <span class="colour-result">${fmtV(f.vce)}</span></div>`,
+
+      r2_open: (h, f) => `
+    <div class="working-section">Identifying the fault:</div>
+    <div class="diagnosis-block">
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 1: Base &amp; Emitter voltages have both jumped up (<span class="colour-voltage">V<sub>B</sub></span> ↑ +<span class="colour-result">${fmtV(f.vb - h.vb)}</span>, <span class="colour-voltage">V<sub>E</sub></span> ↑ +<span class="colour-result">${fmtV(f.ve - h.ve)}</span>)</div>
+        <div class="symptom-body">The ground connection for the base divider has been severed. Instead of a voltage divider, <span class="colour-resistor">R<sub>1</sub></span> now acts as a direct pull-up toward the <span class="colour-supply">${V.vcc}&thinsp;V</span> rail, flooding the base with current and driving <span class="colour-voltage">V<sub>B</sub></span> up to <span class="colour-result">${fmtV(f.vb)}</span>.<br>Because the B‑E junction stays forward-biased (<span class="colour-bjt">V<sub>BE</sub></span> ≈ 0.6&thinsp;V), <span class="colour-voltage">V<sub>E</sub></span> tracks the base upward lockstep, landing at <span class="colour-result">${fmtV(f.ve)}</span>.</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 2: Emitter current has surged (<span class="colour-current">I<sub>E</sub></span> ↑ +<span class="colour-result">${fmtA(f.ie - h.ie)}</span>)</div>
+        <div class="symptom-body">By Ohm's Law (<span class="colour-current">I<sub>E</sub></span> = <span class="colour-voltage">V<sub>E</sub></span> / <span class="colour-resistor">R<sub>E</sub></span>), the massive rise in <span class="colour-voltage">V<sub>E</sub></span> pushing across the healthy <span class="colour-resistor">${fmtO0(V.re)}</span> emitter resistor forces the loop current up to <span class="colour-result">${fmtA(f.ie)}</span>.</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 3: <span class="colour-vce">V<sub>CE</sub></span> has bottomed out at the saturation limit (<span class="colour-vce">V<sub>CE</sub></span> = <span class="colour-result">${fmtV(f.vce)}</span>)</div>
+        <div class="symptom-body">This is the smoking gun for a saturated transistor. The massive influx of base current tries to pull a huge collector current (<span class="colour-current">I<sub>C</sub></span> = β × <span class="colour-current">I<sub>B</sub></span>). However, <span class="colour-resistor">R<sub>C</sub></span> limits the maximum current the <span class="colour-supply">${V.vcc}&thinsp;V</span> rail can provide, so the transistor fully conducts, dropping <span class="colour-vce">V<sub>CE</sub></span> to its absolute internal floor: <span class="colour-vce">V<sub>CE(sat)</sub></span> = ${VCE_SAT}&thinsp;V.</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 4: Collector voltage has dropped drastically (<span class="colour-voltage">V<sub>C</sub></span> ↓ <span class="colour-result">${fmtV(f.vc - h.vc)}</span>)</div>
+        <div class="symptom-body">In saturation, the collector is pinched right above the emitter voltage. You can verify this: <span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-voltage">V<sub>E</sub></span> + <span class="colour-vce">V<sub>CE(sat)</sub></span> = ${fmtV(f.ve)} + ${VCE_SAT}&thinsp;V = <span class="colour-result">${fmtV(f.vc)}</span>.</div>
+      </div>
+    </div>
+    <div class="working-section">Applying the formulas:</div>
+    <div class="working-line">Because <span class="colour-resistor">R<sub>2</sub></span> has gone open, we can no longer use the voltage divider (<span class="colour-resistor">R<sub>1</sub></span>&nbsp;<span class="colour-resistor">R<sub>2</sub></span>) to calculate <span class="colour-voltage">V<sub>B</sub></span>.</div>
+    <div class="working-line">So how to verify it?</div>
+    <div class="working-step">Preliminaries: </div>
+
+    <div class="working-label">We are going to make 2 assumptions:</div>
+    <div class="working-line">1. <span class="colour-bjt">Q1</span> is in saturation.</div>
+    <div class="working-line">2. <span class="colour-current">I<sub>B</sub></span> ≈ 0 (The base current is so low it is negligible).</div>
+    <div class="working-line">&nbsp;</div>
+
+    <div class="working-label">Transistor's in saturation:</div>
+    <div class="working-line">A saturated transistor (BJT) fixes its voltage at the value of <span class="colour-bjt">V<sub>CE(sat)</sub></span> in the datasheet.</div>
+    <div class="working-formula-row"><span class="colour-bjt">V<sub>CE(sat)</sub></span> = 0.2 V</div>
+    <div class="working-line">&nbsp;</div>
+
+    <div class="working-label">Kirchhoff's Current Law:</div>
+    <div class="working-line">Because we assume that <span class="colour-current">I<sub>B</sub></span> ≈ 0, the current for the right hand side of the circuit can be approximated to:</div>
+    <div class="working-formula-row"><span class="colour-current">I</span> ≈ <span class="colour-current">I<sub>RC</sub></span> ≈ <span class="colour-current">I<sub>RE</sub></span> ≈ <span class="colour-current">I<sub>E</sub></span></div>
+    <div class="working-line">&nbsp;</div>
+
+    <div class="working-label">Kirchhoff's Voltage Law:</div>
+    <div class="working-line">The sum of the voltages around a closed loop is zero.</div>
+    <div class="working-formula-row"><span class="colour-supply">V<sub>CC</sub></span> − <span class="colour-voltage">V<sub>RC</sub></span> − <span class="colour-bjt">V<sub>CE(sat)</sub></span> − <span class="colour-voltage">V<sub>RE</sub></span> = 0</div>
+    <div class="working-line">This can be rearranged as:</div>
+    <div class="working-formula-row"><span class="colour-supply"><span class="colour-voltage">V<sub>RC</sub></span> + <span class="colour-voltage">V<sub>RE</sub></span> = V<sub>CC</sub></span> − <span class="colour-bjt">V<sub>CE(sat)</sub></span></div>
+    <div class="working-line">&nbsp;</div>
+
+    <div class="working-step">Emmitter current: </div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>E</sub></span> ≈ <span class="colour-current">I</span> = ${frac('<span class="colour-voltage">V</span>','<span class="colour-resistor">R</span>', '')}</div>
+    <div class="working-formula-row"><span class="colour-voltage">V</span> = <span class="colour-voltage">V<sub>RC</sub></span> + <span class="colour-voltage">V<sub>RE</sub></span> = <span class="colour-supply">V<sub>CC</sub></span> − <span class="colour-bjt">V<sub>CE(sat)</sub></span></div>
+    <div class="working-formula-row"><span class="colour-resistor">R</span> = <span class="colour-resistor">R<sub>C</sub></span> + <span class="colour-resistor">R<sub>E</sub></span></div>
+    <div class="working-line">Therefore:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>E</sub></span> = ${frac('<span class="colour-supply">V<sub>CC</sub></span> − <span class="colour-bjt">V<sub>CE(sat)</sub></span>', '<span class="colour-resistor">R<sub>C</sub></span> + <span class="colour-resistor">R<sub>E</sub></span>')}</div>
+
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>E</sub></span> = ${frac(`${V.vcc} V − 0.2 V`, `${fmtO0(V.rc)} + ${fmtO0(V.re)}`)}</div>
+    <div class="working-total"><span class="colour-current">I<sub>E</sub></span> = <span class="colour-result">${fmtA(f.ie)}</span></div>
+
+    <div class="working-step">Emitter voltage:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-current">I<sub>E</sub></span> × <span class="colour-resistor">R<sub>E</sub></span></div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>E</sub></span> = ${fmtA(f.ie)} × ${fmtO0(V.re)}</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-result">${fmtV(f.ve)}</span></div>
+
+    <div class="working-step">Base voltage:</div>
+    <div class="working-label">Base voltage (<span class="colour-bjt">V<sub>BE</sub>(on)</span> still ≈ 0.6 V (<span class="colour-bjt">V<sub>BE</sub> (on)</span>), even saturated):</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-voltage">V<sub>E</sub></span> + <span class="colour-bjt">V<sub>BE</sub>(on)</span></div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>B</sub></span> = ${fmtV(f.ve)} + 0.6 V</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-result">${fmtV(f.vb)}</span></div>
+
+    <div class="working-step">Collector voltage:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-voltage">V<sub>E</sub></span> + <span class="colour-bjt">V<sub>CE(sat)</sub></span></div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>C</sub></span> = ${fmtV(f.ve)} + 0.2 V </div>
+    <div class="working-total"><span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-result">${fmtV(f.vc)}</span></div>
+
+    <div class="working-label">Collector-emitter voltage:</div>
+    <div class="working-formula-row"><span class="colour-vce">V<sub>CE</sub></span> = <span class="colour-voltage">V<sub>C</sub></span> − <span class="colour-voltage">V<sub>E</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-vce">V<sub>CE</sub></span> = ${fmtV(f.vc)} − ${fmtV(f.ve)}</div>
+    <div class="working-total"><span class="colour-vce">V<sub>CE</sub></span> = <span class="colour-result">${fmtV(f.vce)}</span></div>`,
+
+      rc_high: (h, f, fault) => `
+    <div class="working-section">Identifying the fault:</div>
+    <div class="diagnosis-block">
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 1: Base &amp; Emitter voltages are perfectly normal (<span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-result">${fmtV(f.vb)}</span>, <span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-result">${fmtV(f.ve)}</span>)</div>
+        <div class="symptom-body">The base divider resistors (<span class="colour-resistor">R<sub>1</sub></span> and <span class="colour-resistor">R<sub>2</sub></span>) are healthy and holding their target voltage. Because the transistor acts as a current source controlled by the base-emitter loop, <span class="colour-voltage">V<sub>E</sub></span> is locked in at <span class="colour-voltage">V<sub>B</sub></span> − 0.6&thinsp;V. A fault on the collector side does not disturb this bias.</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 2: Emitter current is completely normal (<span class="colour-current">I<sub>E</sub></span> = <span class="colour-result">${fmtA(f.ie)}</span>)</div>
+        <div class="symptom-body">By Ohm's Law (<span class="colour-current">I<sub>E</sub></span> = <span class="colour-voltage">V<sub>E</sub></span> / <span class="colour-resistor">R<sub>E</sub></span>), the voltage across <span class="colour-resistor">R<sub>E</sub></span> (${fmtV(f.ve)}) and its physical resistance (${fmtO0(V.re)}) are both unchanged, so the loop current stays exactly at its design value. This confirms that <span class="colour-resistor">R<sub>1</sub></span>, <span class="colour-resistor">R<sub>2</sub></span>, <span class="colour-resistor">R<sub>E</sub></span>, and the B‑E junction are all 100% operational.</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 3: Collector voltage has dropped significantly (<span class="colour-voltage">V<sub>C</sub></span> ↓ <span class="colour-result">${fmtV(f.vc - h.vc)}</span>)</div>
+        <div class="symptom-body">We established that <span class="colour-current">I<sub>C</sub></span> ≈ <span class="colour-current">I<sub>E</sub></span> is still flowing normally. By Ohm's Law (<span class="colour-voltage">V<sub>RC</sub></span> = <span class="colour-current">I<sub>C</sub></span> × <span class="colour-resistor">R<sub>C</sub></span>), because the current is constant yet <span class="colour-voltage">V<sub>C</sub></span> dropped closer to ground — meaning more voltage is being dropped across <span class="colour-resistor">R<sub>C</sub></span> — the physical resistance of <span class="colour-resistor">R<sub>C</sub></span> must have increased.</div>
+      </div>
+    </div>
+    <div class="working-section">Applying the formulas:</div>
+
+    <div class="working-step">Base voltage:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-supply">V<sub>CC</sub></span> × ${frac('<span class="colour-resistor">R2</span>', '<span class="colour-resistor">R<sub>1</sub></span> + <span class="colour-resistor">R2</span>')}</div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>B</sub></span> = ${V.vcc} V × ${frac(fmtO0(V.r2), fmtO0(V.r1) + ' + ' + fmtO0(V.r2))}</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-result">${fmtV(f.vb)}</span> — unchanged</div>
+
+    <div class="working-step">Emitter voltage:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-voltage">V<sub>B</sub></span> − <span class="colour-bjt">V<sub>BE</sub>(on)</span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>E</sub></span> = ${fmtV(f.vb)} − 0.6 V</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-result">${fmtV(f.ve)}</span> — unchanged</div>
+   
+    <div class="working-step">Emitter current:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>E</sub></span> = ${frac('<span class="colour-voltage">V<sub>E</sub></span>', '<span class="colour-resistor">R<sub>E</sub></span>')}</div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>E</sub></span> = ${frac(fmtV(f.ve), fmtO0(V.re))}</div>
+    <div class="working-total"><span class="colour-current">I<sub>E</sub></span> = <span class="colour-result">${fmtA(f.ie)}</span> — unchanged, no ammeter movement at all</div>
+  
+    <div class="working-step">Collector voltage (with the faulted <span class="colour-resistor">R<sub>C</sub></span>):</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-supply">V<sub>CC</sub></span> − <span class="colour-current">I<sub>E</sub></span><span class="colour-resistor">R<sub>C</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>C</sub></span> = ${V.vcc} V − (${fmtA(f.ie)} × ${fmtO0(V.rc * fault.mult)})</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-result">${fmtV(f.vc)}</span></div>
+   
+    <div class="working-step">Collector-emitter voltage:</div>
+    <div class="working-formula-row"><span class="colour-vce">V<sub>CE</sub></span> = <span class="colour-voltage">V<sub>C</sub></span> − <span class="colour-voltage">V<sub>E</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-vce">V<sub>CE</sub></span> = ${fmtV(f.vc)} − ${fmtV(f.ve)}</div>
+    <div class="working-total"><span class="colour-vce">V<sub>CE</sub></span> = <span class="colour-result">${fmtV(f.vce)}</span></div>`,
+
+      rc_open: (h, f) => `
+    <div class="working-line">&nbsp;</div>
+    <div class="working-line">Because <span class="colour-resistor">R<sub>C</sub></span> has gone open, there is no path for collector current to flow.</div>
+    <div class="working-line">&nbsp;</div>
+    <div class="working-line">So how to verify it?</div>
+    <div class="working-step">Preliminaries:</div>
+    <div class="working-label">Key consequence of <span class="colour-resistor">R<sub>C</sub></span> open:</div>
+    <div class="working-line">With no collector current path: <span class="colour-current">I<sub>C</sub></span> = 0</div>
+    <div class="working-line">By Kirchhoff's Current Law:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>E</sub></span> = <span class="colour-current">I<sub>C</sub></span> + <span class="colour-current">I<sub>B</sub></span> &nbsp;→&nbsp; <span class="colour-current">I<sub>B</sub></span> = <span class="colour-current">I<sub>E</sub></span></div>
+    <div class="working-line">The base must now supply all the emitter current — this loads the voltage divider, pulling <span class="colour-voltage">V<sub>B</sub></span> down.</div>
+    <div class="working-line">&nbsp;</div>
+    <div class="working-step">Step 1 — Thévenin equivalent of the voltage divider:</div>
+    <div class="working-label">Thévenin voltage:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>th</sub></span> = <span class="colour-supply">V<sub>CC</sub></span> × ${frac('<span class="colour-resistor">R<sub>2</sub></span>', '<span class="colour-resistor">R<sub>1</sub></span> + <span class="colour-resistor">R<sub>2</sub></span>')}</div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>th</sub></span> = ${V.vcc} V × ${frac(fmtO0(V.r2), fmtO0(V.r1) + ' + ' + fmtO0(V.r2))}</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>th</sub></span> = <span class="colour-result">${fmtV(h.vb)}</span></div>
+    <div class="working-label">Thévenin resistance (<span class="colour-resistor">R<sub>1</sub></span> ∥ <span class="colour-resistor">R<sub>2</sub></span>):</div>
+    <div class="working-formula-row"><span class="colour-resistor">R<sub>th</sub></span> = ${frac('1', frac('1', '<span class="colour-resistor">R<sub>1</sub></span>') + ' + ' + frac('1', '<span class="colour-resistor">R<sub>2</sub></span>'))}</div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-resistor">R<sub>th</sub></span> = ${frac('1', frac('1', fmtO0(V.r1)) + ' + ' + frac('1', fmtO0(V.r2)))}</div>
+    <div class="working-total"><span class="colour-resistor">R<sub>th</sub></span> = <span class="colour-result">${fmtO0(V.r1 * V.r2 / (V.r1 + V.r2))}</span></div>
+
+    <div class="working-step">Step 2 — Emitter current (KVL around base-emitter loop):</div>
+    <div class="working-line">Since <span class="colour-current">I<sub>B</sub></span> = <span class="colour-current">I<sub>E</sub></span>, applying KVL through <span class="colour-resistor">R<sub>th</sub></span>, <span class="colour-bjt">V<sub>BE</sub>(on)</span> and <span class="colour-resistor">R<sub>E</sub></span>:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>E</sub></span> = ${frac('<span class="colour-voltage">V<sub>th</sub></span> − <span class="colour-bjt">V<sub>BE</sub>(on)</span>', '<span class="colour-resistor">R<sub>th</sub></span> + <span class="colour-resistor">R<sub>E</sub></span>')}</div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>E</sub></span> = ${frac(`${fmtV(h.vb)} − 0.6 V`, `${fmtO0(V.r1 * V.r2 / (V.r1 + V.r2))} + ${fmtO0(V.re)}`)}</div>
+    <div class="working-total"><span class="colour-current">I<sub>E</sub></span> = <span class="colour-result">${fmtA(f.ie)}</span></div>
+
+    <div class="working-step">Step 3 — Emitter voltage:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-current">I<sub>E</sub></span> × <span class="colour-resistor">R<sub>E</sub></span></div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>E</sub></span> = ${fmtA(f.ie)} × ${fmtO0(V.re)}</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-result">${fmtV(f.ve)}</span></div>
+
+    <div class="working-step">Step 4 — Base voltage:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-voltage">V<sub>E</sub></span> + <span class="colour-bjt">V<sub>BE</sub>(on)</span></div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>B</sub></span> = ${fmtV(f.ve)} + 0.6 V</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-result">${fmtV(f.vb)}</span></div>
+
+    <div class="working-step">Step 5 — Collector voltage:</div>
+    <div class="working-line">With <span class="colour-resistor">R<sub>C</sub></span> open, <span class="colour-current">I<sub>C</sub></span> = 0 — no voltage drop across <span class="colour-resistor">R<sub>C</sub></span>:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-supply">V<sub>CC</sub></span> − <span class="colour-current">I<sub>C</sub></span> × <span class="colour-resistor">R<sub>C</sub></span> = <span class="colour-supply">V<sub>CC</sub></span> − 0</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-result">${fmtV(f.vc)}</span></div>
+    <div class="working-step">Collector-emitter voltage:</div>
+    <div class="working-formula-row"><span class="colour-vce">V<sub>CE</sub></span> = <span class="colour-voltage">V<sub>C</sub></span> − <span class="colour-voltage">V<sub>E</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-vce">V<sub>CE</sub></span> = ${fmtV(f.vc)} − ${fmtV(f.ve)}</div>
+    <div class="working-total"><span class="colour-vce">V<sub>CE</sub></span> = <span class="colour-result">${fmtV(f.vce)}</span></div>`,
+
+      re_high: (h, f, fault) => `
+    <div class="working-section">Identifying the fault:</div>
+    <div class="diagnosis-block">
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 1: Base &amp; Emitter voltages are normal (<span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-result">${fmtV(h.vb)}</span>, <span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-result">${fmtV(h.ve)}</span>)</div>
+        <div class="symptom-body">The base voltage divider is firmly holding the base at ${fmtV(h.vb)}, so <span class="colour-resistor">R<sub>1</sub></span> and <span class="colour-resistor">R<sub>2</sub></span> are healthy. Because <span class="colour-voltage">V<sub>E</sub></span> is exactly 0.6&thinsp;V lower, the transistor's B‑E junction is okay.</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 2: Emitter current has dropped (<span class="colour-current">I<sub>E</sub></span> ↓ <span class="colour-result">${fmtA(f.ie - h.ie)}</span>)</div>
+        <div class="symptom-body">Using Ohm's Law: <span class="colour-resistor">R<sub>E</sub></span> = <span class="colour-voltage">V<sub>E</sub></span> / <span class="colour-current">I<sub>E</sub></span>. The voltage across <span class="colour-resistor">R<sub>E</sub></span> (${fmtV(h.ve)}) hasn't changed, but the current dropped. The only mathematical explanation is that <span class="colour-resistor">R<sub>E</sub></span> has increased in resistance.</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 3: Collector voltage has risen (<span class="colour-voltage">V<sub>C</sub></span> ↑ +<span class="colour-result">${fmtV(f.vc - h.vc)}</span>)</div>
+        <div class="symptom-body">Because <span class="colour-resistor">R<sub>E</sub></span> went high and choked the loop current, <span class="colour-current">I<sub>C</sub></span> dropped as well (<span class="colour-current">I<sub>C</sub></span> ≈ <span class="colour-current">I<sub>E</sub></span>). Less current through <span class="colour-resistor">R<sub>C</sub></span> means less voltage is dropped across it, so <span class="colour-voltage">V<sub>C</sub></span> floats up closer to the ${V.vcc}&thinsp;V rail.</div>
+      </div>
+    </div>
+    <div class="working-section">Applying the formulas:</div>
+
+    <div class="working-step">Voltage divider — <span class="colour-resistor">R<sub>E</sub></span> doesn't appear in it at all:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-supply">V<sub>CC</sub></span> × ${frac('<span class="colour-resistor">R2</span>', '<span class="colour-resistor">R<sub>1</sub></span> + <span class="colour-resistor">R2</span>')}</div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>B</sub></span> = ${V.vcc} V × ${frac(fmtO0(V.r2), fmtO0(V.r1) + ' + ' + fmtO0(V.r2))}</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-result">${fmtV(f.vb)}</span> — unchanged</div>
+
+    <div class="working-step">Emitter voltage:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-voltage">V<sub>B</sub></span> − <span class="colour-bjt">V<sub>BE</sub>(on)</span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>E</sub></span> = ${fmtV(f.vb)} − 0.6 V</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-result">${fmtV(f.ve)}</span> — unchanged</div>
+    
+    <div class="working-step">Emitter current (with the faulted <span class="colour-resistor">R<sub>E</sub></span>):</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>E</sub></span> = ${frac('<span class="colour-voltage">V<sub>E</sub></span>', '<span class="colour-resistor">R<sub>E</sub></span>')}</div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-current">I<sub>E</sub></span> = ${frac(fmtV(f.ve), fmtO0(V.re * fault.mult))}</div>
+    <div class="working-total"><span class="colour-current">I<sub>E</sub></span> = <span class="colour-result">${fmtA(f.ie)}</span></div>
+    
+    <div class="working-step">Collector voltage:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-supply">V<sub>CC</sub></span> − <span class="colour-current">I<sub>E</sub></span><span class="colour-resistor">R<sub>C</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>C</sub></span> = ${V.vcc} V − (${fmtA(f.ie)} × ${fmtO0(V.rc)})</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-result">${fmtV(f.vc)}</span></div>
+    
+    <div class="working-step">Collector-emitter voltage:</div>
+    <div class="working-formula-row"><span class="colour-vce">V<sub>CE</sub></span> = <span class="colour-voltage">V<sub>C</sub></span> − <span class="colour-voltage">V<sub>E</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-vce">V<sub>CE</sub></span> = ${fmtV(f.vc)} − ${fmtV(f.ve)}</div>
+    <div class="working-total"><span class="colour-vce">V<sub>CE</sub></span> = <span class="colour-result">${fmtV(f.vce)}</span></div>`,
+
+      re_open: (h, f) => `
+    <div class="working-section">Identifying the fault:</div>
+    <div class="diagnosis-block">
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 1: Base voltage is completely healthy (<span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-result">${fmtV(f.vb)}</span>)</div>
+        <div class="symptom-body">The base divider network (<span class="colour-resistor">R<sub>1</sub></span> and <span class="colour-resistor">R<sub>2</sub></span>) is perfectly normal. Because the loop current is choked off, base current (<span class="colour-current">I<sub>B</sub></span>) drops to zero, placing no loading on the divider — it sits right at its ideal, unloaded calculation point.</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 2: Emitter voltage has risen by +<span class="colour-result">${fmtV(f.ve - h.ve)}</span> to equal <span class="colour-voltage">V<sub>B</sub></span> (<span class="colour-voltage">V<sub>E</sub></span> = <span class="colour-result">${fmtV(f.ve)}</span>)</div>
+        <div class="symptom-body">When <span class="colour-resistor">R<sub>E</sub></span> goes open-circuit, the emitter pin is physically disconnected from ground and left floating. A floating node has nowhere to dump charge.<br>The voltmeter reading <span class="colour-voltage">V<sub>E</sub></span> has a massive internal impedance (≈10&thinsp;MΩ). Because this is far higher than the base bias resistors, the B‑E junction cannot establish its normal 0.6&thinsp;V active forward-bias drop. Instead, the floating emitter behaves like a high-impedance extension of the base, pulling <span class="colour-voltage">V<sub>E</sub></span> up to match <span class="colour-voltage">V<sub>B</sub></span> precisely.</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 3: Emitter current is dead (<span class="colour-current">I<sub>E</sub></span> = <span class="colour-result">${fmtA(f.ie)}</span>)</div>
+        <div class="symptom-body">Because the physical path through <span class="colour-resistor">R<sub>E</sub></span> to ground is completely severed, no current can flow down the emitter leg — the loop current drops entirely to zero.</div>
+      </div>
+      <div class="symptom-item">
+        <div class="symptom-title">Symptom 4: Collector voltage floats to the supply rail (<span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-result">${fmtV(f.vc)}</span>)</div>
+        <div class="symptom-body">With the emitter path open the transistor is completely cut off, so <span class="colour-current">I<sub>C</sub></span> = 0. By Ohm's Law, the voltage drop across <span class="colour-resistor">R<sub>C</sub></span> disappears (<span class="colour-voltage">V<sub>RC</sub></span> = 0&thinsp;A × <span class="colour-resistor">${fmtO0(V.rc)}</span> = 0&thinsp;V), forcing <span class="colour-voltage">V<sub>C</sub></span> to sit exactly at the <span class="colour-supply">${V.vcc}&thinsp;V</span> rail.</div>
+      </div>
+    </div>
+    <div class="working-section">Applying the formulas:</div>
+
+    <div class="working-step">Voltage divider — unaffected by <span class="colour-resistor">R<sub>E</sub></span>:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-supply">V<sub>CC</sub></span> × ${frac('<span class="colour-resistor">R2</span>', '<span class="colour-resistor">R<sub>1</sub></span> + <span class="colour-resistor">R2</span>')}</div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>B</sub></span> = ${V.vcc} V × ${frac(fmtO0(V.r2), fmtO0(V.r1) + ' + ' + fmtO0(V.r2))}</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-result">${fmtV(f.vb)}</span> — unchanged</div>
+
+    <div class="working-step">Emitter current:</div>
+    <div class="working-line">With <span class="colour-resistor">R<sub>E</sub></span> open, there's no path for emitter current to <span class="colour-ground">ground</span> at all:</div>
+    <div class="working-total"><span class="colour-current">I<sub>E</sub></span> = <span class="colour-result">${fmtA(f.ie)}</span></div>
+
+    <div class="working-step">Collector voltage (no current, no drop across <span class="colour-resistor">R<sub>C</sub></span>):</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-supply">V<sub>CC</sub></span> − <span class="colour-current">I<sub>E</sub></span><span class="colour-resistor">R<sub>C</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>C</sub></span> = ${V.vcc} V − 0 V</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>C</sub></span> = <span class="colour-result">${fmtV(f.vc)}</span></div>
+
+    <div class="working-step">Collector-emitter voltage:</div>
+    <div class="working-formula-row"><span class="colour-vce">V<sub>CE</sub></span> = <span class="colour-voltage">V<sub>C</sub></span> − <span class="colour-voltage">V<sub>E</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-vce">V<sub>CE</sub></span> = ${fmtV(f.vc)} − ${fmtV(f.ve)}</div>
+    <div class="working-total"><span class="colour-vce">V<sub>CE</sub></span> = <span class="colour-result">${fmtV(f.vce)}</span></div>
+
+    <div class="working-label">Emitter voltage (no current means no diode drop to subtract):</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>E</sub></span> ≈ <span class="colour-voltage">V<sub>B</sub></span> = <span class="colour-result">${fmtV(f.ve)}</span> — floats up to meet <span class="colour-voltage">V<sub>B</sub></span>, not <span class="colour-voltage">V<sub>B</sub></span> − 0.6 V</div>`,
+    };
+
+    function showFaultWorking(qid, fault) {
+      const box = document.getElementById(qid + 'Working');
+      box.className = 'working-box visible';
+      const healthy = { vb: VB, ve: VE, ie: IE, vc: VC, vce: VCE };
+      const faulted = calcFaultedCircuit(fault);
+      const statement = fault.type === 'open'
+        ? `<div class="working-line">${faultLabel(fault)}: continuity lost — infinite resistance (open circuit).</div>`
+        : `<div class="working-line">${faultLabel(fault)}: its resistance rose from ${fmtO0(V[fault.key])} to ${fmtO0(V[fault.key] * fault.mult)}.</div>`;
+      const mechanism = FAULT_EXPLANATIONS[`${fault.key}_${fault.type}`](healthy, faulted, fault);
+      document.getElementById(qid + 'WorkingContent').innerHTML = statement + mechanism;
+    }
+
+    // Re-shuffles Q1 for a fresh attempt — shared by resetQuiz() and goBackToQuestion().
+    function resetQ1() {
+      const opts = buildQ1Options();
+      Q.q1 = { sel: null, ans: false, cor: opts.findIndex(o => o.type === 'correct'), opts };
+      renderOptions('q1');
+      document.getElementById('q1Banner').className = 'result-banner';
+      document.getElementById('q1Working').className = 'working-box';
+      const chk = document.getElementById('q1Check'); chk.style.display = 'inline-block'; chk.disabled = true;
+      document.getElementById('q1Next').style.display = 'none';
+      document.getElementById('vceNum').textContent = '?';
+      document.getElementById('vceUnit').textContent = 'V';
+      document.getElementById('vceGhostGroup').setAttribute('display', 'none');
+    }
+
+    // Clears question n's built state entirely (including its assigned
+    // fault) so the next visit rebuilds it fresh via ensureFaultQuestionBuilt.
+    function resetFaultQuestion(n) {
+      const qid = 'q' + n;
+      Q[qid] = { sel: null, ans: false, cor: null, opts: [], fault: null };
+      const optsEl = document.getElementById(qid + 'Options'); if (optsEl) optsEl.innerHTML = '';
+      const banner = document.getElementById(qid + 'Banner'); if (banner) banner.className = 'result-banner';
+      const working = document.getElementById(qid + 'Working'); if (working) working.className = 'working-box';
+      const chk = document.getElementById(qid + 'Check'); if (chk) { chk.style.display = 'inline-block'; chk.disabled = true; }
+      const nxt = document.getElementById(qid + 'Next'); if (nxt) nxt.style.display = 'none';
+      const sum = document.getElementById(qid + 'Summary'); if (sum) sum.style.display = 'none';
+    }
+
+    // "← Prev" always gives a fresh attempt at the previous question, same
+    // spirit as bjt_quiz_1's backFromQN functions. Named distinctly from
+    // goBack(e) below (the top-of-page menu "← Back" link's history.back()
+    // handler) — both were previously named goBack, and since JS function
+    // declarations in the same scope don't overload, the later definition
+    // (goBack(e)) silently won for BOTH call sites, breaking this one
+    // (called as goBack(n) with a number, which has no .preventDefault()).
+    function goBackToQuestion(n) {
+      const prev = n - 1;
+      if (prev === 1) resetQ1(); else resetFaultQuestion(prev);
+      resetFaultQuestion(n);
+      showQuestion(prev);
+    }
+
+    // Progress dots + "n / N" label — QIDS is a fixed, known-at-page-load
+    // list, so every dot always exists regardless of which questions have
+    // actually been visited/answered yet.
+    function updateProgress() {
+      QIDS.forEach(q => {
+        const d = document.getElementById('dot-' + q); if (!d) return;
+        d.className = 'progress-dot';
+        if (q === cur) d.classList.add('active'); else if (Q[q] && Q[q].ans) d.classList.add('done');
+      });
+      const n = QIDS.indexOf(cur) + 1;
+      const lbl = document.getElementById('progressLabel'); if (lbl && n > 0) lbl.textContent = n + ' / ' + QUIZ_QUESTION_COUNT;
+    }
+
+    function showQuestion(n) {
+      cur = 'q' + n;
+      document.getElementById('summaryPanel').style.display = 'none';
+      for (let i = 1; i <= QUIZ_QUESTION_COUNT; i++) {
+        const panel = document.getElementById('q' + i + 'Panel');
+        if (panel) panel.style.display = (i === n) ? 'flex' : 'none';
+      }
+      if (n === 1) clearFault(); else showFaultQuestion(n);
+      updateProgress();
+    }
+
+    function showQ1Working() {
+      const box = document.getElementById('q1Working');
+      box.className = 'working-box visible';
+      document.getElementById('q1WorkingContent').innerHTML = `
+    <div class="working-line"><span class="colour-voltage">V<sub>CE</sub></span> is the difference between the collector and emitter voltages, both measured with respect to <span class="colour-ground">ground</span> — exactly what the <span class="colour-voltage">V<sub>C</sub></span> and <span class="colour-voltage">V<sub>E</sub></span> meters are reading right now:</div>
+    <div class="working-section">Applying the formula:</div>
+
+    <div class="working-step">Collector-emitter voltage:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>CE</sub></span> = <span class="colour-voltage">V<sub>C</sub></span> − <span class="colour-voltage">V<sub>E</sub></span></div>
+    <div class="working-label">Substituting values:</div>
+    <div class="working-formula-row"><span class="colour-voltage">V<sub>CE</sub></span> = ${fmtV(VC)} − ${fmtV(VE)}</div>
+    <div class="working-total"><span class="colour-voltage">V<sub>CE</sub></span> = <span class="colour-result">${fmtV(VCE)}</span></div>`;
+    }
+
+    function buildSummaryReadings(qid) {
+      const healthy = { vb: VB, ve: VE, ie: IE, vc: VC };
+      const readings = (qid === 'q1') ? healthy : calcFaultedCircuit(Q[qid].fault);
+      const meters = [
+        { label: 'V<sub>B</sub>', cls: 'colour-voltage', val: readings.vb, hval: healthy.vb, fmt: fmtV },
+        { label: 'V<sub>E</sub>', cls: 'colour-voltage', val: readings.ve, hval: healthy.ve, fmt: fmtV },
+        { label: 'I<sub>E</sub>', cls: 'colour-current', val: readings.ie, hval: healthy.ie, fmt: fmtA },
+        { label: 'V<sub>C</sub>', cls: 'colour-voltage', val: readings.vc, hval: healthy.vc, fmt: fmtV },
+      ];
+      const items = meters.map(m => {
+        const diff = m.val - m.hval;
+        const changed = Math.abs(diff) > Math.abs(m.hval) * 0.02;
+        const arrow = changed
+          ? ` <span style="color:${diff > 0 ? CLR_UP : CLR_DOWN}">${diff > 0 ? '⬆' : '⬇'}</span>`
+          : '';
+        return `<span class="sr-item"><span class="${m.cls}">${m.label}</span>&nbsp;<span class="colour-result">${m.fmt(m.val)}</span>${arrow}</span>`;
+      }).join('');
+      const label = qid === 'q1' ? 'Healthy baseline' : 'Faulted readings';
+      return `<div class="summary-readings"><span class="sr-label">${label}:</span>${items}</div>`;
+    }
+
+    function showSummary() {
+      cur = 'summary';
+      for (let i = 1; i <= QUIZ_QUESTION_COUNT; i++) {
+        const panel = document.getElementById('q' + i + 'Panel');
+        if (panel) panel.style.display = 'none';
+      }
+      document.getElementById('summaryPanel').style.display = 'block';
+      const vals = `<div class="summary-values">
+    <span style="color:var(--colour-supply);font-weight:bold">V<sub>CC</sub></span> = <span style="color:var(--colour-supply)">${V.vcc} V</span>&nbsp;&nbsp;&nbsp;
+    <span style="color:var(--colour-resistor-labels);font-weight:bold">R1</span> = <span style="color:var(--colour-resistor-labels)">${fmtO0(V.r1)}</span>&nbsp;&nbsp;
+    <span style="color:var(--colour-resistor-labels);font-weight:bold">R2</span> = <span style="color:var(--colour-resistor-labels)">${fmtO0(V.r2)}</span>&nbsp;&nbsp;
+    <span style="color:var(--colour-resistor-labels);font-weight:bold">RC</span> = <span style="color:var(--colour-resistor-labels)">${fmtO0(V.rc)}</span>&nbsp;&nbsp;
+    <span style="color:var(--colour-resistor-labels);font-weight:bold">RE</span> = <span style="color:var(--colour-resistor-labels)">${fmtO0(V.re)}</span>
+  </div>`;
+      const items = QIDS.map((qid, i) => {
+        const st = Q[qid];
+        const qtext = document.querySelector('#' + qid + 'Panel .q-text').innerHTML;
+        const ans = (st.sel != null && st.opts[st.sel]) ? st.opts[st.sel].label : '—';
+        const ok = st.sel === st.cor;
+        const colour = ok ? '#00ff99' : '#ff3366';
+        const mark = ok ? '✓' : '✗';
+        const working = document.getElementById(qid + 'WorkingContent').innerHTML;
+        return `<div class="summary-item">
+      <div class="summary-item-head"><span class="summary-qnum">Q${i + 1}</span><span class="summary-question">${qtext}</span></div>
+      <div class="summary-answer" style="color:${colour}">You answered: ${ans} &nbsp; ${mark}</div>
+      ${buildSummaryReadings(qid)}
+      <div class="working-box visible">${working}</div>
+    </div>`;
+      }).join('');
+      document.getElementById('summaryContent').innerHTML = vals + items;
+      QIDS.forEach(q => { const d = document.getElementById('dot-' + q); if (d) d.className = 'progress-dot done'; });
+      document.getElementById('progressLabel').textContent = 'Complete';
+    }
+
+    function resetQuiz() {
+      clearFault();
+      resetQ1();
+      for (let n = 2; n <= QUIZ_QUESTION_COUNT; n++) resetFaultQuestion(n);
+      showQuestion(1);
+    }
+
+    // Builds one question panel per FAULT_POOL entry (Q2..Q(N+1), fixed
+    // pool order) — generated rather than hand-duplicated so the markup
+    // can never drift out of sync with the pool itself.
+    function buildFaultPanels() {
+      const container = document.getElementById('faultPanels');
+      container.innerHTML = FAULT_POOL.map((fault, i) => {
+        const n = i + 2;
+        const qid = 'q' + n;
+        const isLast = n === QUIZ_QUESTION_COUNT;
+        const advanceBtn = isLast
+          ? `<button class="btn btn-summary" id="${qid}Summary" onclick="showSummary()" style="display:none">See Summary →</button>`
+          : `<button class="btn btn-next" id="${qid}Next" onclick="showQuestion(${n + 1})" style="display:none">Next →</button>`;
+        return `<div class="q-panel" id="${qid}Panel" style="display:none">
+          <div class="q-header">
+            <div class="q-num">Q${n}</div>
+            <div>
+              <div class="q-text" id="${qid}Text">Based on these meter readings, what fault has occurred?</div>
+              <div class="q-hint" id="${qid}Hint">Compare each reading (and its arrow) against the healthy values from Q1 — note which meters moved and which didn't.</div>
+            </div>
+          </div>
+          <div class="options" id="${qid}Options"></div>
+          <div class="result-banner" id="${qid}Banner"><span id="${qid}Icon"></span>&nbsp;<span id="${qid}BannerText"></span></div>
+          <div class="working-box" id="${qid}Working">
+            <div class="working-title">Fault Analysis</div>
+            <div id="${qid}WorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="${qid}Back" onclick="goBackToQuestion(${n})">← Prev</button>
+            <button class="btn btn-check" id="${qid}Check" onclick="checkFault(${n})" disabled>Check</button>
+            ${advanceBtn}
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ New Question</button>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    // One progress dot per question, in QIDS order.
+    function buildProgressDots() {
+      document.getElementById('progressDots').innerHTML =
+        QIDS.map(q => `<div class="progress-dot" id="dot-${q}"></div>`).join('');
+    }
+
+    // ── zoom modal ──
+    function openModal() {
+      const src = document.getElementById('circuitSvg'), dst = document.getElementById('modalSvg');
+      dst.innerHTML = src.innerHTML; dst.setAttribute('viewBox', src.getAttribute('viewBox'));
+      document.getElementById('diagramModal').classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeModal() {
+      document.getElementById('diagramModal').classList.remove('open');
+      document.getElementById('modalSvg').innerHTML = '';
+      document.body.style.overflow = '';
+    }
+    function handleModalClick(e) { if (e.target.closest('.modal-close')) return; closeModal(); }
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+    buildFaultPanels();
+    buildProgressDots();
+    setMode('example1');
+
+    /* ─── DEV: jump straight to a question for testing ──────────────────────
+       Console:   jump(3)            → go to Q3 (that pool entry's fault)
+                  jump(3, true)      → go to Q3 already answered
+       URL:       ?q=3               → loads straight on Q3
+                  ?q=3&ans=1         → loads on Q3, answered
+                  ?q=s               → loads straight on the summary (see jumpToSummary below) */
+    function jump(n, answered) {
+      if (n < 1 || n > QUIZ_QUESTION_COUNT) { console.warn('jump: no question', n); return; }
+      showQuestion(n);
+      if (answered) {
+        const st = Q['q' + n];
+        if (st) st.sel = st.cor;
+        if (n === 1) checkQ1(); else checkFault(n);
+      }
+    }
+    window.jump = jump;
+
+    /* ─── DEV: jump straight to the summary, auto-answering every question ──
+       (correctly, so the summary has real banners/workings to review) ────
+       Console:   jumpToSummary()
+       URL:       ?q=s */
+    function jumpToSummary() {
+      if (!Q.q1.ans) { Q.q1.sel = Q.q1.cor; checkQ1(); }
+      for (let n = 2; n <= QUIZ_QUESTION_COUNT; n++) {
+        ensureFaultQuestionBuilt(n);
+        const st = Q['q' + n];
+        if (!st.ans) { st.sel = st.cor; checkFault(n); }
+      }
+      showSummary();
+    }
+    window.jumpToSummary = jumpToSummary;
+
+    function goBack(e) { e.preventDefault(); history.back(); }
+    // Only show the back link if there's actually somewhere to go back to —
+    // history.length is 1 when this page was opened directly (new tab, bookmark,
+    // double-click) rather than reached by clicking a link from a menu page.
+    if (history.length > 1) {
+      document.getElementById('menuLink').style.display = '';
+    }
+
+    {
+      const p = new URLSearchParams(location.search);
+      if (p.has('q')) { if (p.get('q') === 's') jumpToSummary(); else jump(+p.get('q'), p.has('ans')); }
+    }
+    /* ──────────────────────────────────────────────────────────────────────── */
+  </script>
+</body>
+
+</html>

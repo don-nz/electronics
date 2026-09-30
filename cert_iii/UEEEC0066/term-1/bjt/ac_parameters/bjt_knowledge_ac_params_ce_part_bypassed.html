@@ -1,0 +1,577 @@
+<!--
+  Knowledge quiz cloned by the user from bjt_knowledge_ac_params_ce_bypassed.html
+  (which remains unchanged), then hand-modified to split the single RE into
+  TWO series resistors, RE1 and RE2, with the bypass capacitor CE re-wired
+  to sit in parallel with RE2 ONLY (tapping the node between RE1 and RE2,
+  not the emitter pin directly). User: *"I've created a new file... which
+  is a copy of bjt_knowledge_ac_params_ce_bypassed but with the additional
+  resistor added and the circuit arranged to fit everything in. RE is now
+  2 - RE1 and RE2. Can you make the necessary changes to the circuit
+  questions and framework to allow for the additional resistor? Maybe
+  halve the original RE and make both RE1 and RE2 135 ohms. Can you also
+  recreate the same questions for this new circuit?"* This is the classic
+  PARTIALLY BYPASSED (partially swamped) emitter configuration — RE1 =
+  RE2 = 135 Ω (so RE1+RE2 = 270 Ω, identical total DC emitter resistance
+  to every other file in this family, keeping IE≈2.716mA and re′≈9.57Ω
+  unchanged throughout).
+
+  THE KEY IDEA: a bypass capacitor blocks DC entirely, so DC bias only
+  ever cares about the TOTAL series resistance in the emitter leg
+  (RE1+RE2=270Ω) — same IE, same re′ as the fully-unbypassed and
+  fully-bypassed files, regardless of where CE taps in. AC behaviour is
+  what changes: CE shorts RE2 to AC ground, but RE1 sits ABOVE that tap
+  point (between the emitter pin and the RE1/RE2 junction), so RE1 is
+  NOT shorted — it stays fully in the AC emitter path. Only RE2 drops
+  out. This makes the circuit a genuine THIRD point on the swamped-vs-
+  bypassed spectrum, sitting between the other two files' extremes:
+    Zb   = β×(RE1+re′)     = 200×(135+9.57)   ≈ 28.9 kΩ
+                              (unbypassed: β×(RE1+RE2+re′)≈55.9kΩ;
+                               fully bypassed: β×re′≈1.91kΩ)
+    Zin  = R1∥R2∥Zb         ≈ 9.13 kΩ (unbypassed 10.77kΩ; fully
+                              bypassed 1.67kΩ — genuinely intermediate)
+    Av   ≈ RC/(RE1+re′)     = 1800/144.57      ≈ 12.45
+                              (unbypassed ≈6.44; fully bypassed ≈188 —
+                               roughly double the unbypassed gain, nowhere
+                               near the fully-bypassed extreme)
+  re′ (Q1) and Zout (Q4) are UNCHANGED from every sibling file in this
+  family — re′ only depends on IE (fixed by RE1+RE2 total, untouched by
+  where CE taps in); Zout only depends on the collector side, which no
+  emitter-leg change can reach. Both questions say so explicitly.
+
+  Q2 and Q5's distractors deliberately include BOTH neighbouring files'
+  own correct answers as wrong options here (β×(RE1+RE2+re′)≈55.9kΩ and
+  RC/(RE1+RE2+re′)≈6.44 — "forgot RE2 is bypassed, used the full
+  unbypassed formula"; β×re′≈1.91kΩ and RC/re′≈188 — "bypassed too much,
+  RE1 isn't shorted") — a genuinely on-topic trap testing whether the
+  student has actually tracked which resistor sits where relative to the
+  capacitor's tap point, not a filler wrong answer.
+
+  Circuit diagram: the user's own hand-built large-scale WIRES/NODES
+  layout (rearranged/compacted from ce_bypassed.html's own circuit to fit
+  the extra resistor), group id renamed `ce-divider-ac-part-bypassed` for
+  this file's own clarity (self-contained defs, no shared JS/ID-clash risk
+  project-wide). RE1 sits directly below the emitter pin; the bypass
+  branch taps off the RE1/RE2 junction node and runs right, down through
+  the rotated `cap-shape` symbol (as `ce_bypassed.html` uses), to GND;
+  RE2 sits on the same original vertical wire, below the tap point.
+
+  Same data-driven QUESTIONS[] engine as bjt_knowledge_basics.html — see
+  that file's header comment for the core architecture. Add/reorder
+  questions by editing the QUESTIONS array only.
+
+  Migrated to the shared cert_iii/assets/quiz-engine.js engine, same
+  recipe as bjt_knowledge_ac_params_ce.html/ce_bypassed.html:
+  CIRCUIT_SVG_ID='circuitRefSvg', DEFAULT_CIRCUIT_VIEWBOX=DEFAULT_VIEWBOX,
+  CIRCUIT_REF_EXTRA toggles the ieIndCe ammeter, SUMMARY_CIRCUIT_REF
+  points at ce-divider-ac-part-bypassed, RENDER_EXTRA re-runs
+  updateReReveal/updateZReveal every render.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../../assets/theme-init.js"></script>
+  <script src="../../../../assets/quiz-engine.js"></script>
+  <title>BJT Knowledge Quiz — AC Parameters (Common Emitter, Partially Bypassed RE)</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../../assets/quiz-common.css">
+  <script src="../../../../assets/breadcrumb.js" defer></script>
+  <style>
+    .progress-wrap { display: flex; gap: .4rem; align-items: center; margin-bottom: 1rem; }
+    /* Q3's correct/one wrong option are a triple-nested reciprocal-sum
+       fraction (1/(1/R1+1/R2+1/Zb), doubled up for the numeric substitution
+       underneath) — up to 8 stacked .working-frac elements side by side in
+       one option button, which crams and wraps awkwardly on phone-width
+       screens. Scoped to just the .frac-option wrapper these two option
+       labels use, so no other option/question anywhere is affected. */
+    @media (max-width: 480px) {
+      .frac-option { font-size: .82em; }
+    }
+    @media(min-width:900px) {
+      /* Circuit viewBox is ~690x570 (the large-scale WIRES-format rebuild —
+         same rough size as bjt_npn_voltage_divider_ac.html's own 700x560),
+         much wider than the compact 140x200 box quiz-common.css's default
+         minmax(340px, 52%) column was originally sized around — a fixed
+         760px cap (not a %) so it renders at roughly the same on-screen
+         HEIGHT as that file's circuit rather than staying narrow and
+         looking squashed. Same fix, same reasoning, same file it's matching. */
+      .quiz-wrap { display: grid;
+        grid-template-columns: minmax(340px, 760px) 1fr;
+        gap: 1.2rem;
+        align-items: start; }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Hidden defs: the CE version of the NPN voltage-divider stage, built
+       in bjt_npn_voltage_divider_ac.html's own large-scale WIRES/NODES
+       format (see the file header comment above), now with an emitter
+       bypass capacitor added. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <filter id="glow">
+        <feGaussianBlur stdDeviation="2" result="b" />
+        <feMerge>
+          <feMergeNode in="b" />
+          <feMergeNode in="SourceGraphic" />
+        </feMerge>
+      </filter>
+
+      <!-- ══ NPN BJT SHAPE ══ -->
+      <g id="bjt-npn-shape">
+        <circle cx="7" cy="0" r="24" fill="none" style="stroke: var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+        <line x1="-17" y1="0" x2="0" y2="0" style="stroke: var(--colour-bjt)" stroke-width="2" />
+        <line x1="0" y1="-12" x2="0" y2="12" style="stroke: var(--colour-bjt)" stroke-width="2.5" />
+        <polyline points="14,-34 14,-20 0,-8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+        <polyline points="14,34 14,20 0,8" style="stroke: var(--colour-bjt)" stroke-width="2" fill="none" stroke-linejoin="round" />
+        <polygon points="12,18 1,14 6,8" style="fill: var(--colour-bjt)" />
+      </g>
+
+      <!-- ══ AC SIGNAL SOURCE SHAPE — circle with one sine cycle ══ -->
+      <g id="ac-source-shape">
+        <circle cx="0" cy="0" r="24" fill="none" style="stroke: var(--colour-signal)" stroke-width="2" filter="url(#glow)" />
+        <path d="M -16,0 C -11,-14 -5,-14 0,0 C 5,14 11,14 16,0" fill="none" style="stroke: var(--colour-signal)" stroke-width="2.5" stroke-linecap="round" />
+      </g>
+
+      <!-- ══ AMMETER BADGE — same shape as bjt_npn_voltage_divider_ac.html's own ammeter-shape ══ -->
+      <g id="ammeter-shape">
+        <circle cx="0" cy="0" r="30" style="fill: var(--colour-ammeter-fill); stroke: var(--colour-current)" stroke-width="1.5" filter="url(#glow)" />
+      </g>
+
+      <!-- ══ Z-VALUE METER BADGE — same solid-over-dashed dial-line motif as
+           bjt_npn_voltage_divider_ac.html's own voltmeter "meter-shape",
+           recoloured to the colour-gain token (the same colour the
+           Zb/Zin/Zout arrow-labels already use) instead of that file's
+           colour-red token, since these badges are revealing a Z value,
+           not a DC voltage. ══ -->
+      <g id="z-meter-shape">
+        <circle cx="0" cy="0" r="25" style="fill: var(--colour-meter-fill); stroke: var(--colour-gain)" stroke-width="1.5" filter="url(#glow)" />
+      </g>
+
+      <!-- ══ COUPLING CAPACITOR SHAPE — two plates, reused for Cin, Cout AND
+           (rotated 90°, see the emitter branch below) the new bypass cap ══ -->
+      <g id="cap-shape">
+        <rect x="-4" y="-12" width="8" height="24" style="fill: var(--colour-panel)" />
+        <line x1="-4" y1="-12" x2="-4" y2="12" style="stroke: var(--colour-capacitor)" stroke-width="2.5" />
+        <line x1="4" y1="-12" x2="4" y2="12" style="stroke: var(--colour-capacitor)" stroke-width="2.5" />
+      </g>
+
+      <!-- ══════════════════════════════════════════════════════════════════
+           Common Emitter — voltage-divider bias, RE BYPASSED. Identical to
+           bjt_knowledge_ac_params_ce.html's own ce-divider-ac (large-scale
+           WIRES/NODES convention — see that file's header comment) plus
+           one new parallel branch: a bypass capacitor CE straight from the
+           emitter node to AC ground, in parallel with RE. ══════════════ -->
+      <g id="ce-divider-ac-part-bypassed">
+
+        <!-- ════════════════════ WIRES ════════════════════ -->
+
+        <!-- ── LEFT VERTICAL (AC source ground return) ── -->
+        <!-- See AC INPUT COMPONENTS for split line -->
+        
+        <!-- ── CENTER VERTICAL (R1/R2 line, base-bias rail, x=200) ── -->
+        <line x1="200" y1="0" x2="200" y2="520" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC rail down to GND rail -->
+
+        <!-- ── RIGHT VERTICAL (collector/emitter rail, x=440) ── -->
+        <line x1="440" y1="0" x2="440" y2="170" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC rail down to  Collector pin -->
+        <line x1="440" y1="220" x2="440" y2="520" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Emitter pin down to GND rail -->
+
+        <!-- ── TOP HORIZONTAL ── -->
+        <line x1="180" y1="0" x2="460" y2="0" style="stroke: var(--colour-series)" stroke-width="2" /><!-- VCC rail (R1 column to RC column) -->
+        <circle cx="200" cy="0" r="5" style="fill: var(--colour-series)" />
+        <circle cx="440" cy="0" r="5" style="fill: var(--colour-series)" />
+
+        <!-- ── BOTTOM HORIZONTAL ── -->
+        <line x1="10" y1="520" x2="620" y2="520" style="stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="200" cy="520" r="5" style="fill: var(--colour-series)" />
+        <circle cx="440" cy="520" r="5" style="fill: var(--colour-series)" />
+
+        <!-- ── CENTRE HORIZONTAL ── -->
+        <line x1="30" y1="190" x2="409" y2="190" style="stroke: var(--colour-series)" stroke-width="2" /><!-- BSource to transistor base pin -->
+
+        <!-- ── OUTPUT HORIZONTAL ── -->
+        <line x1="440" y1="135" x2="600" y2="135" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Collector pin, through Cout, to output -->
+
+        <!-- ── EMITTER BYPASS CAPACITOR BRANCH ── -->
+        <circle cx="440" cy="335" r="5" style="fill: var(--colour-series)" />
+        <line x1="440" y1="335" x2="530" y2="335" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Emitter node across to bypass branch -->
+        <line x1="530" y1="335" x2="530" y2="520" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Down to GND -->
+        <circle cx="530" cy="520" r="5" style="fill: var(--colour-series)" />
+
+        <!-- ════════════════════ NODES ════════════════════ -->
+
+        <!-- ── NODE B — Zin is looked up from here, rightward into the base ── -->
+        <circle cx="200" cy="275" r="5" style="fill: var(--colour-series)" />
+
+        <!-- ── ZB -->
+        <text x="370" y="170" style="fill: var(--colour-gain)" font-size="16" text-anchor="middle" font-weight="bold">Z<tspan baseline-shift="sub" font-size="13">b &#10145;</tspan></text>
+        <g id="zbBadgeCe" display="none" transform="translate(340,130)">
+          <use href="#z-meter-shape" />
+          <text x="0" y="2" style="fill: var(--colour-text)" text-anchor="middle" font-size="14" font-weight="bold">28.9</text>
+          <text x="0" y="19" style="fill: var(--colour-gain)" text-anchor="middle" font-size="12">k&#937;</text>
+        </g>
+
+        <!-- ── ZC -->
+        <text x="170" y="170" style="fill: var(--colour-gain)" font-size="16" text-anchor="middle" font-weight="bold">Z<tspan baseline-shift="sub" font-size="13">in &#10145;</tspan></text>
+        <g id="zinBadgeCe" display="none" transform="translate(140,130)">
+          <use href="#z-meter-shape" />
+          <text x="0" y="2" style="fill: var(--colour-text)" text-anchor="middle" font-size="14" font-weight="bold">9.13</text>
+          <text x="0" y="19" style="fill: var(--colour-gain)" text-anchor="middle" font-size="12">k&#937;</text>
+        </g>
+
+        <!-- ── ZOUT -->
+        <text x="490" y="120" style="fill: var(--colour-gain)" font-size="16" text-anchor="middle" font-weight="bold"><tspan baseline-shift="-70%">&#11013;</tspan> Z<tspan baseline-shift="sub" font-size="13">out</tspan></text>
+        <g id="zoutBadgeCe" display="none" transform="translate(520,85)">
+          <use href="#z-meter-shape" />
+          <text x="0" y="2" style="fill: var(--colour-text)" text-anchor="middle" font-size="14" font-weight="bold">1.8</text>
+          <text x="0" y="19" style="fill: var(--colour-gain)" text-anchor="middle" font-size="12">k&#937;</text>
+        </g>
+
+        <!-- ════════════════════ AC INPUT COMPONENTS ════════════════════ -->
+        <g>
+
+          <!-- ── INPUT VERTICAL WIRES WITH ARROWS ── -->
+          <circle cx="30" cy="190" r="5" style="fill: var(--colour-signal)" />
+
+          <polygon points="24,210,36,210 30,200" style="fill: var(--colour-series)" /><!-- Arrow pointing up -->
+          <line x1="30" y1="210" x2="30" y2="330" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Horizontal to "input" -->
+
+          <text x="5" y="342" style="fill: var(--colour-signal)" text-anchor="start" font-size="16" font-weight="bold">input</text>
+
+          <line x1="30" y1="350" x2="30" y2="500" style="stroke: var(--colour-series)" stroke-width="2" /><!-- "input" to GND -->
+          <polygon points="24,500 36,500 30,510" style="fill: var(--colour-series)" /><!-- Arrow pointing down -->
+
+          <circle cx="30" cy="520" r="5" style="fill: var(--colour-signal)" />
+
+        </g>
+        <g transform="translate(80,190)">
+          <use href="#cap-shape" />
+          <text x="0" y="-25" fill="var(--colour-capacitor-labels)" text-anchor="middle" font-size="16" font-weight="bold">C<tspan baseline-shift="sub" font-size="13">IN</tspan></text>
+        </g>
+
+        <!-- ════════════════════ AC OUTPUT COMPONENTS ════════════════════ -->
+        <circle cx="440" cy="135" r="5" style="fill: var(--colour-series)" />
+
+        <g transform="translate(570,135)">
+          <use href="#cap-shape" />
+          <text x="0" y="-25" fill="var(--colour-capacitor-labels)" text-anchor="middle" font-size="16" font-weight="bold">C<tspan baseline-shift="sub" font-size="13">OUT</tspan></text>
+        </g>
+        <g id="outputTerminalPlain">
+          <circle cx="600" cy="135" r="5" style="fill: var(--colour-signal)" />
+          <text x="580" y="342" style="fill: var(--colour-signal)" text-anchor="start" font-size="16" font-weight="bold">output</text>
+          <circle cx="600" cy="520" r="5" style="fill: var(--colour-signal)" />
+
+          <!-- ── OUTPUT VERTICAL WIRES WITH ARROWS ── -->
+          <line x1="600" y1="150" x2="600" y2="330" style="stroke: var(--colour-series)" stroke-width="2" /><!-- Horizontal to "output" -->
+          <polygon points="594,155 606,155 600,145" style="fill: var(--colour-series)" /><!-- Arrow pointing up -->
+          <line x1="600" y1="340" x2="600" y2="510" style="stroke: var(--colour-series)" stroke-width="2" /><!-- "output" to GND -->
+          <polygon points="594,500 606,500 600,510" style="fill: var(--colour-series)" /><!-- Arrow pointing down -->
+
+        </g>
+
+        <!-- ════════════════════ VCC ════════════════════ -->
+
+        <g transform="translate(480,-10)">
+          <text x="0" y="15" style="fill: var(--colour-voltage-label)" text-anchor="start" font-size="15" font-weight="bold">
+            V<tspan baseline-shift="sub" font-size="10">CC</tspan><tspan style="color: var(--colour-text);">+ 12 V</tspan></text>
+        </g>
+
+        <!-- ════════════════════ COMMON LABEL ════════════════════ -->
+
+        <text x="120" y="540" fill="var(--colour-gnd)" text-anchor="middle" font-size="14" font-weight="bold">Common</text>
+
+        <!-- ════════════════════ COMMON LABEL ════════════════════ -->
+
+        <text x="120" y="540" fill="var(--colour-gnd)" text-anchor="middle" font-size="14" font-weight="bold">Common</text>
+
+        <!-- ════════════════════ BJT — NPN ════════════════════ -->
+
+        <g transform="translate(426,191)">
+          <use href="#bjt-npn-shape" />
+          <text x="-15" y="-25" fill="var(--colour-bjt-labels)" text-anchor="middle" font-size="14" font-weight="bold">Q1</text>
+          <text x="0" y="40" fill="var(--colour-bjt-labels)" text-anchor="end" font-size="12">BC549</text>
+          <text x="35" y="-5" fill="var(--colour-bjt-labels)" text-anchor="start" font-size="14" font-weight="bold">β = 200</text>
+          <!-- ── re' reveal — hidden until Q1 is answered, toggled via updateReReveal() ── -->
+          <text id="reRevealCe" display="none" x="35" y="20" fill="var(--colour-bjt-labels)" text-anchor="start" font-size="13" font-weight="bold">r<tspan baseline-shift="sub" font-size="10">e</tspan>′ ≈ 9.57 Ω</text>
+        </g>
+
+        <!-- ════════════════════ RESISTORS ════════════════════ -->
+
+        <!-- ── R1 ── -->
+        <g transform="translate(185,20)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="30" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R1</text>
+          <text x="60" y="30" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16">120 kΩ</text>
+        </g>
+
+        <!-- ── R2 ── -->
+        <g transform="translate(185,350)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="60" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R2</text>
+          <text x="60" y="60" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16">15 kΩ</text>
+        </g>
+
+        <!-- ── RC ── -->
+        <g transform="translate(425,20)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-15" y="30" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">RC</text>
+          <text x="60" y="30" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16">1.8 kΩ</text>
+        </g>
+
+        <!-- ── RE1 ── -->
+        <g transform="translate(425,240)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-20" y="60" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">RE1</text>
+          <text x="60" y="60" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16">135 Ω</text>
+        </g>
+
+        <!-- ── RE2 ── -->
+        <g transform="translate(425,350)">
+          <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+          <text x="-20" y="60" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">RE2</text>
+          <text x="60" y="60" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16">135 Ω</text>
+        </g>
+
+        <!-- ════════════════════ BYPASS CAPACITOR ════════════════════ -->
+
+        <g transform="translate(530,430) rotate(90)">
+          <use href="#cap-shape" />
+        </g>
+        <text x="550" y="435" fill="var(--colour-capacitor-labels)" text-anchor="start" font-size="16" font-weight="bold">C<tspan baseline-shift="sub" font-size="13">E</tspan></text>
+
+        <!-- ════════════════════ IE INDICATOR ════════════════════ -->
+
+        <g id="ieIndCe" display="none" transform="translate(440,475)">
+          <use href="#ammeter-shape" />
+          <text x="-35" y="-20" style="fill: var(--colour-current)" text-anchor="middle" font-size="14" font-weight="bold">I<tspan baseline-shift="sub" font-size="10">E</tspan></text>
+          <text x="0" y="-2" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">2.716</text>
+          <text x="0" y="15" style="fill: var(--colour-current)" text-anchor="middle" font-size="12">mA</text>
+        </g>
+
+      </g>
+    </defs>
+  </svg>
+
+  <div class="crumb" id="crumb" data-current="AC Parameters — CE (Partial Bypass)"></div>
+  <header>
+    <h1>BJT Amplifier: AC Parameters — Common Emitter (Partially Bypassed RE)</h1>
+    <p>Voltage Gain · Input &amp; Output Resistance · Common-Emitter (Voltage-Divider Bias, RE1 Unbypassed + RE2 Bypassed)</p>
+  </header>
+
+  <div class="quiz-wrap">
+
+    <!-- LEFT: circuit diagram -->
+    <div class="circuit-col">
+      <div class="circuit-panel" onclick="openModal()" title="Click to zoom">
+        <div class="panel-label" id="circuitRefLabel">Reference Circuit</div>
+        <div class="zoom-hint">
+          <svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.8" fill="none" />
+            <line x1="12.5" y1="12.5" x2="17" y2="17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            <line x1="6" y1="8" x2="10" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+            <line x1="8" y1="6" x2="8" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+          </svg>
+          Zoom
+        </div>
+        <svg id="circuitRefSvg" viewBox="-10 -10 690 570" xmlns="http://www.w3.org/2000/svg">
+          <use id="circuitRefUse" href="#ce-divider-ac-part-bypassed" />
+          <g id="xyRuler" display="none"></g>
+        </svg>
+      </div>
+    </div>
+
+    <!-- RIGHT: question -->
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <!-- Single reusable question panel — populated from QUESTIONS[cur] by renderQuestion() -->
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+          <div class="options" id="qOptions"></div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <!-- Summary -->
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Zoom modal — copies circuitRefSvg's current innerHTML/viewBox in on open. -->
+    <div class="diagram-modal" id="diagramModal" onclick="handleModalClick(event)">
+      <div class="modal-inner" id="modalInner">
+        <div class="modal-header">
+          <span class="modal-title" id="modalTitle">Reference Circuit</span>
+          <button class="modal-close" onclick="closeModal()">✕ Close</button>
+        </div>
+        <svg id="modalSvg" viewBox="-10 -10 690 570" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const DEFAULT_VIEWBOX = '-10 -10 690 570';
+    CIRCUIT_SVG_ID = 'circuitRefSvg';
+    DEFAULT_CIRCUIT_VIEWBOX = DEFAULT_VIEWBOX;
+    CIRCUIT_REF_EXTRA = (id, loadTerminal, ammeter) => {
+      document.getElementById('ieIndCe').setAttribute('display', ammeter ? 'inline' : 'none');
+    };
+    SUMMARY_CIRCUIT_REF = { id: 'ce-divider-ac-part-bypassed', label: 'Common Emitter (RE1 unbypassed + RE2 bypassed)', viewBox: DEFAULT_VIEWBOX };
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS — Q1-5, cloned from bjt_knowledge_ac_params_ce_bypassed.html's
+    // own Q1-5. Q1 (re′) and Q4 (Zout) are formula-identical to every
+    // sibling file — a bypass capacitor doesn't touch DC bias or the
+    // collector side. Q2 (Zb), Q3 (Zin) and Q5 (Av) use RE1 ONLY (RE2 is
+    // shorted to AC ground by CE) — see the file's own header comment for
+    // the full formula summary. See bjt_knowledge_basics.html's header
+    // comment for the full field reference.
+    // ══════════════════════════════════════════════════════════════════════
+
+    const QUESTIONS = [
+      {
+        circuitId: 'ce-divider-ac-part-bypassed',
+        circuitLabel: 'Common Emitter (RE1 unbypassed + RE2 bypassed)',
+        circuitAmmeter: true,
+        text: () => 'What is <b class="colour-bjt">r<sub>e</sub>′</b> for this <b style="color:var(--colour-ui-primary)">common-emitter</b> stage when the emitter is <b style="color:var(--colour-ui-primary)">partially bypassed</b>?',
+        hint: () => 're′ = VT/IE, using the standard room-temperature approximation VT ≈ 26 mV.',
+        options: () => shuffle([
+          { label: `<b class="colour-bjt">re′</b> ≈ ${frac('26 mV', '<b class="colour-current">I<sub>E</sub></b>')} ≈ ${frac('26 mV', '2.716 mA')} ≈ 9.57 Ω`, type: 'correct' },
+          { label: `<b class="colour-bjt">re′</b> ≈ ${frac('26 V', '<b class="colour-current">I<sub>E</sub></b>')} ≈ ${frac('26 V', '2.716 mA')} ≈ 9,573 Ω`, type: 'wrong' },
+          { label: `<b class="colour-bjt">re′</b> ≈ 26 Ω`, type: 'wrong' },
+          { label: `<b class="colour-bjt">re′</b> ≈ ${frac('<b class="colour-current">I<sub>E</sub></b>', '26 mV')} ≈ ${frac('2.716 mA', '26 mV')} ≈ 0.104 Ω`, type: 'wrong' },
+        ]),
+        correctExplain: () => '<b class="colour-bjt">r<sub>e</sub>′</b> ≈ 9.57 Ω',
+        working: () => `
+    <div class="working-formula-row"><b class="colour-bjt">r<sub>e</sub>′</b> = ${frac('V<sub>T</sub>', 'I<sub>E</sub>')} ≈ ${frac('26 mV', '2.716 mA')}</div>
+    <div class="working-total"><b class="colour-bjt">r<sub>e</sub>′</b> ≈ 9.57 Ω — identical to both the fully-unbypassed and fully-bypassed circuits' own re′, since RE1+RE2 (270 Ω) is the same total DC emitter resistance every version of this circuit uses, and a bypass capacitor can never change a DC quantity regardless of where it taps in. Keep this value, every AC parameter from here on uses it.</div>`
+      },
+      {
+        circuitId: 'ce-divider-ac-part-bypassed',
+        circuitLabel: 'Common Emitter (RE1 unbypassed + RE2 bypassed)',
+        text: () => 'The bypass capacitor <b class="colour-cap">C<sub>E</sub></b> taps the node BETWEEN <b class="colour-resistor">R<sub>E1</sub></b> and <b class="colour-resistor">R<sub>E2</sub></b>, shorting only <b class="colour-resistor">R<sub>E2</sub></b> to AC ground — <b class="colour-resistor">R<sub>E1</sub></b> sits above that node, between the emitter pin and the tap, so it stays fully in the AC path. What is the <b style="color:var(--colour-ui-primary)">AC</b> resistance looking directly into the base, <b class="colour-resistor">Z<sub>b</sub></b>?',
+        hint: () => 'Only RE2 is shorted out — RE1 is NOT bypassed, it\'s still in series with re′ in the AC emitter leg. Zb = β × (RE1 + re′).',
+        options: () => shuffle([
+          { label: `<b class="colour-gain">Zb</b> = <b class="colour-bjt">β</b> × (<b class="colour-resistor">RE1</b> + <b class="colour-bjt">re′</b>) = 200 × (135 Ω + 9.57 Ω) ≈ 28.9 kΩ`, type: 'correct' },
+          { label: `<b class="colour-gain">Zb</b> = <b class="colour-bjt">β</b> × (<b class="colour-resistor">RE1</b> + <b class="colour-resistor">RE2</b> + <b class="colour-bjt">re′</b>) = 200 × (135 Ω + 135 Ω + 9.57 Ω) ≈ 55.9 kΩ`, type: 'wrong' },
+          { label: `<b class="colour-gain">Zb</b> = <b class="colour-bjt">β</b> × <b class="colour-bjt">re′</b> = 200 × 9.57 Ω ≈ 1.91 kΩ`, type: 'wrong' },
+          { label: `<b class="colour-gain">Zb</b> ≈ <b class="colour-bjt">β</b> × <b class="colour-resistor">RE1</b> = 200 × 135 Ω ≈ 27 kΩ`, type: 'wrong' },
+        ]),
+        correctExplain: () => '<b class="colour-resistor">Z<sub>b</sub></b> = <b class="colour-bjt">β</b> × (<b class="colour-resistor">R<sub>E1</sub></b> + r<sub>e</sub>′) ≈ 28.9 kΩ',
+        working: () => `
+    <div class="working-line"><b class="colour-cap">C<sub>E</sub></b> shorts <b class="colour-resistor">R<sub>E2</sub></b> to AC ground, so ONLY <b class="colour-resistor">R<sub>E2</sub></b> drops out of the AC emitter leg. <b class="colour-resistor">R<sub>E1</sub></b> sits between the emitter pin and the bypassed node, so it's still fully there, still reflected into the base β times bigger — same as re′.</div>
+    <div class="working-formula-row"><b class="colour-resistor">Z<sub>b</sub></b> = <b class="colour-bjt">β</b> × (<b class="colour-resistor">R<sub>E1</sub></b> + r<sub>e</sub>′) = 200 × (135 Ω + 9.57 Ω)</div>
+    <div class="working-total"><b class="colour-resistor">Z<sub>b</sub></b> ≈ 28,914 Ω ≈ 28.9 kΩ — sitting neatly between the fully-unbypassed circuit's own Zb (≈55.9 kΩ, using RE1+RE2) and the fully-bypassed circuit's own Zb (≈1.91 kΩ, using neither). Keep this value, it's used again in the next question.</div>`
+      },
+      {
+        circuitId: 'ce-divider-ac-part-bypassed',
+        circuitLabel: 'Common Emitter (RE1 unbypassed + RE2 bypassed)',
+        text: () => 'What is the <b style="color:var(--colour-ui-primary)">AC</b> input resistance <b class="colour-resistor">Z<sub>in</sub></b> seen by the signal source?',
+        hint: () => 'Same shape as always: R1, R2 and Zb are all three connected between the base node and AC ground — three resistances in PARALLEL.',
+        options: () => shuffle([
+          { label: `<span class="frac-option"><b class="colour-gain">Zin</b> = ${frac('1', `${frac('1', '<b class="colour-resistor">R1</b>')} + ${frac('1', '<b class="colour-resistor">R2</b>')} + ${frac('1', '<b class="colour-gain">Zb</b>')}`)} = ${frac('1', `${frac('1', '120 kΩ')} + ${frac('1', '15 kΩ')} + ${frac('1', '28.9 kΩ')}`)} ≈ 9.13 kΩ</span>`, type: 'correct' },
+          { label: '<b class="colour-gain">Zin</b> = <b class="colour-resistor">R1</b> + <b class="colour-resistor">R2</b> + <b class="colour-gain">Zb</b> = 120 kΩ + 15 kΩ + 28.9 kΩ ≈ 163.9 kΩ', type: 'wrong' },
+          { label: `<span class="frac-option"><b class="colour-gain">Zin</b> = ${frac('1', `${frac('1', '<b class="colour-resistor">R1</b>')} + ${frac('1', '<b class="colour-resistor">R2</b>')}`)} = ${frac('1', `${frac('1', '120 kΩ')} + ${frac('1', '15 kΩ')}`)} ≈ 13.3 kΩ</span>`, type: 'wrong' },
+          { label: '<b class="colour-gain">Zin</b> ≈ <b class="colour-gain">Zb</b> = 28.9 kΩ', type: 'wrong' },
+        ]),
+        correctExplain: () => '<b class="colour-resistor">Z<sub>in</sub></b> = R1∥R2∥<b class="colour-resistor">Z<sub>b</sub></b> ≈ 9.13 kΩ',
+        working: () => `
+    <div class="working-formula-row"><b class="colour-resistor">Z<sub>in</sub></b> = R1 ∥ R2 ∥ <b class="colour-resistor">Z<sub>b</sub></b></div>
+    <div class="working-line">${frac('1', '<b class="colour-resistor">Z<sub>in</sub></b>')} = ${frac('1', '120,000')} + ${frac('1', '15,000')} + ${frac('1', '28,914')} ≈ 0.0001096 Ω⁻¹</div>
+    <div class="working-total"><b class="colour-resistor">Z<sub>in</sub></b> ≈ 9,125 Ω ≈ 9.13 kΩ — genuinely intermediate between the fully-unbypassed circuit's own Zin (≈10.77 kΩ, where R1∥R2 dominated) and the fully-bypassed circuit's own Zin (≈1.67 kΩ, where Zb dominated): here Zb (28.9 kΩ) is bigger than R1∥R2 (13.3 kΩ) but not by nearly as much as in the fully-unbypassed case, so it pulls Zin down further than the unbypassed circuit without swinging all the way to dominate it outright.</div>`
+      },
+      {
+        circuitId: 'ce-divider-ac-part-bypassed',
+        circuitLabel: 'Common Emitter (RE1 unbypassed + RE2 bypassed)',
+        text: () => 'What is the approximate <b style="color:var(--colour-ui-primary)">AC</b> output resistance <b class="colour-resistor">Z<sub>out</sub></b>, looking back into the collector terminal?',
+        hint: () => 'Zero the source, then look back into the collector node — same question as always, and neither emitter-leg resistor nor the bypass cap has any path to this node at all.',
+        options: () => shuffle([
+          { label: '<b class="colour-gain">Zout</b> ≈ <b class="colour-resistor">RC</b> = 1.8 kΩ', type: 'correct' },
+          { label: '<b class="colour-gain">Zout</b> ≈ <b class="colour-resistor">RE1</b> + <b class="colour-resistor">RE2</b> = 135 Ω + 135 Ω = 270 Ω', type: 'wrong' },
+          { label: '<b class="colour-gain">Zout</b> ≈ <b class="colour-gain">Zin</b> ≈ 9.13 kΩ', type: 'wrong' },
+          { label: `<b class="colour-gain">Zout</b> ≈ <b class="colour-resistor">RC</b> ∥ (<b class="colour-resistor">RE1</b> + <b class="colour-resistor">RE2</b>) = ${frac('1', `${frac('1', '1.8 kΩ')} + ${frac('1', '270 Ω')}`)} ≈ 234.8 Ω`, type: 'wrong' },
+        ]),
+        correctExplain: () => '<b class="colour-resistor">Z<sub>out</sub></b> ≈ <b class="colour-resistor">R<sub>C</sub></b>',
+        working: () => `
+    <div class="working-line">With the source zeroed, the only thing directly wired to the collector node (besides the transistor's internal, very-high ro — ignored here) is <b class="colour-resistor">R<sub>C</sub></b> itself, running up to the AC-grounded <b class="colour-supply">V<sub>CC</sub></b> rail.</div>
+    <div class="working-formula-row"><b class="colour-resistor">Z<sub>out</sub></b> ≈ <b class="colour-resistor">R<sub>C</sub></b> = 1.8 kΩ</div>
+    <div class="working-total">Unchanged from every sibling circuit in this family — <b class="colour-cap">C<sub>E</sub></b>, <b class="colour-resistor">R<sub>E1</sub></b> and <b class="colour-resistor">R<sub>E2</sub></b> all sit on the EMITTER side, with no path to the collector node this question is looking into. Zout only ever depends on what's actually wired to the collector.</div>`
+      },
+      {
+        circuitId: 'ce-divider-ac-part-bypassed',
+        circuitLabel: 'Common Emitter (RE1 unbypassed + RE2 bypassed)',
+        text: () => 'What is the voltage gain <b class="colour-gain">|A<sub>v</sub>|</b> of this common-emitter stage, with <b class="colour-resistor">R<sub>E2</sub></b> bypassed but <b class="colour-resistor">R<sub>E1</sub></b> left in the AC path?',
+        hint: () => 'Only RE1 stays in the AC emitter leg — |Av| ≈ RC / (RE1 + re′), not RC/(RE1+RE2+re′) and not RC/re′.',
+        options: () => shuffle([
+          { label: `<b class="colour-gain">|Av|</b> ≈ ${frac('<b class="colour-resistor">RC</b>', '<b class="colour-resistor">RE1</b>+<b class="colour-bjt">re′</b>')} = ${frac('1800 Ω', '144.57 Ω')} ≈ 12.45`, type: 'correct' },
+          { label: `<b class="colour-gain">|Av|</b> ≈ ${frac('<b class="colour-resistor">RC</b>', '<b class="colour-resistor">RE1</b>+<b class="colour-resistor">RE2</b>+<b class="colour-bjt">re′</b>')} = ${frac('1800 Ω', '279.57 Ω')} ≈ 6.44`, type: 'wrong' },
+          { label: `<b class="colour-gain">|Av|</b> ≈ ${frac('<b class="colour-resistor">RC</b>', '<b class="colour-bjt">re′</b>')} = ${frac('1800 Ω', '9.57 Ω')} ≈ 188`, type: 'wrong' },
+          { label: `<b class="colour-gain">|Av|</b> ≈ ${frac('<b class="colour-resistor">RC</b>', '<b class="colour-resistor">RE1</b>')} = ${frac('1800 Ω', '135 Ω')} ≈ 13.33`, type: 'wrong' },
+        ]),
+        correctExplain: () => '<b class="colour-gain">|A<sub>v</sub>|</b> ≈ R<sub>C</sub>/(R<sub>E1</sub>+r<sub>e</sub>′) ≈ 12.45',
+        working: () => `
+    <div class="working-formula-row"><b class="colour-gain">|A<sub>v</sub>|</b> ≈ ${frac('<b class="colour-resistor">R<sub>C</sub></b>', '<b class="colour-resistor">R<sub>E1</sub></b> + r<sub>e</sub>′')} = ${frac('1800 Ω', '144.57 Ω')}</div>
+    <div class="working-total"><b class="colour-gain">|A<sub>v</sub>|</b> ≈ 12.45 — roughly DOUBLE the fully-unbypassed circuit's own 6.44, but nowhere near the fully-bypassed circuit's own 188. Partially bypassing the emitter is a genuine middle ground: removing RE2 from the AC path buys back some gain without giving up all the stability RE1 still provides, since Av here still depends partly on a real resistor (RE1) and not on re′ alone.</div>`
+      },
+    ];
+    /* re' reveal on the diagram itself, once Q1 has been answered. Persists
+       regardless of which question is currently on screen (unlike the
+       ammeter badge, which only shows for its own question) — this is
+       "now-known information", same convention as the rest of this
+       project's progressive-reveal circuits. */
+    function updateReReveal() {
+      document.getElementById('reRevealCe').setAttribute('display', Q[0].ans ? 'inline' : 'none');
+    }
+
+    /* Zb/Zin/Zout value badges — same "reveal once answered, stays
+       revealed" convention as updateReReveal() above. Zb=Q2(idx1),
+       Zin=Q3(idx2), Zout=Q4(idx3). */
+    function updateZReveal() {
+      document.getElementById('zbBadgeCe').setAttribute('display', Q[1].ans ? 'inline' : 'none');
+      document.getElementById('zinBadgeCe').setAttribute('display', Q[2].ans ? 'inline' : 'none');
+      document.getElementById('zoutBadgeCe').setAttribute('display', Q[3].ans ? 'inline' : 'none');
+    }
+
+    RENDER_EXTRA = () => { updateReReveal(); updateZReveal(); };
+
+    initQuizNav();
+    resetQuiz();
+    initQuizFromURL();
+  </script>
+</body>
+
+</html>
