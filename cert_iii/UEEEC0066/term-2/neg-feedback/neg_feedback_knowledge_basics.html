@@ -126,6 +126,7 @@
     .fb-path-label { fill: var(--colour-signal); font-size: 14px; font-weight: 700; text-anchor: start; }
     .fb-path-line { stroke: var(--colour-series); stroke-width: 2px; fill: none; }
     .fb-path-arrow { fill: var(--colour-series); }
+    .fb-gain-label { fill: var(--colour-gain); font-size: 14px; font-weight: 700; text-anchor: start; }
   </style>
 </head>
 
@@ -308,7 +309,7 @@
             <!-- ── AMPLIFIER ── -->
             <g transform="translate(210,60)">
               <use href="#amp-triangle-shape" class="circuit-display-box" />
-              <text class="fb-path-label" x="15" y="-15">
+              <text class="fb-gain-label" x="15" y="-15">
                 A<tspan baseline-shift="sub" font-size="12">V<tspan dy="2" font-size="10">OL</tspan></tspan> = <tspan id="circuit2AvolText">1,000,000</tspan>
               </text>
               <use href="#amp-network-label" />
@@ -320,6 +321,10 @@
               <text class="fb-network-label" x="35" y="30">Sampling</text>
               <text class="fb-network-label" x="35" y="50">Network</text>
               <use href="#sampling-network-label" />
+
+              <text class="fb-gain-label" x="135" y="-15">
+                A<tspan baseline-shift="sub" font-size="12">V<tspan dy="2" font-size="10">CL</tspan></tspan> = <tspan id="circuit2AvclText">1,000,000</tspan>
+              </text>
             </g>
 
             <!-- Feedback Network slot -->
@@ -607,6 +612,10 @@
         leftPanel: 'circuit',
         get avol() { return fmtInt(Q4V.aol); },
         get beta() { return fmtBeta(Q4V.beta); },
+        // '?' until checked, then the real value — Q4 is QUESTIONS[3], so
+        // Q[3].ans is this question's own "has it been answered yet" flag
+        // (quiz-engine.js's per-question live state, not QUESTIONS[3] itself).
+        get acl() { return (Q[3] && Q[3].ans) ? fmtACL(Q4V.acl) : '?'; },
         text: () => `This amplifier's <span class="colour-gain">open-loop gain</span> (A<sub>OL</sub>) and <b>feedback factor</b> (β) are shown on the diagram. Calculate its <span class="colour-gain">closed-loop gain</span>, A<sub>CL</sub>.`,
         hint: () => `A<sub>CL</sub> = A<sub>OL</sub> / (1 + A<sub>OL</sub> × β) — the general feedback equation. Substitute the two values shown on the diagram directly; don't skip the "1 +" in the denominator.`,
         options: () => shuffle([
@@ -636,7 +645,10 @@
         // randomizeAclBetaQuestions()'s own comment on the AOL pools).
         leftPanel: 'circuit',
         get avol() { return fmtInt(Q5V.aol); },
-        beta: '?',
+        get acl() { return fmtInt(Q5V.acl); },
+        // '?' until checked, then the real value — Q5 is QUESTIONS[4], so
+        // Q[4].ans is this question's own "has it been answered yet" flag.
+        get beta() { return (Q[4] && Q[4].ans) ? fmtBeta(Q5V.beta) : '?'; },
         text: () => `This amplifier has an open-loop gain (A<sub>OL</sub>) as shown on the diagram, and a measured closed-loop gain A<sub>CL</sub> = <b>${fmtInt(Q5V.acl)}</b>. Calculate its feedback factor, β.`,
         hint: () => `Rearrange the general feedback equation A<sub>CL</sub> = A<sub>OL</sub>/(1+A<sub>OL</sub>×β) to solve for β — or, since A<sub>OL</sub> is so large here, just use the shortcut β ≈ 1/A<sub>CL</sub>.`,
         options: () => shuffle([
@@ -674,12 +686,17 @@
       const showFill = isFill(QUESTIONS[cur]);
       document.getElementById('circuit1Display').style.display = showFill ? '' : 'none';
       document.getElementById('circuit2Display').style.display = showFill ? 'none' : '';
-      // Apply this question's own AVOL/β, if it sets them (only
+      // Apply this question's own AVOL/β/ACL, if it sets them (only
       // circuit2-using questions do) — keeps the diagram's displayed
-      // values in sync with whichever question is on screen.
+      // values in sync with whichever question is on screen. Whichever
+      // one of β/ACL a given question is actually solving for is left as
+      // a literal "?" (its own field, not the getter) rather than the
+      // real computed value, so the diagram never hands the student the
+      // answer before they've worked it out themselves.
       const data = QUESTIONS[cur];
       if (data.avol !== undefined) document.getElementById('circuit2AvolText').textContent = data.avol;
       if (data.beta !== undefined) document.getElementById('circuit2BetaText').textContent = data.beta;
+      if (data.acl !== undefined) document.getElementById('circuit2AvclText').textContent = data.acl;
     };
 
     RESET_EXTRA = randomizeAclBetaQuestions;
