@@ -56,9 +56,15 @@
   objective lands on the same displayed value as the exact formula, the
   same relationship the review sheet's own Q11 worked example relies on.
 
+  Q6 — the objective "approximate closed-loop gain using β" (ACL ≈ 1/β),
+  which Q4/Q5 only touched in their working text. Randomised AOL/β, same
+  reveal-on-check diagram behaviour as Q4 (ACL shown as "?" until checked).
+  Distractors are the same kind of specific mis-derivation as Q4/Q5 (loop
+  gain instead of ACL, forgetting to invert β, inverting the wrong term).
+
   Being built one question at a time, same convention as every other quiz in
   this project (see jfet_knowledge_basics.html's own header) — all 4
-  objectives are now covered (Q1-Q5).
+  objectives are now covered (Q1-Q6).
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -436,7 +442,7 @@
     // VALUES Q4/Q5 depend on, so skipping it would leave Q4V/Q5V empty —
     // calling it once here too means a ?q=4/?q=5 deep-link always has a
     // valid (if not freshly-random) set of numbers instead of throwing.
-    let Q4V = {}, Q5V = {};
+    let Q4V = {}, Q5V = {}, Q6V = {};
     function randomizeAclBetaQuestions() {
       const aol4 = randPick([500000, 750000, 1000000, 1500000, 2000000, 2500000]);
       const beta4 = randPick([0.01, 0.015, 0.02, 0.025, 0.05]);
@@ -462,6 +468,15 @@
         wrongStoppedEarly: aol5 / acl5 - 1,                 // forgot the final ÷AOL step
         wrongWrongDivisor: (aol5 / acl5 - 1) / acl5,        // divided by ACL instead of AOL at the end
         wrongFlippedRatio: (acl5 / aol5 - 1) / acl5,        // used ACL/AOL instead of AOL/ACL throughout
+      };
+
+      const aol6 = randPick([500000, 750000, 1000000, 1500000, 2000000, 2500000]);
+      const beta6 = randPick([0.01, 0.015, 0.02, 0.025, 0.05]);
+      Q6V = {
+        aol: aol6, beta: beta6, acl: 1 / beta6,
+        wrongLoopGain: aol6 * beta6,                // computed loop gain (AOL×β), not ACL
+        wrongInverted: beta6,                        // forgot to invert β
+        wrongTermInverted: 1 / (1 + beta6),          // inverted 1+β instead of AOL×β
       };
     }
     randomizeAclBetaQuestions();
@@ -666,6 +681,34 @@
     <div class="working-formula-row">β = ${frac(`${fmtInt(Q5V.aol)}/${fmtInt(Q5V.acl)} − 1`, fmtInt(Q5V.aol))}</div>
     <div class="working-total">β ≈ <b>${fmtBeta(Q5V.beta)}</b></div>
     <div class="working-line" style="margin-top:.6rem">Shortcut check: since A<sub>OL</sub> is so large here, β ≈ 1/A<sub>CL</sub> = 1/${fmtInt(Q5V.acl)} ≈ ${fmtBeta(Q5V.betaApprox)} — close enough to the exact answer above to use as a quick estimate whenever A<sub>OL</sub>×β ≫ 1.</div>`
+      },
+      {
+        // Approximates ACL from β (objective: "Approximate the closed-loop
+        // gain of an amplifier using the feedback factor (beta)"). AOL and β
+        // are shown on the diagram; ACL is the unknown, so it's "?" on the
+        // diagram until checked (same reveal-on-check getter pattern as Q4).
+        // Relies on AOL×β ≫ 1, which holds for every pool value here.
+        leftPanel: 'circuit',
+        get avol() { return fmtInt(Q6V.aol); },
+        get beta() { return fmtBeta(Q6V.beta); },
+        get acl() { return (Q[5] && Q[5].ans) ? fmtACL(Q6V.acl) : '?'; },
+        text: () => `This amplifier's <span class="colour-gain">open-loop gain</span> (A<sub>OL</sub>) and <b>feedback factor</b> (β) are shown on the diagram. <b style="color:var(--colour-ui-primary)">Estimate</b> its <span class="colour-gain">closed-loop gain</span>, A<sub>CL</sub>, using the approximation for large open-loop gain.`,
+        hint: () => `When A<sub>OL</sub>×β is much bigger than 1, the "1 +" in the general feedback equation becomes negligible. What does A<sub>OL</sub>/(A<sub>OL</sub>×β) simplify to?`,
+        options: () => shuffle([
+          { label: `A<sub>CL</sub> ≈ ${frac('1', 'β')} = ${frac('1', fmtBeta(Q6V.beta))} ≈ <b>${fmtACL(Q6V.acl)}</b>`, type: 'correct' },
+          { label: `A<sub>CL</sub> ≈ A<sub>OL</sub> × β = ${fmtInt(Q6V.aol)} × ${fmtBeta(Q6V.beta)} ≈ <b>${fmtInt(Q6V.wrongLoopGain)}</b>`, type: 'wrong' },
+          { label: `A<sub>CL</sub> ≈ β = <b>${fmtBeta(Q6V.wrongInverted)}</b>`, type: 'wrong' },
+          { label: `A<sub>CL</sub> ≈ ${frac('1', '1 + β')} = ${frac('1', `1 + ${fmtBeta(Q6V.beta)}`)} ≈ <b>${fmtBeta(Q6V.wrongTermInverted)}</b>`, type: 'wrong' },
+        ]),
+        correctExplain: () => `A<sub>CL</sub> ≈ 1/β = 1/${fmtBeta(Q6V.beta)} ≈ <b>${fmtACL(Q6V.acl)}</b>`,
+        working: () => `
+    <div class="working-formula-row">A<sub>CL</sub> = ${frac('A<sub>OL</sub>', '1 + A<sub>OL</sub> × β')}</div>
+    <div class="working-label">Since A<sub>OL</sub>×β = ${fmtInt(Q6V.aol * Q6V.beta)} ≫ 1, the "1 +" is negligible:</div>
+    <div class="working-formula-row">A<sub>CL</sub> ≈ ${frac('A<sub>OL</sub>', 'A<sub>OL</sub> × β')}</div>
+    <div class="working-label">The A<sub>OL</sub> cancels:</div>
+    <div class="working-formula-row">A<sub>CL</sub> ≈ ${frac('1', 'β')} = ${frac('1', fmtBeta(Q6V.beta))}</div>
+    <div class="working-total">A<sub>CL</sub> ≈ <span class="colour-gain">${fmtACL(Q6V.acl)}</span></div>
+    <div class="working-line" style="margin-top:.6rem">This is why the shortcut needs no open-loop gain value at all: with heavy feedback the closed-loop gain depends almost entirely on the feedback network's β.</div>`
       }
     ];
 
