@@ -1,0 +1,692 @@
+<!--
+  Source material: the teacher's own "The effects of negative feedback"
+  objectives page (Purpose + 4 bullet objectives) plus a printed Review
+  Questions sheet (11 questions) and Figure 1, "The general feedback model"
+  (Summing Network → Amplifier → Sampling Network, with a Feedback Network
+  tapping the output back into the Summing Network). Same policy as this
+  project's other review-sheet-backed quizzes (e.g. diff_amp_knowledge_basics.html's
+  own header note): the review questions are REFERENCE ONLY for topic
+  coverage, never copied — every question below, including its wording and
+  (where relevant) its numbers, is original.
+
+  Q1 — user's own explicit direction: instead of a plain multiple-choice
+  question on Figure 1, show the general feedback model itself and have the
+  student LABEL its 4 blocks, using this project's existing kind:'fill'
+  click-a-name-then-click-a-target mechanic (first used by
+  digital_circuit_derivation_ab.html, then jfet_knowledge_basics.html's
+  terminal-labelling Q2/Q3 — see quiz-engine.js's own header comment for the
+  full mechanic). The diagram is redrawn fresh from the textbook figure's
+  own layout (same 4 blocks, same signal path/feedback loop) — not traced
+  from the photographed page. Unlike jfet_knowledge_basics.html's version,
+  this diagram never changes shape between questions, so there's no
+  circuitConfig/applyXCircuitConfig() layer — slotIds is a fixed array.
+
+  Q2 — user's own explicit direction: a 4-column kind:'match' question (same
+  generic mechanic as e.g. bjt_review_quiz.html's Av/Zin/Zout/re′ question —
+  the engine itself is column-count-agnostic), covering an alternate name
+  plus one genuinely non-obvious fact for each of the 4 blocks. The
+  "comparator" alternate name for the Summing Network deliberately echoes
+  Q1's own working() text, which already flagged it as a legitimate informal
+  synonym (as opposed to Q1's distractors, chosen to have NO legitimate
+  overlap with any real block name).
+
+  Q3 — user's own explicit column/option spec: a 3-column kind:'match'
+  question (Increases / Depends on Circuit / Decreases) sorting Gain,
+  Distortion, Bandwidth, f1, f2, Rin, Rout — covers the "list the effects of
+  negative feedback on amplifier performance" objective. Rin/Rout's "Depends
+  on Circuit" answer (rather than a fixed Increases/Decreases) matches the
+  review sheet's own answer key caveat ("...with certain types of feedback
+  and decreases with other types") — the 4 standard feedback topologies
+  (series/shunt input mixing, voltage/current output sampling) are what
+  actually decide those two, not negative feedback alone.
+
+  Q4/Q5 — user's own explicit direction: calculate ACL from the general
+  feedback equation (Q4), then rearrange it to solve for β (Q5) — the last
+  two objectives. AOL/β (Q4) and AOL/ACL (Q5) are randomised fresh on every
+  resetQuiz() (randomizeAclBetaQuestions(), wired via RESET_EXTRA — initial
+  load AND every Restart click), with AOL/β live on circuit-2's own diagram
+  via its avol/beta getters. Q5 leaves β as a literal "?" on the diagram
+  (it's the value being solved for) and states ACL in the question text
+  instead, since circuit-2 has no ACL slot of its own. Answer options follow
+  the same "formula = substituted = answer" one-liner style as e.g.
+  bjt_review_quiz.html's re′ question — every wrong option is a specific,
+  plausible mis-derivation (a step skipped, the wrong variable divided by,
+  a flipped fraction), not an arbitrary number. AOL pools are deliberately
+  large relative to β/ACL so the "β ≈ 1/ACL" shortcut from Q5's own
+  objective lands on the same displayed value as the exact formula, the
+  same relationship the review sheet's own Q11 worked example relies on.
+
+  Being built one question at a time, same convention as every other quiz in
+  this project (see jfet_knowledge_basics.html's own header) — all 4
+  objectives are now covered (Q1-Q5).
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../assets/theme-init.js"></script>
+  <script src="../../../assets/quiz-engine.js"></script>
+  <title>Negative Feedback Knowledge Quiz</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../assets/quiz-common.css">
+  <script src="../../../assets/breadcrumb.js" defer></script>
+  <style>
+    /* kind:'fill' click-a-name-then-click-a-block labelling — same rules as
+       jfet_knowledge_basics.html's own <style> block (see that file's header
+       comment for why this stays page-local rather than living in
+       quiz-common.css). Renamed jfet-slot-html → fb-slot-html; everything
+       else copied unchanged. */
+    .circuit-panel { cursor: default; }
+    .fill-pool-wrap { margin-top: .8rem; }
+    .fill-pool-row { display: flex; align-items: center; gap: .5rem; }
+    .fill-pool-arrow { font-size: 1rem; color: var(--colour-ui-primary); opacity: 0; transition: opacity .15s; }
+    .fill-pool-row.needs-pick .fill-pool-arrow { opacity: 1; animation: fillArrowBounce .8s ease-in-out infinite; }
+    @keyframes fillArrowBounce { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(3px); } }
+    .fill-pool {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: .5rem;
+      padding: .8rem;
+      border: 2px dashed var(--colour-border);
+      border-radius: var(--radius-lg);
+      background: rgba(var(--colour-label-rgb), .05);
+      min-height: 3rem;
+      transition: border-color .15s, background .15s;
+    }
+    .fill-pool.needs-pick {
+      border-color: var(--colour-ui-primary);
+      border-style: solid;
+      background: rgba(var(--colour-ui-primary-rgb), .06);
+      animation: matchPoolPulse 1.1s ease-in-out infinite;
+    }
+    .fill-pool .match-chip { min-width: 128px; text-align: center; }
+    /* Opaque fill — the Amplifier slot is a triangle sitting directly on
+       the signal-path line, and a see-through fill would let that line
+       visibly cross through the placed label text. */
+    .circuit-display-box { fill: var(--colour-panel); stroke: var(--colour-ui-primary); stroke-width: 1.5px; cursor: default; }
+    .circuit-slot-box { fill: var(--colour-panel); stroke: var(--colour-ui-primary); stroke-width: 1.5px; stroke-dasharray: 4,3; cursor: pointer; }
+    .circuit-slot-box.filled { stroke-dasharray: none; }
+    .circuit-slot-box.correct { stroke: var(--colour-ui-correct); }
+    .circuit-slot-box.wrong { stroke: #ff3d66; }
+    .circuit-slot-box.correct, .circuit-slot-box.wrong { cursor: default; }
+    .fb-slot-html {
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-body); font-size: 15px; font-weight: 700;
+      color: var(--colour-ui-primary); text-align: center; line-height: 1.15;
+      pointer-events: none; width: 100%; height: 100%;
+    }
+    .fb-slot-html.correct { color: var(--colour-ui-correct); }
+    .fb-slot-html.wrong { color: #ff3d66; }
+    .fb-network-label { fill: var(--colour-ui-primary); font-size: 16px; font-weight: 700; text-anchor: start; }
+    .fb-path-label { fill: var(--colour-signal); font-size: 14px; font-weight: 700; text-anchor: start; }
+    .fb-path-line { stroke: var(--colour-series); stroke-width: 2px; fill: none; }
+    .fb-path-arrow { fill: var(--colour-series); }
+  </style>
+</head>
+
+<body>
+<!-- ════════════════════════════════════════════════════════════ -->
+<!--                      BASE SHAPES                             -->
+<!-- ════════════════════════════════════════════════════════════ -->
+  <svg style="display: none;" aria-hidden="true">
+    <defs>
+      <filter id="glow">
+        <feGaussianBlur stdDeviation="2" result="b" />
+        <feMerge>
+          <feMergeNode in="b" />
+          <feMergeNode in="SourceGraphic" />
+        </feMerge>
+      </filter>
+
+      <!-- ════════════════════════════════════════════════════════ -->
+      <!-- ── NETWORK SHAPE ── -->
+      <!-- ════════════════════════════════════════════════════════ -->
+      <g id="network-box-shape">
+        <rect width="140" height="70" rx="4"/>
+      </g>
+
+      <g id="amp-triangle-shape">
+        <polygon points="0,-10 0,90 140,35" />
+      </g>  
+
+      <g id="arrow-shape">
+        <polygon points="0,-6 0,6 8,0" fill="var(--colour-series)"  />
+      </g>
+
+      <g id="summing-network-label">
+        <text class="fb-path-label" x="-55" y="25" >Input</text>
+        <text class="fb-path-label" x="-55" y="55" >(Vin)</text>
+      </g>
+
+      <g id="amp-network-label">
+        <text class="fb-path-label" x="-35" y="25" >Va</text>
+      </g>
+
+      <g id="sampling-network-label">
+        <text class="fb-path-label" x="165" y="25" >Output</text>
+        <text class="fb-path-label" x="165" y="55" >(Vout)</text>
+      </g>
+
+      <g id="feedback-network-label">
+        <text class="fb-path-label" x="-75" y="25" >Feedback</text>
+        <text class="fb-path-label" x="-55" y="55" >(Vf)</text>
+      </g>
+
+      <g id="circuit-lines">
+
+          <!-- ── LINE INTO SUMMING NETWORK ── -->
+          <line class="fb-path-line" x1="-45" y1="95" x2="10" y2="95" />
+          <use href="#arrow-shape" transform="translate(10,95)" />
+
+          <!-- ── LINE FROM SUMMING NETWORK INTO AMPLIFIER ── -->
+          <line class="fb-path-line" x1="165" y1="95" x2="200" y2="95" />
+          <use href="#arrow-shape" transform="translate(200,95)" />
+
+          <!-- ── LINE FROM AMPLIFIER INTO SAMPLING NETWORK ── -->
+          <line class="fb-path-line" x1="355" y1="95" x2="390" y2="95" />
+          <use href="#arrow-shape" transform="translate(390,95)" />
+
+          <!-- ── VOUT LINE TO NOWHERE ── -->
+          <line class="fb-path-line" x1="545" y1="95" x2="610" y2="95" />
+          <use href="#arrow-shape" transform="translate(610,95)" />
+
+          <!-- ── LINE FROM SAMPLING NETWORK INTO FEEDBACK NETWORK ── -->
+          <polyline class="fb-path-line" points="470,130 470,285 368,285" />
+          <use href="#arrow-shape" transform="translate(370,285) scale(-1, 1)" />
+
+
+          <!-- ── LINE FROM SAMPLING NETWORK INTO FEEDBACK NETWORK ── -->
+          <polyline class="fb-path-line" points="220,285 90,285 90,138" />
+          <use href="#arrow-shape" transform="translate(90,138) rotate(270)" />
+      </g>
+
+    </defs>
+  </svg>
+
+  <div class="crumb" id="crumb" data-current="Negative Feedback Basics"></div>
+  <header>
+    <h1>Negative Feedback</h1>
+    <p>General Feedback Model · Effects on Amplifier Performance · Closed-Loop Gain</p>
+  </header>
+
+  <div class="quiz-wrap" id="quizWrap">
+
+    <div class="circuit-col">
+      <!-- Q1's labelling diagram (kind:'fill') — fixed geometry, redrawn
+           from the textbook's own Figure 1 layout: Summing Network →
+           Amplifier → Sampling Network along the top signal path, Feedback
+           Network tapping the output back into the Summing Network below. -->
+      <div class="circuit-panel" id="circuitPanelFill">
+        <div class="panel-label">Click a name below, then click a block</div>
+        <svg viewBox="-55 0 705 370" xmlns="http://www.w3.org/2000/svg">
+
+          <!-- Two alternative groups share this one panel/svg, toggled by
+               RENDER_EXTRA below — only one is ever visible at a time.
+               circuit1Display: Q1's own interactive fill slots.
+               circuit2Display: the plain reference version, with its own
+               AOL/β values — now also a real, non-defs element, same
+               reasoning as circuit1Display below: its AVOL/β <tspan>s need
+               real ids RENDER_EXTRA can getElementById and update per
+               question, which (per this file's own <use>-interactive-ids
+               note) only works for an element living directly in the
+               visible tree, not one instantiated via <use>. -->
+          <g id="circuit1Display">
+            <!-- Q1's interactive slots live directly in the VISIBLE SVG, not
+                 behind a <use href="#circuit-1">, on purpose: <use> only
+                 clones its target for RENDERING — the original ids stay put
+                 wherever they're written, so getElementById('slotSumming')
+                 would otherwise always resolve to the hidden <defs> copy, not
+                 this visible one, and neither the click listeners nor
+                 renderFill()'s innerHTML writes would ever reach what the
+                 student can see. The static pieces (lines/arrows/labels/box
+                 shapes) have no unique ids and stay shared via <use> below —
+                 only the per-slot foreignObject wrappers need to be real,
+                 non-defs elements. -->
+            <use href="#circuit-lines" />
+
+            <!-- ── SUMMING NETWORK ── -->
+            <g transform="translate(20,60)">
+              <g id="slotSumming" class="circuit-slot-box">
+                <use href="#network-box-shape" />
+                <foreignObject x="0" y="0" width="140" height="70">
+                  <div xmlns="http://www.w3.org/1999/xhtml" id="slotSummingText" class="fb-slot-html"></div>
+                </foreignObject>
+              </g>
+              <use href="#summing-network-label" />
+            </g>
+
+            <!-- ── AMPLIFIER ── -->
+            <g transform="translate(210,60)">
+              <g id="slotAmp" class="circuit-slot-box">
+                <use href="#amp-triangle-shape" />
+                <foreignObject x="0" y="10" width="100" height="50">
+                  <div xmlns="http://www.w3.org/1999/xhtml" id="slotAmpText" class="fb-slot-html"></div>
+                </foreignObject>
+              </g>
+              <use href="#amp-network-label" />
+            </g>
+
+            <!-- ── SAMPLING NETWORK ── -->
+            <g transform="translate(400,60)">
+              <g id="slotSampling" class="circuit-slot-box">
+                <use href="#network-box-shape" />
+                <foreignObject x="0" y="0" width="140" height="70">
+                  <div xmlns="http://www.w3.org/1999/xhtml" id="slotSamplingText" class="fb-slot-html"></div>
+                </foreignObject>
+              </g>
+              <use href="#sampling-network-label" />
+            </g>
+
+            <!-- Feedback Network slot -->
+            <g transform="translate(220,250)">
+              <g id="slotFeedback" class="circuit-slot-box">
+                <use href="#network-box-shape" />
+                <foreignObject x="0" y="0" width="140" height="70">
+                  <div xmlns="http://www.w3.org/1999/xhtml" id="slotFeedbackText" class="fb-slot-html"></div>
+                </foreignObject>
+              </g>
+              <use href="#feedback-network-label" />
+            </g>
+          </g>
+
+          <g id="circuit2Display" style="display:none">
+            <use href="#circuit-lines" />
+
+            <!-- ── SUMMING NETWORK ── -->
+            <g transform="translate(20,60)">
+              <use href="#network-box-shape" class="circuit-display-box" />
+              <text class="fb-network-label" x="35" y="30">Summing</text>
+              <text class="fb-network-label" x="35" y="50">Network</text>
+              <use href="#summing-network-label" />
+            </g>
+
+            <!-- ── AMPLIFIER ── -->
+            <g transform="translate(210,60)">
+              <use href="#amp-triangle-shape" class="circuit-display-box" />
+              <text class="fb-path-label" x="15" y="-15">
+                A<tspan baseline-shift="sub" font-size="12">V<tspan dy="2" font-size="10">OL</tspan></tspan> = <tspan id="circuit2AvolText">1,000,000</tspan>
+              </text>
+              <use href="#amp-network-label" />
+            </g>
+
+            <!-- ── SAMPLING NETWORK ── -->
+            <g transform="translate(400,60)">
+              <use href="#network-box-shape" class="circuit-display-box" />
+              <text class="fb-network-label" x="35" y="30">Sampling</text>
+              <text class="fb-network-label" x="35" y="50">Network</text>
+              <use href="#sampling-network-label" />
+            </g>
+
+            <!-- Feedback Network slot -->
+            <g transform="translate(220,250)">
+              <use href="#network-box-shape" class="circuit-display-box" />
+              <text class="fb-network-label" x="35" y="30">Feedback</text>
+              <text class="fb-network-label" x="35" y="50">Network</text>
+              <text class="fb-path-label" x="45" y="-10">β = <tspan id="circuit2BetaText">0.1</tspan></text>
+              <use href="#feedback-network-label" />
+            </g>
+          </g>
+
+        </svg>
+      </div>
+    </div>
+
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+
+          <!-- Fill-in pool — shown only for kind:'fill' questions, toggled
+               via RENDER_EXTRA below. -->
+          <div class="fill-pool-wrap" id="fillPoolWrap" style="display:none">
+            <div class="fill-pool-row" id="fillPoolRow">
+              <div class="fill-pool-arrow">▶</div>
+              <div class="fill-pool" id="fillPool"></div>
+            </div>
+          </div>
+
+          <div class="options" id="qOptions"></div>
+          <div class="match-wrap" id="qMatch" style="display:none">
+            <div class="match-pool-row" id="matchPoolRow">
+              <div class="match-pool-arrow">▶</div>
+              <div class="match-pool" id="matchPool"></div>
+            </div>
+            <div class="match-columns" id="matchColumns"></div>
+          </div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS — see quiz-engine.js's own header comment for the full field
+    // reference. Add, remove, split or reorder questions by editing this
+    // array only — nothing in the engine needs to change.
+    // ══════════════════════════════════════════════════════════════════════
+
+    const FB_SLOT_IDS = ['slotSumming', 'slotAmp', 'slotSampling', 'slotFeedback'];
+
+    // ── Randomised ACL/β calculation questions (Q4/Q5) ──
+    // Values are picked fresh on every resetQuiz() — initial load AND
+    // Restart clicks, via RESET_EXTRA below (see quiz-engine.js's own
+    // header comment: RESET_EXTRA runs at the very start of resetQuiz(),
+    // before any question's own options()/text() are first evaluated).
+    // AOL pools are kept large relative to β/ACL on purpose, so the
+    // "β ≈ 1/ACL" shortcut (the approximate-via-beta objective) lands
+    // close to the exact rearranged-formula answer — the same relationship
+    // the review sheet's own Q11 worked example relies on.
+    function fmtInt(n) { return Math.round(n).toLocaleString('en-US'); }
+    function fmtACL(n) { return n.toFixed(2); }
+    function fmtBeta(n) { return Number(n.toFixed(4)).toString(); }
+    function randPick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+    function computeACL(aol, beta) { return aol / (1 + aol * beta); }
+    function computeBetaExact(aol, acl) { return (aol / acl - 1) / aol; }
+
+    // Populated immediately below (not just via RESET_EXTRA) because
+    // quiz-engine.js's own resetQuiz() deliberately SKIPS calling
+    // RESET_EXTRA whenever the URL already has a ?q=N deep-link — that
+    // skip exists so a shared link to "question N as written" stays
+    // deterministic when RESET_EXTRA reorders QUESTIONS (its usual job
+    // elsewhere in this project). Here RESET_EXTRA instead generates the
+    // VALUES Q4/Q5 depend on, so skipping it would leave Q4V/Q5V empty —
+    // calling it once here too means a ?q=4/?q=5 deep-link always has a
+    // valid (if not freshly-random) set of numbers instead of throwing.
+    let Q4V = {}, Q5V = {};
+    function randomizeAclBetaQuestions() {
+      const aol4 = randPick([500000, 750000, 1000000, 1500000, 2000000, 2500000]);
+      const beta4 = randPick([0.01, 0.015, 0.02, 0.025, 0.05]);
+      Q4V = {
+        aol: aol4, beta: beta4, acl: computeACL(aol4, beta4),
+        // NOTE: a "forgot the +1, used AOL/(AOL×β) = 1/β" distractor was
+        // tried here first and rejected — once AOL×β is in the thousands
+        // (as it always is with these pools), the "+1" is negligible, so
+        // that distractor rounds to the SAME displayed value as the
+        // correct answer in every case (verified by simulation: 1000/1000
+        // trials collided). wrongMissingAolTimes below doesn't have that
+        // problem — it stays AOL-scale (millions), nowhere near the other
+        // three answers' bands (tens / thousands / hundredths).
+        wrongMissingAolTimes: aol4 / (1 + beta4),   // added β directly instead of AOL×β in the denominator
+        wrongLoopGain: aol4 * beta4,                 // computed loop gain (AOL×β), not ACL
+        wrongFlipped: (1 + aol4 * beta4) / aol4,     // flipped the fraction upside down
+      };
+
+      const aol5 = randPick([500000, 750000, 1000000, 1500000, 2000000]);
+      const acl5 = randPick([10, 15, 20, 25, 40, 50]);
+      Q5V = {
+        aol: aol5, acl: acl5, beta: computeBetaExact(aol5, acl5), betaApprox: 1 / acl5,
+        wrongStoppedEarly: aol5 / acl5 - 1,                 // forgot the final ÷AOL step
+        wrongWrongDivisor: (aol5 / acl5 - 1) / acl5,        // divided by ACL instead of AOL at the end
+        wrongFlippedRatio: (acl5 / aol5 - 1) / acl5,        // used ACL/AOL instead of AOL/ACL throughout
+      };
+    }
+    randomizeAclBetaQuestions();
+
+    const QUESTIONS = [
+      {
+        // kind:'fill' — click a name, then click a block. Pool mixes the 4
+        // real general-feedback-model block names (col:0-3, matching
+        // FB_SLOT_IDS's order) with 3 unrelated circuit-block distractors —
+        // deliberately no `col` on those, so they can never register as any
+        // slot's correct answer. Distractors chosen to be unambiguous (no
+        // legitimate overlap with any of the 4 real block names), unlike
+        // e.g. "Comparator", which some texts use as an informal alternate
+        // name for the summing network itself.
+        leftPanel: 'circuit',
+        kind: 'fill',
+        slotIds: FB_SLOT_IDS,
+        text: () => `This is the <b style="color:var(--colour-ui-primary)">general feedback model</b> — the block diagram every closed-loop electronic system can be represented by. <b style="color:var(--colour-ui-primary)">Click</b> a name below, then <b style="color:var(--colour-ui-primary)">click</b> the block it belongs to.`,
+        hint: () => `Follow the signal path: the input and the fed-back output are combined first, then amplified, then a portion of the output is sampled to produce that feedback signal. Three of the names below don't belong to this model at all.`,
+        options: () => shuffle([
+          { label: 'Summing Network',  poolHtml: 'Summing Network',  col: 0 },
+          { label: 'Amplifier',        poolHtml: 'Amplifier',        col: 1 },
+          { label: 'Sampling Network', poolHtml: 'Sampling Network', col: 2 },
+          { label: 'Feedback Network', poolHtml: 'Feedback Network', col: 3 },
+          { label: 'Oscillator',       poolHtml: 'Oscillator' },
+          { label: 'Rectifier',        poolHtml: 'Rectifier' },
+          { label: 'Filter Network',   poolHtml: 'Filter Network' }
+        ]),
+        correctExplain: (st) => {
+          const wrongCount = st.slotPlaced.filter((p, slot) => p !== st.cor[slot]).length;
+          return wrongCount === 0 ? 'All 4 blocks correctly labelled' : `${st.slotPlaced.length - wrongCount} of ${st.slotPlaced.length} blocks correctly labelled`;
+        },
+        working: (st) => {
+          const mistakes = st.slotPlaced
+            .map((p, slot) => p !== st.cor[slot] ? (st.opts[p]?.label ?? '(left blank)') : null)
+            .filter(Boolean);
+          const mistakeLine = mistakes.length
+            ? `<div class="working-step" style="margin-top:.6rem">Mislabelled:</div><div class="working-line">${mistakes.join(', ')}</div>`
+            : '';
+          return `
+    <div class="working-step">The general feedback model's 4 blocks:</div>
+    <div class="working-line">The <b style="color:var(--colour-ui-correct)">Summing Network</b> combines the input (Vin) with the feedback signal (Vf) to produce Va — the signal that actually drives the amplifier. The <b style="color:var(--colour-ui-correct)">Amplifier</b> provides the system's raw gain. The <b style="color:var(--colour-ui-correct)">Sampling Network</b> taps off a portion of the output to send to the feedback path. The <b style="color:var(--colour-ui-correct)">Feedback Network</b> conditions that sampled signal into Vf before it reaches the summing network.</div>
+    <div class="working-step" style="margin-top:.6rem">Why Oscillator, Rectifier and Filter Network don't belong:</div>
+    <div class="working-line">All three are real circuit blocks elsewhere in electronics, but none of them is a stage of THIS model — an oscillator generates its own signal rather than processing one, a rectifier converts AC to DC, and a filter network shapes frequency content. None of that matches what any of the 4 labelled blocks above actually do.</div>
+    ${mistakeLine}`;
+        }
+      },
+      {
+        // kind:'match', 4 columns (same mechanic as e.g. bjt_review_quiz.html's
+        // Av/Zin/Zout/re′ question, just with 4 columns instead of 2 — the
+        // engine itself doesn't care how many). Deepens Q1: instead of just
+        // naming the 4 blocks, this one covers an alternate name plus a
+        // genuinely non-obvious fact for each — the kind of detail a review
+        // question's "why is it called this?" is actually getting at.
+        kind: 'match',
+        columns: () => ['Summing Network', 'Amplifier', 'Sampling Network', 'Feedback Network'],
+        text: () => `Each statement below describes one block of the <b style="color:var(--colour-ui-primary)">general feedback model</b>. <b style="color:var(--colour-ui-primary)">Place</b> each one under the block it describes.`,
+        hint: () => `Alternate names are a good shortcut here: a "comparator" combines two signals, an "open-loop" amplifier has no feedback applied yet, a "pickoff" taps something off, and "β" is the feedback factor.`,
+        options: () => shuffle([
+          { label: 'Outputs a signal that is the combination of two inputs — Vin and the feedback signal, Vf', col: 0 },
+          { label: 'Also known as the comparator (or mixer) network', col: 0 },
+          { label: 'Its output, Va, is often just a few millivolts — heavy negative feedback cancels out most of Vin here', col: 0 },
+          { label: 'Provides the system’s raw open-loop gain, AOL', col: 1 },
+          { label: 'Also called the open-loop amplifier — the gain block with no feedback applied yet', col: 1 },
+          { label: 'Its own gain barely matters once feedback is heavy — closed-loop gain ends up set almost entirely by the feedback network instead', col: 1 },
+          { label: 'Taps off a portion of the output signal to send down the feedback path', col: 2 },
+          { label: 'Also called the output sampler, or pickoff network', col: 2 },
+          { label: 'Can sample either output voltage or output current, depending on the feedback topology', col: 2 },
+          { label: 'Conditions the sampled output into the feedback signal, Vf, before it reaches the summing network', col: 3 },
+          { label: 'Also known as the beta (β) network', col: 3 },
+          { label: 'Usually just a simple resistive attenuator — it rarely contains any gain of its own', col: 3 },
+        ]),
+        correctExplain: (st) => {
+          const wrongCount = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).length;
+          return wrongCount === 0 ? 'All 12 statements correctly matched' : `${st.opts.length - wrongCount} of ${st.opts.length} statements correctly matched`;
+        },
+        working: (st) => {
+          const mistakes = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).map(o => o.label);
+          const mistakeLine = mistakes.length
+            ? `<div class="working-step" style="margin-top:.6rem">Misplaced:</div><div class="working-line">${mistakes.join(', ')}</div>`
+            : '';
+          return `
+    <div class="working-step">Summing Network — also called the comparator or mixer:</div>
+    <div class="working-line">It combines Vin with the feedback signal Vf to produce Va. In a heavily-fed-back system Vf tracks Vin closely, so Va — the actual difference between them — can be tiny, even though Vin and Vf themselves are large.</div>
+    <div class="working-step" style="margin-top:.6rem">Amplifier — also called the open-loop amplifier:</div>
+    <div class="working-line">It supplies AOL, the raw gain the feedback equation starts from. The whole point of negative feedback is that AOL's own value (and its drift) barely matters once feedback is heavy — the closed-loop gain settles close to 1/β instead, set by the feedback network.</div>
+    <div class="working-step" style="margin-top:.6rem">Sampling Network — also called the output sampler or pickoff network:</div>
+    <div class="working-line">It taps a portion of the output to feed the feedback path. Depending on the feedback topology (series or shunt), it can sample the output as either a voltage or a current.</div>
+    <div class="working-step" style="margin-top:.6rem">Feedback Network — also known as the beta (β) network:</div>
+    <div class="working-line">It conditions the sampled output into Vf. It's usually just a resistive attenuator (hence β is normally a fraction less than 1) — the feedback network itself typically adds no gain.</div>
+    ${mistakeLine}`;
+        }
+      },
+      {
+        // kind:'match', 3 columns — user's own explicit column/option spec
+        // (Increases / Depends on Circuit / Decreases, sorting Gain,
+        // Distortion, Bandwidth, f1, f2, Rin, Rout), against the "list the
+        // effects of negative feedback on amplifier performance" objective.
+        // Rin/Rout both land in "Depends on Circuit" — which of the 4
+        // standard feedback topologies (series/shunt mixing at the input,
+        // voltage/current sampling at the output) is in use decides which
+        // way each one moves, unlike the other 5 characteristics, which
+        // always move the same way regardless of topology.
+        kind: 'match',
+        columns: () => ['Increases', 'Depends on Circuit', 'Decreases'],
+        text: () => `Adding <b style="color:var(--colour-ui-primary)">negative feedback</b> changes several of an amplifier's characteristics. <b style="color:var(--colour-ui-primary)">Place</b> each one under how it's typically affected.`,
+        hint: () => `Gain and bandwidth trade off against each other directly — if one goes up, the other goes down, and f1/f2 move the same way as bandwidth itself (widening it). Rin and Rout don't have one fixed answer — it depends on which of the 4 standard feedback topologies (series or shunt at the input, voltage or current at the output) is used.`,
+        options: () => shuffle([
+          { label: 'Gain', col: 2 },
+          { label: 'Distortion', col: 2 },
+          { label: 'f1 (lower cutoff frequency)', col: 2 },
+          { label: 'Bandwidth', col: 0 },
+          { label: 'f2 (upper cutoff frequency)', col: 0 },
+          { label: 'Rin (input resistance)', col: 1 },
+          { label: 'Rout (output resistance)', col: 1 },
+        ]),
+        correctExplain: (st) => {
+          const wrongCount = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).length;
+          return wrongCount === 0 ? 'All 7 characteristics correctly sorted' : `${st.opts.length - wrongCount} of ${st.opts.length} characteristics correctly sorted`;
+        },
+        working: (st) => {
+          const mistakes = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).map(o => o.label);
+          const mistakeLine = mistakes.length
+            ? `<div class="working-step" style="margin-top:.6rem">Misplaced:</div><div class="working-line">${mistakes.join(', ')}</div>`
+            : '';
+          return `
+    <div class="working-step">Decreases — Gain, Distortion, f1:</div>
+    <div class="working-line"><b>Gain</b> drops because that's the whole trade negative feedback makes — AOL/(1+AOL×β) is always smaller than AOL alone. <b>Distortion</b> drops because any nonlinearity appearing at the output gets sampled and fed back, where it opposes itself at the summing network the same way the wanted signal's own error does. <b>f1</b> moves DOWN (further from DC), which widens the bandwidth from the low end.</div>
+    <div class="working-step" style="margin-top:.6rem">Increases — Bandwidth, f2:</div>
+    <div class="working-line">Gain and bandwidth trade off directly — for a single-pole amplifier, gain × bandwidth is roughly constant, so the SAME factor (1+AOL×β) that divides gain down multiplies bandwidth up. <b>f2</b> moves UP (further from DC) as the other half of that widened bandwidth.</div>
+    <div class="working-step" style="margin-top:.6rem">Depends on Circuit — Rin, Rout:</div>
+    <div class="working-line">Unlike the 5 above, these don't move the same way every time. <b>Rin</b> rises if the feedback signal is mixed in SERIES with Vin, but falls if it's mixed in SHUNT (parallel) with it. <b>Rout</b> falls if the sampling network reads output VOLTAGE, but rises if it reads output CURRENT. Which combination a given circuit uses is what decides the direction, not negative feedback itself.</div>
+    ${mistakeLine}`;
+        }
+      },
+      {
+        // Calculates ACL from the general feedback equation (objective:
+        // "Calculate the closed-loop voltage gain of an amplifier using the
+        // general feedback equation"). AOL/β are randomised fresh each
+        // attempt (randomizeAclBetaQuestions(), via RESET_EXTRA) and shown
+        // live on circuit-2's own diagram through the avol/beta getters
+        // below. Each option is a full formula → substituted → answer
+        // one-liner, same style as e.g. bjt_review_quiz.html's re′
+        // question — every wrong option is a SPECIFIC, plausible
+        // mis-derivation (missing "+1", computing loop gain instead of
+        // closed-loop gain, flipping the fraction), not just a random
+        // number standing in for "wrong".
+        leftPanel: 'circuit',
+        get avol() { return fmtInt(Q4V.aol); },
+        get beta() { return fmtBeta(Q4V.beta); },
+        text: () => `This amplifier's <span class="colour-gain">open-loop gain</span> (A<sub>OL</sub>) and <b>feedback factor</b> (β) are shown on the diagram. Calculate its <span class="colour-gain">closed-loop gain</span>, A<sub>CL</sub>.`,
+        hint: () => `A<sub>CL</sub> = A<sub>OL</sub> / (1 + A<sub>OL</sub> × β) — the general feedback equation. Substitute the two values shown on the diagram directly; don't skip the "1 +" in the denominator.`,
+        options: () => shuffle([
+          { label: `A<sub>CL</sub> = ${frac('A<sub>OL</sub>', '1 + A<sub>OL</sub> × β')} = ${frac(fmtInt(Q4V.aol), `1 + ${fmtInt(Q4V.aol)} × ${fmtBeta(Q4V.beta)}`)} ≈ <b>${fmtACL(Q4V.acl)}</b>`, type: 'correct' },
+          { label: `A<sub>CL</sub> = ${frac('A<sub>OL</sub>', '1 + β')} = ${frac(fmtInt(Q4V.aol), `1 + ${fmtBeta(Q4V.beta)}`)} ≈ <b>${fmtInt(Q4V.wrongMissingAolTimes)}</b>`, type: 'wrong' },
+          { label: `A<sub>CL</sub> = A<sub>OL</sub> × β = ${fmtInt(Q4V.aol)} × ${fmtBeta(Q4V.beta)} ≈ <b>${fmtInt(Q4V.wrongLoopGain)}</b>`, type: 'wrong' },
+          { label: `A<sub>CL</sub> = ${frac('1 + A<sub>OL</sub> × β', 'A<sub>OL</sub>')} = ${frac(`1 + ${fmtInt(Q4V.aol)} × ${fmtBeta(Q4V.beta)}`, fmtInt(Q4V.aol))} ≈ <b>${fmtBeta(Q4V.wrongFlipped)}</b>`, type: 'wrong' },
+        ]),
+        correctExplain: () => `A<sub>CL</sub> = A<sub>OL</sub>/(1 + A<sub>OL</sub>×β) ≈ <b>${fmtACL(Q4V.acl)}</b>`,
+        working: () => `
+    <div class="working-formula-row">A<sub>CL</sub> = ${frac('A<sub>OL</sub>', '1 + A<sub>OL</sub> × β')}</div>
+    <div class="working-label">Substituting A<sub>OL</sub> = ${fmtInt(Q4V.aol)}, β = ${fmtBeta(Q4V.beta)}:</div>
+    <div class="working-formula-row">A<sub>CL</sub> = ${frac(fmtInt(Q4V.aol), `1 + ${fmtInt(Q4V.aol)} × ${fmtBeta(Q4V.beta)}`)}</div>
+    <div class="working-total">A<sub>CL</sub> ≈ <span class="colour-gain">${fmtACL(Q4V.acl)}</span></div>
+    <div class="working-line" style="margin-top:.6rem">Notice how close this already is to 1/β ≈ ${fmtACL(1 / Q4V.beta)} — once A<sub>OL</sub>×β is large, the "1 +" barely matters, which is exactly the shortcut the next question's approximation relies on.</div>`
+      },
+      {
+        // Rearranges the same general feedback equation to solve for β
+        // (objective: "Approximate the closed-loop gain of an amplifier
+        // using the feedback factor (beta)"). AOL is shown on the diagram
+        // as before, but β is left as "?" since it's the value being
+        // solved for — ACL (the other known) is stated in the question
+        // text instead, since circuit-2's diagram has no ACL slot of its
+        // own. Closes with the same β ≈ 1/ACL shortcut the review sheet's
+        // own Q11 shows as an alternate method, landing on the same
+        // displayed value as the exact derivation (by design — see
+        // randomizeAclBetaQuestions()'s own comment on the AOL pools).
+        leftPanel: 'circuit',
+        get avol() { return fmtInt(Q5V.aol); },
+        beta: '?',
+        text: () => `This amplifier has an open-loop gain (A<sub>OL</sub>) as shown on the diagram, and a measured closed-loop gain A<sub>CL</sub> = <b>${fmtInt(Q5V.acl)}</b>. Calculate its feedback factor, β.`,
+        hint: () => `Rearrange the general feedback equation A<sub>CL</sub> = A<sub>OL</sub>/(1+A<sub>OL</sub>×β) to solve for β — or, since A<sub>OL</sub> is so large here, just use the shortcut β ≈ 1/A<sub>CL</sub>.`,
+        options: () => shuffle([
+          { label: `β = ${frac('A<sub>OL</sub>/A<sub>CL</sub> − 1', 'A<sub>OL</sub>')} = ${frac(`${fmtInt(Q5V.aol)}/${fmtInt(Q5V.acl)} − 1`, fmtInt(Q5V.aol))} ≈ <b>${fmtBeta(Q5V.beta)}</b>`, type: 'correct' },
+          { label: `β = A<sub>OL</sub>/A<sub>CL</sub> − 1 = ${fmtInt(Q5V.aol)}/${fmtInt(Q5V.acl)} − 1 ≈ <b>${fmtInt(Q5V.wrongStoppedEarly)}</b>`, type: 'wrong' },
+          { label: `β = ${frac('A<sub>OL</sub>/A<sub>CL</sub> − 1', 'A<sub>CL</sub>')} = ${frac(`${fmtInt(Q5V.aol)}/${fmtInt(Q5V.acl)} − 1`, fmtInt(Q5V.acl))} ≈ <b>${fmtInt(Q5V.wrongWrongDivisor)}</b>`, type: 'wrong' },
+          { label: `β = ${frac('A<sub>CL</sub>/A<sub>OL</sub> − 1', 'A<sub>CL</sub>')} = ${frac(`${fmtInt(Q5V.acl)}/${fmtInt(Q5V.aol)} − 1`, fmtInt(Q5V.acl))} ≈ <b>${fmtBeta(Q5V.wrongFlippedRatio)}</b>`, type: 'wrong' },
+        ]),
+        correctExplain: () => `β = (A<sub>OL</sub>/A<sub>CL</sub> − 1)/A<sub>OL</sub> ≈ <b>${fmtBeta(Q5V.beta)}</b>`,
+        working: () => `
+    <div class="working-formula-row">A<sub>CL</sub> = ${frac('A<sub>OL</sub>', '1 + A<sub>OL</sub> × β')}</div>
+    <div class="working-label">Rearranged to solve for β:</div>
+    <div class="working-formula-row">β = ${frac('A<sub>OL</sub>/A<sub>CL</sub> − 1', 'A<sub>OL</sub>')}</div>
+    <div class="working-label">Substituting A<sub>OL</sub> = ${fmtInt(Q5V.aol)}, A<sub>CL</sub> = ${fmtInt(Q5V.acl)}:</div>
+    <div class="working-formula-row">β = ${frac(`${fmtInt(Q5V.aol)}/${fmtInt(Q5V.acl)} − 1`, fmtInt(Q5V.aol))}</div>
+    <div class="working-total">β ≈ <b>${fmtBeta(Q5V.beta)}</b></div>
+    <div class="working-line" style="margin-top:.6rem">Shortcut check: since A<sub>OL</sub> is so large here, β ≈ 1/A<sub>CL</sub> = 1/${fmtInt(Q5V.acl)} ≈ ${fmtBeta(Q5V.betaApprox)} — close enough to the exact answer above to use as a quick estimate whenever A<sub>OL</sub>×β ≫ 1.</div>`
+      }
+    ];
+
+    // Fixed slot→col mapping (this diagram never changes shape between
+    // questions, unlike jfet_knowledge_basics.html's Q2/Q3, so this is a
+    // one-time wire-up rather than something applied per-question).
+    FB_SLOT_IDS.forEach((id, col) => {
+      document.getElementById(id).addEventListener('click', () => slotClicked(col));
+    });
+
+    RENDER_EXTRA = () => {
+      document.getElementById('fillPoolWrap').style.display = isFill(QUESTIONS[cur]) ? '' : 'none';
+      // circuit1Display (Q1's interactive fill slots) vs circuit2Display
+      // (the plain reference version, circuit-2) — only one question uses
+      // each right now (Q1 vs the dummy Q4), but this reads off `kind`
+      // rather than a question index so it keeps working if more questions
+      // are added on either side later.
+      const showFill = isFill(QUESTIONS[cur]);
+      document.getElementById('circuit1Display').style.display = showFill ? '' : 'none';
+      document.getElementById('circuit2Display').style.display = showFill ? 'none' : '';
+      // Apply this question's own AVOL/β, if it sets them (only
+      // circuit2-using questions do) — keeps the diagram's displayed
+      // values in sync with whichever question is on screen.
+      const data = QUESTIONS[cur];
+      if (data.avol !== undefined) document.getElementById('circuit2AvolText').textContent = data.avol;
+      if (data.beta !== undefined) document.getElementById('circuit2BetaText').textContent = data.beta;
+    };
+
+    RESET_EXTRA = randomizeAclBetaQuestions;
+
+    initQuizNav();
+    resetQuiz();
+    initQuizFromURL();
+  </script>
+</body>
+</html>
