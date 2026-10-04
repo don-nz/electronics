@@ -1,0 +1,492 @@
+<!--
+  Monostable multivibrator Q-output construction drill — the monostable
+  sibling of digital_jk_preset_clear_diagram.html, reusing the exact same
+  shared mechanic (assets/waveform-builder.js: random pulse tracks, step-
+  waveform rendering, piece placement/undo, progress shading, per-column
+  checking, print worksheet) with a new page-local domain: ONE random,
+  read-only Trigger track is shown, and the student builds the resulting Q
+  waveform for a monostable with a fixed output pulse width.
+
+  A toggle above the puzzle picks one of 4 variants — every combination of
+  trigger edge (positive/rising vs negative/falling) and retriggering
+  (non-retriggerable vs retriggerable) — which are exactly the four timing-
+  diagram cases the week 12 lesson asks students to draw. Drawn with the
+  same block-diagram symbols digital_knowledge_multivibrators.html uses
+  (mv-mono-pos-block / mv-mono-neg-block, copied from there — edit that
+  file's copy first if they ever need to change). CONFIG carries each
+  variant's edge direction and retrigger flag; deriveQ() is written purely
+  in terms of those so the same code drives all 4 variants.
+
+  Rule every column is evaluated against:
+    1. A column with an ACTIVE trigger edge (rising or falling, per CONFIG)
+       while Q is LOW starts a pulse: Q is HIGH for the next W columns.
+    2. An active edge while Q is ALREADY HIGH is either
+         non-retriggerable -> ignored entirely (Q still ends W columns after
+                              the edge that started it), or
+         retriggerable     -> restarts the timing: Q now stays HIGH until W
+                              columns after THIS latest edge.
+    3. Otherwise Q is LOW (a monostable's one stable state).
+  W (the output pulse width, in columns) is picked fresh, 4-6, for every new
+  diagram and shown on the rule card, so students can't just memorise "8".
+
+  Two things generateDiagram() deliberately screens for:
+    - at least one active edge that arrives WHILE a pulse is running
+      ("busy" edges) — a puzzle without one wouldn't separate retriggerable
+      from non-retriggerable at all, the whole point of the toggle;
+    - no active edge landing on the exact column a pulse would end — a
+      real device's behaviour there is an arguable race, so it's never
+      generated (same "never shown" convention the flip-flop siblings use
+      for S=R=1 and P/C overlap).
+
+  Q-bar (the complement) isn't built separately — the builder is single-
+  output — but is revealed beneath Q once Check has been pressed, since "Q-bar
+  is just Q flipped" is the whole content of that part of the lesson.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../../assets/theme-init.js"></script>
+  <script src="../../../../assets/waveform-builder.js"></script>
+  <title>Digital Electronics — Monostable Timing Diagram Builder</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../../assets/quiz-common.css">
+  <script src="../../../../assets/breadcrumb.js" defer></script>
+  <style>
+    .rule-card { font-size: .82rem; line-height: 1.55; margin-bottom: 1.2rem; }
+    .rule-card .rule-row { display: flex; gap: .5rem; margin: .3rem 0; }
+    .rule-card .rule-cond { flex: none; width: 8.5rem; font-family: 'Share Tech Mono', monospace; }
+    .legend-row { display: flex; gap: 1rem; row-gap: .4rem; flex-wrap: wrap; margin-top: .6rem; font-size: .72rem; color: var(--colour-label); }
+    .legend-swatch { display: inline-block; width: 1.1rem; height: 2px; margin-right: .3rem; vertical-align: middle; }
+
+    .gate-toggle-card { font-size: .82rem; margin-bottom: 1.2rem; }
+    .gate-toggle-label { color: var(--colour-label); margin-bottom: .6rem; }
+    .gate-toggle { display: grid; grid-template-columns: repeat(2, max-content); gap: .8rem; justify-content: center; }
+    .gate-toggle-btn {
+      display: flex; flex-direction: column; align-items: center; gap: .3rem;
+      padding: .6rem 1.1rem; border: 1px solid var(--colour-border); border-radius: var(--radius-lg);
+      background: transparent; cursor: pointer; font-family: 'Share Tech Mono', monospace;
+      font-size: .7rem; letter-spacing: .05em; text-transform: uppercase; color: var(--colour-label);
+      text-align: center; transition: background .15s, color .15s, border-color .15s;
+    }
+    .gate-toggle-btn svg { width: 9rem; height: auto; display: block; }
+    .gate-toggle-btn.active {
+      border-color: var(--colour-ui-primary);
+      background: rgba(var(--colour-ui-primary-rgb), .12);
+      color: var(--colour-ui-primary);
+    }
+    .gate-toggle-btn:not(.active):hover { background: rgba(var(--colour-ui-primary-rgb), .04); color: var(--colour-text); }
+
+    .hint-toggle-card { font-size: .82rem; margin-bottom: 1.2rem; }
+    .hint-toggle-label { color: var(--colour-label); margin-bottom: .6rem; }
+    .hint-toggle { display: flex; gap: .6rem; flex-wrap: wrap; justify-content: center; }
+    .hint-toggle-btn {
+      padding: .5rem 1.1rem; border: 1px solid var(--colour-border); border-radius: var(--radius-lg);
+      background: transparent; cursor: pointer; font-family: 'Share Tech Mono', monospace;
+      font-size: .7rem; letter-spacing: .05em; text-transform: uppercase; color: var(--colour-label);
+      transition: background .15s, color .15s, border-color .15s;
+    }
+    .hint-toggle-btn:not(.active):hover { background: rgba(var(--colour-ui-primary-rgb), .04); color: var(--colour-text); }
+    .hint-toggle-btn[data-hint="edges"].active { border-color: var(--colour-switch); color: var(--colour-switch); background: color-mix(in srgb, var(--colour-switch) 14%, transparent); }
+    .hint-toggle-btn[data-hint="busy"].active { border-color: var(--colour-output-z); color: var(--colour-output-z); background: color-mix(in srgb, var(--colour-output-z) 14%, transparent); }
+
+    .wb-tracks-wrap { position: relative; }
+    .wb-hint-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+    .wb-track-label { width: 2.4rem; }
+    #qbarRow { display: none; }
+    #qbarRow.shown { display: flex; }
+  </style>
+</head>
+
+<body>
+  <!-- Hidden defs: the two monostable block symbols for the toggle below.
+       Copied from ../../knowledge/digital_knowledge_multivibrators.html
+       (edit there first, then re-copy here). -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur stdDeviation="2" result="b" />
+        <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+      </filter>
+
+      <g id="mv-mono-pos-block">
+       <g transform="translate(135,90)">
+        <rect x="-75" y="-90" width="150" height="180" rx="4" fill="none" style="stroke: var(--colour-dff)" stroke-width="2" filter="url(#glow)" />
+        <text x="0" y="-62" text-anchor="middle" font-size="15" font-weight="bold" style="fill: var(--colour-dff)">MONOSTABLE</text>
+        <line x1="-135" y1="0" x2="-75" y2="0" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <path d="M -75 -15 L -55 0 L -75 15" fill="none" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="-48" y="7" font-size="18" font-weight="bold" style="fill: var(--colour-dff)">Trigger</text>
+        <line x1="75" y1="-45" x2="135" y2="-45" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="60" y="-34" text-anchor="end" font-size="25" font-weight="bold" style="fill: var(--colour-dff)">Q</text>
+        <line x1="75" y1="45" x2="135" y2="45" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="60" y="55" text-anchor="end" font-size="25" font-weight="bold" style="fill: var(--colour-dff)"><tspan style="text-decoration: overline">Q</tspan></text>
+       </g>
+      </g>
+
+      <g id="mv-mono-neg-block">
+       <g transform="translate(135,90)">
+        <rect x="-75" y="-90" width="150" height="180" rx="4" fill="none" style="stroke: var(--colour-dff)" stroke-width="2" filter="url(#glow)" />
+        <text x="0" y="-62" text-anchor="middle" font-size="15" font-weight="bold" style="fill: var(--colour-dff)">MONOSTABLE</text>
+        <line x1="-135" y1="0" x2="-93" y2="0" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <circle cx="-84" cy="0" r="8" fill="none" style="stroke: var(--colour-dff)" stroke-width="2" filter="url(#glow)" />
+        <path d="M -75 -15 L -55 0 L -75 15" fill="none" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="-48" y="7" font-size="18" font-weight="bold" style="fill: var(--colour-dff)">Trigger</text>
+        <line x1="75" y1="-45" x2="135" y2="-45" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="60" y="-34" text-anchor="end" font-size="25" font-weight="bold" style="fill: var(--colour-dff)">Q</text>
+        <line x1="75" y1="45" x2="135" y2="45" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="60" y="55" text-anchor="end" font-size="25" font-weight="bold" style="fill: var(--colour-dff)"><tspan style="text-decoration: overline">Q</tspan></text>
+       </g>
+      </g>
+    </defs>
+  </svg>
+
+  <div class="crumb" id="crumb" data-current="Monostable Timing Diagram Builder"></div>
+  <header>
+    <h1>Digital Electronics</h1>
+    <p>Monostable Multivibrator — Build the Q Output</p>
+  </header>
+
+  <div class="quiz-wrap single-col" id="quizWrap">
+    <div class="questions-col">
+
+      <div class="card rule-card">
+        <div class="progress-wrap" style="margin-bottom:.8rem;">
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+        <div>A <b>monostable multivibrator</b> follows these rules at every <b id="ruleEdgeWord">rising</b> trigger edge<span id="ruleGateNote"></span>. Its output pulse width is <b id="rulePulseW">5 columns</b>:</div>
+        <div id="ruleRows"></div>
+        <div>Use the pieces below to draw Q, column by column, then hit <b>Check</b>.</div>
+        <div class="legend-row">
+          <span><span class="legend-swatch" style="background:var(--colour-switch)"></span>Trigger</span>
+          <span><span class="legend-swatch" style="background:var(--colour-output-z)"></span>Q (building)</span>
+        </div>
+      </div>
+
+      <div class="card gate-toggle-card">
+        <div class="gate-toggle-label">Choose the monostable type to build:</div>
+        <div class="gate-toggle" id="gateToggle">
+          <button type="button" class="gate-toggle-btn active" id="cfgBtn-pos-non" onclick="pickConfig('pos-non')" aria-pressed="true">
+            <svg viewBox="-10 -10 290 200"><use href="#mv-mono-pos-block" /></svg>
+            <span>Positive Edge<br>Non-Retriggerable</span>
+          </button>
+          <button type="button" class="gate-toggle-btn" id="cfgBtn-neg-non" onclick="pickConfig('neg-non')" aria-pressed="false">
+            <svg viewBox="-10 -10 290 200"><use href="#mv-mono-neg-block" /></svg>
+            <span>Negative Edge<br>Non-Retriggerable</span>
+          </button>
+          <button type="button" class="gate-toggle-btn" id="cfgBtn-pos-re" onclick="pickConfig('pos-re')" aria-pressed="false">
+            <svg viewBox="-10 -10 290 200"><use href="#mv-mono-pos-block" /></svg>
+            <span>Positive Edge<br>Retriggerable</span>
+          </button>
+          <button type="button" class="gate-toggle-btn" id="cfgBtn-neg-re" onclick="pickConfig('neg-re')" aria-pressed="false">
+            <svg viewBox="-10 -10 290 200"><use href="#mv-mono-neg-block" /></svg>
+            <span>Negative Edge<br>Retriggerable</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="card hint-toggle-card">
+        <div class="hint-toggle-label">Show helper overlays:</div>
+        <div class="hint-toggle" id="hintToggle">
+          <button type="button" class="hint-toggle-btn" id="hintBtnEdges" data-hint="edges" onclick="toggleHint('edges')" aria-pressed="false">Show Trigger Edges</button>
+          <button type="button" class="hint-toggle-btn" id="hintBtnBusy" data-hint="busy" onclick="toggleHint('busy')" aria-pressed="false">Show Edges During a Pulse</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="wb-tracks-wrap" id="tracksWrap">
+          <svg class="wb-hint-overlay" id="hintOverlay" preserveAspectRatio="none"></svg>
+          <div class="wb-track-row">
+            <div class="wb-track-label">Trig</div>
+            <svg id="trigTrack"></svg>
+          </div>
+          <div class="wb-track-row">
+            <div class="wb-track-label">Q</div>
+            <svg id="qTrack"></svg>
+          </div>
+          <div class="wb-track-row" id="qbarRow">
+            <div class="wb-track-label"><span style="text-decoration:overline">Q</span></div>
+            <svg id="qbarTrack"></svg>
+          </div>
+        </div>
+
+        <div class="wb-palette" id="palette"></div>
+
+        <div class="result-banner" id="resultBanner"><span id="resultIcon"></span>&nbsp;<span id="resultText"></span></div>
+
+        <div class="btn-row">
+          <button class="btn btn-prev" id="undoBtn" onclick="doUndo()">← Undo</button>
+          <button class="btn btn-check" id="checkBtn" onclick="doCheck()" disabled>Check</button>
+          <button class="btn btn-shuffle" id="restartBtn" onclick="doRestart()">↺ Retry</button>
+          <button class="btn btn-summary" id="newBtn" onclick="doNewDiagram()">🎲 New Diagram</button>
+          <button class="btn" onclick="printDiagramNow()">🖨 Print Worksheet</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Print Worksheet — direct child of <body> (NOT nested inside
+       .quiz-wrap), populated by waveform-builder.js's own
+       buildPrintDiagram() (see its header comment). Invisible on screen
+       (.print-only), shown only via the browser's Print / Save-as-PDF. -->
+  <div id="printWorksheet" class="print-only"></div>
+
+  <footer>Electronics // Cert III // UEEEC0069</footer>
+
+  <script>
+    const N = 24;
+    const MIN_W = 4, MAX_W = 6;
+    const PIECES = [
+      { type: 'flat', width: 1 }, { type: 'flat', width: 2 }, { type: 'flat', width: 3 },
+      { type: 'rise' }, { type: 'fall' },
+    ];
+
+    // ── monostable domain logic (page-local — see this file's own header
+    // comment for why this stays out of the shared waveform-builder.js) ──
+    const CONFIG = {
+      'pos-non': { edge: 'rising',  retrig: false, edgeName: 'positive-edge', edgeWord: 'rising',  modeName: 'non-retriggerable' },
+      'neg-non': { edge: 'falling', retrig: false, edgeName: 'negative-edge', edgeWord: 'falling', modeName: 'non-retriggerable' },
+      'pos-re':  { edge: 'rising',  retrig: true,  edgeName: 'positive-edge', edgeWord: 'rising',  modeName: 'retriggerable' },
+      'neg-re':  { edge: 'falling', retrig: true,  edgeName: 'negative-edge', edgeWord: 'falling', modeName: 'retriggerable' },
+    };
+    let configKey = 'pos-non';
+
+    // True at every column where Trigger makes the active transition. The
+    // trigger idles LOW before column 0, so there's never an edge at col 0.
+    function activeEdges(T, edge) {
+      return T.map((v, i) => {
+        const prev = i === 0 ? 0 : T[i - 1];
+        return edge === 'rising' ? (prev === 0 && v === 1) : (prev === 1 && v === 0);
+      });
+    }
+
+    // `end` is the first column at which the running pulse has finished.
+    // busy[i] marks an active edge that arrives while a pulse is running;
+    // ambiguous is set if an edge lands exactly on `end` (never shown —
+    // see header comment).
+    function deriveQ(T, edge, retrig, W) {
+      const isEdge = activeEdges(T, edge);
+      const Q = [], busy = new Array(T.length).fill(false);
+      let end = 0, ambiguous = false;
+      for (let i = 0; i < T.length; i++) {
+        if (isEdge[i]) {
+          if (i < end) { busy[i] = true; if (retrig) end = i + W; }
+          else { if (end > 0 && i === end) ambiguous = true; end = i + W; }
+        }
+        Q.push(i < end ? 1 : 0);
+      }
+      return { Q, busy, isEdge, ambiguous };
+    }
+
+    // Retries the whole draw until Trigger gives at least one edge that
+    // arrives mid-pulse AND Q completes at least one full pulse AND there's
+    // no end-of-pulse race — see header comment for why each matters.
+    function generateDiagram(edge, retrig) {
+      let best = null, bestScore = -1;
+      for (let attempt = 0; attempt < 80; attempt++) {
+        const W = MIN_W + Math.floor(Math.random() * (MAX_W - MIN_W + 1));
+        const T = randomPulseTrack(N, { minPulse: 1, maxPulse: 2, minGap: 1, maxGap: 5 });
+        const d = deriveQ(T, edge, retrig, W);
+        const busyCount = d.busy.filter(Boolean).length;
+        let falls = 0;
+        for (let i = 1; i < N; i++) if (d.Q[i - 1] === 1 && d.Q[i] === 0) falls++;
+        const highCols = d.Q.filter(Boolean).length;
+        if (d.ambiguous) continue;
+        const result = { T, Q: d.Q, busy: d.busy, isEdge: d.isEdge, W };
+        if (busyCount >= 1 && falls >= 1 && highCols <= N * 0.75) return result;
+        const score = busyCount * 5 + falls;
+        if (score > bestScore) { best = result; bestScore = score; }
+      }
+      return best;
+    }
+
+    function renderRuleCard() {
+      const cfg = CONFIG[configKey];
+      document.getElementById('ruleGateNote').textContent = ` (${cfg.edgeName} triggered, ${cfg.modeName})`;
+      document.getElementById('ruleEdgeWord').textContent = cfg.edgeWord;
+      document.getElementById('rulePulseW').textContent = `${W} columns`;
+      const rules = [
+        [`Q at rest`, '<b>LOW</b> — a monostable\'s one stable state'],
+        [`Edge, Q LOW`, `<b>Start</b> — Q goes HIGH for <b>${W} columns</b>, then returns LOW by itself`],
+        cfg.retrig
+          ? [`Edge, Q HIGH`, `<b>Retrigger</b> — the timing restarts; Q now stays HIGH until ${W} columns after <b>this</b> edge`]
+          : [`Edge, Q HIGH`, `<b>Ignored</b> — Q still ends ${W} columns after the edge that started it`],
+      ];
+      document.getElementById('ruleRows').innerHTML = rules.map(([cond, desc]) =>
+        `<div class="rule-row"><span class="rule-cond">${cond}</span><span>${desc}</span></div>`
+      ).join('');
+    }
+
+    function pickConfig(key) {
+      if (key === configKey) return;
+      configKey = key;
+      Object.keys(CONFIG).forEach(k => {
+        const btn = document.getElementById('cfgBtn-' + k);
+        btn.classList.toggle('active', k === key);
+        btn.setAttribute('aria-pressed', String(k === key));
+      });
+      doNewDiagram();
+    }
+
+    // ── helper overlays ── Show Trigger Edges: a dashed line at every
+    // active edge. Show Edges During a Pulse: only the ones that arrive
+    // while Q is already HIGH — the ones where retriggerable and non-
+    // retriggerable devices behave differently, which is what this
+    // exercise is really about. Both persist across New Diagram/Retry/
+    // Check and are positioned via getBoundingClientRect()/getScreenCTM()
+    // (not hardcoded pixel math), same as the flip-flop siblings.
+    let hintEdges = false, hintBusy = false;
+
+    function toggleHint(key) {
+      if (key === 'edges') hintEdges = !hintEdges;
+      else if (key === 'busy') hintBusy = !hintBusy;
+      document.getElementById('hintBtnEdges').classList.toggle('active', hintEdges);
+      document.getElementById('hintBtnEdges').setAttribute('aria-pressed', String(hintEdges));
+      document.getElementById('hintBtnBusy').classList.toggle('active', hintBusy);
+      document.getElementById('hintBtnBusy').setAttribute('aria-pressed', String(hintBusy));
+      renderHints();
+    }
+
+    function renderHints() {
+      requestAnimationFrame(() => {
+        const overlay = document.getElementById('hintOverlay');
+        if (!hintEdges && !hintBusy) { overlay.innerHTML = ''; return; }
+
+        const wrap = document.getElementById('tracksWrap');
+        const wrapRect = wrap.getBoundingClientRect();
+        if (wrapRect.width === 0) return; // not laid out yet
+
+        const trigSvg = document.getElementById('trigTrack');
+        const ctm = trigSvg.getScreenCTM();
+        const colVbWidth = trigSvg.viewBox.baseVal.width / N;
+        function colX(colIndex) {
+          const pt = trigSvg.createSVGPoint();
+          pt.x = colIndex * colVbWidth;
+          pt.y = 0;
+          return pt.matrixTransform(ctm).x - wrapRect.left;
+        }
+
+        const trigTop = trigSvg.getBoundingClientRect().top - wrapRect.top;
+        const qBottom = document.getElementById('qTrack').getBoundingClientRect().bottom - wrapRect.top;
+
+        overlay.setAttribute('viewBox', `0 0 ${wrapRect.width} ${wrapRect.height}`);
+        let html = '';
+        for (let i = 0; i < N; i++) {
+          if (!isEdge[i]) continue;
+          const x = colX(i);
+          if (hintBusy && busy[i]) {
+            html += `<line x1="${x}" y1="${trigTop}" x2="${x}" y2="${qBottom}" style="stroke: var(--colour-output-z)" stroke-width="2" stroke-dasharray="4,3" />`;
+          } else if (hintEdges) {
+            html += `<line x1="${x}" y1="${trigTop}" x2="${x}" y2="${qBottom}" style="stroke: var(--colour-switch)" stroke-width="2" stroke-dasharray="4,3" />`;
+          }
+        }
+        overlay.innerHTML = html;
+      });
+    }
+
+    window.addEventListener('resize', renderHints);
+    if (document.fonts && document.fonts.ready) { document.fonts.ready.then(renderHints); }
+
+    // ── page state ──
+    let T, correctQ, busy, isEdge, W, builder, checked, lastResult;
+
+    function doNewDiagram() {
+      const cfg = CONFIG[configKey];
+      ({ T, Q: correctQ, busy, isEdge, W } = generateDiagram(cfg.edge, cfg.retrig));
+      builder = { pieces: [] };
+      checked = false;
+      lastResult = null;
+      render();
+    }
+
+    function doRestart() {
+      builder = { pieces: [] };
+      checked = false;
+      lastResult = null;
+      render();
+    }
+
+    function doUndo() {
+      if (checked) return;
+      wbUndo(builder);
+      render();
+    }
+
+    function pickPiece(piece) {
+      if (checked) return;
+      wbPlace(builder, piece, N);
+      render();
+    }
+
+    function doCheck() {
+      if (checked) return;
+      if (wbCursor(builder).col !== N) return;
+      lastResult = wbCheck(builder, correctQ);
+      checked = true;
+      render();
+    }
+
+    function render() {
+      renderRuleCard();
+      const progressCols = wbCursor(builder).col;
+      renderReadOnlyTrackSVG(document.getElementById('trigTrack'), T, { className: 'wb-track-path wb-track-clk', progressCols });
+      renderQTrackSVG(document.getElementById('qTrack'), builder, N, checked ? { results: lastResult.results } : {});
+
+      // Q-bar is revealed once Check has been pressed — see header comment.
+      const qbarRow = document.getElementById('qbarRow');
+      qbarRow.classList.toggle('shown', checked);
+      if (checked) {
+        renderReadOnlyTrackSVG(document.getElementById('qbarTrack'), correctQ.map(v => 1 - v), { className: 'wb-q-path wb-col-correct' });
+      }
+
+      renderPiecePalette(document.getElementById('palette'), {
+        pieces: PIECES,
+        onPick: pickPiece,
+        isDisabled: (p) => checked || !wbCanPlace(builder, p, N),
+      });
+
+      const cursor = wbCursor(builder);
+      document.getElementById('checkBtn').disabled = checked || cursor.col !== N;
+      document.getElementById('undoBtn').disabled = checked || builder.pieces.length === 0;
+
+      const banner = document.getElementById('resultBanner');
+      if (checked) {
+        banner.className = 'result-banner ' + (lastResult.allCorrect ? 'correct' : 'wrong');
+        document.getElementById('resultIcon').textContent = lastResult.allCorrect ? '✓' : '✗';
+        document.getElementById('resultText').textContent = lastResult.allCorrect
+          ? `All ${lastResult.total} columns correct! Q-bar (below) is simply Q flipped.`
+          : `${lastResult.correctCount} of ${lastResult.total} columns correct — red columns are wrong.`;
+      } else {
+        banner.className = 'result-banner';
+      }
+
+      renderHints();
+    }
+
+    if (history.length > 1) { document.getElementById('menuLink').style.display = ''; }
+    function goBack(e) { e.preventDefault(); history.back(); }
+
+    // Builds the print worksheet fresh (current variant's rule text, the
+    // current Trigger track, the current correct Q) right before opening the
+    // print dialog, then hands off to waveform-builder.js's own
+    // buildPrintDiagram() — see its header comment for what gets built.
+    function printDiagramNow() {
+      buildPrintDiagram({
+        descriptionEl: document.querySelector('.rule-card'),
+        givenTracks: [
+          { label: 'Trig', svgEl: document.getElementById('trigTrack') },
+        ],
+        solutionTrack: { label: 'Q', levels: correctQ, totalCols: N, className: 'wb-q-path wb-col-correct' },
+      });
+      wbTriggerPrint();
+    }
+
+    doNewDiagram();
+  </script>
+</body>
+
+</html>
