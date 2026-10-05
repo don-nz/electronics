@@ -1,0 +1,469 @@
+<!--
+  ADC output construction drill — the analogue-to-digital sibling of
+  digital_shift_register_timing_diagram.html, reusing the same shared
+  mechanic (assets/waveform-builder.js: step-waveform pieces, placement/
+  undo, per-column checking, print worksheet) with a new page-local domain:
+  a SAMPLED ANALOGUE INPUT (one held voltage per column, drawn against a
+  grid of output levels) is shown for a small ADC, and the student builds
+  ONE chosen output bit (D0, D1, D2 or D3) column by column.
+
+  Toggles above the puzzle pick the converter — a 3-bit (8 levels) or 4-bit
+  (16 levels) ADC — and HOW it rounds: to the NEAREST level (the usual
+  case; error never more than half a step) or by TRUNCATION (the level at
+  or just below the sample; error up to a full step). Reading the two is
+  the whole lesson on quantisation error.
+
+  Rule every column is evaluated against:
+    1. The input voltage, in units of one step, is v (the grid line k is
+       the voltage that gives code k).
+    2. Nearest: code = round(v).  Truncation: code = floor(v).
+    3. Output bit Dk is bit k of that code (D0 = LSB).
+
+  generateAnalog() keeps every sample at least 0.15 of a step away from a
+  decision level, so no column is a coin-toss to read off the picture, and
+  keeps drawing until the chosen bit changes at least three times. After
+  Check, the other bits are revealed as read-only rows, so the whole output
+  word can be read straight down any column. The helper overlay draws the
+  decision levels as dashed lines across the analogue input.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../../assets/theme-init.js"></script>
+  <script src="../../../../assets/waveform-builder.js"></script>
+  <title>Digital Electronics — ADC Output Builder</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../../assets/quiz-common.css">
+  <script src="../../../../assets/breadcrumb.js" defer></script>
+  <style>
+    .rule-card { font-size: .82rem; line-height: 1.55; margin-bottom: 1.2rem; }
+    .rule-card .rule-row { display: flex; gap: .5rem; margin: .3rem 0; }
+    .rule-card .rule-cond { flex: none; width: 8.5rem; font-family: 'Share Tech Mono', monospace; }
+    .legend-row { display: flex; gap: 1rem; row-gap: .4rem; flex-wrap: wrap; margin-top: .6rem; font-size: .72rem; color: var(--colour-label); }
+    .legend-swatch { display: inline-block; width: 1.1rem; height: 2px; margin-right: .3rem; vertical-align: middle; }
+
+    .gate-toggle-card { font-size: .82rem; margin-bottom: 1.2rem; }
+    .gate-toggle-label { color: var(--colour-label); margin-bottom: .6rem; }
+    .gate-toggle { display: grid; grid-template-columns: repeat(2, max-content); gap: .8rem; justify-content: center; }
+    .gate-toggle-btn {
+      display: flex; flex-direction: column; align-items: center; gap: .3rem;
+      padding: .6rem 1.1rem; border: 1px solid var(--colour-border); border-radius: var(--radius-lg);
+      background: transparent; cursor: pointer; font-family: 'Share Tech Mono', monospace;
+      font-size: .7rem; letter-spacing: .05em; text-transform: uppercase; color: var(--colour-label);
+      text-align: center; transition: background .15s, color .15s, border-color .15s;
+    }
+    .gate-toggle-btn svg { width: 9rem; height: auto; display: block; }
+    .gate-toggle-btn.active {
+      border-color: var(--colour-ui-primary);
+      background: rgba(var(--colour-ui-primary-rgb), .12);
+      color: var(--colour-ui-primary);
+    }
+    .gate-toggle-btn:not(.active):hover { background: rgba(var(--colour-ui-primary-rgb), .04); color: var(--colour-text); }
+
+    .hint-toggle-card { font-size: .82rem; margin-bottom: 1.2rem; }
+    .hint-toggle-label { color: var(--colour-label); margin-bottom: .6rem; }
+    .hint-toggle { display: flex; gap: .6rem; flex-wrap: wrap; justify-content: center; }
+    .hint-toggle-btn {
+      padding: .5rem 1.1rem; border: 1px solid var(--colour-border); border-radius: var(--radius-lg);
+      background: transparent; cursor: pointer; font-family: 'Share Tech Mono', monospace;
+      font-size: .7rem; letter-spacing: .05em; text-transform: uppercase; color: var(--colour-label);
+      transition: background .15s, color .15s, border-color .15s;
+    }
+    .hint-toggle-btn:not(.active):hover { background: rgba(var(--colour-ui-primary-rgb), .04); color: var(--colour-text); }
+    .hint-toggle-btn[data-hint="edges"].active { border-color: var(--colour-switch); color: var(--colour-switch); background: color-mix(in srgb, var(--colour-switch) 14%, transparent); }
+    .out-toggle-card { font-size: .82rem; margin-bottom: 1.2rem; }
+    .out-toggle-btn { min-width: 3.6rem; }
+    .out-toggle-btn.active { border-color: var(--colour-output-z); color: var(--colour-output-z); background: color-mix(in srgb, var(--colour-output-z) 14%, transparent); }
+
+    .wb-tracks-wrap { position: relative; }
+    .wb-hint-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+    .wb-track-label { width: 2.4rem; }
+    .extra-row { display: none; }
+    .extra-row.shown { display: flex; }
+  </style>
+</head>
+
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur stdDeviation="2" result="b" />
+        <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+      </filter>
+
+      
+      
+      <g id="adc-3">
+       <g transform="translate(135,80)">
+        <path d="M -75 0 L -35 -45 L 75 -45 L 75 45 L -35 45 Z" fill="none" style="stroke: var(--colour-dff)" stroke-width="2" filter="url(#glow)" />
+        <line x1="-135" y1="0" x2="-75" y2="0" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="-130" y="-8" text-anchor="start" font-size="15" font-weight="bold" style="fill: var(--colour-dff)">V<tspan font-size="10" dy="3">in</tspan></text>
+        <text x="20" y="5" text-anchor="middle" font-size="12" font-weight="bold" style="fill: var(--colour-dff)">3-BIT ADC</text>
+        <line x1="-25.0" y1="45" x2="-25.0" y2="80" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="-25.0" y="98" text-anchor="middle" font-size="13" font-weight="bold" style="fill: var(--colour-dff)">D<tspan font-size="10" dy="3">2</tspan></text>
+        <line x1="20.0" y1="45" x2="20.0" y2="80" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="20.0" y="98" text-anchor="middle" font-size="13" font-weight="bold" style="fill: var(--colour-dff)">D<tspan font-size="10" dy="3">1</tspan></text>
+        <line x1="65.0" y1="45" x2="65.0" y2="80" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="65.0" y="98" text-anchor="middle" font-size="13" font-weight="bold" style="fill: var(--colour-dff)">D<tspan font-size="10" dy="3">0</tspan></text>
+       </g>
+      </g>
+
+      <g id="adc-4">
+       <g transform="translate(135,80)">
+        <path d="M -75 0 L -35 -45 L 75 -45 L 75 45 L -35 45 Z" fill="none" style="stroke: var(--colour-dff)" stroke-width="2" filter="url(#glow)" />
+        <line x1="-135" y1="0" x2="-75" y2="0" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="-130" y="-8" text-anchor="start" font-size="15" font-weight="bold" style="fill: var(--colour-dff)">V<tspan font-size="10" dy="3">in</tspan></text>
+        <text x="20" y="5" text-anchor="middle" font-size="12" font-weight="bold" style="fill: var(--colour-dff)">4-BIT ADC</text>
+        <line x1="-25.0" y1="45" x2="-25.0" y2="80" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="-25.0" y="98" text-anchor="middle" font-size="13" font-weight="bold" style="fill: var(--colour-dff)">D<tspan font-size="10" dy="3">3</tspan></text>
+        <line x1="5.0" y1="45" x2="5.0" y2="80" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="5.0" y="98" text-anchor="middle" font-size="13" font-weight="bold" style="fill: var(--colour-dff)">D<tspan font-size="10" dy="3">2</tspan></text>
+        <line x1="35.0" y1="45" x2="35.0" y2="80" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="35.0" y="98" text-anchor="middle" font-size="13" font-weight="bold" style="fill: var(--colour-dff)">D<tspan font-size="10" dy="3">1</tspan></text>
+        <line x1="65.0" y1="45" x2="65.0" y2="80" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="65.0" y="98" text-anchor="middle" font-size="13" font-weight="bold" style="fill: var(--colour-dff)">D<tspan font-size="10" dy="3">0</tspan></text>
+       </g>
+      </g>
+
+
+    </defs>
+  </svg>
+
+
+  <div class="crumb" id="crumb" data-current="ADC Output Builder"></div>
+  <header>
+    <h1>Digital Electronics</h1>
+    <p>Analogue to Digital — Build an Output Bit</p>
+  </header>
+
+  <div class="quiz-wrap single-col" id="quizWrap">
+    <div class="questions-col">
+
+      <div class="card rule-card">
+        <div class="progress-wrap" style="margin-bottom:.8rem;">
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+        <div>A <b id="ruleKind">3-bit ADC</b> samples the analogue input once per column and outputs <b id="ruleHow">the grid level nearest to it</b>. Build <b id="ruleOut">D₀</b>:</div>
+        <div id="ruleRows"></div>
+        <div>Use the pieces below to draw <span id="ruleOut2">D₀</span>, column by column, then hit <b>Check</b>.</div>
+        <div class="legend-row">
+          <span><span class="legend-swatch" style="background:var(--colour-input-a)"></span>V<sub>in</sub> (sampled)</span>
+        <span><span class="legend-swatch" style="background:var(--colour-output-z)"></span><span id="legendOut">D₀</span> (building)</span>
+        </div>
+      </div>
+
+      <div class="card gate-toggle-card">
+        <div class="gate-toggle-label">Choose the ADC to build:</div>
+        <div class="gate-toggle" id="gateToggle">
+        <button type="button" class="gate-toggle-btn active" id="cfgBtn-n3-near" onclick="pickConfig('n3-near')" aria-pressed="true">
+          <svg viewBox="-10 -10 290 220"><use href="#adc-3" /></svg>
+          <span>3-bit ADC<br>Rounds to nearest</span>
+        </button>
+        <button type="button" class="gate-toggle-btn" id="cfgBtn-n3-trunc" onclick="pickConfig('n3-trunc')" aria-pressed="false">
+          <svg viewBox="-10 -10 290 220"><use href="#adc-3" /></svg>
+          <span>3-bit ADC<br>Truncates (rounds down)</span>
+        </button>
+        <button type="button" class="gate-toggle-btn" id="cfgBtn-n4-near" onclick="pickConfig('n4-near')" aria-pressed="false">
+          <svg viewBox="-10 -10 290 220"><use href="#adc-4" /></svg>
+          <span>4-bit ADC<br>Rounds to nearest</span>
+        </button>
+        <button type="button" class="gate-toggle-btn" id="cfgBtn-n4-trunc" onclick="pickConfig('n4-trunc')" aria-pressed="false">
+          <svg viewBox="-10 -10 290 220"><use href="#adc-4" /></svg>
+          <span>4-bit ADC<br>Truncates (rounds down)</span>
+        </button>
+      </div>
+      </div>
+
+      <div class="card hint-toggle-card out-toggle-card">
+        <div class="hint-toggle-label">Output to build:</div>
+        <div class="hint-toggle" id="outToggle">
+          <button type="button" class="hint-toggle-btn out-toggle-btn active" id="outBtn0" onclick="pickOut(0)" aria-pressed="true">D₀</button>
+          <button type="button" class="hint-toggle-btn out-toggle-btn" id="outBtn1" onclick="pickOut(1)" aria-pressed="false">D₁</button>
+          <button type="button" class="hint-toggle-btn out-toggle-btn" id="outBtn2" onclick="pickOut(2)" aria-pressed="false">D₂</button>
+        <button type="button" class="hint-toggle-btn out-toggle-btn" id="outBtn3" onclick="pickOut(3)" aria-pressed="false">D₃</button>
+        </div>
+        <div class="hint-toggle-label" style="margin-top:.9rem">Show helper overlay (dashed lines where the output code changes):</div>
+        <div class="hint-toggle" id="hintToggle">
+          <button type="button" class="hint-toggle-btn" id="hintBtnEdges" data-hint="edges" onclick="toggleHint('edges')" aria-pressed="false">Show Decision Levels</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="wb-tracks-wrap" id="tracksWrap">
+          <svg class="wb-hint-overlay" id="hintOverlay" preserveAspectRatio="none"></svg>
+          <div class="wb-track-row" id="vinRow">
+            <div class="wb-track-label" id="vinLabel"></div>
+            <svg id="vinTrack"></svg>
+          </div>
+          <div class="wb-track-row">
+            <div class="wb-track-label" id="qLabel">D₀</div>
+            <svg id="qTrack"></svg>
+          </div>
+          <div class="wb-track-row extra-row" id="extraRow1">
+            <div class="wb-track-label" id="extraLabel1"></div>
+            <svg id="extraTrack1"></svg>
+          </div>
+          <div class="wb-track-row extra-row" id="extraRow2">
+            <div class="wb-track-label" id="extraLabel2"></div>
+            <svg id="extraTrack2"></svg>
+          </div>
+          <div class="wb-track-row extra-row" id="extraRow3">
+            <div class="wb-track-label" id="extraLabel3"></div>
+            <svg id="extraTrack3"></svg>
+          </div>
+        </div>
+
+        <div class="wb-palette" id="palette"></div>
+
+        <div class="result-banner" id="resultBanner"><span id="resultIcon"></span>&nbsp;<span id="resultText"></span></div>
+
+        <div class="btn-row">
+          <button class="btn btn-prev" id="undoBtn" onclick="doUndo()">← Undo</button>
+          <button class="btn btn-check" id="checkBtn" onclick="doCheck()" disabled>Check</button>
+          <button class="btn btn-shuffle" id="restartBtn" onclick="doRestart()">↺ Retry</button>
+          <button class="btn btn-summary" id="newBtn" onclick="doNewDiagram()">🎲 New Diagram</button>
+          <button class="btn" onclick="printDiagramNow()">🖨 Print Worksheet</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div id="printWorksheet" class="print-only"></div>
+
+  <footer>Electronics // Cert III // UEEEC0069</footer>
+
+  <script>
+    const N = 24;
+    const PIECES = [
+      { type: 'flat', width: 1 }, { type: 'flat', width: 2 }, { type: 'flat', width: 3 },
+      { type: 'rise' }, { type: 'fall' },
+    ];
+    const SUB = ['₀', '₁', '₂', '₃'];
+
+    // ── ADC domain logic (page-local — see this file's own header) ──
+    const CONFIG = {
+      'n3-near':  { n: 3, mode: 'near' },
+      'n3-trunc': { n: 3, mode: 'trunc' },
+      'n4-near':  { n: 4, mode: 'near' },
+      'n4-trunc': { n: 4, mode: 'trunc' },
+    };
+    let configKey = 'n3-near';
+    let outSel = 0;
+    let hintLevels = false;
+
+    const codeOf = (v, cfg) => cfg.mode === 'near' ? Math.round(v) : Math.floor(v);
+    const boundaryDist = (v, cfg) => cfg.mode === 'near' ? Math.abs(((v % 1) + 1) % 1 - 0.5) : Math.min(((v % 1) + 1) % 1, 1 - (((v % 1) + 1) % 1));
+    const bitTrack = (codes, b) => codes.map(c => (c >> b) & 1);
+    const changes = (arr) => arr.filter((v, i) => i > 0 && v !== arr[i - 1]).length;
+
+    // A smooth-ish random signal, one held value per column, kept clear of every decision level.
+    function genAnalog(cfg) {
+      const L = 1 << cfg.n, top = L - 1;
+      const mid = top / 2, amp = mid - 0.9;
+      const period = 12 + Math.random() * 10, phase = Math.random() * 6.283;
+      const v = [];
+      for (let i = 0; i < N; i++) {
+        let x = mid + amp * Math.sin(6.283 * i / period + phase) + (Math.random() - 0.5) * 0.7;
+        x = Math.max(0.25, Math.min(top - 0.25, x));
+        for (let k = 0; k < 6 && boundaryDist(x, cfg) < 0.15; k++) x += 0.1 * (Math.random() < 0.5 ? -1 : 1) + 0.05;
+        x = Math.max(0.25, Math.min(top - 0.25, x));
+        v.push(x);
+      }
+      return v;
+    }
+
+    function generateDiagram() {
+      const cfg = CONFIG[configKey];
+      let result = null;
+      for (let attempt = 0; attempt < 200; attempt++) {
+        const v = genAnalog(cfg);
+        if (v.some(x => boundaryDist(x, cfg) < 0.15)) continue;
+        const codes = v.map(x => codeOf(x, cfg));
+        result = { v, codes };
+        if (changes(bitTrack(codes, outSel)) >= 3) break;
+      }
+      return result;
+    }
+
+    function renderRuleCard() {
+      const cfg = CONFIG[configKey];
+      const name = 'D' + SUB[outSel];
+      document.getElementById('ruleKind').textContent = `${cfg.n}-bit ADC (${1 << cfg.n} levels)`;
+      document.getElementById('ruleHow').textContent = cfg.mode === 'near' ? 'the grid level nearest to it' : 'the grid level at or just below it';
+      ['ruleOut', 'ruleOut2', 'legendOut', 'qLabel'].forEach(id => document.getElementById(id).textContent = name);
+      const rules = [
+        ['Sample', 'Each column holds one sampled value of V<sub>in</sub>, drawn as a short step. The grid lines are the voltages that give codes 0, 1, 2 … (marked at the left)'],
+        ['Code', cfg.mode === 'near'
+          ? 'Output code = <b>nearest</b> grid level (rounded) — a sample a little above a line still gives that line\'s code'
+          : 'Output code = grid level at or <b>just below</b> the sample (truncated)'],
+        [name, `Bit ${outSel} of the code (weight ${1 << outSel}${outSel === 0 ? ', the LSB' : outSel === CONFIG[configKey].n - 1 ? ', the MSB' : ''})`],
+      ];
+      document.getElementById('ruleRows').innerHTML = rules.map(([cond, desc]) =>
+        `<div class="rule-row"><span class="rule-cond">${cond}</span><span>${desc}</span></div>`
+      ).join('');
+    }
+
+    function pickConfig(key) {
+      if (key === configKey) return;
+      configKey = key;
+      Object.keys(CONFIG).forEach(k => {
+        const btn = document.getElementById('cfgBtn-' + k);
+        btn.classList.toggle('active', k === key);
+        btn.setAttribute('aria-pressed', String(k === key));
+      });
+      if (outSel >= CONFIG[key].n) setOut(CONFIG[key].n - 1);
+      doNewDiagram();
+    }
+
+    function setOut(b) {
+      outSel = b;
+      [0, 1, 2, 3].forEach(k => {
+        const btn = document.getElementById('outBtn' + k);
+        btn.classList.toggle('active', k === b);
+        btn.setAttribute('aria-pressed', String(k === b));
+      });
+    }
+    function pickOut(b) {
+      if (b === outSel || b >= CONFIG[configKey].n) return;
+      setOut(b);
+      doNewDiagram();
+    }
+
+    function toggleHint() {
+      hintLevels = !hintLevels;
+      document.getElementById('hintBtnEdges').classList.toggle('active', hintLevels);
+      document.getElementById('hintBtnEdges').setAttribute('aria-pressed', String(hintLevels));
+      renderVin();
+    }
+    function renderHints() {}
+
+    // ── the analogue input row: a sampled-and-held staircase on a grid of output levels ──
+    function renderVin() {
+      const cfg = CONFIG[configKey], L = 1 << cfg.n;
+      const W = N * 30, H = L * 24, pad = 8, cw = W / N;
+      const Y = (x) => H - pad - x * (H - 2 * pad) / (L - 1);
+      const svg = document.getElementById('vinTrack');
+      svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+      svg.setAttribute('preserveAspectRatio', 'none');
+      let html = '';
+      for (let i = 0; i <= N; i++) html += `<line x1="${i * cw}" y1="0" x2="${i * cw}" y2="${H}" style="stroke: var(--colour-label)" stroke-width="1" opacity=".18" />`;
+      for (let k = 0; k < L; k++) html += `<line x1="0" y1="${Y(k)}" x2="${W}" y2="${Y(k)}" style="stroke: var(--colour-label)" stroke-width="1" opacity=".4" />`;
+      if (hintLevels) {
+        for (let k = cfg.mode === 'near' ? 0 : 1; k < L - (cfg.mode === 'near' ? 1 : 0); k++) {
+          const y = Y(cfg.mode === 'near' ? k + 0.5 : k);
+          html += `<line x1="0" y1="${y}" x2="${W}" y2="${y}" style="stroke: var(--colour-switch)" stroke-width="2" stroke-dasharray="6,4" />`;
+        }
+      }
+      let d = '';
+      v.forEach((x, i) => { const y = Y(x); d += (i ? ` L ${i * cw},${y}` : `M ${i * cw},${y}`) + ` L ${(i + 1) * cw},${y}`; });
+      html += `<path d="${d}" fill="none" style="stroke: var(--colour-input-a)" stroke-width="3" stroke-linejoin="round" />`;
+      v.forEach((x, i) => { html += `<circle cx="${(i + 0.5) * cw}" cy="${Y(x)}" r="5" style="fill: var(--colour-input-a)" />`; });
+      svg.innerHTML = html;
+      const lab = document.getElementById('vinLabel');
+      lab.style.cssText = 'display:flex;flex-direction:column;justify-content:space-between;align-self:stretch;font-size:.58rem;line-height:1;text-align:right;color:var(--colour-label);font-weight:normal;';
+      lab.innerHTML = Array.from({ length: L }, (_, k) => `<span>${L - 1 - k}</span>`).join('');
+      document.getElementById('vinRow').style.alignItems = 'stretch';
+    }
+
+    // ── page state ──
+    let v, codes, correctQ, builder, checked, lastResult;
+
+    function doNewDiagram() {
+      ({ v, codes } = generateDiagram());
+      correctQ = bitTrack(codes, outSel);
+      builder = { pieces: [] };
+      checked = false;
+      lastResult = null;
+      render();
+    }
+
+    function doRestart() {
+      builder = { pieces: [] };
+      checked = false;
+      lastResult = null;
+      render();
+    }
+
+    function doUndo() {
+      if (checked) return;
+      wbUndo(builder);
+      render();
+    }
+
+    function pickPiece(piece) {
+      if (checked) return;
+      wbPlace(builder, piece, N);
+      render();
+    }
+
+    function doCheck() {
+      if (checked) return;
+      if (wbCursor(builder).col !== N) return;
+      lastResult = wbCheck(builder, correctQ);
+      checked = true;
+      render();
+    }
+
+    function render() {
+      const n = CONFIG[configKey].n;
+      renderRuleCard();
+      renderVin();
+      renderQTrackSVG(document.getElementById('qTrack'), builder, N, checked ? { results: lastResult.results, correctLevels: correctQ } : {});
+
+      // After Check, reveal the other bits as read-only rows.
+      const others = [0, 1, 2, 3].filter(b => b < n && b !== outSel);
+      [1, 2, 3].forEach(r => {
+        const row = document.getElementById('extraRow' + r);
+        const b = others[r - 1];
+        row.classList.toggle('shown', checked && b !== undefined);
+        if (b === undefined) return;
+        document.getElementById('extraLabel' + r).textContent = 'D' + SUB[b];
+        if (checked) renderReadOnlyTrackSVG(document.getElementById('extraTrack' + r), bitTrack(codes, b), { className: 'wb-q-path wb-col-correct' });
+      });
+      [0, 1, 2, 3].forEach(k => { document.getElementById('outBtn' + k).style.display = k < n ? '' : 'none'; });
+
+      renderPiecePalette(document.getElementById('palette'), {
+        pieces: PIECES,
+        onPick: pickPiece,
+        isDisabled: (p) => checked || !wbCanPlace(builder, p, N),
+      });
+
+      const cursor = wbCursor(builder);
+      document.getElementById('checkBtn').disabled = checked || cursor.col !== N;
+      document.getElementById('undoBtn').disabled = checked || builder.pieces.length === 0;
+
+      const banner = document.getElementById('resultBanner');
+      if (checked) {
+        banner.className = 'result-banner ' + (lastResult.allCorrect ? 'correct' : 'wrong');
+        document.getElementById('resultIcon').textContent = lastResult.allCorrect ? '✓' : '✗';
+        document.getElementById('resultText').textContent = lastResult.allCorrect
+          ? `All ${lastResult.total} columns correct! The other bits are shown below — read any column straight down to get the ADC's output code.`
+          : `${lastResult.correctCount} of ${lastResult.total} columns correct — red columns are wrong.`;
+      } else {
+        banner.className = 'result-banner';
+      }
+    }
+
+    if (history.length > 1) { document.getElementById('menuLink').style.display = ''; }
+    function goBack(e) { e.preventDefault(); history.back(); }
+
+    function printDiagramNow() {
+      buildPrintDiagram({
+        descriptionEl: document.querySelector('.rule-card'),
+        givenTracks: [{ label: 'Vin', svgEl: document.getElementById('vinTrack') }],
+        solutionTrack: { label: 'D' + SUB[outSel], levels: correctQ, totalCols: N, className: 'wb-q-path wb-col-correct' },
+      });
+      wbTriggerPrint();
+    }
+
+    doNewDiagram();
+  </script>
+</body>
+
+</html>
