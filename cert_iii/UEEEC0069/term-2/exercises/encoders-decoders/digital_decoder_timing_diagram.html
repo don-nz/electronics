@@ -301,7 +301,7 @@
           <button class="btn btn-check" id="checkBtn" onclick="doCheck()" disabled>Check</button>
           <button class="btn btn-shuffle" id="restartBtn" onclick="doRestart()">↺ Retry</button>
           <button class="btn btn-summary" id="newBtn" onclick="doNewDiagram()">🎲 New Diagram</button>
-          <button class="btn" onclick="printDiagramNow()">🖨 Print Worksheet</button>
+          <button class="btn" id="printBtn" onclick="printDiagramNow()">🖨 Print Worksheet</button>
         </div>
       </div>
 
@@ -542,6 +542,58 @@
         solutionTrack: { label: 'Y' + SUB[outSel], levels: correctQ, totalCols: N, className: 'wb-q-path wb-col-correct' },
       });
       wbTriggerPrint();
+    }
+
+
+    // ── "Answers" mode ── Before the student has placed anything, the Check button
+    // reads "Answers" and shows the finished solution (no student-entered values).
+    // Once they start building, it becomes the normal Check button and the Print
+    // Worksheet button is hidden (a printed blank worksheet is only useful before
+    // the puzzle is attempted). Retry / New Diagram return to the starting state.
+    let answersShown = false;
+    const __render = render;
+    render = function () { __render(); applyAnswersUI(); };
+    const __doCheck = doCheck;
+    doCheck = function () {
+      if (checked) return;
+      if (builder.pieces.length === 0) { showAnswers(); return; }
+      __doCheck();
+    };
+    const __doRestart = doRestart;
+    doRestart = function () { answersShown = false; __doRestart(); };
+    const __doNewDiagram = doNewDiagram;
+    doNewDiagram = function () { answersShown = false; __doNewDiagram(); };
+
+    function showAnswers() {
+      builder = { pieces: [] };
+      let lvl = 0, c = 0;
+      while (c < N) {
+        const x = correctQ[c];
+        if (x !== lvl) { wbPlace(builder, { type: x ? 'rise' : 'fall' }, N); lvl = x; c++; }
+        else {
+          let w = 1;
+          while (w < 3 && c + w < N && correctQ[c + w] === lvl) w++;
+          wbPlace(builder, { type: 'flat', width: w }, N); c += w;
+        }
+      }
+      answersShown = true;
+      lastResult = wbCheck(builder, correctQ);
+      checked = true;
+      render();
+    }
+
+    function applyAnswersUI() {
+      const atStart = builder.pieces.length === 0 && !checked;
+      const cb = document.getElementById('checkBtn');
+      cb.textContent = atStart ? 'Answers' : 'Check';
+      if (atStart) cb.disabled = false;
+      const pb = document.getElementById('printBtn');
+      if (pb) pb.style.display = (builder.pieces.length > 0 && !answersShown) ? 'none' : '';
+      if (answersShown) {
+        document.getElementById('resultBanner').className = 'result-banner correct';
+        document.getElementById('resultIcon').textContent = '👁';
+        document.getElementById('resultText').textContent = 'Answers shown — press Retry to have a go yourself, or New Diagram for a fresh puzzle.';
+      }
     }
 
     doNewDiagram();
