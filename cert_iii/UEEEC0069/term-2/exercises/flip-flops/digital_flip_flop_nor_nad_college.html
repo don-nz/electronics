@@ -454,6 +454,8 @@
       #printWorksheet .wb-track-label { color: #000; }
       #printWorksheet .wb-grid-line { stroke: #999; stroke-dasharray: none; opacity: 1; }
     }
+      #qbarRow { display: none; }
+    #qbarRow.shown { display: flex; }
   </style>
 </head>
 
@@ -542,6 +544,10 @@
       <div class="wb-track-row">
         <div class="wb-track-label">Q</div>
         <svg id="qTrack"></svg>
+      </div>
+      <div class="wb-track-row" id="qbarRow">
+        <div class="wb-track-label"><span style="text-decoration:overline">Q</span></div>
+        <svg id="qbarTrack"></svg>
       </div>
 
       <div class="wb-palette" id="palette"></div>
@@ -728,6 +734,38 @@
         html += `<path class="wb-track-path wb-track-q" d="${d}" />`;
       }
 
+      // After Check: redraw the student's wrong columns (and any riser that
+      // only exists because an earlier column was wrong) in red, then lay the
+      // FULL correct waveform over it in green, risers included, so the
+      // green lines always trace the complete solution and anything red is
+      // the student's own departure from it.
+      if (opts.results && opts.correctLevels) {
+        const cl = opts.correctLevels;
+        const lvlY = (l) => (l === 1 ? y1 : y0);
+        const seg = (c, prev, cur) => {
+          const xs = c * colW, xe = xs + colW;
+          return prev === cur ? `M ${xs} ${lvlY(cur)} L ${xe} ${lvlY(cur)} ` : `M ${xs} ${lvlY(prev)} L ${xs} ${lvlY(cur)} L ${xe} ${lvlY(cur)} `;
+        };
+        let col = 0, lvl = 0, red = '';
+        const place = (cols, newLvl) => {
+          for (let k = 0; k < cols; k++, col++) {
+            const prev = k === 0 ? lvl : newLvl;
+            const cprev = col === 0 ? 0 : cl[col - 1];
+            if (!opts.results[col] || prev !== cprev) red += seg(col, prev, newLvl);
+          }
+          lvl = newLvl;
+        };
+        for (const p of builder.pieces) {
+          if (p.type === 'flat') place(p.width, lvl);
+          else if (p.type === 'rise') place(1, 1);
+          else if (p.type === 'fall') place(1, 0);
+        }
+        let green = '', prevC = 0;
+        cl.forEach((v, i) => { green += seg(i, prevC, v); prevC = v; });
+        if (red) html += `<path class="wb-track-path" style="stroke: var(--colour-ui-wrong)" d="${red}" />`;
+        html += `<path class="wb-track-path" style="stroke: var(--colour-ui-correct)" d="${green}" />`;
+      }
+
       svg.innerHTML = html;
     }
 
@@ -896,7 +934,14 @@
     function render() {
       renderReadOnlyTrackSVG(document.getElementById('sTrack'), S, { className: 'wb-track-path wb-track-s' });
       renderReadOnlyTrackSVG(document.getElementById('rTrack'), R, { className: 'wb-track-path wb-track-r' });
-      renderQTrackSVG(document.getElementById('qTrack'), builder, N, checked ? { results: lastResult.results } : {});
+      renderQTrackSVG(document.getElementById('qTrack'), builder, N, checked ? { results: lastResult.results, correctLevels: correctQ } : {});
+
+      // Q-bar is revealed once Check has been pressed — it's just Q flipped.
+      const qbarRow = document.getElementById('qbarRow');
+      qbarRow.classList.toggle('shown', checked);
+      if (checked) {
+        renderReadOnlyTrackSVG(document.getElementById('qbarTrack'), correctQ.map(v => 1 - v), { className: 'wb-track-path wb-track-q' });
+      }
 
       renderPiecePalette(document.getElementById('palette'), {
         pieces: PIECES,
@@ -913,7 +958,7 @@
         banner.className = 'result-banner ' + (lastResult.allCorrect ? 'correct' : 'wrong');
         document.getElementById('resultIcon').textContent = lastResult.allCorrect ? '✓' : '✗';
         document.getElementById('resultText').textContent = lastResult.allCorrect
-          ? `All ${lastResult.total} columns correct!`
+          ? `All ${lastResult.total} columns correct! Q-bar (below) is simply Q flipped.`
           : `${lastResult.correctCount} of ${lastResult.total} columns correct — red columns are wrong.`;
       } else {
         banner.className = 'result-banner';

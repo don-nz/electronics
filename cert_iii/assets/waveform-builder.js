@@ -183,7 +183,8 @@ function wbCheck(builder, correctLevels) {
 }
 
 // ── rendering the buildable track ──
-// `opts.results` (from wbCheck) recolours each placed column correct/wrong;
+// `opts.results` (from wbCheck) recolours each placed column correct/wrong
+// (and `opts.correctLevels` adds the correct level in green on wrong ones);
 // omitted, every placed column renders in the neutral "still building"
 // colour. Always draws the full-width grid so the student can see how much
 // track remains regardless of how much is placed so far.
@@ -197,10 +198,32 @@ function renderQTrackSVG(svgEl, builder, totalCols, opts = {}) {
   if (cursorCol > 0) {
     html += `<rect class="wb-progress-shade" x="0" y="0" width="${cursorCol * colWidth}" height="${wbSvgHeight()}" />`;
   }
+  // With opts.correctLevels (and results) the student's own line is drawn
+  // first — wrong columns in red, right ones in green — then the FULL
+  // correct waveform is laid over it in green, risers included, so the
+  // green lines always trace the complete solution and anything red is
+  // the student's own departure from it. A riser in the student's line
+  // that is NOT part of the solution (it only exists because an earlier
+  // column was wrong) is drawn red on its own rather than green.
+  const full = opts.results && opts.correctLevels;
   segs.forEach(s => {
-    const cls = opts.results ? (opts.results[s.col] ? 'wb-col-correct' : 'wb-col-wrong') : 'wb-col-building';
-    html += `<path class="wb-q-path ${cls}" d="${wbColumnPathD(s.col, s.prevLevel, s.level, colWidth)}" />`;
+    if (!full) {
+      const cls = opts.results ? (opts.results[s.col] ? 'wb-col-correct' : 'wb-col-wrong') : 'wb-col-building';
+      html += `<path class="wb-q-path ${cls}" d="${wbColumnPathD(s.col, s.prevLevel, s.level, colWidth)}" />`;
+      return;
+    }
+    const correctPrev = s.col === 0 ? 0 : opts.correctLevels[s.col - 1];
+    if (!opts.results[s.col]) {
+      html += `<path class="wb-q-path wb-col-wrong" d="${wbColumnPathD(s.col, s.prevLevel, s.level, colWidth)}" />`;
+    } else if (s.prevLevel === correctPrev) {
+      html += `<path class="wb-q-path wb-col-correct" d="${wbColumnPathD(s.col, s.prevLevel, s.level, colWidth)}" />`;
+    } else {
+      html += `<path class="wb-q-path wb-col-wrong" d="${wbColumnPathD(s.col, s.prevLevel, s.level, colWidth)}" />`;
+    }
   });
+  if (full) {
+    html += `<path class="wb-q-path wb-col-correct" d="${wbFullTrackPathD(opts.correctLevels, colWidth)}" />`;
+  }
   svgEl.innerHTML = html;
 }
 

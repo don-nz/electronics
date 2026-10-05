@@ -1,0 +1,504 @@
+<!--
+  Counter output construction drill — the counter sibling of
+  digital_monostable_timing_diagram.html, reusing the same shared mechanic
+  (assets/waveform-builder.js: read-only track rendering, step-waveform
+  pieces, placement/undo, per-column checking, print worksheet) with a new
+  page-local domain: a regular, read-only CLK track is shown, plus the
+  count the 3-bit counter holds before the first pulse, and the student
+  builds ONE chosen output (Q0, Q1 or Q2) column by column.
+
+  Toggles above the puzzle pick the counter type — every combination of
+  direction (up/down) and active clock edge (positive/negative), the same
+  two things the week 13 timing-diagram questions ask students to read off
+  a diagram — and which output to build. Q0 toggles on every active edge,
+  Q1 on every second, Q2 on every fourth, which is the whole point of
+  "each output halves the frequency again".
+
+  Rule every column is evaluated against:
+    1. A column with an ACTIVE clock edge (rising or falling, per CONFIG)
+       moves the 3-bit count one step: +1 (up) or -1 (down), wrapping
+       111 -> 000 (up) or 000 -> 111 (down) — overflow.
+    2. Otherwise the count holds.
+    3. Qk is bit k of the count (weight 2^k) AFTER that column's edge.
+  CLK idles LOW before column 0, so there is never an edge on column 0 and
+  the first column shows the starting count.
+
+  generateDiagram() re-draws the starting count until the chosen output
+  changes at least twice, so a puzzle is never one long flat line. After
+  Check, the other two outputs are revealed as read-only tracks so the whole
+  count can be read straight down any column.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../../assets/theme-init.js"></script>
+  <script src="../../../../assets/waveform-builder.js"></script>
+  <title>Digital Electronics — Counter Timing Diagram Builder</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../../assets/quiz-common.css">
+  <script src="../../../../assets/breadcrumb.js" defer></script>
+  <style>
+    .rule-card { font-size: .82rem; line-height: 1.55; margin-bottom: 1.2rem; }
+    .rule-card .rule-row { display: flex; gap: .5rem; margin: .3rem 0; }
+    .rule-card .rule-cond { flex: none; width: 8.5rem; font-family: 'Share Tech Mono', monospace; }
+    .legend-row { display: flex; gap: 1rem; row-gap: .4rem; flex-wrap: wrap; margin-top: .6rem; font-size: .72rem; color: var(--colour-label); }
+    .legend-swatch { display: inline-block; width: 1.1rem; height: 2px; margin-right: .3rem; vertical-align: middle; }
+
+    .gate-toggle-card { font-size: .82rem; margin-bottom: 1.2rem; }
+    .gate-toggle-label { color: var(--colour-label); margin-bottom: .6rem; }
+    .gate-toggle { display: grid; grid-template-columns: repeat(2, max-content); gap: .8rem; justify-content: center; }
+    .gate-toggle-btn {
+      display: flex; flex-direction: column; align-items: center; gap: .3rem;
+      padding: .6rem 1.1rem; border: 1px solid var(--colour-border); border-radius: var(--radius-lg);
+      background: transparent; cursor: pointer; font-family: 'Share Tech Mono', monospace;
+      font-size: .7rem; letter-spacing: .05em; text-transform: uppercase; color: var(--colour-label);
+      text-align: center; transition: background .15s, color .15s, border-color .15s;
+    }
+    .gate-toggle-btn svg { width: 9rem; height: auto; display: block; }
+    .gate-toggle-btn.active {
+      border-color: var(--colour-ui-primary);
+      background: rgba(var(--colour-ui-primary-rgb), .12);
+      color: var(--colour-ui-primary);
+    }
+    .gate-toggle-btn:not(.active):hover { background: rgba(var(--colour-ui-primary-rgb), .04); color: var(--colour-text); }
+
+    .hint-toggle-card { font-size: .82rem; margin-bottom: 1.2rem; }
+    .hint-toggle-label { color: var(--colour-label); margin-bottom: .6rem; }
+    .hint-toggle { display: flex; gap: .6rem; flex-wrap: wrap; justify-content: center; }
+    .hint-toggle-btn {
+      padding: .5rem 1.1rem; border: 1px solid var(--colour-border); border-radius: var(--radius-lg);
+      background: transparent; cursor: pointer; font-family: 'Share Tech Mono', monospace;
+      font-size: .7rem; letter-spacing: .05em; text-transform: uppercase; color: var(--colour-label);
+      transition: background .15s, color .15s, border-color .15s;
+    }
+    .hint-toggle-btn:not(.active):hover { background: rgba(var(--colour-ui-primary-rgb), .04); color: var(--colour-text); }
+    .hint-toggle-btn[data-hint="edges"].active { border-color: var(--colour-switch); color: var(--colour-switch); background: color-mix(in srgb, var(--colour-switch) 14%, transparent); }
+    .out-toggle-card { font-size: .82rem; margin-bottom: 1.2rem; }
+    .out-toggle-btn { min-width: 3.6rem; }
+    .out-toggle-btn.active { border-color: var(--colour-output-z); color: var(--colour-output-z); background: color-mix(in srgb, var(--colour-output-z) 14%, transparent); }
+
+    .wb-tracks-wrap { position: relative; }
+    .wb-hint-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+    .wb-track-label { width: 2.4rem; }
+    .extra-row { display: none; }
+    .extra-row.shown { display: flex; }
+  </style>
+</head>
+
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur stdDeviation="2" result="b" />
+        <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+      </filter>
+
+      <g id="ctr-up-pos">
+       <g transform="translate(135,90)">
+        <rect x="-75" y="-90" width="150" height="180" rx="4" fill="none" style="stroke: var(--colour-dff)" stroke-width="2" filter="url(#glow)" />
+        <text x="0" y="-70" text-anchor="middle" font-size="14" font-weight="bold" style="fill: var(--colour-dff)">UP COUNTER</text>
+        <line x1="-135" y1="0" x2="-75" y2="0" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <path d="M -75 -15 L -55 0 L -75 15" fill="none" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="-48" y="7" font-size="18" font-weight="bold" style="fill: var(--colour-dff)">CLK</text>
+        <line x1="75" y1="-40" x2="135" y2="-40" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="60" y="-34" text-anchor="end" font-size="18" font-weight="bold" style="fill: var(--colour-dff)">Q<tspan font-size="12" dy="4">2</tspan></text>
+        <line x1="75" y1="0" x2="135" y2="0" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="60" y="6" text-anchor="end" font-size="18" font-weight="bold" style="fill: var(--colour-dff)">Q<tspan font-size="12" dy="4">1</tspan></text>
+        <line x1="75" y1="40" x2="135" y2="40" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="60" y="46" text-anchor="end" font-size="18" font-weight="bold" style="fill: var(--colour-dff)">Q<tspan font-size="12" dy="4">0</tspan></text>
+       </g>
+      </g>
+
+      <g id="ctr-up-neg">
+       <g transform="translate(135,90)">
+        <rect x="-75" y="-90" width="150" height="180" rx="4" fill="none" style="stroke: var(--colour-dff)" stroke-width="2" filter="url(#glow)" />
+        <text x="0" y="-70" text-anchor="middle" font-size="14" font-weight="bold" style="fill: var(--colour-dff)">UP COUNTER</text>
+        <line x1="-135" y1="0" x2="-93" y2="0" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <circle cx="-84" cy="0" r="8" fill="none" style="stroke: var(--colour-dff)" stroke-width="2" filter="url(#glow)" />
+        <path d="M -75 -15 L -55 0 L -75 15" fill="none" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="-48" y="7" font-size="18" font-weight="bold" style="fill: var(--colour-dff)">CLK</text>
+        <line x1="75" y1="-40" x2="135" y2="-40" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="60" y="-34" text-anchor="end" font-size="18" font-weight="bold" style="fill: var(--colour-dff)">Q<tspan font-size="12" dy="4">2</tspan></text>
+        <line x1="75" y1="0" x2="135" y2="0" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="60" y="6" text-anchor="end" font-size="18" font-weight="bold" style="fill: var(--colour-dff)">Q<tspan font-size="12" dy="4">1</tspan></text>
+        <line x1="75" y1="40" x2="135" y2="40" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="60" y="46" text-anchor="end" font-size="18" font-weight="bold" style="fill: var(--colour-dff)">Q<tspan font-size="12" dy="4">0</tspan></text>
+       </g>
+      </g>
+
+      <g id="ctr-down-pos">
+       <g transform="translate(135,90)">
+        <rect x="-75" y="-90" width="150" height="180" rx="4" fill="none" style="stroke: var(--colour-dff)" stroke-width="2" filter="url(#glow)" />
+        <text x="0" y="-70" text-anchor="middle" font-size="14" font-weight="bold" style="fill: var(--colour-dff)">DOWN COUNTER</text>
+        <line x1="-135" y1="0" x2="-75" y2="0" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <path d="M -75 -15 L -55 0 L -75 15" fill="none" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="-48" y="7" font-size="18" font-weight="bold" style="fill: var(--colour-dff)">CLK</text>
+        <line x1="75" y1="-40" x2="135" y2="-40" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="60" y="-34" text-anchor="end" font-size="18" font-weight="bold" style="fill: var(--colour-dff)">Q<tspan font-size="12" dy="4">2</tspan></text>
+        <line x1="75" y1="0" x2="135" y2="0" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="60" y="6" text-anchor="end" font-size="18" font-weight="bold" style="fill: var(--colour-dff)">Q<tspan font-size="12" dy="4">1</tspan></text>
+        <line x1="75" y1="40" x2="135" y2="40" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="60" y="46" text-anchor="end" font-size="18" font-weight="bold" style="fill: var(--colour-dff)">Q<tspan font-size="12" dy="4">0</tspan></text>
+       </g>
+      </g>
+
+      <g id="ctr-down-neg">
+       <g transform="translate(135,90)">
+        <rect x="-75" y="-90" width="150" height="180" rx="4" fill="none" style="stroke: var(--colour-dff)" stroke-width="2" filter="url(#glow)" />
+        <text x="0" y="-70" text-anchor="middle" font-size="14" font-weight="bold" style="fill: var(--colour-dff)">DOWN COUNTER</text>
+        <line x1="-135" y1="0" x2="-93" y2="0" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <circle cx="-84" cy="0" r="8" fill="none" style="stroke: var(--colour-dff)" stroke-width="2" filter="url(#glow)" />
+        <path d="M -75 -15 L -55 0 L -75 15" fill="none" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="-48" y="7" font-size="18" font-weight="bold" style="fill: var(--colour-dff)">CLK</text>
+        <line x1="75" y1="-40" x2="135" y2="-40" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="60" y="-34" text-anchor="end" font-size="18" font-weight="bold" style="fill: var(--colour-dff)">Q<tspan font-size="12" dy="4">2</tspan></text>
+        <line x1="75" y1="0" x2="135" y2="0" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="60" y="6" text-anchor="end" font-size="18" font-weight="bold" style="fill: var(--colour-dff)">Q<tspan font-size="12" dy="4">1</tspan></text>
+        <line x1="75" y1="40" x2="135" y2="40" style="stroke: var(--colour-dff)" stroke-width="2" />
+        <text x="60" y="46" text-anchor="end" font-size="18" font-weight="bold" style="fill: var(--colour-dff)">Q<tspan font-size="12" dy="4">0</tspan></text>
+       </g>
+      </g>
+    </defs>
+  </svg>
+
+
+  <div class="crumb" id="crumb" data-current="Counter Timing Diagram Builder"></div>
+  <header>
+    <h1>Digital Electronics</h1>
+    <p>Counters — Build an Output</p>
+  </header>
+
+  <div class="quiz-wrap single-col" id="quizWrap">
+    <div class="questions-col">
+
+      <div class="card rule-card">
+        <div class="progress-wrap" style="margin-bottom:.8rem;">
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+        <div>A <b>3-bit <span id="ruleDir">up</span> counter</b> advances at every <b id="ruleEdgeWord">rising</b> clock edge. Before the first clock pulse its outputs read <b id="ruleStart">Q₂Q₁Q₀ = 101 (5)</b>. Build <b id="ruleOut">Q₀</b>:</div>
+        <div id="ruleRows"></div>
+        <div>Use the pieces below to draw <span id="ruleOut2">Q₀</span>, column by column, then hit <b>Check</b>.</div>
+        <div class="legend-row">
+          <span><span class="legend-swatch" style="background:var(--colour-switch)"></span>CLK</span>
+          <span><span class="legend-swatch" style="background:var(--colour-output-z)"></span><span id="legendOut">Q₀</span> (building)</span>
+        </div>
+      </div>
+
+      <div class="card gate-toggle-card">
+        <div class="gate-toggle-label">Choose the counter type to build:</div>
+        <div class="gate-toggle" id="gateToggle">
+          <button type="button" class="gate-toggle-btn active" id="cfgBtn-up-pos" onclick="pickConfig('up-pos')" aria-pressed="true">
+            <svg viewBox="-10 -10 290 200"><use href="#ctr-up-pos" /></svg>
+            <span>Up · Positive Edge<br>Rising CLK counts</span>
+          </button>
+          <button type="button" class="gate-toggle-btn" id="cfgBtn-up-neg" onclick="pickConfig('up-neg')" aria-pressed="false">
+            <svg viewBox="-10 -10 290 200"><use href="#ctr-up-neg" /></svg>
+            <span>Up · Negative Edge<br>Falling CLK counts</span>
+          </button>
+          <button type="button" class="gate-toggle-btn" id="cfgBtn-down-pos" onclick="pickConfig('down-pos')" aria-pressed="false">
+            <svg viewBox="-10 -10 290 200"><use href="#ctr-down-pos" /></svg>
+            <span>Down · Positive Edge<br>Rising CLK counts</span>
+          </button>
+          <button type="button" class="gate-toggle-btn" id="cfgBtn-down-neg" onclick="pickConfig('down-neg')" aria-pressed="false">
+            <svg viewBox="-10 -10 290 200"><use href="#ctr-down-neg" /></svg>
+            <span>Down · Negative Edge<br>Falling CLK counts</span>
+          </button>
+
+        </div>
+      </div>
+
+      <div class="card hint-toggle-card out-toggle-card">
+        <div class="hint-toggle-label">Output to build:</div>
+        <div class="hint-toggle" id="outToggle">
+          <button type="button" class="hint-toggle-btn out-toggle-btn active" id="outBtn0" onclick="pickOut(0)" aria-pressed="true">Q₀ (LSB)</button>
+          <button type="button" class="hint-toggle-btn out-toggle-btn" id="outBtn1" onclick="pickOut(1)" aria-pressed="false">Q₁</button>
+          <button type="button" class="hint-toggle-btn out-toggle-btn" id="outBtn2" onclick="pickOut(2)" aria-pressed="false">Q₂ (MSB)</button>
+        </div>
+        <div class="hint-toggle-label" style="margin-top:.9rem">Show helper overlay:</div>
+        <div class="hint-toggle" id="hintToggle">
+          <button type="button" class="hint-toggle-btn" id="hintBtnEdges" data-hint="edges" onclick="toggleHint('edges')" aria-pressed="false">Show Active Clock Edges</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="wb-tracks-wrap" id="tracksWrap">
+          <svg class="wb-hint-overlay" id="hintOverlay" preserveAspectRatio="none"></svg>
+          <div class="wb-track-row">
+            <div class="wb-track-label">CLK</div>
+            <svg id="clkTrack"></svg>
+          </div>
+          <div class="wb-track-row">
+            <div class="wb-track-label" id="qLabel">Q₀</div>
+            <svg id="qTrack"></svg>
+          </div>
+          <div class="wb-track-row extra-row" id="extraRow1">
+            <div class="wb-track-label" id="extraLabel1"></div>
+            <svg id="extraTrack1"></svg>
+          </div>
+          <div class="wb-track-row extra-row" id="extraRow2">
+            <div class="wb-track-label" id="extraLabel2"></div>
+            <svg id="extraTrack2"></svg>
+          </div>
+        </div>
+
+        <div class="wb-palette" id="palette"></div>
+
+        <div class="result-banner" id="resultBanner"><span id="resultIcon"></span>&nbsp;<span id="resultText"></span></div>
+
+        <div class="btn-row">
+          <button class="btn btn-prev" id="undoBtn" onclick="doUndo()">← Undo</button>
+          <button class="btn btn-check" id="checkBtn" onclick="doCheck()" disabled>Check</button>
+          <button class="btn btn-shuffle" id="restartBtn" onclick="doRestart()">↺ Retry</button>
+          <button class="btn btn-summary" id="newBtn" onclick="doNewDiagram()">🎲 New Diagram</button>
+          <button class="btn" onclick="printDiagramNow()">🖨 Print Worksheet</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div id="printWorksheet" class="print-only"></div>
+
+  <footer>Electronics // Cert III // UEEEC0069</footer>
+
+  <script>
+    const N = 24;
+    const PIECES = [
+      { type: 'flat', width: 1 }, { type: 'flat', width: 2 }, { type: 'flat', width: 3 },
+      { type: 'rise' }, { type: 'fall' },
+    ];
+    const SUB = ['₀', '₁', '₂'];
+
+    // ── counter domain logic (page-local — see this file's own header) ──
+    const CONFIG = {
+      'up-pos':   { dir: 1,  edge: 'rising',  dirWord: 'up',   edgeWord: 'rising' },
+      'up-neg':   { dir: 1,  edge: 'falling', dirWord: 'up',   edgeWord: 'falling' },
+      'down-pos': { dir: -1, edge: 'rising',  dirWord: 'down', edgeWord: 'rising' },
+      'down-neg': { dir: -1, edge: 'falling', dirWord: 'down', edgeWord: 'falling' },
+    };
+    let configKey = 'up-pos';
+    let outSel = 0;
+
+    // A regular clock, LOW first: 0,1,0,1…  (rising edges on odd columns,
+    // falling edges on even columns from 2).
+    const CLK = Array.from({ length: N }, (_, i) => i % 2);
+
+    function activeEdges(T, edge) {
+      return T.map((v, i) => {
+        const prev = i === 0 ? 0 : T[i - 1];
+        return edge === 'rising' ? (prev === 0 && v === 1) : (prev === 1 && v === 0);
+      });
+    }
+
+    // counts[i] = the 3-bit count showing in column i.
+    function deriveCounts(start, dir, edge) {
+      const isEdge = activeEdges(CLK, edge);
+      const counts = [];
+      let v = start;
+      for (let i = 0; i < N; i++) {
+        if (isEdge[i]) v = (v + dir + 8) % 8;
+        counts.push(v);
+      }
+      return { counts, isEdge };
+    }
+
+    const bitTrack = (counts, b) => counts.map(v => (v >> b) & 1);
+    const changes = (arr) => arr.filter((v, i) => i > 0 && v !== arr[i - 1]).length;
+    const bin3 = (v) => v.toString(2).padStart(3, '0');
+
+    function generateDiagram() {
+      const cfg = CONFIG[configKey];
+      let result = null;
+      for (let attempt = 0; attempt < 60; attempt++) {
+        const start = Math.floor(Math.random() * 8);
+        const d = deriveCounts(start, cfg.dir, cfg.edge);
+        result = { start, ...d };
+        if (changes(bitTrack(d.counts, outSel)) >= 2) break;
+      }
+      return result;
+    }
+
+    function renderRuleCard() {
+      const cfg = CONFIG[configKey];
+      const name = 'Q' + SUB[outSel];
+      document.getElementById('ruleDir').textContent = cfg.dirWord;
+      document.getElementById('ruleEdgeWord').textContent = cfg.edgeWord;
+      document.getElementById('ruleStart').textContent = `Q₂Q₁Q₀ = ${bin3(start)} (${start})`;
+      ['ruleOut', 'ruleOut2', 'legendOut', 'qLabel'].forEach(id => document.getElementById(id).textContent = name);
+      const wrap = cfg.dir === 1 ? '111 → 000' : '000 → 111';
+      const rules = [
+        ['Active edge', `The count moves one step <b>${cfg.dirWord}</b> (wraps ${wrap})`],
+        ['No edge', 'The count <b>holds</b>'],
+        [name, `HIGH when bit ${outSel} of the count is 1 (weight ${2 ** outSel})`],
+      ];
+      document.getElementById('ruleRows').innerHTML = rules.map(([cond, desc]) =>
+        `<div class="rule-row"><span class="rule-cond">${cond}</span><span>${desc}</span></div>`
+      ).join('');
+    }
+
+    function pickConfig(key) {
+      if (key === configKey) return;
+      configKey = key;
+      Object.keys(CONFIG).forEach(k => {
+        const btn = document.getElementById('cfgBtn-' + k);
+        btn.classList.toggle('active', k === key);
+        btn.setAttribute('aria-pressed', String(k === key));
+      });
+      doNewDiagram();
+    }
+
+    function pickOut(b) {
+      if (b === outSel) return;
+      outSel = b;
+      [0, 1, 2].forEach(k => {
+        const btn = document.getElementById('outBtn' + k);
+        btn.classList.toggle('active', k === b);
+        btn.setAttribute('aria-pressed', String(k === b));
+      });
+      doNewDiagram();
+    }
+
+    // ── helper overlay: a dashed line at every active clock edge ──
+    let hintEdges = false;
+
+    function toggleHint() {
+      hintEdges = !hintEdges;
+      document.getElementById('hintBtnEdges').classList.toggle('active', hintEdges);
+      document.getElementById('hintBtnEdges').setAttribute('aria-pressed', String(hintEdges));
+      renderHints();
+    }
+
+    function renderHints() {
+      requestAnimationFrame(() => {
+        const overlay = document.getElementById('hintOverlay');
+        if (!hintEdges) { overlay.innerHTML = ''; return; }
+        const wrap = document.getElementById('tracksWrap');
+        const wrapRect = wrap.getBoundingClientRect();
+        if (wrapRect.width === 0) return;
+        const clkSvg = document.getElementById('clkTrack');
+        const ctm = clkSvg.getScreenCTM();
+        const colVbWidth = clkSvg.viewBox.baseVal.width / N;
+        const colX = (i) => {
+          const pt = clkSvg.createSVGPoint();
+          pt.x = i * colVbWidth; pt.y = 0;
+          return pt.matrixTransform(ctm).x - wrapRect.left;
+        };
+        const top = clkSvg.getBoundingClientRect().top - wrapRect.top;
+        const bottom = wrapRect.height;
+        overlay.setAttribute('viewBox', `0 0 ${wrapRect.width} ${wrapRect.height}`);
+        let html = '';
+        for (let i = 0; i < N; i++) {
+          if (!isEdge[i]) continue;
+          const x = colX(i);
+          html += `<line x1="${x}" y1="${top}" x2="${x}" y2="${bottom}" style="stroke: var(--colour-switch)" stroke-width="2" stroke-dasharray="4,3" />`;
+        }
+        overlay.innerHTML = html;
+      });
+    }
+
+    window.addEventListener('resize', renderHints);
+    if (document.fonts && document.fonts.ready) { document.fonts.ready.then(renderHints); }
+
+    // ── page state ──
+    let start, counts, isEdge, correctQ, builder, checked, lastResult;
+
+    function doNewDiagram() {
+      ({ start, counts, isEdge } = generateDiagram());
+      correctQ = bitTrack(counts, outSel);
+      builder = { pieces: [] };
+      checked = false;
+      lastResult = null;
+      render();
+    }
+
+    function doRestart() {
+      builder = { pieces: [] };
+      checked = false;
+      lastResult = null;
+      render();
+    }
+
+    function doUndo() {
+      if (checked) return;
+      wbUndo(builder);
+      render();
+    }
+
+    function pickPiece(piece) {
+      if (checked) return;
+      wbPlace(builder, piece, N);
+      render();
+    }
+
+    function doCheck() {
+      if (checked) return;
+      if (wbCursor(builder).col !== N) return;
+      lastResult = wbCheck(builder, correctQ);
+      checked = true;
+      render();
+    }
+
+    function render() {
+      renderRuleCard();
+      const progressCols = wbCursor(builder).col;
+      renderReadOnlyTrackSVG(document.getElementById('clkTrack'), CLK, { className: 'wb-track-path wb-track-clk', progressCols });
+      renderQTrackSVG(document.getElementById('qTrack'), builder, N, checked ? { results: lastResult.results, correctLevels: correctQ } : {});
+
+      // After Check, reveal the other two outputs so the whole count reads
+      // straight down any column.
+      const others = [2, 1, 0].filter(b => b !== outSel);
+      others.forEach((b, i) => {
+        const row = document.getElementById('extraRow' + (i + 1));
+        row.classList.toggle('shown', checked);
+        document.getElementById('extraLabel' + (i + 1)).textContent = 'Q' + SUB[b];
+        if (checked) renderReadOnlyTrackSVG(document.getElementById('extraTrack' + (i + 1)), bitTrack(counts, b), { className: 'wb-q-path wb-col-correct' });
+      });
+
+      renderPiecePalette(document.getElementById('palette'), {
+        pieces: PIECES,
+        onPick: pickPiece,
+        isDisabled: (p) => checked || !wbCanPlace(builder, p, N),
+      });
+
+      const cursor = wbCursor(builder);
+      document.getElementById('checkBtn').disabled = checked || cursor.col !== N;
+      document.getElementById('undoBtn').disabled = checked || builder.pieces.length === 0;
+
+      const banner = document.getElementById('resultBanner');
+      if (checked) {
+        banner.className = 'result-banner ' + (lastResult.allCorrect ? 'correct' : 'wrong');
+        document.getElementById('resultIcon').textContent = lastResult.allCorrect ? '✓' : '✗';
+        document.getElementById('resultText').textContent = lastResult.allCorrect
+          ? `All ${lastResult.total} columns correct! The other two outputs are shown below — read any column straight down to get the count.`
+          : `${lastResult.correctCount} of ${lastResult.total} columns correct — red columns are wrong.`;
+      } else {
+        banner.className = 'result-banner';
+      }
+
+      renderHints();
+    }
+
+    if (history.length > 1) { document.getElementById('menuLink').style.display = ''; }
+    function goBack(e) { e.preventDefault(); history.back(); }
+
+    function printDiagramNow() {
+      buildPrintDiagram({
+        descriptionEl: document.querySelector('.rule-card'),
+        givenTracks: [
+          { label: 'CLK', svgEl: document.getElementById('clkTrack') },
+        ],
+        solutionTrack: { label: 'Q' + SUB[outSel], levels: correctQ, totalCols: N, className: 'wb-q-path wb-col-correct' },
+      });
+      wbTriggerPrint();
+    }
+
+    doNewDiagram();
+  </script>
+</body>
+
+</html>
