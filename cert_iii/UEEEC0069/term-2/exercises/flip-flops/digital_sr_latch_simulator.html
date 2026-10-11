@@ -1,0 +1,376 @@
+<!--
+  SR latch simulator — an interactive companion to the SR-latch quiz and the Q-output builder.
+  Pick a NOR or NAND latch (drawn as in the lesson: NOR has R on the top gate and S on the bottom,
+  NAND has S-bar on top and R-bar on the bottom), start in HOLD, and click S or R to flip an input.
+
+  What makes it a SIMULATOR rather than a truth table is the signal flow: when a gate's inputs
+  change its output follows after a short gate delay, and the new level then TRAVELS along the
+  feedback wire to the other gate's input (drawn as a coloured sweep along the wire), which may
+  make that gate change in turn. Each wire is coloured by its logic level (green = 1, grey = 0).
+  Speed buttons (Slow / Normal / Fast) change the gate and wire delays. A status panel names the
+  current state (Hold / Set / Reset / Invalid) and explains it, and the function table highlights
+  the current row.
+
+  Inputs are toggled one at a time (a click changes one input), so the genuinely unpredictable
+  case of releasing S and R at the same instant is never produced here — that race is described
+  in the status text for the Invalid state instead.
+
+  No shared engine is used: the page is self-contained apart from the site chrome. The gate
+  shapes (gate-nor-trad / gate-nand-trad) come from cert_iii/working/jk_flipflop-circuits.html.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../../assets/theme-init.js"></script>
+  <title>Digital Electronics — SR Latch Simulator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../../assets/quiz-common.css">
+  <script src="../../../../assets/breadcrumb.js" defer></script>
+  <style>
+    .sim-intro { font-size: .85rem; line-height: 1.6; }
+    .sim-toggle { display: flex; gap: .6rem; flex-wrap: wrap; margin-top: .9rem; }
+    .sim-btn {
+      padding: .5rem 1.1rem; border: 1px solid var(--colour-border); border-radius: var(--radius-lg, 6px);
+      background: transparent; color: var(--colour-label); cursor: pointer; font-family: inherit;
+      font-size: .78rem; font-weight: 700; letter-spacing: .04em; transition: background .15s, color .15s, border-color .15s;
+    }
+    .sim-btn:hover { color: var(--colour-text); border-color: var(--colour-ui-primary); }
+    .sim-btn.active {
+      border-color: var(--colour-ui-primary); color: var(--colour-ui-primary);
+      background: rgba(var(--colour-ui-primary-rgb), .1);
+    }
+    .sim-btn:focus-visible { outline: 2px solid var(--colour-ui-primary); outline-offset: 2px; }
+    #simSvg { width: 100%; max-width: 560px; display: block; margin: 0 auto; }
+    #simSvg .sw { cursor: pointer; }
+    #simSvg .sw:focus { outline: none; }
+    #simSvg .sw:focus-visible rect.sw-box, #simSvg .sw:hover rect.sw-box { stroke: var(--colour-ui-primary); stroke-width: 3; }
+    .sim-status { margin-top: .8rem; padding: .7rem .9rem; border: 1px solid var(--colour-border); border-radius: 6px; font-size: .85rem; line-height: 1.55; }
+    .sim-status b.st { text-transform: uppercase; letter-spacing: .05em; }
+    .sim-controls { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; margin-top: .8rem; font-size: .78rem; color: var(--colour-label); }
+    .sim-table { border-collapse: collapse; margin: .6rem auto 0; font-size: .85rem; }
+    .sim-table th, .sim-table td { border: 1px solid var(--colour-border); padding: .35rem .8rem; text-align: center; }
+    .sim-table th { color: var(--colour-label); font-weight: 700; }
+    .sim-table tr.cur td { background: rgba(var(--colour-ui-primary-rgb), .14); font-weight: 700; }
+    .sim-legend { display: flex; gap: 1.1rem; flex-wrap: wrap; justify-content: center; margin-top: .5rem; font-size: .75rem; color: var(--colour-label); }
+    .sim-legend i { display: inline-block; width: 1.2rem; height: 4px; border-radius: 2px; margin-right: .3rem; vertical-align: middle; }
+  </style>
+</head>
+
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur stdDeviation="2" result="b" />
+        <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+      </filter>
+      <!-- NOR / NAND gate symbols, from cert_iii/working/jk_flipflop-circuits.html -->
+      <g id="gate-lead-in2">
+      <line x1="0" y1="8" x2="16" y2="8" stroke="var(--colour-bjt)" stroke-width="2" />
+      <line x1="0" y1="24" x2="16" y2="24" stroke="var(--colour-bjt)" stroke-width="2" />
+      </g>
+      <g id="gate-lead-in2-or">
+      <line x1="0" y1="8" x2="19.4" y2="8" stroke="var(--colour-bjt)" stroke-width="2" />
+      <line x1="0" y1="24" x2="19.4" y2="24" stroke="var(--colour-bjt)" stroke-width="2" />
+      </g>
+      <g id="gate-lead-out-inv">
+      <circle cx="52" cy="16" r="4" fill="var(--colour-panel)" stroke="var(--colour-bjt)" stroke-width="2"
+      filter="url(#glow)" />
+      <line x1="56" y1="16" x2="68" y2="16" stroke="var(--colour-bjt)" stroke-width="2" />
+      </g>
+      <path id="gate-and-body" d="M 16,0 L 32,0 A 16,16 0 0 1 32,32 L 16,32 Z" fill="none" stroke="var(--colour-bjt)"
+      stroke-width="2" filter="url(#glow)" />
+      <path id="gate-or-body" d="M 16,0 Q 32,0 48,16 Q 32,32 16,32 Q 25,16 16,0 Z" fill="none"
+      stroke="var(--colour-bjt)" stroke-width="2" filter="url(#glow)" />
+      <g id="gate-nand-trad">
+      <use href="#gate-lead-in2" />
+      <use href="#gate-and-body" />
+      <use href="#gate-lead-out-inv" />
+      </g>
+      <g id="gate-nor-trad">
+      <use href="#gate-lead-in2-or" />
+      <use href="#gate-or-body" />
+      <use href="#gate-lead-out-inv" />
+      </g>
+    </defs>
+  </svg>
+
+  <div class="crumb" id="crumb" data-current="SR Latch Simulator"></div>
+  <header>
+    <h1>Digital Electronics</h1>
+    <p>SR Latch — NOR &amp; NAND — Simulator</p>
+  </header>
+
+  <div class="quiz-wrap single-col" id="quizWrap">
+    <div class="questions-col">
+    <div class="card sim-intro">
+      <div>An <b>SR latch</b> is two gates wired so that each one's output feeds the other's input. Click <b>S</b> or
+        <b>R</b> in the diagram to flip an input, then watch the change ripple through: a gate's output changes, the new
+        level <b>travels back along the feedback wire</b>, and the other gate may then change in turn.</div>
+      <div class="sim-toggle" id="typeToggle">
+        <button type="button" class="sim-btn active" id="typeBtn-nor" onclick="setType('nor')" aria-pressed="true">NOR latch (active-HIGH inputs)</button>
+        <button type="button" class="sim-btn" id="typeBtn-nand" onclick="setType('nand')" aria-pressed="false">NAND latch (active-LOW inputs)</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <svg id="simSvg" viewBox="0 0 560 262" xmlns="http://www.w3.org/2000/svg" font-family="'Share Tech Mono', monospace" role="img" aria-label="SR latch simulator"></svg>
+      <div class="sim-legend">
+        <span><i style="background:var(--colour-ui-correct)"></i>logic 1 (HIGH)</span>
+        <span><i style="background:var(--colour-label)"></i>logic 0 (LOW)</span>
+      </div>
+      <div class="sim-status" id="simStatus" aria-live="polite"></div>
+      <div class="sim-controls">
+        <button type="button" class="sim-btn" onclick="resetSim()">↺ Reset to Hold</button>
+        <span>Speed:</span>
+        <button type="button" class="sim-btn" id="spd-slow" onclick="setSpeed('slow')">Slow</button>
+        <button type="button" class="sim-btn active" id="spd-normal" onclick="setSpeed('normal')">Normal</button>
+        <button type="button" class="sim-btn" id="spd-fast" onclick="setSpeed('fast')">Fast</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="font-size:.85rem;font-weight:700;color:var(--colour-label);text-align:center" id="tableTitle">Function table</div>
+      <table class="sim-table" id="simTable"></table>
+    </div>
+    </div>
+  </div>
+
+  <footer>Electronics // Cert III // UEEEC0069</footer>
+
+  <script>
+    // ── NOR / NAND SR latch simulator ──────────────────────────────────────────
+    // Two gates, cross-coupled. Gate 0 (top) makes Q, gate 1 (bottom) makes Q-bar.
+    // Each gate's output travels along a feedback wire to the OTHER gate's input:
+    //   Q     -> gate 1's upper input     Q-bar -> gate 0's lower input
+    // The external inputs are on gate 0's upper input and gate 1's lower input, as in
+    // the lesson figures (NOR: R top, S bottom; NAND: S-bar top, R-bar bottom).
+    // A small discrete-event engine models gate delay (an output changes a moment after
+    // its inputs do) and wire travel time (so students can SEE the signal move).
+    const SPEEDS = { slow: { gate: 650, wire: 1600 }, normal: { gate: 380, wire: 950 }, fast: { gate: 150, wire: 380 } };
+    let speed = 'normal';
+    let type = 'nor';
+    let ext, out, inFb, flight, pendingOut, events = [], seq = 0, loopOn = false;
+
+    const gateFn = (a, b) => type === 'nor' ? +!(a || b) : +!(a && b);
+    const HIGH = 'var(--colour-ui-correct)', LOW = 'var(--colour-label)';
+    const col = (v) => v ? HIGH : LOW;
+
+    // geometry (matches the lesson-style latch figures)
+    const S = 2.2, GX = 135, G1Y = 22, G2Y = 150, XJ = 385, XL = 108, XOUT_END = 455;
+    const T1 = G1Y + 8 * S, B1 = G1Y + 24 * S, O1 = G1Y + 16 * S;
+    const T2 = G2Y + 8 * S, B2 = G2Y + 24 * S, O2 = G2Y + 16 * S;
+    const XO = GX + 68 * S;
+    const P = (pts) => 'M ' + pts.map(p => p.join(',')).join(' L ');
+    const PATHS = {
+      ext0: P([[96, T1], [GX, T1]]),
+      ext1: P([[96, B2], [GX, B2]]),
+      out0: P([[XO, O1], [XJ, O1], [XOUT_END, O1]]),
+      out1: P([[XO, O2], [XJ, O2], [XOUT_END, O2]]),
+      fb0: P([[XJ, O2], [XJ, 147], [XL, 105], [XL, B1], [GX, B1]]),   // Q-bar -> gate 0 lower input
+      fb1: P([[XJ, O1], [XJ, 103], [XL, 145], [XL, T2], [GX, T2]]),   // Q     -> gate 1 upper input
+    };
+
+    function initState() {
+      ext = type === 'nor' ? [0, 0] : [1, 1];      // idle = Hold
+      out = [0, 1];                                 // Q = 0, Q-bar = 1
+      inFb = [out[1], out[0]];
+      flight = [null, null];
+      pendingOut = [null, null];
+      events.forEach(e => e.dead = true); events = [];
+    }
+
+    function names() {
+      return type === 'nor'
+        ? { top: 'R', bottom: 'S', topPlain: 'R', bottomPlain: 'S', idle: 0, asserted: 1 }
+        : { top: 'S̄', bottom: 'R̄', topPlain: 'S', bottomPlain: 'R', idle: 1, asserted: 0 };
+    }
+
+    function buildSvg() {
+      const nm = names();
+      const gate = type === 'nor' ? 'gate-nor-trad' : 'gate-nand-trad';
+      const sw = (i, y, label) => `
+        <g class="sw" id="sw${i}" tabindex="0" role="button" aria-label="Toggle input ${label}">
+          <rect class="sw-box" x="6" y="${y - 20}" width="90" height="40" rx="6" style="fill: var(--colour-panel); stroke: var(--colour-border)" stroke-width="2" />
+          <text x="51" y="${y + 6}" text-anchor="middle" font-size="20" font-weight="bold" id="swTxt${i}" style="fill: var(--colour-text)"></text>
+        </g>`;
+      const lab = (label) => label.length > 1 ? `<tspan style="text-decoration:overline">${label[0]}</tspan>` : label;
+      document.getElementById('simSvg').innerHTML = `
+        <use href="#${gate}" transform="translate(${GX},${G1Y}) scale(${S})" />
+        <use href="#${gate}" transform="translate(${GX},${G2Y}) scale(${S})" />
+        <g fill="none" stroke-linejoin="round" stroke-linecap="round">
+          <path id="w-ext0" d="${PATHS.ext0}" stroke-width="3" />
+          <path id="w-ext1" d="${PATHS.ext1}" stroke-width="3" />
+          <path id="w-out0" d="${PATHS.out0}" stroke-width="3" />
+          <path id="w-out1" d="${PATHS.out1}" stroke-width="3" />
+          <path id="w-fb0" d="${PATHS.fb0}" stroke-width="3" />
+          <path id="w-fb1" d="${PATHS.fb1}" stroke-width="3" />
+          <path id="o-fb0" d="${PATHS.fb0}" stroke-width="4.5" />
+          <path id="o-fb1" d="${PATHS.fb1}" stroke-width="4.5" />
+        </g>
+        <circle cx="${XJ}" cy="${O1}" r="5" id="j0" />
+        <circle cx="${XJ}" cy="${O2}" r="5" id="j1" />
+        ${sw(0, T1, nm.topPlain)}
+        ${sw(1, B2, nm.bottomPlain)}
+        <text x="${XOUT_END + 8}" y="${O1 + 7}" font-size="22" font-weight="bold" id="qTxt" style="fill: var(--colour-text)"></text>
+        <text x="${XOUT_END + 8}" y="${O2 + 7}" font-size="22" font-weight="bold" id="qbTxt" style="fill: var(--colour-text)"></text>
+        <text x="${XL - 20}" y="${B1 - 8}" text-anchor="middle" font-size="15" font-weight="bold" id="fbTxt0"></text>
+        <text x="${XL - 20}" y="${T2 - 8}" text-anchor="middle" font-size="15" font-weight="bold" id="fbTxt1"></text>
+        <text x="${GX + 78}" y="${G1Y - 4}" text-anchor="middle" font-size="12" style="fill: var(--colour-label)">${type === 'nor' ? 'NOR' : 'NAND'}</text>
+        <text x="${GX + 78}" y="${G2Y + 82}" text-anchor="middle" font-size="12" style="fill: var(--colour-label)">${type === 'nor' ? 'NOR' : 'NAND'}</text>`;
+      [0, 1].forEach(i => {
+        const g = document.getElementById('sw' + i);
+        g.addEventListener('click', () => toggleExt(i));
+        g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExt(i); } });
+      });
+    }
+
+    // ── event engine ──
+    function sched(dt, fn) {
+      const e = { t: performance.now() + dt, fn, dead: false, id: ++seq };
+      events.push(e); startLoop(); return e;
+    }
+    function startLoop() { if (!loopOn) { loopOn = true; requestAnimationFrame(tick); } }
+    function tick() {
+      const now = performance.now();
+      events.sort((a, b) => a.t - b.t);
+      while (events.length && events[0].t <= now) {
+        const e = events.shift();
+        if (!e.dead) e.fn();
+      }
+      events = events.filter(e => !e.dead);
+      render(now);
+      if (events.length || flight[0] || flight[1]) requestAnimationFrame(tick); else loopOn = false;
+    }
+
+    const inputsOf = (g) => g === 0 ? [ext[0], inFb[0]] : [inFb[1], ext[1]];
+    function reeval(g) {
+      const target = gateFn(...inputsOf(g));
+      const pend = pendingOut[g];
+      if (pend) {
+        if (pend.val === target) return;
+        pend.ev.dead = true; pendingOut[g] = null;
+      }
+      if (target !== out[g]) {
+        const dt = SPEEDS[speed].gate * (0.9 + 0.2 * Math.random());
+        pendingOut[g] = { val: target, ev: sched(dt, () => applyOut(g, target)) };
+      }
+    }
+    function applyOut(g, val) {
+      out[g] = val; pendingOut[g] = null;
+      const dest = 1 - g;                    // the gate this output feeds back to
+      const now = performance.now(), dur = SPEEDS[speed].wire;
+      const id = ++seq;
+      flight[dest] = { val, t0: now, t1: now + dur, id };
+      sched(dur, () => arrive(dest, val, id));
+    }
+    function arrive(dest, val, id) {
+      inFb[dest] = val;
+      if (flight[dest] && flight[dest].id === id) flight[dest] = null;
+      reeval(dest);
+    }
+    function toggleExt(i) {
+      ext[i] = 1 - ext[i];
+      reeval(i);          // an external input only ever feeds its own gate
+      startLoop(); render(performance.now());
+    }
+
+    // ── drawing ──
+    function stateKey() {
+      const nm = names();
+      const topA = ext[0] === nm.asserted, botA = ext[1] === nm.asserted;
+      // NOR: top = R, bottom = S.  NAND: top = S-bar, bottom = R-bar.
+      const Sa = type === 'nor' ? botA : topA, Ra = type === 'nor' ? topA : botA;
+      return Sa && Ra ? 'invalid' : Sa ? 'set' : Ra ? 'reset' : 'hold';
+    }
+    function render(now) {
+      now = now || performance.now();
+      const nm = names();
+      const set = (id, v, extra) => { const el = document.getElementById(id); if (!el) return; el.setAttribute('stroke', col(v)); if (extra) extra(el); };
+      set('w-ext0', ext[0]); set('w-ext1', ext[1]);
+      set('w-out0', out[0]); set('w-out1', out[1]);
+      [0, 1].forEach(d => {
+        set('w-fb' + d, inFb[d]);
+        const ov = document.getElementById('o-fb' + d), f = flight[d];
+        if (f) {
+          const L = ov.getTotalLength(), p = Math.max(0, Math.min(1, (now - f.t0) / (f.t1 - f.t0)));
+          ov.setAttribute('stroke', col(f.val));
+          ov.setAttribute('stroke-dasharray', L);
+          ov.setAttribute('stroke-dashoffset', L * (1 - p));
+          ov.style.display = '';
+        } else ov.style.display = 'none';
+        const t = document.getElementById('fbTxt' + d);
+        t.textContent = inFb[d]; t.style.fill = col(inFb[d]);
+      });
+      document.getElementById('j0').style.fill = col(out[0]);
+      document.getElementById('j1').style.fill = col(out[1]);
+      [0, 1].forEach(i => {
+        const el = document.getElementById('swTxt' + i), box = document.querySelector('#sw' + i + ' rect');
+        const lab = i === 0 ? nm.top : nm.bottom;
+        el.textContent = lab + ' = ' + ext[i];
+        box.style.fill = ext[i] ? 'rgba(var(--colour-ui-primary-rgb), .16)' : 'var(--colour-panel)';
+      });
+      const q = document.getElementById('qTxt'), qb = document.getElementById('qbTxt');
+      q.textContent = 'Q = ' + out[0]; q.style.fill = col(out[0]);
+      qb.innerHTML = '<tspan style="text-decoration:overline">Q</tspan> = ' + out[1]; qb.style.fill = col(out[1]);
+      renderStatus();
+    }
+    const STATE_TEXT = {
+      nor: {
+        hold: 'Both inputs are idle (0). Nothing from outside is pushing — each gate\'s output is exactly the input that keeps the other gate where it is, so the latch <b>holds</b> its last state.',
+        set: '<b>S</b> is asserted (1). It pulls the lower gate\'s output <span style="text-decoration:overline">Q</span> LOW; that LOW travels back to the upper gate, whose inputs are now both LOW, so <b>Q rises to 1</b>.',
+        reset: '<b>R</b> is asserted (1). It pulls the upper gate\'s output Q LOW; that LOW travels back to the lower gate, whose inputs are now both LOW, so <span style="text-decoration:overline">Q</span> rises to 1.',
+        invalid: 'Both <b>S and R</b> are asserted. Each gate has a HIGH input, so <b>both outputs are forced LOW</b> — Q and <span style="text-decoration:overline">Q</span> are no longer opposites. This is the <b>Invalid</b> state; releasing both together would be a race.',
+      },
+      nand: {
+        hold: 'Both inputs are idle (1). Each NAND\'s output is the input that keeps the other where it is, so the latch <b>holds</b> its last state.',
+        set: '<span style="text-decoration:overline">S</span> is asserted (0). It forces the upper NAND\'s output <b>Q HIGH</b>; that HIGH travels back to the lower gate, whose inputs are now both HIGH, so <span style="text-decoration:overline">Q</span> falls to 0.',
+        reset: '<span style="text-decoration:overline">R</span> is asserted (0). It forces the lower NAND\'s output <span style="text-decoration:overline">Q</span> HIGH; that HIGH travels back to the upper gate, whose inputs are now both HIGH, so Q falls to 0.',
+        invalid: 'Both <span style="text-decoration:overline">S</span> and <span style="text-decoration:overline">R</span> are asserted (0). Each gate has a LOW input, so <b>both outputs are forced HIGH</b> — Q and <span style="text-decoration:overline">Q</span> are no longer opposites. This is the <b>Invalid</b> state.',
+      },
+    };
+    function renderStatus() {
+      const k = stateKey();
+      const busy = events.length > 0 || flight[0] || flight[1];
+      const el = document.getElementById('simStatus');
+      el.innerHTML = `<div><b class="st">${k}</b> · Q = <b>${out[0]}</b>, <span style="text-decoration:overline">Q</span> = <b>${out[1]}</b>${busy ? ' · <i>signals settling…</i>' : ''}</div>
+        <div style="margin-top:.35rem">${STATE_TEXT[type][k]}</div>`;
+      document.querySelectorAll('#simTable tr[data-k]').forEach(tr => tr.classList.toggle('cur', tr.dataset.k === k));
+    }
+    function buildTable() {
+      const nor = type === 'nor';
+      const hdr = nor ? ['S', 'R'] : ['<span style="text-decoration:overline">S</span>', '<span style="text-decoration:overline">R</span>'];
+      const rows = nor
+        ? [['hold', '0', '0', 'holds'], ['set', '1', '0', '1', '0'], ['reset', '0', '1', '0', '1'], ['invalid', '1', '1', '0', '0']]
+        : [['hold', '1', '1', 'holds'], ['set', '0', '1', '1', '0'], ['reset', '1', '0', '0', '1'], ['invalid', '0', '0', '1', '1']];
+      document.getElementById('tableTitle').textContent = (nor ? 'NOR' : 'NAND') + ' SR latch — function table';
+      document.getElementById('simTable').innerHTML =
+        `<tr><th>${hdr[0]}</th><th>${hdr[1]}</th><th>Q</th><th><span style="text-decoration:overline">Q</span></th><th>State</th></tr>` +
+        rows.map(r => r[3] === 'holds'
+          ? `<tr data-k="${r[0]}"><td>${r[1]}</td><td>${r[2]}</td><td colspan="2">no change</td><td>${r[0]}</td></tr>`
+          : `<tr data-k="${r[0]}"><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td>${r[0]}</td></tr>`).join('');
+    }
+
+    function setType(tp) {
+      type = tp;
+      ['nor', 'nand'].forEach(k => {
+        const b = document.getElementById('typeBtn-' + k);
+        b.classList.toggle('active', k === tp); b.setAttribute('aria-pressed', String(k === tp));
+      });
+      initState(); buildSvg(); buildTable(); render();
+    }
+    function resetSim() { initState(); render(); }
+    function setSpeed(s) {
+      speed = s;
+      ['slow', 'normal', 'fast'].forEach(k => document.getElementById('spd-' + k).classList.toggle('active', k === s));
+    }
+
+    initState(); buildSvg(); buildTable(); render();
+  </script>
+</body>
+
+</html>
