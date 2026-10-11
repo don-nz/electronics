@@ -350,7 +350,26 @@
     // P and C's asserted windows are picked up front and kept mutually
     // exclusive (with a 2-column gap either side) — copied verbatim from
     // digital_dtype_preset_clear_diagram.html's own generatePC().
-    function generatePC(n, assert, idle) {
+    // ── Setup/hold rule ──
+    // A synchronous input (D, J, K) must never change in the same column as the ACTIVE clock edge —
+    // a real flip-flop needs it stable around the edge, and in the diagram it would be ambiguous
+    // whether the old or new level was sampled. Likewise PRESET/CLEAR are never asserted (or
+    // released) on an active-edge column. activeEdgeCols() finds those columns; the data tracks
+    // are held at their previous level through them, and generatePC() is told which columns to avoid.
+    function activeEdgeCols(CLK, edge) {
+      const cols = [];
+      for (let i = 1; i < CLK.length; i++) {
+        const rising = CLK[i - 1] === 0 && CLK[i] === 1;
+        const falling = CLK[i - 1] === 1 && CLK[i] === 0;
+        if (edge === 'rising' ? rising : falling) cols.push(i);
+      }
+      return cols;
+    }
+    function holdAtEdges(track, edgeCols) {
+      edgeCols.forEach(e => { track[e] = track[e - 1]; });
+    }
+
+    function generatePC(n, assert, idle, forbidden) {
       const P = new Array(n).fill(idle), R = new Array(n).fill(idle);
       const windows = [];
       function place(target) {
@@ -358,7 +377,8 @@
           const width = 1 + Math.floor(Math.random() * 2);
           const start = 2 + Math.floor(Math.random() * Math.max(1, n - width - 3));
           const end = start + width;
-          const clashes = windows.some(w => start < w.end + 2 && end + 2 > w.start);
+          const hitsEdge = forbidden && Array.from({ length: width }, (_, k) => start + k).some(c => forbidden.has(c));
+          const clashes = hitsEdge || windows.some(w => start < w.end + 2 && end + 2 > w.start);
           if (!clashes) { windows.push({ start, end }); for (let i = start; i < end; i++) target[i] = assert; return; }
         }
       }
@@ -409,9 +429,13 @@
       let best = null, bestScore = -1;
       for (let attempt = 0; attempt < 30; attempt++) {
         const CLK = generateClock(n);
+        const edgeCols = activeEdgeCols(CLK, edge);
+        const forbidden = new Set(edgeCols.flatMap(e => [e - 1, e]));
         const J = randomPulseTrack(n, { minPulse: 1, maxPulse: 3, minGap: 1, maxGap: 3 });
         const K = randomPulseTrack(n, { minPulse: 1, maxPulse: 3, minGap: 1, maxGap: 3 });
-        const { P, C } = generatePC(n, assert, idle);
+        holdAtEdges(J, edgeCols);
+        holdAtEdges(K, edgeCols);
+        const { P, C } = generatePC(n, assert, idle, forbidden);
         const Q = deriveQ(P, C, CLK, J, K, assert, edge);
 
         let transitions = 0;
