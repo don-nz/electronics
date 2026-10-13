@@ -10,10 +10,12 @@ For each page it looks at the top-level shapes inside <defs> blocks:
   * identical to a master shape                       -> removed, library supplies it
   * identical apart from a root transform="scale(…)"  -> removed, transform passed to Shapes.use
   * page-specific (id not in any master)              -> left alone
-  * same id but different markup ("drift")            -> page is NOT touched; listed so you decide
-                                                         whether the page or the master is right
+  * same id but different markup ("drift")            -> kept in the page (the library skips ids already
+                                                         present, so the page looks exactly as before);
+                                                         reported so you can decide page vs master
 Then it adds <script src=".../assets/shapes.js"> after theme-init.js and a
-Shapes.use(...) call at the top of <body>, and drops hidden <svg><defs> wrappers left empty.
+Shapes.use(...) call just before the page's first inline <script> in <body> (after all
+local <defs>, so kept-local shapes win), and drops hidden <svg><defs> wrappers left empty.
 Comments are preserved; only the shape elements are cut.
 Check every migrated page with tools/shots.py (before/after) and tools/smoke.py.
 """
@@ -32,6 +34,33 @@ def norm(s):
     return re.sub(r'\s+', ' ', s).strip()
 
 
+PRES = {'stroke', 'fill', 'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'stroke-dasharray',
+        'opacity', 'fill-opacity', 'stroke-opacity', 'filter', 'font-size', 'font-weight', 'font-family'}
+
+
+def canon(markup):
+    """Canonical form for comparing shape markup: tag attributes become a sorted set in which
+    presentation attributes and the equivalent style="prop: value" declarations are merged
+    (style wins), and whitespace is collapsed. Two copies that differ only in syntax compare equal.
+    Geometry, colours and structure still have to match exactly."""
+    def tag(m):
+        close, name, attrs, selfc = m.groups()
+        if close:
+            return f'</{name}>'
+        d = {}
+        for am in re.finditer(r'([\w:-]+)\s*=\s*"([^"]*)"', attrs):
+            d[am.group(1)] = am.group(2)
+        style = d.pop('style', '')
+        for decl in style.split(';'):
+            if ':' in decl:
+                k, v = decl.split(':', 1)
+                d[k.strip()] = v.strip()          # style overrides the attribute
+        d = {k: re.sub(r'\s+', ' ', v).strip() for k, v in d.items()}
+        return '<' + name + ''.join(f' {k}="{d[k]}"' for k in sorted(d)) + ('/' if selfc else '') + '>'
+    out = re.sub(r'<(/?)([\w:-]+)([^>]*?)(/?)>', tag, markup)
+    return re.sub(r'>\s+<', '><', re.sub(r'\s+', ' ', out)).strip()
+
+
 def strip_tf(markup):
     m = re.match(r'(<\w+\b[^>]*?)\s+transform="([^"]*)"', markup)
     if m:
@@ -40,10 +69,10 @@ def strip_tf(markup):
 
 
 def master_index():
-    idx = collections.defaultdict(dict)       # id -> {set: normalised markup}
+    idx = collections.defaultdict(dict)       # id -> {set: canonical markup}
     for sname, body in bs.read_sets().items():
         for i, blk in bs.element_blocks(body).items():
-            idx[i][sname] = norm(blk)
+            idx[i][sname] = canon(blk)
     return idx
 
 
@@ -73,7 +102,7 @@ def element_spans(markup, base):
     return out
 
 
-def classify(text, idx):
+def classify(text, idx, adopt=()):
     """-> (todo, drift): todo = [(id, a, b, sets, transform)], drift = [ids]"""
     blank = blank_comments(text)
     todo, drift = [], []
@@ -82,26 +111,29 @@ def classify(text, idx):
         for i, a, b in element_spans(body, dm.start(1)):
             if i not in idx:
                 continue
-            n = norm(blank[a:b])
+            n = canon(blank[a:b])
             hit = [s for s, v in idx[i].items() if v == n]
             tf = None
             if not hit:
-                n2, tf = strip_tf(n)
-                hit = [s for s, v in idx[i].items() if tf and v == n2]
+                raw = norm(blank[a:b])
+                _stripped, tf = strip_tf(raw)
+                if tf:
+                    n2 = canon(_stripped)
+                    hit = [s for s, v in idx[i].items() if v == n2]
             if hit:
                 todo.append((i, a, b, hit, tf))
+            elif i in adopt:                      # master wins: drop the page's differing copy
+                todo.append((i, a, b, list(idx[i]), None))
             else:
                 drift.append(i)
     return todo, drift
 
 
-def migrate(path, idx, write):
+def migrate(path, idx, write, adopt=()):
     text = open(path, encoding='utf-8').read()
-    todo, drift = classify(text, idx)
-    if drift:
-        return None, 'drift: ' + ', '.join(drift)
+    todo, drift = classify(text, idx, adopt)
     if not todo:
-        return None, 'nothing to migrate'
+        return None, 'nothing to migrate' + (' (drift: ' + ', '.join(drift) + ')' if drift else '')
     new = text
     for i, a, b, hit, tf in sorted(todo, key=lambda t: -t[1]):
         new = new[:a] + new[b:]
@@ -115,21 +147,37 @@ def migrate(path, idx, write):
         remaining = {i for i in remaining if best not in idsets[i]}
     new = re.sub(r'[ \t]*<svg\b[^>]*(?:width="0"|aria-hidden="true")[^>]*>\s*<defs[^>]*>\s*</defs>\s*</svg>[ \t]*\n?',
                  '', new)
-    rel = os.path.relpath(os.path.join(ROOT, 'cert_iii', 'assets', 'shapes.js'), os.path.dirname(path)).replace(os.sep, '/')
-    mt = re.search(r'([ \t]*)<script src="[^"]*assets/theme-init\.js"></script>\n', new)
-    if not mt:
-        return None, 'no theme-init.js tag to anchor on'
-    new = new[:mt.end()] + f'{mt.group(1)}<script src="{rel}"></script>\n' + new[mt.end():]
-    args = ', '.join("'" + s + "'" for s in chosen)
-    if tfmap:
-        args += ', { transform: { ' + ', '.join(f"'{k}': '{v}'" for k, v in sorted(tfmap.items())) + ' } }'
-    mb = re.search(r'<body[^>]*>\n', new)
-    if not mb:
-        return None, 'no <body> line'
-    new = new[:mb.end()] + f'  <script>Shapes.use({args});</script>\n' + new[mb.end():]
+    existing = re.search(r"Shapes\.use\(([^)]*)\)", new)
+    if existing:                               # page already on the library: just make sure the sets are listed
+        have = set(re.findall(r"'([\w-]+)'", existing.group(1).split('{')[0]))
+        missing = [c for c in chosen if c not in have]
+        if missing and not (set(idsets) <= {'glow'}):     # every set carries glow, so glow alone needs nothing
+            head, _, tail = existing.group(1).partition('{')
+            add = ', '.join("'" + c + "'" for c in missing)
+            repl = head.rstrip().rstrip(',') + ', ' + add + ((', {' + tail) if tail else '')
+            new = new[:existing.start(1)] + repl + new[existing.end(1):]
+    else:
+        rel = os.path.relpath(os.path.join(ROOT, 'cert_iii', 'assets', 'shapes.js'), os.path.dirname(path)).replace(os.sep, '/')
+        mt = re.search(r'([ \t]*)<script src="[^"]*assets/theme-init\.js"></script>\n', new)
+        if not mt:
+            return None, 'no theme-init.js tag to anchor on'
+        new = new[:mt.end()] + f'{mt.group(1)}<script src="{rel}"></script>\n' + new[mt.end():]
+        args = ', '.join("'" + s_ + "'" for s_ in chosen)
+        if tfmap:
+            args += ', { transform: { ' + ', '.join(f"'{k}': '{v}'" for k, v in sorted(tfmap.items())) + ' } }'
+        # Insert the call just before the page's first inline <script> after <body>: by then every
+        # page-local <defs> has been parsed, so Shapes.use() skips ids the page defines itself
+        # (kept-local drift stays in force) — yet it still runs before the page's own script.
+        mb = re.search(r'<body[^>]*>\n', new)
+        if not mb:
+            return None, 'no <body> line'
+        ms = re.search(r'[ \t]*<script(?![^>]*\bsrc=)[^>]*>', new[mb.end():])
+        at = mb.end() + ms.start() if ms else (new.rfind('</body>') if '</body>' in new else len(new))
+        new = new[:at] + f'  <script>Shapes.use({args});</script>\n' + new[at:]
     if write:
         open(path, 'w', encoding='utf-8').write(new)
-    return dict(removed=len(todo), sets=chosen, transforms=len(tfmap), lines=text.count('\n') - new.count('\n')), 'ok'
+    return dict(removed=len(todo), sets=chosen, transforms=len(tfmap), kept_local=sorted(set(drift)),
+                lines=text.count('\n') - new.count('\n')), 'ok'
 
 
 def all_pages():
@@ -143,12 +191,14 @@ def all_pages():
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('pages', nargs='*')
+    ap.add_argument('--adopt', default='', help='comma list of ids where the MASTER wins over a differing page copy')
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument('--list', action='store_true')
     g.add_argument('--dry', action='store_true')
     g.add_argument('--apply', action='store_true')
     a = ap.parse_args()
     idx = master_index()
+    adopt = set(x for x in a.adopt.split(',') if x)
     paths = [os.path.abspath(p) for p in a.pages] if a.pages else list(all_pages())
     if a.list:
         clean = 0
@@ -163,10 +213,10 @@ def main():
         return 0
     for p in paths:
         if not a.pages:
-            todo, drift = classify(open(p, encoding='utf-8').read(), idx)
-            if drift or not todo:
+            todo, drift = classify(open(p, encoding='utf-8').read(), idx, adopt)
+            if not todo:
                 continue
-        res, msg = migrate(p, idx, write=a.apply)
+        res, msg = migrate(p, idx, write=a.apply, adopt=adopt)
         print(os.path.relpath(p, ROOT), '->', res if res else 'SKIP: ' + msg)
     return 0
 
