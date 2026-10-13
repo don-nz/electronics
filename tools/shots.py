@@ -79,8 +79,12 @@ def browse(path, text, query, extra, shot=None, dom=False):
         if dom:
             cmd.append('--dump-dom')
         cmd.append('file://' + tmp + query)
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-        return r.stdout
+        for attempt in (1, 2):             # a hung browser gets one more go, then is reported
+            try:
+                return subprocess.run(cmd, capture_output=True, text=True, timeout=75).stdout
+            except subprocess.TimeoutExpired:
+                subprocess.run(['pkill', '-f', os.path.basename(tmp)], capture_output=True)
+        return ''
     finally:
         if os.path.exists(tmp):
             os.remove(tmp)
