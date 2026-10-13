@@ -10,6 +10,8 @@ Checks, per page:
   1. JS errors     — uncaught errors, unhandled promise rejections, console.error
   2. Local links   — every relative src/href (script, link, a, img) points at a file that exists
   3. Deep links    — (--deeplinks) quiz pages with a QUESTIONS array also load as ?q=2
+  4. Blank check   — (--blank-check) press Check on every question with nothing entered,
+                     then open the summary; any throw (e.g. a working() that assumed an answer) fails
 
 Needs Chromium on PATH (override with CHROME=/path/to/chrome). Exit code is 1 if
 anything fails, so it can run in CI. Temp copies are written next to the page
@@ -29,6 +31,14 @@ INJECT = ('<script>window.__e=[];'
           '(function(){var ce=console.error;console.error=function(){window.__e.push("console.error: "+Array.prototype.join.call(arguments," "));ce.apply(console,arguments)}})();'
           'addEventListener("load",function(){setTimeout(function(){document.title="SMOKE|"+JSON.stringify(window.__e)},400)});'
           '</script>')
+
+
+BLANK = ('<script>addEventListener("load",function(){'
+         'if(typeof QUESTIONS==="undefined"||typeof checkAnswer!=="function"||typeof goToQuestion!=="function")return;'
+         'for(var i=0;i<QUESTIONS.length;i++){try{goToQuestion(i+1);checkAnswer();}'
+         'catch(e){window.__e.push("blank-check Q"+(i+1)+": "+e.message)}}'
+         'try{showSummary();}catch(e){window.__e.push("blank-check summary: "+e.message)}'
+         '});</script>')
 
 
 def pages(filters, include_all):
@@ -62,11 +72,11 @@ def check_links(path, text):
     return bad
 
 
-def load(path, text, query='', retry=True):
+def load(path, text, query='', retry=True, extra=''):
     """Load `path` (+query) with the listener injected; return list of errors."""
     m = re.search(r'<head[^>]*>', text[text.find('<!DOCTYPE') if '<!DOCTYPE' in text else 0:], re.I)
     off = text.find('<!DOCTYPE') if '<!DOCTYPE' in text else 0
-    t = text[:off + m.end()] + INJECT + text[off + m.end():] if m else INJECT + text
+    t = text[:off + m.end()] + INJECT + extra + text[off + m.end():] if m else INJECT + extra + text
     tmp = os.path.join(os.path.dirname(path), '_smoke_' + os.path.basename(path))
     try:
         with open(tmp, 'w', encoding='utf-8') as fh:
@@ -76,7 +86,7 @@ def load(path, text, query='', retry=True):
                              capture_output=True, text=True, timeout=90).stdout
     except subprocess.TimeoutExpired:
         if retry:
-            return load(path, text, query, retry=False)   # slow under load — one more go
+            return load(path, text, query, retry=False, extra=extra)   # slow under load — one more go
         return ['harness: browser timed out twice']
     except Exception as e:
         return [f'harness: {e}']
@@ -95,13 +105,15 @@ def load(path, text, query='', retry=True):
         return [mm.group(1)]
 
 
-def run_one(path, deeplinks, links_only):
+def run_one(path, deeplinks, links_only, blank=False):
     text = open(path, encoding='utf-8', errors='replace').read()
     problems = [('link', b) for b in check_links(path, text)]
     if not links_only:
         problems += [('js', e) for e in load(path, text)]
         if deeplinks and re.search(r'\bconst\s+QUESTIONS\b|\bQUESTIONS\s*=', text):
             problems += [('deeplink ?q=2', e) for e in load(path, text, '?q=2')]
+        if blank and re.search(r'\bconst\s+QUESTIONS\b|\bQUESTIONS\s*=', text):
+            problems += [('blank-check', e) for e in load(path, text, extra=BLANK)]
     return path, problems
 
 
@@ -110,6 +122,7 @@ def main():
     ap.add_argument('filters', nargs='*', help='only pages whose repo-relative path contains one of these')
     ap.add_argument('-j', '--jobs', type=int, default=4)
     ap.add_argument('--deeplinks', action='store_true')
+    ap.add_argument('--blank-check', action='store_true', help='press Check on every question with nothing entered')
     ap.add_argument('--links-only', action='store_true')
     ap.add_argument('--all', action='store_true', help='include assets/shapes, Templates and working/')
     a = ap.parse_args()
@@ -121,7 +134,7 @@ def main():
     print(f'{len(ps)} pages')
     failed = 0
     with cf.ThreadPoolExecutor(max_workers=a.jobs) as ex:
-        for path, problems in ex.map(lambda p: run_one(p, a.deeplinks, a.links_only), ps):
+        for path, problems in ex.map(lambda p: run_one(p, a.deeplinks, a.links_only, a.blank_check), ps):
             if problems:
                 failed += 1
                 print(f'FAIL {os.path.relpath(path, ROOT)}')

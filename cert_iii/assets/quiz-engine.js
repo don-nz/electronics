@@ -251,6 +251,18 @@ function truthMistakeLine(labels, st) {
     : '';
 }
 
+// True when the student pressed Check having entered nothing at all — shown
+// as "Not answered" (and marked wrong) instead of being silently graded.
+// 'switches' is never unanswered: every switch always holds a real 0/1.
+function isUnanswered(data, st) {
+  if (isBits(data)) return st.clicks.every(row => row.every(n => bitFromClicks(n) === null));
+  if (isTruth(data)) return st.clicks.every(n => zFromClicks(n) === null);
+  if (isFill(data)) return st.slotPlaced.every(p => p === null);
+  if (isSwitches(data)) return false;
+  if (isMatch(data)) return data.reusablePool ? st.assign.every(a => a === null) : st.place.every(p => p === null);
+  return isMulti(data) ? st.sel.length === 0 : st.sel === null;
+}
+
 function isAnswerCorrect(data, st) {
   if (isBits(data)) return st.clicks.every((row, r) => row.every((n, c) => bitFromClicks(n) === st.cor[r][c]));
   if (isTruth(data)) return st.clicks.every((n, r) => zFromClicks(n) === st.cor[r]);
@@ -272,6 +284,7 @@ function isAnswerCorrect(data, st) {
 }
 
 function selectedLabel(data, st) {
+  if (isUnanswered(data, st)) return 'Not answered';
   if (isBits(data)) {
     let correct = 0, total = 0;
     st.clicks.forEach((row, r) => row.forEach((n, c) => { total++; if (bitFromClicks(n) === st.cor[r][c]) correct++; }));
@@ -300,10 +313,10 @@ function selectedLabel(data, st) {
   }
   const asLabel = i => data.leftPanel === 'shapeGrid' ? (i + 1) : LETTERS[i];
   if (!isMulti(data)) {
-    if (st.sel == null || !st.opts[st.sel]) return '—';
+    if (st.sel == null || !st.opts[st.sel]) return 'Not answered';
     return data.leftPanel === 'shapeGrid' ? `Circuit ${asLabel(st.sel)}` : st.opts[st.sel].label;
   }
-  return st.sel.length ? [...st.sel].sort((a, b) => a - b).map(asLabel).join(', ') : '—';
+  return st.sel.length ? [...st.sel].sort((a, b) => a - b).map(asLabel).join(', ') : 'Not answered';
 }
 
 // Fills in the fully-correct answer for a question without marking it
@@ -442,6 +455,9 @@ function renderMatch() {
     chip.className = 'match-chip' + (isPicked ? ' picked' : '') + (opt.shapeId ? ' match-chip-shape' : '');
     chip.innerHTML = matchChipContent(opt, false, data.shapeViewBox);
     chip.disabled = st.ans || (picking && !isPicked);
+    // Checked with this chip never placed: flag it as unassigned (decoys that
+    // should stay in the pool are left as plain dimmed chips).
+    if (st.ans && st.cor[i] !== null) chip.classList.add('wrong', 'unassigned');
     if (!chip.disabled) chip.addEventListener('click', (e) => { e.stopPropagation(); selectPoolItem(i); });
     pool.appendChild(chip);
   });
@@ -475,10 +491,25 @@ function renderMatch() {
       items.appendChild(chip);
     });
 
+    if (st.ans) {
+      const expected = st.cor.filter(c => c === colIdx).length;
+      const placed = st.opts.filter((_, i) => st.place[i] === colIdx).length;
+      for (let k = placed; k < expected; k++) items.appendChild(unassignedChip());
+    }
+
     colDiv.append(arrow, title, items);
     colDiv.classList.toggle('droppable', !st.ans && picking);
     colsEl.appendChild(colDiv);
   });
+}
+
+// Stand-in shown in a column that the student left empty once the question
+// is checked — the "unassigned" counterpart to a correct/wrong placed chip.
+function unassignedChip() {
+  const chip = document.createElement('span');
+  chip.className = 'match-chip wrong unassigned';
+  chip.textContent = 'Unassigned';
+  return chip;
 }
 
 function selectPoolItem(i) {
@@ -576,6 +607,8 @@ function renderMatchReusable() {
         if (!chip.disabled) chip.addEventListener('click', (e) => { e.stopPropagation(); unassignColumnReusable(colIdx); });
       }
       items.appendChild(chip);
+    } else if (st.ans) {
+      items.appendChild(unassignedChip());
     }
 
     colDiv.append(arrow, title, items);
@@ -620,7 +653,8 @@ function renderBits() {
       const bit = bitFromClicks(st.clicks[r][c]);
       td.textContent = bit === null ? '' : String(bit);
       if (st.ans) {
-        td.className = 'bits-cell ' + (bit === st.cor[r][c] ? 'correct' : 'wrong');
+        if (bit === null) td.textContent = '—';
+        td.className = 'bits-cell ' + (bit === st.cor[r][c] ? 'correct' : 'wrong') + (bit === null ? ' unassigned' : '');
       } else {
         td.className = 'bits-cell';
         td.addEventListener('click', () => clickBit(r, c));
@@ -728,7 +762,8 @@ function renderTruth() {
     const z = zFromClicks(st.clicks[r]);
     zTd.textContent = z === null ? '' : String(z);
     if (st.ans) {
-      zTd.className = 'bits-cell' + (z === st.cor[r] ? ' correct' : ' wrong');
+      if (z === null) zTd.textContent = '—';
+      zTd.className = 'bits-cell' + (z === st.cor[r] ? ' correct' : ' wrong') + (z === null ? ' unassigned' : '');
     } else {
       zTd.className = 'bits-cell';
       zTd.addEventListener('click', () => clickTruthZ(r));
@@ -813,8 +848,10 @@ function renderFill() {
     const txt = document.getElementById(elId + 'Text');
     const placedIdx = st.slotPlaced[slot];
     box.classList.remove('filled', 'correct', 'wrong', 'plain');
+    box.classList.remove('unassigned');
     if (placedIdx === null) {
       txt.innerHTML = '';
+      if (st.ans && st.cor[slot] !== -1) { txt.textContent = '—'; box.classList.add('wrong', 'unassigned'); box.title = 'Unassigned'; }
     } else {
       txt.innerHTML = st.opts[placedIdx].poolHtml;
       box.classList.add('filled');
@@ -937,7 +974,13 @@ function renderQuestion() {
     const ok = isAnswerCorrect(data, st);
     banner.className = 'result-banner ' + (ok ? 'correct' : 'wrong');
     document.getElementById('qIcon').textContent = ok ? '✓' : '✗';
-    document.getElementById('qBannerText').innerHTML = ok ? `Correct! ${data.correctExplain(st)}` : `The correct answer is ${data.correctExplain(st)}`;
+    const blank = !ok && isUnanswered(data, st);
+    // For the table/placement kinds correctExplain() is a score ("0 of 16 bits
+    // correct"), which reads oddly after "Not answered" — point at the solution.
+    const scoreKind = isBits(data) || isTruth(data) || isFill(data) || isMatch(data);
+    document.getElementById('qBannerText').innerHTML = ok ? `Correct! ${data.correctExplain(st)}`
+      : blank ? (scoreKind ? '<b>Not answered.</b> The correct answers are shown in the worked solution below.' : `<b>Not answered.</b> The correct answer is ${data.correctExplain(st)}`)
+      : `The correct answer is ${data.correctExplain(st)}`;
   } else {
     banner.className = 'result-banner';
   }
@@ -949,13 +992,11 @@ function renderQuestion() {
   document.getElementById('qBack').style.display = cur > 0 ? 'inline-block' : 'none';
   const check = document.getElementById('qCheck');
   check.style.display = st.ans ? 'none' : 'inline-block';
-  // Check is always clickable once a question is on screen — it no longer
-  // waits for a complete answer. checkAnswer() itself substitutes the
-  // correct answer for anything left unanswered/incomplete, so Check also
-  // works as an explicit "show me" for this self-study revision tool,
-  // without needing the ?q=n&ans=1 URL override (fiddly to type on a
-  // phone). Nothing graded here rides on the student's result, so there's
-  // no reason to gate the button on completeness.
+  // Check is always clickable once a question is on screen. Pressing it
+  // with nothing (or only part) entered grades what is there: a blank
+  // question reads "Not answered" and counts wrong, and unfilled parts of a
+  // match/fill/bits/truth question show as unassigned beside the correct
+  // and wrong ones. The worked solution is shown either way.
   check.disabled = st.ans;
   const isLast = cur === QUESTIONS.length - 1;
   document.getElementById('qNext').style.display = (st.ans && !isLast) ? 'inline-block' : 'none';
@@ -1001,21 +1042,6 @@ function renderQuestion() {
 function checkAnswer() {
   const st = Q[cur], data = QUESTIONS[cur];
   if (st.ans) return;
-  // An unanswered or partially-answered question no longer blocks Check —
-  // it substitutes the fully-correct answer (same fillCorrectSelection()
-  // jump()/?ans=1 already use) and shows it like any other checked
-  // question, so Check doubles as an explicit "show me" for revision.
-  // Whatever the student HAD selected is discarded in that case, same as
-  // fillCorrectSelection() always does — there's no "grade what they got
-  // so far" middle ground.
-  const complete =
-    isMatch(data) ? (data.reusablePool ? st.assign.every(a => a !== null) : st.opts.every((o, i) => o.col === null || st.place[i] !== null)) :
-    isBits(data) ? st.clicks.every(row => row.every(n => bitFromClicks(n) !== null)) :
-    isTruth(data) ? st.clicks.every(n => zFromClicks(n) !== null) :
-    isFill(data) ? st.slotPlaced.every((p, slot) => p !== null || st.cor[slot] === -1) :
-    isSwitches(data) ? true : // every switch already has a real 0/1 value from the start (no blank state like 'bits'/'truth' cells), so a switches question is always "complete" as-is
-    (isMulti(data) ? st.sel.length > 0 : st.sel !== null);
-  if (!complete) fillCorrectSelection(cur);
   st.ans = true;
   renderQuestion();
   document.getElementById('qBanner').scrollIntoView({ behavior: 'smooth', block: 'start' });
