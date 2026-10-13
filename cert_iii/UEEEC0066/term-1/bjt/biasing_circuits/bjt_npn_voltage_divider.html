@@ -423,9 +423,6 @@
         text: 'For maximum symmetrical output swing before clipping, what is the ideal <span style="color:var(--colour-ideal)">collector-emitter voltage</span> V<sub>CE(ideal)</sub>?',
         hint: 'The ideal Q-point splits the voltage remaining after R<sub>E</sub>\'s drop evenly between R<sub>C</sub> and the transistor: V<sub>CE(ideal)</sub> ≈ (V<sub>CC</sub> − I<sub>E</sub>R<sub>E</sub>) / 2.'
       }
-      // Q7's text depends on which side of ideal V_CE currently sits on (varies across
-      // Example 1/2/3/Randomise), so it isn't in this static list — see updateQ7Question(),
-      // called from refreshLabels() every time V changes.
     ];
 
     // ══════════════════════════════════════════════════════════════════════
@@ -492,32 +489,6 @@
       if (Math.abs(diffPct) <= 20) return { tag: 'centred', diffPct };
       if (diffPct > 20) return { tag: 'cutoff', diffPct };
       return { tag: 'saturation', diffPct };
-    }
-
-    // Q7: the four single-component changes that CAN bring V_CE to a centred
-    // Q-point, each solved exactly (holding the other three components fixed).
-    //   - rcTarget: R1,R2,RE fixed. I_E (and so V_CE_ideal) is untouched by R_C,
-    //     so this is the ONLY lever that hits the exact V_CE(ideal) from Q6
-    //     without changing the emitter bias current at all.
-    //   - reTarget: R1,R2,RC fixed. V_E is set solely by the base divider, so
-    //     V_CE_ideal = (VCC-VE)/2 is ALSO untouched by R_E — this also lands on
-    //     the same Q6 number, but only by substantially changing I_E, which
-    //     undermines R_E's own role of stabilising I_E against beta/temperature.
-    //   - r2Target / r1Target: changing the divider changes V_E, so V_CE_ideal
-    //     itself shifts too — these converge V_CE and V_CE_ideal at a NEW point,
-    //     different from the Q6 number, redesigning the whole bias current
-    //     rather than repositioning V_CE within it.
-    function calcAdjustmentTargets() {
-      const ieDiv = V.vcc / (2 * V.rc + V.re);
-      const veDiv = ieDiv * V.re;
-      const vbDiv = veDiv + VBE;
-      const r2Target = V.r1 * vbDiv / (V.vcc - vbDiv);
-      const r1Target = V.r2 * (V.vcc - vbDiv) / vbDiv;
-      const rcTarget = VCE_ideal / IE;
-      const ieViaRE = VCE_ideal / V.rc;
-      const reTarget = VE / ieViaRE;
-      const convergedVCE = (V.vcc - ieDiv * V.re) / 2; // where V_CE and V_CE_ideal meet if R1/R2 is used instead
-      return { r2Target, r1Target, rcTarget, reTarget, ieDiv, ieViaRE, convergedVCE };
     }
 
     // ── mode switching ──
@@ -606,22 +577,6 @@
         { label: `<span class="cideal">V<sub>CE(ideal)</sub></span> = <span class="colour-supply">V<sub>CC</sub></span> = ${fmtV(V.vcc)}`, type: 'wrong' },
       ]);
     }
-    function buildQ7Options() {
-      // All four options genuinely land V_CE at (a) centred Q-point — see
-      // calcAdjustmentTargets() for the derivation of each target value and
-      // why only R_C does it without disturbing I_E. Direction words
-      // (Increase/Decrease) are derived from the target vs the current value,
-      // so they're correct whichever side of ideal this circuit sits on.
-      const T = calcAdjustmentTargets();
-      const dir = (target, baseline) => target > baseline ? 'Increase' : 'Decrease';
-      return shuffle([
-        { label: `${dir(T.rcTarget, V.rc)} R<sub>C</sub> to ${fmtO0(T.rcTarget)}`, type: 'correct' },
-        { label: `${dir(T.r2Target, V.r2)} R2 to ${fmtO0(T.r2Target)}`, type: 'wrong' },
-        { label: `${dir(T.r1Target, V.r1)} R1 to ${fmtO0(T.r1Target)}`, type: 'wrong' },
-        { label: `${dir(T.reTarget, V.re)} R<sub>E</sub> to ${fmtO0(T.reTarget)}`, type: 'wrong' },
-      ]);
-    }
-
     // ── circuit-specific SVG annotation show/hide ──
     function fmtVParts(v) {
       const a = Math.abs(v);
@@ -703,45 +658,6 @@
       buildQ1Options, buildQ2Options, buildQ3Options,
       buildQ4Options, buildQ5Options, buildQ6Options,
     ];
-
-    function checkQ7() {
-      const st = Q.q7; if (st.ans || st.sel === null) return; st.ans = true;
-      const ok = st.sel === st.cor;
-      markOptions('q7', st.sel, st.cor, ok);
-      const T = calcAdjustmentTargets();
-      const dir = (target, baseline) => target > baseline ? 'Increase' : 'Decrease';
-      setBanner('q7', ok, `${dir(T.rcTarget, V.rc)} <span class="colour-resistor">R<sub>C</sub></span> to ${fmtO0(T.rcTarget)} — the only change that doesn't disturb <span class="colour-current">I<sub>E</sub></span>.`);
-      showQ7Working();
-      applyCircuitState(CIRCUIT_STATES[6].reveal);
-      advanceQuestion(7);
-    }
-    function showQ7Working() {
-      const box = document.getElementById('q7Working');
-      box.className = 'working-box visible';
-      const T = calcAdjustmentTargets();
-      const dir = (target, baseline) => target > baseline ? 'Increase' : 'Decrease';
-      const ieChangePct = (T.ieViaRE - IE) / IE * 100;
-      document.getElementById('q7WorkingContent').innerHTML = `
-    <div class="step-label"><span class="colour-resistor">R<sub>C</sub></span> — the correct lever</div>
-    <div class="working-line"><span class="colour-current">I<sub>E</sub></span> and <span class="colour-voltage">V<sub>E</sub></span> don't depend on <span class="colour-resistor">R<sub>C</sub></span> at all, so <span class="cideal">V<sub>CE(ideal)</sub></span> stays exactly the ${fmtV(VCE_ideal)} found in Q6. Solving <span class="colour-voltage">V<sub>C</sub></span> − <span class="colour-voltage">V<sub>E</sub></span> = <span class="cideal">V<sub>CE(ideal)</sub></span> for <span class="colour-resistor">R<sub>C</sub></span>:</div>
-
-    <div class="working-formula-row"><span class="cideal">R<sub>C</sub></span> = ${frac('<span class="cideal">V<sub>CE(ideal)</sub></span>', '<span class="colour-current">I<sub>E</sub></span>')}</div>
-    <div class="working-label">Substituting values:</div>
-    <div class="working-formula-row"><span class="cideal">R<sub>C</sub></span> = ${frac(fmtV(VCE_ideal), fmtA(IE))}</div>
-    <div class="working-total"><span class="cideal">R<sub>C</sub></span>: ${fmtO0(V.rc)} → <span class="colour-result">${dir(T.rcTarget, V.rc)} to ${fmtO0(T.rcTarget)}</span> &nbsp;<i>(<span class="colour-current">I<sub>E</sub></span> stays at ${fmtA(IE)} — completely unchanged)</i></div>
-
-    <div class="working-line">All three changes below can numerically land <span class="colour-voltage">V<sub>CE</sub></span> on a centred Q-point — but they don't all get there the same way. <span class="colour-resistor">R<sub>1</sub></span>, <span class="colour-resistor">R<sub>2</sub></span> and <span class="colour-resistor">R<sub>E</sub></span> all set <span class="colour-current">I<sub>E</sub></span> (directly or via <span class="colour-voltage">V<sub>E</sub></span>), so touching any of them means redesigning the bias current just to reposition <span class="colour-voltage">V<sub>CE</sub></span>. <span class="colour-resistor">R<sub>C</sub></span> alone sits downstream of <span class="colour-current">I<sub>E</sub></span> and only sets where <span class="colour-voltage">V<sub>CE</sub></span> falls on the load line.</div>
-
-    <div class="step-label"><span class="colour-resistor">R<sub>E</sub></span> — also reaches ${fmtV(VCE_ideal)}, but at a cost</div>
-    <div class="working-line"><span class="colour-voltage">V<sub>E</sub></span> is set by the base divider, not by <span class="colour-resistor">R<sub>E</sub></span>, so this route also lands on the same <span class="cideal">V<sub>CE(ideal)</sub></span> = ${fmtV(VCE_ideal)}. But to get there, <span class="colour-current">I<sub>E</sub></span> has to move from ${fmtA(IE)} to ${fmtA(T.ieViaRE)} — a ${Math.abs(ieChangePct).toFixed(0)}% ${ieChangePct >= 0 ? 'increase' : 'decrease'} in bias current, which also works against <span class="colour-resistor">R<sub>E</sub></span>'s own job of stabilising <span class="colour-current">I<sub>E</sub></span> against β and temperature drift.</div>
-    <div class="working-total"><span class="colour-resistor">R<sub>E</sub></span>: ${fmtO0(V.re)} → <span style="color:var(--colour-ui-wrong)">${dir(T.reTarget, V.re)} to ${fmtO0(T.reTarget)}</span></div>
-
-    <div class="step-label"><span class="colour-resistor">R<sub>1</sub></span> or <span class="colour-resistor">R<sub>2</sub></span> — moves the goalposts too</div>
-    <div class="working-line">Changing the base divider changes <span class="colour-voltage">V<sub>E</sub></span>, which means <span class="cideal">V<sub>CE(ideal)</sub></span> itself shifts as you turn the knob. Instead of hitting ${fmtV(VCE_ideal)}, <span class="colour-voltage">V<sub>CE</sub></span> and the (now-moving) ideal converge somewhere else entirely — <b>${fmtV(T.convergedVCE)}</b> — with <span class="colour-current">I<sub>E</sub></span> shifting from ${fmtA(IE)} to ${fmtA(T.ieDiv)} along the way. This redesigns the whole bias point rather than just repositioning <span class="colour-voltage">V<sub>CE</sub></span> within it.</div>
-    <div class="working-total"><span class="colour-resistor">R<sub>2</sub></span>: ${fmtO0(V.r2)} → <span style="color:var(--colour-ui-wrong)">${dir(T.r2Target, V.r2)} to ${fmtO0(T.r2Target)}</span> &nbsp;or&nbsp; <span class="colour-resistor">R<sub>1</sub></span>: ${fmtO0(V.r1)} → <span style="color:var(--colour-ui-wrong)">${dir(T.r1Target, V.r1)} to ${fmtO0(T.r1Target)}</span></div>`;
-    }
-
-    function backFromQ7() { resetQuestion('q6'); resetQuestion('q7'); showQuestion(6); }
 
     // ══════════════════════════════════════════════════════════════════════
     // END CIRCUIT SIMULATION
