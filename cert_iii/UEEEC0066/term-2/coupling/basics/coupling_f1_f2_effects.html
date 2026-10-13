@@ -1,0 +1,777 @@
+<!--
+  Coupling: effects on f1 and f2 — conceptual quiz with two numeric
+  questions (f1 near the start, one f2 at the very end).
+
+  Same two-stage amplifier and Example 1/2/3/Randomise machinery as
+  coupling_circuit_analysis.html, but the questions change ONE thing and
+  ask what moves: the series coupling capacitor C1 sets the lower corner
+  f1 and leaves f2 alone; f2 is set by the shunt capacitance at the
+  collector (the transistor's own inter-electrode capacitance plus stray
+  wiring), drawn here as Cs, and by the resistance driving it.
+
+  Formulas used (f1 is the course equation-sheet form; the f2 form is the
+  same single-pole RC corner, with Cs and the resistance it sees):
+    RT  = ROUT1 + RIN2          (series — what C1 works against)
+    f1  = 1 / (2π × RT × C1)
+    Rsh = ROUT1 ∥ RIN2          (what Cs charges through at high frequency,
+                                 C1 being effectively a short there)
+    f2  = 1 / (2π × Rsh × Cs)
+  Cs is "device + stray" at Stage 1's collector, given as a value on the
+  diagram; the questions never ask the student to choose a capacitor to
+  move f2, because in practice f2 is decided by the transistor and layout.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../../assets/theme-init.js"></script>
+  <script src="../../../../assets/shapes.js"></script>
+  <script src="../../../../assets/quiz-engine.js"></script>
+  <title>Coupling: Effects on f1 and f2</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../../assets/quiz-common.css">
+  <script src="../../../../assets/breadcrumb.js" defer></script>
+  <style>
+    /* .mode-toggle is its own top-level grid item now (not nested inside
+       .circuit-col), specifically so it can sit ABOVE the question card on
+       mobile instead of wherever circuit-col's own flex `order` happens to
+       land it (quiz-common.css's shared .quiz-wrap uses flex+order for its
+       generic mobile stacking, which can only reorder circuit-col and
+       questions-col as whole blocks — not reach inside circuit-col to
+       reorder mode-toggle separately from circuit-panel). Grid template
+       areas replace that flex/order mechanism here, letting all three
+       pieces (mode/circuit/questions) be positioned independently at each
+       breakpoint. This is a page-local override — quiz-common.css's shared
+       flex/order behaviour is untouched, so every other quiz keeps using it
+       exactly as before. */
+    .quiz-wrap {
+      display: grid;
+      grid-template-areas: "mode" "questions" "circuit";
+      gap: 1.5rem;
+    }
+    .mode-toggle { grid-area: mode; }
+    .questions-col { grid-area: questions; }
+    .circuit-col { grid-area: circuit; }
+    @media(min-width:870px) {
+      /* Two full stages side by side needs real width to stay readable —
+         same fixed-cap-not-percent reasoning as bjt_knowledge_ac_params_ce.html's
+         own .quiz-wrap override, just a wider cap (870x580 viewBox here vs
+         that file's 690x570). mode+circuit share the left column (mode on
+         top), questions-col spans both rows on the right — same visual
+         layout as before this file had Example/Randomise at all. */
+      .quiz-wrap {
+        grid-template-columns: minmax(340px, 820px) 1fr;
+        /* min-content pins row1 to exactly the mode-toggle buttons' own
+           height. Without this, "auto" (the default when rows aren't
+           listed explicitly) lets the "questions" area's 2-row SPAN pull
+           extra height into row1 too, not just row2 — browsers distribute
+           a spanning item's height need across ALL the auto tracks it
+           spans, not just the one that visually "needs" it, which showed
+           up as a large empty gap between the mode-toggle buttons and the
+           circuit diagram once Q1's card (hint+4 options+working solution)
+           got tall enough to matter. 1fr for row2 absorbs all of that
+           extra height instead, which is what actually lets align-items
+           below control circuit-panel's position within its own cell. */
+        grid-template-rows: min-content 1fr;
+        grid-template-areas: "mode questions" "circuit questions";
+        gap: 1.2rem;
+        align-items: center;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Hidden defs: the two-stage circuit (same voltage-divider groups as coupling_circuit_analysis.html) and the four response-curve thumbnails used by the graph question. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      
+
+      <!-- ══ NPN BJT SHAPE ══ -->
+      
+
+      <!-- ══ Resistor Vertical ══ -->
+      <g id="resistor-vertical">
+        <rect x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)"
+          stroke="var(--colour-resistor)" stroke-width="2" filter="url(#glow)" />
+      </g>
+
+      <!-- ══ CAPACITOR SHAPE ══ -->
+      
+
+      <!-- ══ VOLTAGE DIVIDER BASE — reusable template, both stages instance this ══ -->
+      <g id="voltage-divider-bias">
+        <line x1="0" y1="20" x2="340" y2="20" style="stroke: var(--colour-series)" stroke-width="2" />
+        <line x1="0" y1="535" x2="340" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+        <line x1="0" y1="170" x2="100" y2="170" style="stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="100" cy="170" r="5" style="fill: var(--colour-series)" />
+        <line x1="240" y1="170" x2="340" y2="170" style="stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="240" cy="170" r="5" style="fill: var(--colour-series)" />
+        <line x1="100" y1="255" x2="209" y2="255" style="stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="100" cy="255" r="5" style="fill: var(--colour-series)" />
+        <line x1="100" y1="20" x2="100" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="100" cy="20" r="5" style="fill: var(--colour-series)" />
+        <circle cx="100" cy="535" r="5" style="fill: var(--colour-series)" />
+        <line x1="240" y1="20" x2="240" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="240" cy="20" r="5" style="fill: var(--colour-series)" />
+        <circle cx="240" cy="535" r="5" style="fill: var(--colour-series)" />
+        <g transform="translate(226,255)">
+          <use href="#bjt-npn-shape" />
+        </g>
+        <g transform="translate(85,60)">
+          <use href="#resistor-vertical" />
+        </g>
+        <g transform="translate(85,370)">
+          <use href="#resistor-vertical" />
+        </g>
+        <g transform="translate(225,60)">
+          <use href="#resistor-vertical" />
+        </g>
+        <g transform="translate(225,370)">
+          <use href="#resistor-vertical" />
+        </g>
+      </g>
+
+      <!-- ══ VOLTAGE DIVIDER Q1 — R1,R2,R3(R3),R4(R4) ══ -->
+      <g id="voltageDivider-Q1-R1-R4">
+        <use href="#voltage-divider-bias" />
+        <text id="lblBeta1" x="265" y="250" fill="var(--colour-bjt-labels)" text-anchor="start" font-size="12" font-weight="bold">β = 300</text>
+        <text x="200" y="220" fill="var(--colour-bjt-labels)" text-anchor="start" font-size="20" font-weight="bold">Q1</text>
+        <g transform="translate(85,60)">
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="20" font-weight="bold">R1</text>
+          <text id="lblR1" x="60" y="40" fill="var(--colour-text)" text-anchor="middle" font-size="20">80kΩ</text>
+        </g>
+        <g transform="translate(85,370)">
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="20" font-weight="bold">R2</text>
+          <text id="lblR2" x="60" y="40" fill="var(--colour-text)" text-anchor="middle" font-size="20">20kΩ</text>
+        </g>
+        <g transform="translate(225,60)">
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="20" font-weight="bold">R3</text>
+          <text id="lblR3" x="60" y="40" fill="var(--colour-text)" text-anchor="middle" font-size="20">5.6kΩ</text>
+        </g>
+        <g transform="translate(225,370)">
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="20" font-weight="bold">R4</text>
+          <text id="lblR4" x="60" y="40" fill="var(--colour-text)" text-anchor="middle" font-size="20">1.8kΩ</text>
+        </g>
+      </g>
+
+      <!-- ══ VOLTAGE DIVIDER Q2 — R5,R6,R7(R7),R8(R8) ══ -->
+      <g id="voltageDivider-Q2-R5-R8">
+        <use href="#voltage-divider-bias" />
+        <text id="lblBeta2" x="265" y="250" fill="var(--colour-bjt-labels)" text-anchor="start" font-size="12" font-weight="bold">β = 400</text>
+        <text x="200" y="220" fill="var(--colour-bjt-labels)" text-anchor="start" font-size="20" font-weight="bold">Q2</text>
+        <g transform="translate(85,60)">
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="20" font-weight="bold">R5</text>
+          <text id="lblR5" x="60" y="40" fill="var(--colour-text)" text-anchor="middle" font-size="20">100kΩ</text>
+        </g>
+        <g transform="translate(85,370)">
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="20" font-weight="bold">R6</text>
+          <text id="lblR6" x="60" y="40" fill="var(--colour-text)" text-anchor="middle" font-size="20">15kΩ</text>
+        </g>
+        <g transform="translate(225,60)">
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="20" font-weight="bold">R7</text>
+          <text id="lblR7" x="60" y="40" fill="var(--colour-text)" text-anchor="middle" font-size="20">4.2kΩ</text>
+        </g>
+        <g transform="translate(225,370)">
+          <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="20" font-weight="bold">R8</text>
+          <text id="lblR8" x="60" y="40" fill="var(--colour-text)" text-anchor="middle" font-size="20">680Ω</text>
+        </g>
+      </g>
+
+      <!-- ══ Response-curve thumbnails for the graph question — dashed = before, solid = after.
+           Gain (up) vs frequency (right, log scale). Baseline: lower corner f1 at x=40, upper corner f2 at x=80. ══ -->
+      <g id="resp-f1-down">
+        <line x1="8" y1="70" x2="112" y2="70" style="stroke: var(--colour-label)" stroke-width="1" />
+        <path d="M10,66 C22,66 30,26 42,26 L80,26 C92,26 100,66 112,66" fill="none" style="stroke: var(--colour-label)" stroke-width="1.5" stroke-dasharray="4 3" />
+        <path d="M10,66 C16,66 20,26 30,26 L80,26 C92,26 100,66 112,66" fill="none" style="stroke: var(--colour-capacitor-labels)" stroke-width="2.5" />
+      </g>
+      <g id="resp-f1-up">
+        <line x1="8" y1="70" x2="112" y2="70" style="stroke: var(--colour-label)" stroke-width="1" />
+        <path d="M10,66 C22,66 30,26 42,26 L80,26 C92,26 100,66 112,66" fill="none" style="stroke: var(--colour-label)" stroke-width="1.5" stroke-dasharray="4 3" />
+        <path d="M10,66 C28,66 40,26 54,26 L80,26 C92,26 100,66 112,66" fill="none" style="stroke: var(--colour-capacitor-labels)" stroke-width="2.5" />
+      </g>
+      <g id="resp-f2-down">
+        <line x1="8" y1="70" x2="112" y2="70" style="stroke: var(--colour-label)" stroke-width="1" />
+        <path d="M10,66 C22,66 30,26 42,26 L80,26 C92,26 100,66 112,66" fill="none" style="stroke: var(--colour-label)" stroke-width="1.5" stroke-dasharray="4 3" />
+        <path d="M10,66 C22,66 30,26 42,26 L66,26 C78,26 86,66 98,66" fill="none" style="stroke: var(--colour-capacitor-labels)" stroke-width="2.5" />
+      </g>
+      <g id="resp-both-in">
+        <line x1="8" y1="70" x2="112" y2="70" style="stroke: var(--colour-label)" stroke-width="1" />
+        <path d="M10,66 C22,66 30,26 42,26 L80,26 C92,26 100,66 112,66" fill="none" style="stroke: var(--colour-label)" stroke-width="1.5" stroke-dasharray="4 3" />
+        <path d="M10,66 C28,66 40,26 52,26 L68,26 C80,26 88,66 100,66" fill="none" style="stroke: var(--colour-capacitor-labels)" stroke-width="2.5" />
+      </g>
+    </defs>
+  </svg>
+
+  <div class="crumb" id="crumb" data-current="f1 and f2 Effects"></div>
+  <header>
+    <h1>Coupling: Effects on f1 and f2</h1>
+    <p>Two-Stage Amplifier · Series vs Shunt Capacitance · Lower Corner f1 · Upper Corner f2</p>
+  </header>
+
+  <div class="quiz-wrap" id="quizWrap">
+
+    <!-- Example 1/2/3/Randomise — its own top-level grid item (not nested
+         in circuit-col) so mobile and desktop can position it independently
+         via grid-area, rather than being stuck wherever circuit-col ends up.
+         See this file's own <style> block for the two grid-template-areas
+         layouts (mobile: mode/questions/circuit stacked; desktop: mode+
+         circuit sharing the left column, questions-col spanning both rows
+         on the right — same visual result as before, just reorderable). -->
+    <div class="mode-toggle">
+      <div class="mode-seg" id="modeSeg">
+        <button id="modeExample1" class="active" onclick="setMode('example1')">Example 1</button>
+        <button id="modeExample2" onclick="setMode('example2')">Example 2</button>
+        <button id="modeExample3" onclick="setMode('example3')">Example 3</button>
+        <button id="modeRandomise" onclick="setMode('randomise')">Randomise</button>
+      </div>
+    </div>
+
+    <!-- LEFT: circuit diagram -->
+    <div class="circuit-col">
+      <div id="qShapeGridPanel" style="display:none">
+        <div class="panel-label">Click the graph that shows the change</div>
+        <div class="shape-grid" id="shapeGridCells"></div>
+      </div>
+      <div class="circuit-panel" onclick="openModal()" title="Click to zoom">
+        <div class="panel-label">Q1 → C1 → Q2 (R8 bypassed) → RL · Cs = device + stray C at Q1’s collector</div>
+        <div class="zoom-hint">
+          <svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.8" fill="none" />
+            <line x1="12.5" y1="12.5" x2="17" y2="17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            <line x1="6" y1="8" x2="10" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+            <line x1="8" y1="6" x2="8" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+          </svg>
+          Zoom
+        </div>
+        <svg id="circuitSvg" viewBox="0 0 870 565" xmlns="http://www.w3.org/2000/svg"
+          font-family="'Share Tech Mono',monospace" shape-rendering="crispEdges">
+
+          <!-- ════════════════════ VCC / COMMON / INPUT / OUTPUT LABELS ════════════════════ -->
+          <g transform="translate(745,10)">
+            <text x="0" y="15" style="fill: var(--colour-voltage-label)" text-anchor="start" font-size="20" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">CC</tspan></text>
+            <text id="lblVCC" x="30" y="20" style="fill: var(--colour-text)" text-anchor="start" font-size="20" font-weight="bold">+12V</text>
+          </g>
+          <g transform="translate(775,555)">
+            <text x="0" y="5" style="fill: var(--colour-current)" text-anchor="start" font-size="20" font-weight="bold">Common</text>
+          </g>
+          <g transform="translate(0,155)">
+            <text x="0" y="0" style="fill: var(--colour-signal)" text-anchor="start" font-size="20" font-weight="bold">Input</text>
+          </g>
+          <g transform="translate(770,155)">
+            <text x="0" y="0" style="fill: var(--colour-signal)" text-anchor="start" font-size="20" font-weight="bold">Output</text>
+          </g>
+
+          <!-- ════════════════════ STAGE 1 (Q1) / STAGE 2 (Q2) ════════════════════ -->
+          <g transform="translate(0,0)">
+            <use href="#voltageDivider-Q1-R1-R4" />
+          </g>
+          <g transform="translate(400,0)">
+            <use href="#voltageDivider-Q2-R5-R8" />
+          </g>
+
+          <!-- ════════════════════ INTERSTAGE COUPLING — C1 ════════════════════ -->
+          <g transform="translate(0,0)">
+            <line x1="340" y1="20" x2="400" y2="20" style="stroke: var(--colour-series)" stroke-width="2" />
+            <line x1="340" y1="535" x2="400" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+            <line x1="340" y1="170" x2="400" y2="170" style="stroke: var(--colour-series)" stroke-width="2" />
+            <g transform="translate(410,170)">
+              <use href="#cap-shape" />
+              <text x="0" y="-20" style="fill: var(--colour-capacitor-labels)" text-anchor="middle" font-size="20" font-weight="bold">C1</text>
+              <text id="lblC1" x="0" y="30" style="fill: var(--colour-text)" text-anchor="middle" font-size="18" font-weight="bold">330nF</text>
+            </g>
+          </g>
+
+          <!-- ════════════════════ R8 BYPASS — C2 ════════════════════ -->
+          <g transform="translate(0,0)">
+            <line x1="640" y1="300" x2="750" y2="300" style="stroke: var(--colour-series)" stroke-width="2" />
+            <line x1="750" y1="300" x2="750" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+            <circle cx="750" cy="535" r="5" style="fill: var(--colour-series)" />
+            <use href="#cap-shape" transform="translate(750,455) rotate(90)" />
+            <text x="770" y="445" fill="var(--colour-capacitor-labels)" text-anchor="middle" font-size="20" font-weight="bold">C2</text>
+          </g>
+
+          <!-- ════════════════════ OUTPUT LOAD — RL ════════════════════ -->
+          <g transform="translate(0,0)">
+            <line x1="740" y1="170" x2="800" y2="170" style="stroke: var(--colour-series)" stroke-width="2" />
+            <line x1="740" y1="535" x2="820" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+            <line x1="800" y1="170" x2="800" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+            <circle cx="800" cy="535" r="5" style="fill: var(--colour-series)" />
+            <g transform="translate(785,300)">
+              <use href="#resistor-vertical" />
+              <text x="-15" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">RL</text>
+              <text id="lblRL" x="60" y="40" fill="var(--colour-text)" text-anchor="middle" font-size="14">10kΩ</text>
+            </g>
+          </g>
+
+          <!-- ════════════════════ SHUNT CAPACITANCE — Cs (device + stray) ════════════════════ -->
+          <g transform="translate(0,0)">
+            <line x1="370" y1="170" x2="370" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+            <circle cx="370" cy="170" r="5" style="fill: var(--colour-series)" />
+            <circle cx="370" cy="535" r="5" style="fill: var(--colour-series)" />
+            <use href="#cap-shape" transform="translate(370,365) rotate(90)" />
+            <text x="392" y="352" style="fill: var(--colour-capacitor-labels)" text-anchor="start" font-size="20" font-weight="bold">C<tspan baseline-shift="sub" font-size="12">S</tspan></text>
+            <text id="lblCS" x="392" y="378" style="fill: var(--colour-text)" text-anchor="start" font-size="16" font-weight="bold">100pF</text>
+          </g>
+
+          <g id="xyRuler" display="none"></g>
+        </svg>
+      </div>
+    </div>
+
+    <!-- RIGHT: question -->
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <!-- Single reusable question panel — populated from QUESTIONS[cur] by renderQuestion() -->
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+          <div class="options" id="qOptions"></div>
+          <div class="match-wrap" id="qMatch" style="display:none">
+            <div class="match-pool-row" id="matchPoolRow">
+              <div class="match-pool-arrow">▶</div>
+              <div class="match-pool" id="matchPool"></div>
+            </div>
+            <div class="match-columns" id="matchColumns"></div>
+          </div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+            <button class="btn print-worksheet-btn" onclick="printWorksheetNow()">🖨 Print Worksheet</button>
+          </div>
+        </div>
+
+        <!-- Summary — no Print Worksheet button here: by the time the
+             summary is reachable every question is answered, and the
+             print button only ever shows before the FIRST answer (same
+             rule as .mode-toggle, see quiz-engine.js's renderQuestion()),
+             so it would never actually be visible in this panel anyway. -->
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Zoom modal — copies #circuitSvg's current innerHTML/viewBox in on open. -->
+    <div class="diagram-modal" id="diagramModal" onclick="handleModalClick(event)">
+      <div class="modal-inner" id="modalInner">
+        <div class="modal-header">
+          <span class="modal-title" id="modalTitle">Two-Stage Voltage-Divider Bias Amplifier</span>
+          <button class="modal-close" onclick="closeModal()">✕ Close</button>
+        </div>
+        <svg id="modalSvg" viewBox="0 0 870 565" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Print Worksheet — direct child of <body> (NOT nested inside
+       .quiz-wrap), populated by quiz-engine.js's own buildPrintWorksheet()
+       (see its header comment for the full explanation). Invisible on
+       screen (.print-only), shown only via the browser's Print / Save-as-
+       PDF, triggered by the "Print Worksheet" button below the questions. -->
+  <div id="printWorksheet" class="print-only"></div>
+
+  <script>Shapes.use('circuit-components', 'bjt-symbols');</script>
+  <script>
+    // ══════════════════════════════════════════════════════════════════════
+    // CIRCUIT VALUES — V (the 13 independent values Example 1/2/3/Randomise
+    // set) and D (the 20-odd DERIVED values recompute() calculates from V,
+    // same chain documented in this file's own header comment). Every
+    // QUESTIONS[] entry below reads D/V live rather than hardcoding numbers.
+    // ══════════════════════════════════════════════════════════════════════
+    let V = {}, D = {};
+    let quizMode = 'example1';
+
+    const EXAMPLE_SETS = {
+      example1: { vcc: 12, r1: 80e3, r2: 20e3, r3: 5.6e3, r4: 1.8e3, beta1: 300, r5: 100e3, r6: 15e3, r7: 4.2e3, r8: 680, beta2: 400, rl: 10e3, c1: 330e-9, cs: 100e-12, vbe: 0.6 },
+      example2: { vcc: 15, r1: 100e3, r2: 22e3, r3: 6.8e3, r4: 2.2e3, beta1: 250, r5: 82e3, r6: 18e3, r7: 3.3e3, r8: 560, beta2: 350, rl: 8.2e3, c1: 220e-9, cs: 150e-12, vbe: 0.6 },
+      example3: { vcc: 9, r1: 56e3, r2: 15e3, r3: 3.3e3, r4: 1.2e3, beta1: 200, r5: 68e3, r6: 12e3, r7: 2.7e3, r8: 470, beta2: 300, rl: 6.8e3, c1: 470e-9, cs: 220e-12, vbe: 0.6 },
+    };
+
+    // ── curated pools for Randomise (kept in realistic ranges for a
+    //    two-stage voltage-divider amplifier, same idea as
+    //    bjt_npn_voltage_divider.html's own R1_POOL/R2_POOL/etc). ──
+    const R1_POOL = [47e3, 56e3, 68e3, 82e3, 100e3, 120e3];
+    const R2_POOL = [10e3, 12e3, 15e3, 18e3, 22e3, 27e3];
+    const R3_POOL = [3.3e3, 3.9e3, 4.7e3, 5.6e3, 6.8e3, 8.2e3];
+    const R4_POOL = [820, 1e3, 1.2e3, 1.5e3, 1.8e3, 2.2e3];
+    const R5_POOL = [47e3, 56e3, 68e3, 82e3, 100e3, 120e3];
+    const R6_POOL = [10e3, 12e3, 15e3, 18e3, 22e3, 27e3];
+    const R7_POOL = [2.7e3, 3.3e3, 3.9e3, 4.7e3, 5.6e3, 6.8e3];
+    const R8_POOL = [330, 390, 470, 560, 680, 820];
+    const RL_POOL = [4.7e3, 6.8e3, 8.2e3, 10e3, 12e3];
+    const VCC_POOL = [9, 12, 15, 18];
+    const C1_POOL = [100e-9, 220e-9, 330e-9, 470e-9];
+    const CS_POOL = [47e-12, 68e-12, 100e-12, 150e-12, 220e-12, 330e-12];
+    const BETA1_POOL = [200, 250, 300, 350, 400];
+    const BETA2_POOL = [250, 300, 350, 400, 450];
+    function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
+
+    // Retries until BOTH stages land in a valid active region (healthy VE
+    // margin above 0, healthy VCE1 margin, VC1 comfortably under VCC) AND
+    // both dividers stay "stiff" (>=10x the base current they supply — the
+    // same margin that makes the unloaded VB=VCC*R2/(R1+R2) approximation
+    // safe in the first place). Also rejects R1===R2/R3===R4/R5===R6/
+    // R7===R8, which would make a "swapped ratio"/"wrong resistor"
+    // distractor an exact duplicate of the correct answer. Verified via a
+    // standalone Python script to converge on the first attempt ~49% of the
+    // time with these pools — 25 attempts makes failure astronomically
+    // unlikely; the Example 1 fallback exists only in case every attempt
+    // somehow fails.
+    function randomValues() {
+      for (let attempt = 0; attempt < 25; attempt++) {
+        const vals = {
+          vcc: pick(VCC_POOL), r1: pick(R1_POOL), r2: pick(R2_POOL), r3: pick(R3_POOL), r4: pick(R4_POOL), beta1: pick(BETA1_POOL),
+          r5: pick(R5_POOL), r6: pick(R6_POOL), r7: pick(R7_POOL), r8: pick(R8_POOL), beta2: pick(BETA2_POOL),
+          rl: pick(RL_POOL), c1: pick(C1_POOL), cs: pick(CS_POOL), vbe: 0.6,
+        };
+        if (vals.r1 === vals.r2 || vals.r3 === vals.r4 || vals.r5 === vals.r6 || vals.r7 === vals.r8) continue;
+        const vb1 = vals.vcc * vals.r2 / (vals.r1 + vals.r2);
+        const ve1 = vb1 - vals.vbe;
+        if (ve1 < 0.3) continue;
+        const ie1 = ve1 / vals.r4;
+        const vc1 = vals.vcc - ie1 * vals.r3;
+        if (vc1 - ve1 < 1 || vc1 > vals.vcc - 0.3) continue;
+        const ib1 = ie1 / (vals.beta1 + 1);
+        if (vals.vcc / (vals.r1 + vals.r2) < 10 * ib1) continue;
+        const vb2 = vals.vcc * vals.r6 / (vals.r5 + vals.r6);
+        const ve2 = vb2 - vals.vbe;
+        if (ve2 < 0.3) continue;
+        const ie2 = ve2 / vals.r8;
+        const ib2 = ie2 / (vals.beta2 + 1);
+        if (vals.vcc / (vals.r5 + vals.r6) < 10 * ib2) continue;
+        return vals;
+      }
+      return { ...EXAMPLE_SETS.example1 };
+    }
+
+    // Same 21-value chain this file's own header comment documents —
+    // VT=26mV is the project-wide room-temperature approximation used
+    // throughout bjt/ac_parameters.
+    function recompute() {
+      const VT = 0.026;
+      D.VB1 = V.vcc * V.r2 / (V.r1 + V.r2);
+      D.VE1 = D.VB1 - V.vbe;
+      D.IE1 = D.VE1 / V.r4;
+      D.IC1 = D.IE1;
+      D.VC1 = V.vcc - D.IC1 * V.r3;
+      D.IB1 = D.IE1 / (V.beta1 + 1);
+      D.re1 = VT / D.IE1;
+      D.Rb1 = V.beta1 * (V.r4 + D.re1);
+      D.RIN1 = 1 / (1 / V.r1 + 1 / V.r2 + 1 / D.Rb1);
+      D.ROUT1 = V.r3;
+      D.R1parR2 = 1 / (1 / V.r1 + 1 / V.r2);
+
+      D.VB2 = V.vcc * V.r6 / (V.r5 + V.r6);
+      D.VE2 = D.VB2 - V.vbe;
+      D.IE2 = D.VE2 / V.r8;
+      D.IB2 = D.IE2 / (V.beta2 + 1);
+      D.re2 = VT / D.IE2;
+      D.Rb2 = V.beta2 * D.re2;
+      D.RIN2 = 1 / (1 / V.r5 + 1 / V.r6 + 1 / D.Rb2);
+      D.ROUT2 = V.r7;
+
+      D.R3parRIN2 = 1 / (1 / V.r3 + 1 / D.RIN2);
+      D.AV1 = -D.R3parRIN2 / (V.r4 + D.re1);
+      D.R7parRL = 1 / (1 / V.r7 + 1 / V.rl);
+      D.AV2 = -D.R7parRL / D.re2;
+      D.AVT = D.AV1 * D.AV2;
+      D.RT = D.ROUT1 + D.RIN2;
+      D.f1 = 1 / (2 * Math.PI * D.RT * V.c1);
+      D.Rsh = D.R3parRIN2;                          // ROUT1 ∥ RIN2
+      D.f2 = 1 / (2 * Math.PI * D.Rsh * V.cs);
+    }
+
+    // ── formatting — several DIFFERENT conventions per quantity type,
+    //    matching the exact precision this file used before it was
+    //    parameterised (fixed decimals for voltages/re′/AV1, "3 significant
+    //    figures, trimmed" for resistors/RIN/ROUT/RT/AV2/AVT/f1, auto
+    //    mA/µA/kΩ/kHz unit switching for currents/resistors/frequency). ──
+    function sig3(v) { return parseFloat(Number(v).toPrecision(3)); }
+    // unitBoundary: is `a` at or past `threshold`, tolerant of float error?
+    // A chain like VB1(=2.4) − VBE(=0.6) → /R4 can land IE1 at
+    // 0.0009999999999999998 instead of exactly 0.001 — a plain `a >= 1e-3`
+    // check sends that a hair under the mA/µA boundary, printing "1000.00
+    // µA" instead of "1.00 mA" (a genuine 1000x-LOOKING misread, caught via
+    // the print worksheet rendering it as literal text where it couldn't
+    // be missed, unlike glancing at an interactive badge). The tolerance
+    // is relative to threshold (not a fixed epsilon), so it stays scale-
+    // appropriate whether threshold is 1e-3 (fmtA2) or 1e6 (fmtCap).
+    function unitBoundary(a, threshold) { return a >= threshold * (1 - 1e-9); }
+    function fmtR(v) { return unitBoundary(Math.abs(v), 1000) ? sig3(v / 1000) + 'kΩ' : sig3(v) + 'Ω'; }
+    function fmtV2(v) { return v.toFixed(2) + ' V'; }
+    function fmtOhm1(v) { return v.toFixed(1) + ' Ω'; }
+    function fmtA2(v) {
+      const a = Math.abs(v);
+      if (unitBoundary(a, 1e-3)) return (v * 1000).toFixed(2) + ' mA';
+      return (v * 1e6).toFixed(2) + ' µA';
+    }
+    // AV1 is always negative (a single CE stage always inverts) and small
+    // enough to want 2 fixed decimals; AV2 is also always negative but
+    // large enough that 3 sig figs (not fixed decimals) reads better; AVT
+    // (two inversions cancelling) is always POSITIVE.
+    function fmtAV1(v) { return '−' + Math.abs(v).toFixed(2); }
+    function fmtAV2(v) { return '−' + sig3(Math.abs(v)); }
+    function fmtAVT(v) { return '+' + sig3(Math.abs(v)); }
+    function fmtHz(v) { return unitBoundary(v, 1000) ? sig3(v / 1000) + ' kHz' : sig3(v) + ' Hz'; }
+    function fmtPF(v) { return sig3(v * 1e12) + 'pF'; }
+    function fmtCap(v) { return unitBoundary(v, 1e-6) ? sig3(v * 1e6) + 'µF' : sig3(v * 1e9) + 'nF'; }
+    function frac(num, den) { return `<span class="working-frac"><span class="num">${num}</span><span class="den">${den}</span></span>`; }
+
+    // Pushes the current V's own values onto the circuit diagram itself
+    // (resistor/VCC/C1/RL labels, β figures) — called from setMode() before
+    // resetQuiz(), so the schematic always matches whichever mode is active.
+    // The reveal badges' own VALUE spans (valVB1 etc.) are handled
+    // separately, inside RENDER_EXTRA, since they only need refreshing at
+    // the moment each one is actually revealed.
+    function refreshCircuitLabels() {
+      document.getElementById('lblR1').textContent = fmtR(V.r1);
+      document.getElementById('lblR2').textContent = fmtR(V.r2);
+      document.getElementById('lblR3').textContent = fmtR(V.r3);
+      document.getElementById('lblR4').textContent = fmtR(V.r4);
+      document.getElementById('lblR5').textContent = fmtR(V.r5);
+      document.getElementById('lblR6').textContent = fmtR(V.r6);
+      document.getElementById('lblR7').textContent = fmtR(V.r7);
+      document.getElementById('lblR8').textContent = fmtR(V.r8);
+      document.getElementById('lblRL').textContent = fmtR(V.rl);
+      document.getElementById('lblVCC').textContent = '+' + V.vcc + 'V';
+      document.getElementById('lblC1').textContent = fmtCap(V.c1);
+      document.getElementById('lblCS').textContent = fmtPF(V.cs);
+      document.getElementById('lblBeta1').textContent = 'β = ' + V.beta1;
+      document.getElementById('lblBeta2').textContent = 'β = ' + V.beta2;
+      const panelTitle = document.getElementById('modalTitle');
+      if (panelTitle) panelTitle.textContent = `Two-Stage Amplifier with Cs — ${V.vcc}V Supply`;
+    }
+
+    function setMode(mode) {
+      quizMode = mode;
+      V = (mode === 'randomise') ? randomValues() : { ...EXAMPLE_SETS[mode] };
+      recompute();
+      refreshCircuitLabels();
+      ['example1', 'example2', 'example3', 'randomise'].forEach(m => {
+        const b = document.getElementById('mode' + m.charAt(0).toUpperCase() + m.slice(1));
+        if (b) b.classList.toggle('active', m === mode);
+      });
+      resetQuiz();
+    }
+
+    // Rebuilds the print worksheet fresh (so it always reflects whichever
+    // mode/values are CURRENTLY active, not whatever was active the last
+    // time it was printed) right before actually opening the browser's
+    // print dialog — see quiz-engine.js's own buildPrintWorksheet() for
+    // what gets built.
+    function printWorksheetNow() {
+      buildPrintWorksheet();
+      qeTriggerPrint();
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS — see quiz-engine.js's own header comment for the field
+    // reference. text()/hint()/options()/working() read the live V/D values;
+    // options() is called once per resetQuiz(), so setMode() always calls
+    // recompute() before resetQuiz().
+    // ══════════════════════════════════════════════════════════════════════
+    const C = {
+      f1: '<b class="colour-cap">f<sub>1</sub></b>', f2: '<b class="colour-gain">f<sub>2</sub></b>',
+      c1: '<b class="colour-cap">C1</b>', cs: '<b class="colour-cap">C<sub>S</sub></b>',
+      rt: '<b class="colour-gain">R<sub>T</sub></b>', rout1: '<b class="colour-gain">R<sub>OUT1</sub></b>', rin2: '<b class="colour-gain">R<sub>IN2</sub></b>',
+      rsh: '<b class="colour-gain">R<sub>SH</sub></b>',
+    };
+    const RESP_VB = '0 0 120 80';
+
+    const QUESTIONS = [
+      {
+        text: () => `Which corner of the frequency response does the series interstage coupling capacitor ${C.c1} set?`,
+        hint: () => `A capacitor in series with the signal blocks low frequencies. Think about which end of the response it can hurt.`,
+        options: () => shuffle([
+          { label: `The <b>lower</b> corner ${C.f1} — it limits how low in frequency the amplifier can go`, type: 'correct' },
+          { label: `The <b>upper</b> corner ${C.f2} — it limits how high in frequency the amplifier can go`, type: 'wrong' },
+          { label: `Both corners equally, because it is part of the signal path`, type: 'wrong' },
+          { label: `Neither — it only sets the DC bias point`, type: 'wrong' },
+        ]),
+        correctExplain: () => `The lower corner ${C.f1}`,
+        working: () => `
+    <div class="working-line">${C.c1} sits <b>in series</b> with the signal. Its reactance X<sub>C</sub> = 1/(2πf${C.c1}) is large at low frequencies, so it drops the signal there — that is the lower roll-off ${C.f1}.</div>
+    <div class="working-total">At high frequencies X<sub>C</sub> falls towards zero, so ${C.c1} passes the signal freely and has no say in ${C.f2}.</div>`
+      },
+      {
+        text: () => `${C.c1} is changed from ${fmtCap(V.c1)} to ${fmtCap(V.c1 * 2)}. What happens to the two corner frequencies?`,
+        hint: () => `Only one of the two corners depends on ${C.c1}. Larger capacitance means lower reactance at any given frequency.`,
+        options: () => shuffle([
+          { label: `${C.f1} falls; ${C.f2} is unchanged`, type: 'correct' },
+          { label: `${C.f1} rises; ${C.f2} is unchanged`, type: 'wrong' },
+          { label: `${C.f1} falls and ${C.f2} falls too`, type: 'wrong' },
+          { label: `${C.f1} is unchanged; ${C.f2} rises`, type: 'wrong' },
+        ]),
+        correctExplain: () => `${C.f1} falls; ${C.f2} is unchanged`,
+        working: () => `
+    <div class="working-line">${C.f1} = 1/(2π × ${C.rt} × ${C.c1}) — ${C.c1} is in the denominator, so a larger ${C.c1} gives a <b>lower</b> ${C.f1}.</div>
+    <div class="working-total">${C.f2} does not contain ${C.c1} at all, so it stays where it was. The amplifier gains a little more low-frequency range and loses nothing at the top.</div>`
+      },
+      {
+        text: () => `Why does changing ${C.c1} make no difference to the upper corner ${C.f2}?`,
+        hint: () => `Compare the coupling capacitor's reactance at 1kHz with its reactance at 100kHz.`,
+        options: () => shuffle([
+          { label: `At high frequencies its reactance is so small it behaves like a short circuit, so it no longer limits the signal`, type: 'correct' },
+          { label: `At high frequencies its reactance becomes very large, so it is effectively removed from the circuit`, type: 'wrong' },
+          { label: `It is connected in parallel with the signal path, so it only affects low frequencies`, type: 'wrong' },
+          { label: `Capacitors only ever affect DC conditions, never the signal`, type: 'wrong' },
+        ]),
+        correctExplain: () => `its reactance is tiny at high frequency, so it acts like a short`,
+        working: () => `
+    <div class="working-formula-row">X<sub>C</sub> = ${frac('1', `2π × f × ${C.c1}`)}</div>
+    <div class="working-line">Take ${C.c1} = ${fmtCap(V.c1)}: at 1kHz X<sub>C</sub> ≈ ${fmtR(1 / (2 * Math.PI * 1e3 * V.c1))}; at 100kHz X<sub>C</sub> ≈ ${fmtR(1 / (2 * Math.PI * 1e5 * V.c1))}.</div>
+    <div class="working-total">Far smaller than the resistances either side, so ${C.c1} is effectively a wire up there. The upper corner is decided elsewhere — by the shunt capacitance ${C.cs} at the collector.</div>`
+      },
+      {
+        leftPanel: 'shapeGrid',
+        shapeViewBox: RESP_VB,
+        text: () => `${C.c1} is doubled to ${fmtCap(V.c1 * 2)}. Which graph shows the gain response <b>before</b> (dashed) and <b>after</b> (solid)?`,
+        hint: () => `Gain on the vertical axis, frequency on the horizontal axis. Remember which corner ${C.c1} controls and which way it moves.`,
+        options: () => shuffle([
+          { shapeId: 'resp-f1-down', type: 'correct' },
+          { shapeId: 'resp-f1-up', type: 'wrong' },
+          { shapeId: 'resp-f2-down', type: 'wrong' },
+          { shapeId: 'resp-both-in', type: 'wrong' },
+        ]),
+        correctExplain: () => `the graph where only the lower corner moves left`,
+        working: () => `
+    <div class="working-line">A larger ${C.c1} lowers ${C.f1}, so the <b>left-hand shoulder moves to the left</b> (lower frequency). The mid-band gain and the right-hand shoulder ${C.f2} stay where they were.</div>
+    <div class="working-total">Left shoulder moving <b>right</b> would mean a <i>smaller</i> ${C.c1}; the right shoulder moving would need a change to ${C.cs}, the transistor or the resistances, not ${C.c1}.</div>`
+      },
+      {
+        kind: 'match',
+        columns: () => ['Moves f1 only', 'Moves f2 only', 'Moves both'],
+        text: () => `Each change below is made to the amplifier on its own. Place it under the corner(s) it moves.`,
+        hint: () => `Series capacitance → ${C.f1}. Shunt capacitance at the collector → ${C.f2}. A resistance that appears in both ${C.rt} and ${C.rsh} moves both.`,
+        options: () => shuffle([
+          { label: `A larger coupling capacitor ${C.c1}`, col: 0 },
+          { label: `A transistor with lower inter-electrode capacitance`, col: 1 },
+          { label: `More stray wiring capacitance at Q1's collector`, col: 1 },
+          { label: `A larger collector resistor R3 (R<sub>OUT1</sub>)`, col: 2 },
+          { label: `Lower input resistance at Q2 (R<sub>IN2</sub> smaller)`, col: 2 },
+        ]),
+        correctExplain: (st) => {
+          const wrongCount = st.opts.filter((o, i) => st.place[i] !== st.cor[i]).length;
+          return wrongCount === 0 ? 'All 5 changes placed correctly' : `${st.opts.length - wrongCount} of ${st.opts.length} changes placed correctly`;
+        },
+        working: () => `
+    <div class="working-line"><b>f1 only:</b> a larger ${C.c1} — it is in ${C.f1} = 1/(2π${C.rt}${C.c1}) and nowhere in ${C.f2}.</div>
+    <div class="working-line"><b>f2 only:</b> lower inter-electrode capacitance, or more/less stray capacitance — these change the shunt capacitance that sets ${C.f2} and have no connection to ${C.c1}.</div>
+    <div class="working-line"><b>Both:</b> ${C.rout1} and ${C.rin2} appear in ${C.rt} (series, for ${C.f1}) and in ${C.rsh} (parallel, for ${C.f2}). Raise R<sub>OUT1</sub> and both corners fall; lower R<sub>IN2</sub> and both corners rise.</div>`
+      },
+      {
+        text: () => `Q2 is replaced with a transistor of the same β and bias but a much lower inter-electrode capacitance (a higher f<sub>T</sub>). What changes?`,
+        hint: () => `Inter-electrode capacitance is a shunt capacitance at the transistor's own terminals. Which corner does shunt capacitance control?`,
+        options: () => shuffle([
+          { label: `${C.f2} rises; ${C.f1} is unchanged`, type: 'correct' },
+          { label: `${C.f2} falls; ${C.f1} is unchanged`, type: 'wrong' },
+          { label: `${C.f1} falls; ${C.f2} is unchanged`, type: 'wrong' },
+          { label: `Neither corner changes — only the mid-band gain does`, type: 'wrong' },
+        ]),
+        correctExplain: () => `${C.f2} rises; ${C.f1} is unchanged`,
+        working: () => `
+    <div class="working-line">${C.f2} = 1/(2π × ${C.rsh} × ${C.cs}), where ${C.cs} includes the transistor's own inter-electrode capacitance. Less capacitance gives a <b>higher</b> ${C.f2}.</div>
+    <div class="working-total">${C.f1} depends only on ${C.rt} and ${C.c1}, which this swap does not touch. This is why f2 is mainly set by the transistor chosen, not by any capacitor you add.</div>`
+      },
+      {
+        text: () => `${C.rin2} ≈ ${fmtR(D.RIN2)} and ${C.rout1} = R3 = ${fmtR(D.ROUT1)}. What is ${C.f1} with ${C.c1} = ${fmtCap(V.c1)}?`,
+        hint: () => `${C.rt} is the series total ${C.c1} works against: ${C.rout1} + ${C.rin2}. Then f1 = 1/(2π × ${C.rt} × ${C.c1}).`,
+        options: () => shuffle([
+          { label: `${C.f1} = ${frac('1', `2π × (${C.rout1} + ${C.rin2}) × ${C.c1}`)} = ${frac('1', `2π × ${fmtR(D.RT)} × ${fmtCap(V.c1)}`)} ≈ ${fmtHz(D.f1)}`, type: 'correct' },
+          { label: `${C.f1} = ${frac('1', `2π × (${C.rout1}∥${C.rin2}) × ${C.c1}`)} = ${frac('1', `2π × ${fmtR(D.Rsh)} × ${fmtCap(V.c1)}`)} ≈ ${fmtHz(1 / (2 * Math.PI * D.Rsh * V.c1))}`, type: 'wrong' },
+          { label: `${C.f1} = ${frac('1', `2π × ${C.rout1} × ${C.c1}`)} = ${frac('1', `2π × ${fmtR(D.ROUT1)} × ${fmtCap(V.c1)}`)} ≈ ${fmtHz(1 / (2 * Math.PI * D.ROUT1 * V.c1))}`, type: 'wrong' },
+          { label: `${C.f1} = ${frac('1', `2π × ${C.rt} × ${sig3(V.c1 * 1e12)}pF`)} ≈ ${fmtHz(1 / (2 * Math.PI * D.RT * V.c1 * 1e-3))}`, type: 'wrong' },
+        ]),
+        correctExplain: () => `${C.f1} ≈ ${fmtHz(D.f1)}`,
+        working: () => `
+    <div class="working-formula-row">${C.rt} = ${C.rout1} + ${C.rin2} = ${fmtR(D.ROUT1)} + ${fmtR(D.RIN2)} ≈ ${fmtR(D.RT)}</div>
+    <div class="working-formula-row">${C.f1} = ${frac('1', `2π × ${C.rt} × ${C.c1}`)} = ${frac('1', `2π × ${fmtR(D.RT)} × ${fmtCap(V.c1)}`)}</div>
+    <div class="working-total">${C.f1} ≈ ${fmtHz(D.f1)}. The parallel combination is a different quantity (it belongs to ${C.f2}); using a unit slip on ${C.c1} is the classic 1000× error.</div>`
+      },
+      {
+        text: () => `${C.c1} is now doubled to ${fmtCap(V.c1 * 2)}, with nothing else changed. What is the new ${C.f1}?`,
+        hint: () => `${C.f1} is inversely proportional to ${C.c1}. Start from the value you just found: ${fmtHz(D.f1)}.`,
+        options: () => shuffle([
+          { label: `${fmtHz(D.f1 / 2)} — half the original`, type: 'correct' },
+          { label: `${fmtHz(D.f1 * 2)} — double the original`, type: 'wrong' },
+          { label: `${fmtHz(D.f1)} — unchanged`, type: 'wrong' },
+          { label: `${fmtHz(D.f1 / 4)} — a quarter of the original`, type: 'wrong' },
+        ]),
+        correctExplain: () => `${C.f1} ≈ ${fmtHz(D.f1 / 2)}`,
+        working: () => `
+    <div class="working-formula-row">${C.f1}<sub>new</sub> = ${frac('1', `2π × ${fmtR(D.RT)} × ${fmtCap(V.c1 * 2)}`)} ≈ ${fmtHz(D.f1 / 2)}</div>
+    <div class="working-total">Twice the capacitance → half the lower corner frequency. ${C.f2} ≈ ${fmtHz(D.f2)} is untouched.</div>`
+      },
+      {
+        text: () => `Using ${C.rt} ≈ ${fmtR(D.RT)}, what value of ${C.c1} would place the lower corner ${C.f1} at 20Hz?`,
+        hint: () => `Rearrange f1 = 1/(2π × ${C.rt} × ${C.c1}) for ${C.c1}.`,
+        options: () => {
+          const cFor = r => 1 / (2 * Math.PI * r * 20);
+          return shuffle([
+            { label: `${C.c1} = ${frac('1', `2π × ${C.rt} × 20Hz`)} = ${frac('1', `2π × ${fmtR(D.RT)} × 20Hz`)} ≈ ${fmtCap(cFor(D.RT))}`, type: 'correct' },
+            { label: `${C.c1} = ${frac('1', `2π × ${C.rout1} × 20Hz`)} = ${frac('1', `2π × ${fmtR(D.ROUT1)} × 20Hz`)} ≈ ${fmtCap(cFor(D.ROUT1))}`, type: 'wrong' },
+            { label: `${C.c1} = ${frac('1', `2π × ${C.rin2} × 20Hz`)} = ${frac('1', `2π × ${fmtR(D.RIN2)} × 20Hz`)} ≈ ${fmtCap(cFor(D.RIN2))}`, type: 'wrong' },
+            { label: `${C.c1} = ${frac('1', `2π × (${C.rout1}∥${C.rin2}) × 20Hz`)} = ${frac('1', `2π × ${fmtR(D.Rsh)} × 20Hz`)} ≈ ${fmtCap(cFor(D.Rsh))}`, type: 'wrong' },
+          ]);
+        },
+        correctExplain: () => `${C.c1} ≈ ${fmtCap(1 / (2 * Math.PI * D.RT * 20))}`,
+        working: () => `
+    <div class="working-formula-row">${C.c1} = ${frac('1', `2π × ${C.rt} × ${C.f1}`)} = ${frac('1', `2π × ${fmtR(D.RT)} × 20Hz`)} ≈ ${fmtCap(1 / (2 * Math.PI * D.RT * 20))}</div>
+    <div class="working-total">In practice you would pick the next standard value above this, so ${C.f1} lands at or below 20Hz. The result uses the <b>series</b> total ${C.rt}, the same resistance as the previous two questions.</div>`
+      },
+      {
+        text: () => `The shunt capacitance at Q1's collector (device + stray) is ${C.cs} = ${fmtPF(V.cs)}. With ${C.rsh} = ${C.rout1} ∥ ${C.rin2} ≈ ${fmtR(D.Rsh)}, what is the upper corner ${C.f2}?`,
+        hint: () => `At high frequency ${C.c1} is a short, so ${C.cs} charges through ${C.rout1} and ${C.rin2} in <b>parallel</b>. Then f2 = 1/(2π × ${C.rsh} × ${C.cs}).`,
+        options: () => shuffle([
+          { label: `${C.f2} = ${frac('1', `2π × ${C.rsh} × ${C.cs}`)} = ${frac('1', `2π × ${fmtR(D.Rsh)} × ${fmtPF(V.cs)}`)} ≈ ${fmtHz(D.f2)}`, type: 'correct' },
+          { label: `${C.f2} = ${frac('1', `2π × ${C.rt} × ${C.cs}`)} = ${frac('1', `2π × ${fmtR(D.RT)} × ${fmtPF(V.cs)}`)} ≈ ${fmtHz(1 / (2 * Math.PI * D.RT * V.cs))}`, type: 'wrong' },
+          { label: `${C.f2} = ${frac('1', `2π × ${C.rout1} × ${C.cs}`)} = ${frac('1', `2π × ${fmtR(D.ROUT1)} × ${fmtPF(V.cs)}`)} ≈ ${fmtHz(1 / (2 * Math.PI * D.ROUT1 * V.cs))}`, type: 'wrong' },
+          { label: `${C.f2} = ${frac('1', `2π × ${C.rsh} × ${sig3(V.cs * 1e9)}nF`)} ≈ ${fmtHz(1 / (2 * Math.PI * D.Rsh * V.cs * 1e3))}`, type: 'wrong' },
+        ]),
+        correctExplain: () => `${C.f2} ≈ ${fmtHz(D.f2)}`,
+        working: () => `
+    <div class="working-formula-row">${C.rsh} = ${C.rout1} ∥ ${C.rin2} = ${frac(`${fmtR(D.ROUT1)} × ${fmtR(D.RIN2)}`, `${fmtR(D.ROUT1)} + ${fmtR(D.RIN2)}`)} ≈ ${fmtR(D.Rsh)}</div>
+    <div class="working-formula-row">${C.f2} = ${frac('1', `2π × ${C.rsh} × ${C.cs}`)} = ${frac('1', `2π × ${fmtR(D.Rsh)} × ${fmtPF(V.cs)}`)}</div>
+    <div class="working-total">${C.f2} ≈ ${fmtHz(D.f2)} — roughly ${sig3(D.f2 / D.f1)} times ${C.f1} ≈ ${fmtHz(D.f1)}, so the bandwidth is set almost entirely by ${C.f2}. Doubling ${C.c1} moved ${C.f1} but not this figure; only the transistor, the layout or the resistances can move it.</div>`
+      },
+    ];
+
+    // Every question except the graph question keeps the amplifier on screen.
+    QUESTIONS.forEach(q => { if (!q.leftPanel) q.leftPanel = 'circuit'; });
+
+    initQuizNav();
+    setMode('example1');
+    initQuizFromURL();
+  </script>
+</body>
+</html>
