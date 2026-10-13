@@ -240,8 +240,7 @@ function truthCorrectExplain(st) {
   return wrongCount === 0 ? `All ${st.opts.length} rows correct` : `${st.opts.length - wrongCount} of ${st.opts.length} rows correct`;
 }
 // Shared "list the wrong rows" working() fragment — `labels` is the
-// space-joined input column labels (e.g. "C B A" or "A"), supplied by the
-// question since column labels/order are genuinely per-question.
+// space-joined input column labels (e.g. "C B A" or "A"), given by the question since column labels/order are genuinely per-question.
 function truthMistakeLine(labels, st) {
   const mistakes = st.opts
     .map((o, i) => ({ o, i }))
@@ -250,6 +249,18 @@ function truthMistakeLine(labels, st) {
   return mistakes.length
     ? `<div class="working-step" style="margin-top:.6rem">Incorrect rows:</div><div class="working-line">${mistakes.join(', ')}</div>`
     : '';
+}
+
+// True when the student pressed Check having entered nothing at all — shown
+// as "Not answered" (and marked wrong) instead of being silently graded.
+// 'switches' is never unanswered: every switch always holds a real 0/1.
+function isUnanswered(data, st) {
+  if (isBits(data)) return st.clicks.every(row => row.every(n => bitFromClicks(n) === null));
+  if (isTruth(data)) return st.clicks.every(n => zFromClicks(n) === null);
+  if (isFill(data)) return st.slotPlaced.every(p => p === null);
+  if (isSwitches(data)) return false;
+  if (isMatch(data)) return data.reusablePool ? st.assign.every(a => a === null) : st.place.every(p => p === null);
+  return isMulti(data) ? st.sel.length === 0 : st.sel === null;
 }
 
 function isAnswerCorrect(data, st) {
@@ -273,6 +284,7 @@ function isAnswerCorrect(data, st) {
 }
 
 function selectedLabel(data, st) {
+  if (isUnanswered(data, st)) return 'Not answered';
   if (isBits(data)) {
     let correct = 0, total = 0;
     st.clicks.forEach((row, r) => row.forEach((n, c) => { total++; if (bitFromClicks(n) === st.cor[r][c]) correct++; }));
@@ -301,10 +313,10 @@ function selectedLabel(data, st) {
   }
   const asLabel = i => data.leftPanel === 'shapeGrid' ? (i + 1) : LETTERS[i];
   if (!isMulti(data)) {
-    if (st.sel == null || !st.opts[st.sel]) return '—';
+    if (st.sel == null || !st.opts[st.sel]) return 'Not answered';
     return data.leftPanel === 'shapeGrid' ? `Circuit ${asLabel(st.sel)}` : st.opts[st.sel].label;
   }
-  return st.sel.length ? [...st.sel].sort((a, b) => a - b).map(asLabel).join(', ') : '—';
+  return st.sel.length ? [...st.sel].sort((a, b) => a - b).map(asLabel).join(', ') : 'Not answered';
 }
 
 // Fills in the fully-correct answer for a question without marking it
@@ -443,6 +455,9 @@ function renderMatch() {
     chip.className = 'match-chip' + (isPicked ? ' picked' : '') + (opt.shapeId ? ' match-chip-shape' : '');
     chip.innerHTML = matchChipContent(opt, false, data.shapeViewBox);
     chip.disabled = st.ans || (picking && !isPicked);
+    // Checked with this chip never placed: flag it as unassigned (decoys that
+    // should stay in the pool are left as plain dimmed chips).
+    if (st.ans && st.cor[i] !== null) chip.classList.add('wrong', 'unassigned');
     if (!chip.disabled) chip.addEventListener('click', (e) => { e.stopPropagation(); selectPoolItem(i); });
     pool.appendChild(chip);
   });
@@ -476,10 +491,25 @@ function renderMatch() {
       items.appendChild(chip);
     });
 
+    if (st.ans) {
+      const expected = st.cor.filter(c => c === colIdx).length;
+      const placed = st.opts.filter((_, i) => st.place[i] === colIdx).length;
+      for (let k = placed; k < expected; k++) items.appendChild(unassignedChip());
+    }
+
     colDiv.append(arrow, title, items);
     colDiv.classList.toggle('droppable', !st.ans && picking);
     colsEl.appendChild(colDiv);
   });
+}
+
+// Stand-in shown in a column that the student left empty once the question
+// is checked — the "unassigned" counterpart to a correct/wrong placed chip.
+function unassignedChip() {
+  const chip = document.createElement('span');
+  chip.className = 'match-chip wrong unassigned';
+  chip.textContent = 'Unassigned';
+  return chip;
 }
 
 function selectPoolItem(i) {
@@ -577,6 +607,8 @@ function renderMatchReusable() {
         if (!chip.disabled) chip.addEventListener('click', (e) => { e.stopPropagation(); unassignColumnReusable(colIdx); });
       }
       items.appendChild(chip);
+    } else if (st.ans) {
+      items.appendChild(unassignedChip());
     }
 
     colDiv.append(arrow, title, items);
@@ -621,7 +653,8 @@ function renderBits() {
       const bit = bitFromClicks(st.clicks[r][c]);
       td.textContent = bit === null ? '' : String(bit);
       if (st.ans) {
-        td.className = 'bits-cell ' + (bit === st.cor[r][c] ? 'correct' : 'wrong');
+        if (bit === null) td.textContent = '—';
+        td.className = 'bits-cell ' + (bit === st.cor[r][c] ? 'correct' : 'wrong') + (bit === null ? ' unassigned' : '');
       } else {
         td.className = 'bits-cell';
         td.addEventListener('click', () => clickBit(r, c));
@@ -729,7 +762,8 @@ function renderTruth() {
     const z = zFromClicks(st.clicks[r]);
     zTd.textContent = z === null ? '' : String(z);
     if (st.ans) {
-      zTd.className = 'bits-cell' + (z === st.cor[r] ? ' correct' : ' wrong');
+      if (z === null) zTd.textContent = '—';
+      zTd.className = 'bits-cell' + (z === st.cor[r] ? ' correct' : ' wrong') + (z === null ? ' unassigned' : '');
     } else {
       zTd.className = 'bits-cell';
       zTd.addEventListener('click', () => clickTruthZ(r));
@@ -814,8 +848,10 @@ function renderFill() {
     const txt = document.getElementById(elId + 'Text');
     const placedIdx = st.slotPlaced[slot];
     box.classList.remove('filled', 'correct', 'wrong', 'plain');
+    box.classList.remove('unassigned');
     if (placedIdx === null) {
       txt.innerHTML = '';
+      if (st.ans && st.cor[slot] !== -1) { txt.textContent = '—'; box.classList.add('wrong', 'unassigned'); box.title = 'Unassigned'; }
     } else {
       txt.innerHTML = st.opts[placedIdx].poolHtml;
       box.classList.add('filled');
@@ -938,7 +974,13 @@ function renderQuestion() {
     const ok = isAnswerCorrect(data, st);
     banner.className = 'result-banner ' + (ok ? 'correct' : 'wrong');
     document.getElementById('qIcon').textContent = ok ? '✓' : '✗';
-    document.getElementById('qBannerText').innerHTML = ok ? `Correct! ${data.correctExplain(st)}` : `The correct answer is ${data.correctExplain(st)}`;
+    const blank = !ok && isUnanswered(data, st);
+    // For the table/placement kinds correctExplain() is a score ("0 of 16 bits
+    // correct"), which reads oddly after "Not answered" — point at the solution.
+    const scoreKind = isBits(data) || isTruth(data) || isFill(data) || isMatch(data);
+    document.getElementById('qBannerText').innerHTML = ok ? `Correct! ${data.correctExplain(st)}`
+      : blank ? (scoreKind ? '<b>Not answered.</b> The correct answers are shown in the worked solution below.' : `<b>Not answered.</b> The correct answer is ${data.correctExplain(st)}`)
+      : `The correct answer is ${data.correctExplain(st)}`;
   } else {
     banner.className = 'result-banner';
   }
@@ -950,13 +992,11 @@ function renderQuestion() {
   document.getElementById('qBack').style.display = cur > 0 ? 'inline-block' : 'none';
   const check = document.getElementById('qCheck');
   check.style.display = st.ans ? 'none' : 'inline-block';
-  // Check is always clickable once a question is on screen — it no longer
-  // waits for a complete answer. checkAnswer() itself substitutes the
-  // correct answer for anything left unanswered/incomplete, so Check also
-  // works as an explicit "show me" for this self-study revision tool,
-  // without needing the ?q=n&ans=1 URL override (fiddly to type on a
-  // phone). Nothing graded here rides on the student's result, so there's
-  // no reason to gate the button on completeness.
+  // Check is always clickable once a question is on screen. Pressing it
+  // with nothing (or only part) entered grades what is there: a blank
+  // question reads "Not answered" and counts wrong, and unfilled parts of a
+  // match/fill/bits/truth question show as unassigned beside the correct
+  // and wrong ones. The worked solution is shown either way.
   check.disabled = st.ans;
   const isLast = cur === QUESTIONS.length - 1;
   document.getElementById('qNext').style.display = (st.ans && !isLast) ? 'inline-block' : 'none';
@@ -1002,21 +1042,6 @@ function renderQuestion() {
 function checkAnswer() {
   const st = Q[cur], data = QUESTIONS[cur];
   if (st.ans) return;
-  // An unanswered or partially-answered question no longer blocks Check —
-  // it substitutes the fully-correct answer (same fillCorrectSelection()
-  // jump()/?ans=1 already use) and shows it like any other checked
-  // question, so Check doubles as an explicit "show me" for revision.
-  // Whatever the student HAD selected is discarded in that case, same as
-  // fillCorrectSelection() always does — there's no "grade what they got
-  // so far" middle ground.
-  const complete =
-    isMatch(data) ? (data.reusablePool ? st.assign.every(a => a !== null) : st.opts.every((o, i) => o.col === null || st.place[i] !== null)) :
-    isBits(data) ? st.clicks.every(row => row.every(n => bitFromClicks(n) !== null)) :
-    isTruth(data) ? st.clicks.every(n => zFromClicks(n) !== null) :
-    isFill(data) ? st.slotPlaced.every((p, slot) => p !== null || st.cor[slot] === -1) :
-    isSwitches(data) ? true : // every switch already has a real 0/1 value from the start (no blank state like 'bits'/'truth' cells), so a switches question is always "complete" as-is
-    (isMulti(data) ? st.sel.length > 0 : st.sel !== null);
-  if (!complete) fillCorrectSelection(cur);
   st.ans = true;
   renderQuestion();
   document.getElementById('qBanner').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1080,6 +1105,7 @@ let CIRCUIT_REF_EXTRA = null;         // optional (id, loadTerminal, ammeter) =>
 let SUMMARY_CIRCUIT_REF = null;       // optional { id, label, viewBox } — if set, showSummary() shows this specific circuit instead of hiding the panel via swapLeftPanel('none')
 let RENDER_EXTRA = null;              // optional () => void, called at the end of every renderQuestion() — for per-file "runs on every render" logic quiz-engine.js can't know about, e.g. progressive-reveal value badges (re′/Zb/Zin/Zout) that persist once their own question is answered, independent of which question is currently on screen
 let RESET_EXTRA = null;               // optional () => void, called at the very START of every resetQuiz() (including on "Restart" clicks, not just the first load) — e.g. digital_gate_identification.html's own `shuffle(QUESTIONS)`, which shuffles the QUESTIONS array's ORDER itself (each of the 7 gates appears in a fixed slot, one per gate) rather than each question's own options, so every playthrough covers all 7 exactly once in a random order. When RESET_EXTRA reorders QUESTIONS like this, resetQuiz() itself automatically SKIPS calling it whenever the URL already has a ?q=N param (see resetQuiz()'s own comment) — no per-page opt-in needed, it's a plain "is ?q= present" check done once in the shared engine — so ?q=N stays a reliable, repeatable deep-link to "the Nth question as written" for debugging/sharing, while a plain load/Restart still shuffles normally
+let SUMMARY_EXTRA = null;            // optional () => void, called at the end of showSummary() — e.g. interactive-circuit.js uses it to set the inline circuit's label/viewBox for the summary page
 
 // For leftPanel:'circuit' questions that reference a DIFFERENT circuit per
 // question (rather than always the same static one) — swaps which <use>
@@ -1192,6 +1218,7 @@ function showSummary() {
   document.getElementById('summaryContent').innerHTML = items;
   QUESTIONS.forEach((_, i) => { const d = document.getElementById('dot-' + i); if (d) d.className = 'progress-dot done'; });
   document.getElementById('progressLabel').textContent = 'Complete';
+  if (SUMMARY_EXTRA) SUMMARY_EXTRA();
 }
 
 // ── zoom modal — fully defensive; pages without a #diagramModal simply
@@ -1256,6 +1283,74 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal()
 // calling correctExplain()/working() — then restores st's original
 // fields straight after, so a student's own in-progress interactive
 // answers on screen are never disturbed by printing.
+// Blank "answer area" for one question on the printed worksheet. Choice
+// questions print their options with tick boxes; table/placement kinds print
+// the empty grid or the term list, so the paper version can actually be
+// attempted. A page whose options are long calculation lines can set
+// PRINT_BLANK_LINES = true to get ruled lines instead (working-out space).
+let PRINT_BLANK_LINES = false;
+function printAnswerArea(data, st) {
+  const mark = '<span class="print-box"></span>';
+  if (isBits(data)) {
+    const head = document.querySelector('#qBits thead');
+    let h = '<table class="print-table">' + (head ? head.outerHTML : '<thead><tr><th>Value</th><th colspan="4">Bits</th></tr></thead>') + '<tbody>';
+    st.opts.forEach(row => { h += `<tr><td>${row.value}</td>${'<td class="print-cell"></td>'.repeat(4)}</tr>`; });
+    return h + '</tbody></table>';
+  }
+  if (isTruth(data)) {
+    const labels = data.inputCounts ? data.inputLabels(st.n) : data.inputLabels();
+    const trailing = data.trailingLabels ? data.trailingLabels() : [];
+    let h = '<table class="print-table"><thead><tr>' + labels.map(l => `<th>${l}</th>`).join('') + `<th>${data.outputLabel()}</th>` + trailing.map(l => `<th>${l}</th>`).join('') + '</tr></thead><tbody>';
+    st.opts.forEach(row => {
+      h += '<tr>' + row.inputs.map(v => `<td>${v}</td>`).join('') + '<td class="print-cell"></td>' + (row.trailing || []).map(v => `<td>${v === null ? '' : v}</td>`).join('') + '</tr>';
+    });
+    return h + '</tbody></table>';
+  }
+  if (isMatch(data)) {
+    const cols = data.columns();
+    const chip = o => o.shapeId ? `<svg viewBox="${data.shapeViewBox || SHAPE_VIEWBOX}" class="print-shape"><use href="#${o.shapeId}"/></svg>` : o.label;
+    const colHead = c => typeof c === 'string' ? c : `<svg viewBox="${data.shapeViewBox || SHAPE_VIEWBOX}" class="print-shape"><use href="#${c.shapeId}"/></svg>`;
+    return `<div class="print-pool">${st.opts.map(o => `<span class="print-term">${chip(o)}</span>`).join('')}</div>` +
+      `<table class="print-table print-match"><thead><tr>${cols.map(c => `<th>${colHead(c)}</th>`).join('')}</tr></thead><tbody><tr>${cols.map(() => '<td class="print-cell print-tall"></td>').join('')}</tr></tbody></table>`;
+  }
+  if (isFill(data)) {
+    return `<div class="print-pool">${st.opts.map(o => `<span class="print-term">${o.poolHtml}</span>`).join('')}</div>` +
+      `<div class="print-slots">${data.slotIds.map((_, s) => `<span class="print-slot">Slot ${s + 1}: <span class="print-blank-inline"></span></span>`).join('')}</div>`;
+  }
+  if (isSwitches(data)) {
+    return `<div class="print-slots">${data.switchLabels().map(l => `<span class="print-slot">${l}: <span class="print-box"></span> 0 <span class="print-box"></span> 1</span>`).join('')}</div>`;
+  }
+  if (!st.opts) return '';
+  if (PRINT_BLANK_LINES) return '<div class="print-options">' + st.opts.map(() => '<div class="print-blank-line"></div>').join('') + '</div>';
+  const grid = data.leftPanel === 'shapeGrid';
+  const label = (o, i) => o.shapeId
+    ? `<svg viewBox="${data.shapeViewBox || SHAPE_VIEWBOX}" class="print-shape"><use href="#${o.shapeId}"/></svg>`
+    : o.label;
+  return '<div class="print-options print-choices">' + st.opts.map((o, i) =>
+    `<div class="print-choice">${mark}<b>${grid ? i + 1 : LETTERS[i]}.</b> ${label(o, i)}</div>`).join('') + '</div>';
+}
+
+// Adds the "Print Worksheet" button and the #printWorksheet host to any page
+// that doesn't already carry its own — called from initQuizNav() so every
+// engine page gets printing without per-page markup. A page with its own
+// .print-worksheet-btn / #printWorksheet / printWorksheetNow() keeps them.
+function installPrintWorksheet() {
+  if (typeof QUESTIONS === 'undefined' || document.querySelector('.print-worksheet-btn')) return;
+  const check = document.getElementById('qCheck');
+  if (!check || !check.parentNode) return;
+  const btn = document.createElement('button');
+  btn.className = 'btn print-worksheet-btn';
+  btn.textContent = '🖨 Print Worksheet';
+  btn.addEventListener('click', () => { buildPrintWorksheet(); qeTriggerPrint(); });
+  check.parentNode.appendChild(btn);
+  if (!document.getElementById('printWorksheet')) {
+    const host = document.createElement('div');
+    host.id = 'printWorksheet';
+    host.className = 'print-only';
+    document.body.appendChild(host);
+  }
+}
+
 function buildPrintWorksheet() {
   const host = document.getElementById('printWorksheet');
   if (!host) return;
@@ -1266,9 +1361,15 @@ function buildPrintWorksheet() {
   if (h1) html += `<h1>${esc(h1.textContent)}</h1>`;
   if (sub) html += `<div class="print-subtitle">${esc(sub.textContent)}</div>`;
 
-  const circuitSvg = document.getElementById(CIRCUIT_SVG_ID);
-  const circuitPanel = document.querySelector('.circuit-panel');
-  if (circuitSvg && circuitPanel && getComputedStyle(circuitPanel).display !== 'none') {
+  // One shared reference circuit (printed once, above the questions) when the
+  // page keeps a single static circuit; per-question circuits (circuitId
+  // swapped by showCircuitRef) are printed under their own question instead.
+  // The panel may be hidden while this runs (e.g. Q1 has no circuit), so the
+  // check is on the questions' configuration, not on what is on screen now.
+  const perQuestion = QUESTIONS.some(d => d.circuitId);
+  const circuitSvg = document.getElementById(CIRCUIT_SVG_ID) || document.querySelector('.circuit-panel svg');
+  const usesCircuit = QUESTIONS.some(d => d.leftPanel === 'circuit' || d.circuitId);
+  if (circuitSvg && usesCircuit && !perQuestion) {
     const label = document.querySelector('.panel-label');
     html += `<div class="print-circuit">
       ${label ? `<div class="print-circuit-label">${esc(label.textContent)}</div>` : ''}
@@ -1280,11 +1381,11 @@ function buildPrintWorksheet() {
   QUESTIONS.forEach((data, i) => {
     const st = Q[i];
     html += `<div class="print-question"><span class="print-qnum">Q${i + 1}.</span> <span class="print-qtext">${data.text(st)}</span>`;
-    if (!isMatch(data) && !isBits(data) && !isTruth(data) && !isFill(data) && !isSwitches(data) && st.opts) {
-      html += '<div class="print-options">';
-      st.opts.forEach(() => { html += '<div class="print-blank-line"></div>'; });
-      html += '</div>';
+    if (data.circuitId && circuitSvg) {
+      const vb = data.circuitViewBox || DEFAULT_CIRCUIT_VIEWBOX || circuitSvg.getAttribute('viewBox');
+      html += `<div class="print-circuit"><svg viewBox="${vb}" xmlns="http://www.w3.org/2000/svg"><use href="#${data.circuitId}"/></svg></div>`;
     }
+    html += printAnswerArea(data, st);
     html += '</div>';
   });
   html += '</div>';
@@ -1393,6 +1494,7 @@ window.setXY = setXY;
 // each page needs. ──
 function initQuizNav() {
   buildProgressDots();
+  installPrintWorksheet();
   // Only show the back link if there's actually somewhere to go back to —
   // history.length is 1 when this page was opened directly (new tab,
   // bookmark, double-click) rather than reached by clicking a link from a
