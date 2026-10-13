@@ -240,8 +240,7 @@ function truthCorrectExplain(st) {
   return wrongCount === 0 ? `All ${st.opts.length} rows correct` : `${st.opts.length - wrongCount} of ${st.opts.length} rows correct`;
 }
 // Shared "list the wrong rows" working() fragment — `labels` is the
-// space-joined input column labels (e.g. "C B A" or "A"), supplied by the
-// question since column labels/order are genuinely per-question.
+// space-joined input column labels (e.g. "C B A" or "A"), given by the question since column labels/order are genuinely per-question.
 function truthMistakeLine(labels, st) {
   const mistakes = st.opts
     .map((o, i) => ({ o, i }))

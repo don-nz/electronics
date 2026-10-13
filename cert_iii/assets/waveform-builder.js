@@ -290,7 +290,7 @@ function renderPiecePalette(container, { pieces, onPick, isDisabled }) {
 // drawn — for the student to draw by hand, matching the coupling quiz's
 // own "blank lines, not answers" printed-worksheet choice. A second
 // "Solution" section (page-break-before, so it starts on a fresh printed
-// page — the same "detachable teacher's copy" pattern
+// page — the same detachable-section pattern
 // quiz-engine.js's .print-answers uses) repeats the same given tracks with
 // the answer track this time rendered for real via renderReadOnlyTrackSVG().
 //
