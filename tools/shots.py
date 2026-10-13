@@ -104,7 +104,7 @@ def question_count(path, text):
 
 def jobs_for(path, quick):
     text = open(path, encoding='utf-8', errors='replace').read()
-    n = question_count(path, text)
+    n = question_count(path, text) or ARGS.count
     d = os.path.join(BASE, ARGS.label, slug(path))
     if n == 0:
         return [(path, text, '', os.path.join(d, 'page.png'))]
@@ -151,6 +151,9 @@ def diff(a):
             missing += 1
             continue
         i1, i2 = Image.open(os.path.join(b, n)).convert('RGB'), Image.open(p2).convert('RGB')
+        if a.crop:
+            box = tuple(int(v) for v in a.crop.split(','))
+            i1, i2 = i1.crop(box), i2.crop(box)
         if i1.size != i2.size:
             print(f'SIZE   {n}: {i1.size} -> {i2.size}')
             changed += 1
@@ -182,9 +185,11 @@ c.add_argument('label'); c.add_argument('filters', nargs='*')
 c.add_argument('-j', '--jobs', type=int, default=4)
 c.add_argument('--quick', action='store_true', help='only the answered/worked state, not the fresh question')
 c.add_argument('--all', action='store_true')
+c.add_argument('--count', type=int, default=0, help='treat pages with no QUESTIONS array as quizzes with this many ?q=N questions')
 d = sub.add_parser('diff')
 d.add_argument('before'); d.add_argument('after')
 d.add_argument('--threshold', type=float, default=0.0, help='fraction of pixels allowed to differ (0.001 = 0.1%%)')
+d.add_argument('--crop', default='', help='x0,y0,x1,y1 — compare only this region of every image')
 d.add_argument('--tolerance', type=int, default=8, help='per-channel difference ignored (anti-aliasing noise)')
 ARGS = ap.parse_args()
 
