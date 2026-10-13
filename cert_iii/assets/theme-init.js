@@ -11,7 +11,8 @@
    the edge of a much wider row/viewport); .theme-toggle-fixed is only a
    fallback for pages with no #crumb at all. Adding the toggle to a page
    is just one <script src="…/assets/theme-init.js"></script> tag — no
-   HTML changes needed. Every page already loads quiz-common.css or
+   HTML changes needed. The same script appends the copyright line
+   (.site-copyright) to the end of <body>. Every page already loads quiz-common.css or
    nav-common.css, both of which define the .theme-toggle/.theme-toggle-state-*
    rules this button uses — it shows the mode you'd SWITCH TO (sun +
    "Light Mode" while in dark theme, moon + "Dark Mode" while in light).
@@ -76,9 +77,39 @@
         }
     }
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', injectButton);
-    } else {
+    // Copyright line at the foot of every page — one string, one place.
+    // Styled by .site-copyright in nav-common.css / quiz-common.css (same
+    // two-file arrangement as .theme-toggle). Keep in step with LICENSE.txt.
+    var COPYRIGHT = '\u00A9 2026 Anderson Home Technology. All rights reserved.';
+    // Set to the licence page's URL once the site is hosted somewhere stable
+    // (e.g. '/license'); while empty the line stays plain text. A relative
+    // path to LICENSE.txt isn't used because it only resolves inside a full
+    // clone of the repo.
+    var COPYRIGHT_URL = '';
+
+    function injectCopyright() {
+        if (document.querySelector('.site-copyright')) return;
+        var p = document.createElement('p');
+        p.className = 'site-copyright';
+        if (COPYRIGHT_URL) {
+            var a = document.createElement('a');
+            a.href = COPYRIGHT_URL;
+            a.textContent = COPYRIGHT;
+            p.appendChild(a);
+        } else {
+            p.textContent = COPYRIGHT;
+        }
+        document.body.appendChild(p);
+    }
+
+    function injectChrome() {
         injectButton();
+        injectCopyright();
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', injectChrome);
+    } else {
+        injectChrome();
     }
 })();
