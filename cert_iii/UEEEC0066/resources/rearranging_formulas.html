@@ -7,11 +7,16 @@
   invalid line is a real, common slip: wrong operation, operation applied to one
   side only, or the right operation on the wrong terms).
 
-  To add formulas, append to PROBLEMS below. A problem is:
-    { start, target, steps: [ { goal, line, wrong: [3 lines], why } ... ] }
+  The page opens on a picker (one card per base formula). Choosing a formula
+  and pressing Next starts a run made of that formula's problems — each one
+  once, in random order, with its steps always in order. Restart reshuffles.
+
+  To add a formula, append to FORMULAS below: { id, title, shown, blurb,
+  problems: [...] }. A problem is:
+    { name, start, target, steps: [ { goal, line, wrong: [3 lines], why } ... ] }
   `start` and every `line`/`wrong` entry are HTML (use the helpers V, I, R, ...
-  and frac()). QUESTIONS is generated from PROBLEMS at load, so nothing else
-  needs editing.
+  and frac()). Keep a formula's problems to three or fewer, and avoid two
+  problems in one formula whose first step is the same line.
 
   Built on the shared cert_iii/assets/quiz-engine.js (single column, no
   circuit panel).
@@ -22,14 +27,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <script src="../../../assets/theme-init.js"></script>
-  <script src="../../../assets/quiz-engine.js"></script>
+  <script src="../../assets/theme-init.js"></script>
+  <script src="../../assets/quiz-engine.js"></script>
   <title>Rearranging Formulas</title>
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
     rel="stylesheet">
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="../../../assets/quiz-common.css">
-  <script src="../../../assets/breadcrumb.js" defer></script>
+  <link rel="stylesheet" href="../../assets/quiz-common.css">
+  <script src="../../assets/breadcrumb.js" defer></script>
   <style>
     .eq-strip {
       margin: .7rem 0 .2rem;
@@ -42,12 +47,41 @@
     }
     .eq-strip .eq-label { display: block; font-size: .7rem; letter-spacing: .08em; text-transform: uppercase; color: var(--colour-label); margin-bottom: .2rem; }
     .eq-goal { font-size: .85rem; }
+    .picker { max-width: 1000px; margin: 0 auto 2rem; padding: 0 16px; }
+    .picker-intro { text-align: center; color: var(--colour-label); margin: 0 0 1.2rem; }
+    .formula-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: .8rem; }
+    @media (min-width: 900px) { .formula-grid { grid-template-columns: repeat(4, 1fr); } }
+    .formula-card {
+      display: flex; flex-direction: column; align-items: center; justify-content: space-between; gap: .6rem;
+      padding: 1rem .6rem; min-height: 9.5rem; text-align: center; cursor: pointer;
+      border: 1px solid var(--colour-border); border-radius: 10px;
+      background: var(--colour-panel); color: var(--colour-text);
+      font: inherit; transition: border-color .15s, box-shadow .15s, background .15s;
+    }
+    .formula-card:hover { border-color: var(--colour-ui-primary); }
+    .formula-card.selected {
+      border-color: var(--colour-ui-primary);
+      background: rgba(var(--colour-ui-primary-rgb), .1);
+      box-shadow: 0 0 0 2px rgba(var(--colour-ui-primary-rgb), .35);
+    }
+    .formula-title { font-weight: 700; font-size: .85rem; }
+    .formula-eq { font-size: 1.05rem; }
+    .formula-blurb { font-size: .72rem; color: var(--colour-label); }
+    .picker-actions { display: flex; justify-content: center; margin-top: 1.2rem; }
     .eq-line { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .4rem .7rem; }
     .eq-arrow { color: var(--colour-label); }
     .eq-step:last-child { font-weight: 700; }
-    /* 10^(A/20): the exponent holds a subscripted symbol, so keep it larger than the browser default */
-    .eq-strip sup, .option-btn sup, .working-box sup { font-size: .85em; line-height: 0; }
-    .eq-strip sup sub, .option-btn sup sub, .working-box sup sub { font-size: .8em; }
+    /* base raised to a stacked exponent, with tall brackets — e.g. 10^( A/20 ).
+       The base is drawn larger and the exponent sits well above its baseline. */
+    .pow { display: inline-flex; align-items: flex-start; white-space: nowrap; margin-top: 1.1em; vertical-align: baseline; }
+    .pow-base { font-size: 1.45em; line-height: 1; margin-top: .15em; }
+    .pow-exp { display: inline-flex; align-items: center; font-size: .78em; margin-left: .15em; transform: translateY(-1.15em); }
+    .pow-exp .pow-par { font-size: 1.9em; font-weight: 200; line-height: 1; }
+    .pow > .pow-par { font-size: 1.9em; font-weight: 200; line-height: 1; }
+    .pow-exp .working-frac .den, .pow-exp .working-frac .num { padding: 0 .15rem; }
+    .option-btn .pow-exp, .working-box .pow-exp { font-size: .92em; }
+    /* quiz-common.css gives every span inside an option flex:1; keep the bracketed exponent at its natural width */
+    .option-btn .pow span:not(.option-letter):not(.result-icon) { flex: 0 0 auto; min-width: auto; }
   </style>
 </head>
 
@@ -55,10 +89,18 @@
   <div class="crumb" id="crumb" data-current="Rearranging Formulas"></div>
   <header>
     <h1>Rearranging Formulas</h1>
-    <p>Prior Learning · Make the Subject · One Step at a Time</p>
+    <p>Pick a Formula · Make the Subject · One Step at a Time</p>
   </header>
 
-  <div class="quiz-wrap single-col" id="quizWrap">
+  <section class="picker" id="picker">
+    <p class="picker-intro">Choose a formula, then work through the steps to make each variable the subject.</p>
+    <div class="formula-grid" id="formulaGrid" role="group" aria-label="Formulas"></div>
+    <div class="picker-actions">
+      <button class="btn btn-check" id="startBtn" onclick="startQuiz()" disabled>Next →</button>
+    </div>
+  </section>
+
+  <div class="quiz-wrap single-col" id="quizWrap" style="display:none">
     <div class="questions-col">
       <div class="card">
         <div class="progress-wrap">
@@ -89,6 +131,7 @@
             <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
             <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
             <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+            <button class="btn btn-prev" onclick="backToPicker()">← Formulas</button>
           </div>
         </div>
 
@@ -96,6 +139,7 @@
           <div class="summary-head">
             <div class="summary-title">Quiz Summary</div>
             <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+            <button class="btn btn-prev" onclick="backToPicker()">← Formulas</button>
           </div>
           <div id="summaryContent"></div>
         </div>
@@ -116,15 +160,20 @@
     const VIN = '<b class="colour-voltage">V<sub>in</sub></b>';
     const VOUT = '<b class="colour-voltage">V<sub>out</sub></b>';
     const LOGQ = `log(${frac(VOUT, VIN)})`;                  // log(Vout / Vin)
-    const POW = `10<sup>${AVDB}/20</sup>`;                   // 10^(AV(dB) / 20)
+    // base raised to a (stacked) exponent with tall brackets: 10^( A / 20 )
+    const pw = (base, exp) => `<span class="pow"><span class="pow-base">${base}</span><span class="pow-exp"><span class="pow-par">(</span>${exp}<span class="pow-par">)</span></span></span>`;
+    const POW = pw('10', frac(AVDB, '20'));                  // 10^(AV(dB) / 20)
     const X = ' × ', EQ = ' = ';
 
-    // ══════════════════════════════════════════════════════════════════════
-    // PROBLEMS — add new formulas here.
-    // ══════════════════════════════════════════════════════════════════════
-    const PROBLEMS = [
+    const FORMULAS = [
       {
-        name: "Ohm's law — make R the subject",
+        id: 'ohm',
+        title: "Ohm's law",
+        shown: `${V}${EQ}${I}${X}${R}`,
+        blurb: 'Make V, I or R the subject',
+        problems: [
+      {
+        name: "make R the subject",
         start: `${I} = ${frac(V, R)}`,
         target: R,
         steps: [
@@ -151,7 +200,34 @@
         ],
       },
       {
-        name: "Ohm's law — make I the subject",
+        name: "make V the subject",
+        start: `${R}${EQ}${frac(V, I)}`,
+        target: V,
+        steps: [
+          {
+            goal: `${V} is divided by ${I}. Get it out of the fraction by doing the opposite to <b>both</b> sides.`,
+            line: `${R}${X}${I}${EQ}${V}`,
+            wrong: [
+              `${frac(R, I)}${EQ}${V}`,
+              `${R} + ${I}${EQ}${V}`,
+              `${R}${EQ}${V}${X}${I}`,
+            ],
+            why: `The opposite of ÷${I} is ×${I}. Multiply <b>both</b> sides by ${I}: on the right the ${I} cancels leaving ${V}; on the left ${R} becomes ${R}${X}${I}.`,
+          },
+          {
+            goal: `The unknown is on the right-hand side. Write the equation with ${V} as the subject, on the left.`,
+            line: `${V}${EQ}${R}${X}${I}`,
+            wrong: [
+              `${V}${EQ}${frac(R, I)}`,
+              `${V}${EQ}${R} + ${I}`,
+              `${V}${EQ}${frac(I, R)}`,
+            ],
+            why: `If a = b then b = a. Nothing about the values changes — you are only swapping sides so the subject is on the left.`,
+          },
+        ],
+      },
+      {
+        name: "make I the subject",
         start: `${V}${EQ}${I}${X}${R}`,
         target: I,
         steps: [
@@ -177,8 +253,16 @@
           },
         ],
       },
+        ],
+      },
       {
-        name: "Frequency (RC) — make R the subject",
+        id: 'rc',
+        title: 'Frequency (RC)',
+        shown: `${F}${EQ}${frac('1', `${PI2}${X}${R}${X}${C}`)}`,
+        blurb: 'Make R or C the subject',
+        problems: [
+      {
+        name: "make R the subject",
         start: `${F}${EQ}${frac('1', `${PI2}${X}${R}${X}${C}`)}`,
         target: R,
         steps: [
@@ -205,7 +289,7 @@
         ],
       },
       {
-        name: "Frequency (RC) — make C the subject",
+        name: "make C the subject",
         start: `${F}${EQ}${frac('1', `${PI2}${X}${R}${X}${C}`)}`,
         target: C,
         steps: [
@@ -231,8 +315,16 @@
           },
         ],
       },
+        ],
+      },
       {
-        name: "Capacitive reactance — make f the subject",
+        id: 'xc',
+        title: 'Capacitive reactance',
+        shown: `${XC}${EQ}${frac('1', `${PI2}${X}${F}${X}${C}`)}`,
+        blurb: 'Make f or C the subject',
+        problems: [
+      {
+        name: "make f the subject",
         start: `${XC}${EQ}${frac('1', `${PI2}${X}${F}${X}${C}`)}`,
         target: F,
         steps: [
@@ -259,7 +351,42 @@
         ],
       },
       {
-        name: "Decibel voltage gain — make V<sub>in</sub> the subject",
+        name: "make C the subject",
+        start: `${XC}${EQ}${frac('1', `${PI2}${X}${F}${X}${C}`)}`,
+        target: C,
+        steps: [
+          {
+            goal: `${C} is part of the bottom line, multiplied by ${PI2} and ${F}. Multiply <b>both</b> sides by ${C} to bring it out of the fraction.`,
+            line: `${XC}${X}${C}${EQ}${frac('1', `${PI2}${X}${F}`)}`,
+            wrong: [
+              `${frac(XC, C)}${EQ}${frac('1', `${PI2}${X}${F}`)}`,
+              `${XC}${EQ}${frac('1', `${PI2}${X}${F}`)}`,
+              `${XC}${X}${C}${EQ}${frac('1', `${PI2}${X}${F}${X}${C}`)}`,
+            ],
+            why: `Multiplying the right side by ${C} cancels the ${C} on the bottom, leaving ${frac('1', `${PI2}${X}${F}`)}. The left side must be multiplied by ${C} too: ${XC}${X}${C}.`,
+          },
+          {
+            goal: `${C} is now multiplied by ${XC}. Do the opposite to <b>both</b> sides so ${C} is on its own.`,
+            line: `${C}${EQ}${frac('1', `${PI2}${X}${F}${X}${XC}`)}`,
+            wrong: [
+              `${C}${EQ}${frac(XC, `${PI2}${X}${F}`)}`,
+              `${C}${EQ}${frac('1', `${PI2}${X}${F}`)} − ${XC}`,
+              `${C}${EQ}${PI2}${X}${F}${X}${XC}`,
+            ],
+            why: `Divide <b>both</b> sides by ${XC}. The left becomes ${C}; on the right the ${XC} goes underneath alongside ${PI2} and ${F}.`,
+          },
+        ],
+      },
+        ],
+      },
+      {
+        id: 'db',
+        title: 'Decibel voltage gain',
+        shown: `${AVDB}${EQ}20${X}${LOGQ}`,
+        blurb: 'Make V<sub>in</sub> the subject',
+        problems: [
+      {
+        name: "make V<sub>in</sub> the subject",
         start: `${AVDB}${EQ}20${X}${LOGQ}`,
         target: VIN,
         steps: [
@@ -277,9 +404,9 @@
             goal: `Now ${VIN} is trapped inside a log. The opposite of log (base 10) is 10 to the power of — do it to <b>both</b> sides.`,
             line: `${POW}${EQ}${frac(VOUT, VIN)}`,
             wrong: [
-              `${frac(AVDB, '20')}${EQ}10<sup>${frac(VOUT, VIN)}</sup>`,
+              `${frac(AVDB, '20')}${EQ}${pw('10', frac(VOUT, VIN))}`,
               `10${X}${frac(AVDB, '20')}${EQ}${frac(VOUT, VIN)}`,
-              `(${frac(AVDB, '20')})<sup>10</sup>${EQ}${frac(VOUT, VIN)}`,
+              `<span class="pow"><span class="pow-par">(</span>${frac(AVDB, '20')}<span class="pow-par">)</span><span class="pow-exp pow-plain">10</span></span>${EQ}${frac(VOUT, VIN)}`,
             ],
             why: `Raising 10 to a power undoes a base-10 log: 10<sup>log(x)</sup> = x. Apply it to <b>both</b> sides — the whole left side becomes the power, and the log on the right disappears leaving ${frac(VOUT, VIN)}.`,
           },
@@ -305,38 +432,81 @@
           },
         ],
       },
+        ],
+      },
     ];
 
     // ══════════════════════════════════════════════════════════════════════
-    // QUESTIONS — generated: one question per step of every problem.
-    // The "current equation" for step n is the correct line from step n−1.
+    // RUN — one formula at a time. Each problem in the chosen formula is used
+    // once, in random order; the steps inside a problem always stay in order.
+    // QUESTIONS is rebuilt in place (the engine holds a reference to it), and
+    // RESET_EXTRA reshuffles it on every Restart.
     // ══════════════════════════════════════════════════════════════════════
     const QUESTIONS = [];
-    PROBLEMS.forEach((p, pi) => {
-      p.steps.forEach((s, si) => {
-        const history = [p.start, ...p.steps.slice(0, si).map(prev => prev.line)];
-        const current = history[history.length - 1];
-        const strip = label => `<div class="eq-strip"><span class="eq-label">${label}</span><span class="eq-line">${history.map(h => `<span class="eq-step">${h}</span>`).join('<span class="eq-arrow">→</span>')}</span></div>`;
-        QUESTIONS.push({
-          leftPanel: 'none',
-          text: () => `<b>Problem ${pi + 1} of ${PROBLEMS.length}</b> — ${p.name}.<br>Step ${si + 1} of ${p.steps.length}: which line comes next?${strip('Equation so far')}`,
-          hint: () => `<span class="eq-goal">${s.goal}</span>`,
-          options: () => shuffle([
-            { label: s.line, type: 'correct' },
-            ...s.wrong.map(w => ({ label: w, type: 'wrong' })),
-          ]),
-          correctExplain: () => s.line,
-          working: () => `
+    let currentFormula = null;
+
+    function buildRun() {
+      QUESTIONS.length = 0;
+      if (!currentFormula) return;
+      const problems = shuffle(currentFormula.problems.slice());
+      problems.forEach((p, pi) => {
+        p.steps.forEach((s, si) => {
+          const history = [p.start, ...p.steps.slice(0, si).map(prev => prev.line)];
+          const current = history[history.length - 1];
+          const strip = `<div class="eq-strip"><span class="eq-label">Equation so far</span><span class="eq-line">${history.map(h => `<span class="eq-step">${h}</span>`).join('<span class="eq-arrow">→</span>')}</span></div>`;
+          QUESTIONS.push({
+            leftPanel: 'none',
+            text: () => `<b>${currentFormula.title}</b> — problem ${pi + 1} of ${problems.length}: ${p.name}.<br>Step ${si + 1} of ${p.steps.length}: which line comes next?${strip}`,
+            hint: () => `<span class="eq-goal">${s.goal}</span>`,
+            options: () => shuffle([
+              { label: s.line, type: 'correct' },
+              ...s.wrong.map(w => ({ label: w, type: 'wrong' })),
+            ]),
+            correctExplain: () => s.line,
+            working: () => `
     <div class="working-line">${s.why}</div>
     <div class="working-formula-row">${current} &nbsp;→&nbsp; ${s.line}</div>
     ${si === p.steps.length - 1 ? `<div class="working-total">Done: ${p.target} is now the subject — ${s.line}</div>` : `<div class="working-line">Next step: carry on from ${s.line}.</div>`}`,
+          });
         });
       });
-    });
+      buildProgressDots();
+    }
+    RESET_EXTRA = buildRun;
+
+    // ── picker ──
+    let chosenId = null;
+    function renderPicker() {
+      const grid = document.getElementById('formulaGrid');
+      grid.innerHTML = FORMULAS.map(f => `
+        <button type="button" class="formula-card${f.id === chosenId ? ' selected' : ''}" data-id="${f.id}" aria-pressed="${f.id === chosenId}">
+          <span class="formula-title">${f.title}</span>
+          <span class="formula-eq">${f.shown}</span>
+          <span class="formula-blurb">${f.blurb}</span>
+        </button>`).join('');
+      grid.querySelectorAll('.formula-card').forEach(btn => btn.addEventListener('click', () => {
+        chosenId = btn.dataset.id;
+        renderPicker();
+      }));
+      document.getElementById('startBtn').disabled = !chosenId;
+    }
+    function startQuiz() {
+      currentFormula = FORMULAS.find(f => f.id === chosenId);
+      if (!currentFormula) return;
+      document.getElementById('picker').style.display = 'none';
+      document.getElementById('quizWrap').style.display = '';
+      resetQuiz();
+      window.scrollTo(0, 0);
+    }
+    function backToPicker() {
+      document.getElementById('quizWrap').style.display = 'none';
+      document.getElementById('picker').style.display = '';
+      renderPicker();
+      window.scrollTo(0, 0);
+    }
 
     initQuizNav();
-    resetQuiz();
-    initQuizFromURL();
+    renderPicker();
   </script>
 </body>
 
