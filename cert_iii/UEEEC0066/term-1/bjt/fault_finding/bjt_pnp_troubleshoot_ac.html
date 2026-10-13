@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="../../../../assets/theme-init.js"></script>
   <script src="../../../../assets/shapes.js"></script>
+  <script src="../../../../assets/quiz-engine.js"></script>
   <title>BJT PNP AC Fault Diagnosis Quiz</title>
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
   <link rel="icon" href="data:,">
@@ -100,7 +101,11 @@
     .btn-shuffle:hover { background: rgba(255,107,53,.2); }
 
     .summary-item { border: 1px solid var(--colour-border); border-radius: 4px; padding: .9rem 1rem; margin-bottom: 1rem; background: rgba(0,0,0,.15); }
-    </style>
+    
+    /* quiz-common.css gives every .option-btn span flex:1, which (with the engine's
+       result icon) squeezes these two-line options into half the row. Keep the icon small. */
+    .option-btn span.result-icon { flex: 0 0 auto; }
+  </style>
 </head>
 <body>
 <div class="crumb" id="crumb" data-current="Troubleshooter"></div>
@@ -422,164 +427,37 @@
   <div class="questions-col">
     <div class="card">
       <div class="progress-wrap">
-        <div class="progress-dot" id="dot-q1"></div>
-        <div class="progress-dot" id="dot-q2"></div>
-        <div class="progress-dot" id="dot-q3"></div>
+        <div id="progressDots" style="display:contents"></div>
         <span class="progress-label" id="progressLabel">1 / 3</span>
         <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
       </div>
 
-      <!-- Q1: CUTOFF (flat 0V) -->
-      <div class="q-panel" id="q1Panel">
+      <div class="q-panel" id="qPanel">
         <div class="q-header">
-          <div class="q-num">Q1</div>
+          <div class="q-num" id="qNum"></div>
           <div>
-            <div class="q-text">The output scope trace is a flat line at 0 V — the AC signal has completely disappeared. Which fault caused this?</div>
-            <div class="q-hint">Think about which fault would completely stop collector current, leaving nothing for C<sub>out</sub> to pass through to the load.</div>
+            <div class="q-text" id="qText"></div>
+            <div class="q-hint" id="qHint"></div>
           </div>
         </div>
-        <!-- Scope: flat 0V output -->
-        <div class="scope-wrap">
-          <svg viewBox="0 0 280 120" xmlns="http://www.w3.org/2000/svg" style="display:block;width:100%;height:auto;background:#030b0f">
-            <line x1="20" y1="20" x2="260" y2="20" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
-            <line x1="20" y1="40" x2="260" y2="40" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
-            <line x1="20" y1="60" x2="260" y2="60" stroke="rgba(0,200,255,.18)" stroke-width="1"/>
-            <line x1="20" y1="80" x2="260" y2="80" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
-            <line x1="20" y1="100" x2="260" y2="100" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
-            <line x1="20" y1="10" x2="20" y2="110" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
-            <line x1="80" y1="10" x2="80" y2="110" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
-            <line x1="140" y1="10" x2="140" y2="110" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
-            <line x1="200" y1="10" x2="200" y2="110" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
-            <line x1="260" y1="10" x2="260" y2="110" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
-            <text x="8" y="22" fill="rgba(0,200,255,.4)" font-size="8" font-family="monospace">+</text>
-            <text x="8" y="63" fill="rgba(0,200,255,.4)" font-size="8" font-family="monospace">0</text>
-            <text x="8" y="103" fill="rgba(0,200,255,.4)" font-size="8" font-family="monospace">−</text>
-            <text x="22" y="18" fill="#ffd700" font-size="8" font-family="monospace" opacity=".8">CH1 Vin</text>
-            <text x="22" y="28" fill="#00e5ff" font-size="8" font-family="monospace" opacity=".8">CH2 Vout</text>
-            <!-- CH1 input (small sine) -->
-            <path d="M 20,60 C 30.5,52.9 39.5,47 50,47 C 60.5,47 69.5,52.9 80,60 C 90.5,67.1 99.5,73 110,73 C 120.5,73 129.5,67.1 140,60 C 150.5,52.9 159.5,47 170,47 C 180.5,47 189.5,52.9 200,60 C 210.5,67.1 219.5,73 230,73 C 240.5,73 249.5,67.1 260,60" fill="none" stroke="#ffd700" stroke-width="1" opacity=".7"/>
-            <!-- CH2 output: FLAT 0V -->
-            <polyline points="20,60 260,60" fill="none" stroke="#00e5ff" stroke-width="1"/>
-          </svg>
-          <div class="scope-legend">
-            <div class="scope-legend-ch"><div class="scope-legend-line" style="background:#ffd700"></div><span style="color:#ffd700;font-size:.68rem">CH1: Input (V<sub>s</sub>)</span></div>
-            <div class="scope-legend-ch"><div class="scope-legend-line" style="background:#00e5ff"></div><span style="color:#00e5ff;font-size:.68rem">CH2: Output (after C<sub>out</sub>)</span></div>
-          </div>
-        </div>
-        <div class="options" id="q1Options"></div>
-        <div class="result-banner" id="q1Banner"><span id="q1Icon"></span>&nbsp;<span id="q1BannerText"></span></div>
-        <div class="working-box" id="q1Working">
+        <!-- Output-scope picture for the current question (filled from QUESTIONS[].scope) -->
+        <div id="qScope"></div>
+        <div class="options" id="qOptions"></div>
+        <div class="selected-list" id="qSelectedList" style="display:none"></div>
+        <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+        <div class="working-box" id="qWorking">
           <div class="working-title">Fault Analysis</div>
-          <div id="q1WorkingContent"></div>
+          <div id="qWorkingContent"></div>
         </div>
         <div class="btn-row">
-          <button class="btn btn-check" id="q1Check" onclick="checkQ(1)" disabled>Check</button>
-          <button class="btn btn-next" id="q1Next" onclick="showQuestion(2)" style="display:none">Next →</button>
+          <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+          <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+          <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+          <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
           <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
         </div>
       </div>
 
-      <!-- Q2: SATURATION (positive half clipped) -->
-      <div class="q-panel" id="q2Panel" style="display:none">
-        <div class="q-header">
-          <div class="q-num">Q2</div>
-          <div>
-            <div class="q-text">The positive half of the output waveform is completely flattened — the transistor can't swing any higher. Which fault caused this?</div>
-            <div class="q-hint">The transistor is pegged at maximum conduction. Consider what pushes V<sub>B</sub> toward GND, flooding the base with current in a PNP circuit.</div>
-          </div>
-        </div>
-        <!-- Scope: saturation (positive half clipped flat at y=50) -->
-        <div class="scope-wrap">
-          <svg viewBox="0 0 280 120" xmlns="http://www.w3.org/2000/svg" style="display:block;width:100%;height:auto;background:#030b0f">
-            <line x1="20" y1="20" x2="260" y2="20" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
-            <line x1="20" y1="40" x2="260" y2="40" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
-            <line x1="20" y1="60" x2="260" y2="60" stroke="rgba(0,200,255,.18)" stroke-width="1"/>
-            <line x1="20" y1="80" x2="260" y2="80" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
-            <line x1="20" y1="100" x2="260" y2="100" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
-            <line x1="20" y1="10" x2="20" y2="110" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
-            <line x1="80" y1="10" x2="80" y2="110" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
-            <line x1="140" y1="10" x2="140" y2="110" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
-            <line x1="200" y1="10" x2="200" y2="110" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
-            <line x1="260" y1="10" x2="260" y2="110" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
-            <text x="8" y="22" fill="rgba(0,200,255,.4)" font-size="8" font-family="monospace">+</text>
-            <text x="8" y="63" fill="rgba(0,200,255,.4)" font-size="8" font-family="monospace">0</text>
-            <text x="8" y="103" fill="rgba(0,200,255,.4)" font-size="8" font-family="monospace">−</text>
-            <text x="22" y="18" fill="#ffd700" font-size="8" font-family="monospace" opacity=".8">CH1 Vin</text>
-            <text x="22" y="28" fill="#00e5ff" font-size="8" font-family="monospace" opacity=".8">CH2 Vout</text>
-            <path d="M 20,60 C 30.5,52.9 39.5,47 50,47 C 60.5,47 69.5,52.9 80,60 C 90.5,67.1 99.5,73 110,73 C 120.5,73 129.5,67.1 140,60 C 150.5,52.9 159.5,47 170,47 C 180.5,47 189.5,52.9 200,60 C 210.5,67.1 219.5,73 230,73 C 240.5,73 249.5,67.1 260,60" fill="none" stroke="#ffd700" stroke-width="1" opacity=".7"/>
-            <!-- Saturation: negative half normal, positive half clipped flat at y=50 -->
-            <polyline points="20,60 25,70 30,80 35,88 40,95 45,99 50,100 55,99 60,95 65,88 70,80 75,70 80,60 85,50 90,50 95,50 100,50 105,50 110,50 115,50 120,50 125,50 130,50 135,50 140,60 145,70 150,80 155,88 160,95 165,99 170,100 175,99 180,95 185,88 190,80 195,70 200,60 205,50 210,50 215,50 220,50 225,50 230,50 235,50 240,50 245,50 250,50 255,50 260,60" fill="none" stroke="#00e5ff" stroke-width="1"/>
-          </svg>
-          <div class="scope-legend">
-            <div class="scope-legend-ch"><div class="scope-legend-line" style="background:#ffd700"></div><span style="color:#ffd700;font-size:.68rem">CH1: Input (V<sub>s</sub>)</span></div>
-            <div class="scope-legend-ch"><div class="scope-legend-line" style="background:#00e5ff"></div><span style="color:#00e5ff;font-size:.68rem">CH2: Output (after C<sub>out</sub>)</span></div>
-          </div>
-        </div>
-        <div class="options" id="q2Options"></div>
-        <div class="result-banner" id="q2Banner"><span id="q2Icon"></span>&nbsp;<span id="q2BannerText"></span></div>
-        <div class="working-box" id="q2Working">
-          <div class="working-title">Fault Analysis</div>
-          <div id="q2WorkingContent"></div>
-        </div>
-        <div class="btn-row">
-          <button class="btn btn-prev" onclick="goBackToQuestion(2)">← Prev</button>
-          <button class="btn btn-check" id="q2Check" onclick="checkQ(2)" disabled>Check</button>
-          <button class="btn btn-next" id="q2Next" onclick="showQuestion(3)" style="display:none">Next →</button>
-          <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
-        </div>
-      </div>
-
-      <!-- Q3: ASYMMETRIC CLIPPING (RC high, positive peaks clip) -->
-      <div class="q-panel" id="q3Panel" style="display:none">
-        <div class="q-header">
-          <div class="q-num">Q3</div>
-          <div>
-            <div class="q-text">Only the positive peaks are clipped — the negative half of the waveform is clean. Which fault caused this asymmetric clipping?</div>
-            <div class="q-hint">Both halves of the wave are present, so the transistor is still active. The DC bias point has shifted — which component would push V<sub>C</sub> too close to the emitter rail?</div>
-          </div>
-        </div>
-        <!-- Scope: asymmetric top clip (positive peaks clipped at y=35) -->
-        <div class="scope-wrap">
-          <svg viewBox="0 0 280 120" xmlns="http://www.w3.org/2000/svg" style="display:block;width:100%;height:auto;background:#030b0f">
-            <line x1="20" y1="20" x2="260" y2="20" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
-            <line x1="20" y1="40" x2="260" y2="40" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
-            <line x1="20" y1="60" x2="260" y2="60" stroke="rgba(0,200,255,.18)" stroke-width="1"/>
-            <line x1="20" y1="80" x2="260" y2="80" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
-            <line x1="20" y1="100" x2="260" y2="100" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
-            <line x1="20" y1="10" x2="20" y2="110" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
-            <line x1="80" y1="10" x2="80" y2="110" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
-            <line x1="140" y1="10" x2="140" y2="110" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
-            <line x1="200" y1="10" x2="200" y2="110" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
-            <line x1="260" y1="10" x2="260" y2="110" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
-            <text x="8" y="22" fill="rgba(0,200,255,.4)" font-size="8" font-family="monospace">+</text>
-            <text x="8" y="63" fill="rgba(0,200,255,.4)" font-size="8" font-family="monospace">0</text>
-            <text x="8" y="103" fill="rgba(0,200,255,.4)" font-size="8" font-family="monospace">−</text>
-            <text x="22" y="18" fill="#ffd700" font-size="8" font-family="monospace" opacity=".8">CH1 Vin</text>
-            <text x="22" y="28" fill="#00e5ff" font-size="8" font-family="monospace" opacity=".8">CH2 Vout</text>
-            <path d="M 20,60 C 30.5,52.9 39.5,47 50,47 C 60.5,47 69.5,52.9 80,60 C 90.5,67.1 99.5,73 110,73 C 120.5,73 129.5,67.1 140,60 C 150.5,52.9 159.5,47 170,47 C 180.5,47 189.5,52.9 200,60 C 210.5,67.1 219.5,73 230,73 C 240.5,73 249.5,67.1 260,60" fill="none" stroke="#ffd700" stroke-width="1" opacity=".7"/>
-            <!-- Asymmetric: positive peaks clipped at y=35, negative half free -->
-            <polyline points="20,60 25,70 30,80 35,88 40,95 45,99 50,100 55,99 60,95 65,88 70,80 75,70 80,60 85,50 90,40 95,35 100,35 105,35 110,35 115,35 120,35 125,35 130,40 135,50 140,60 145,70 150,80 155,88 160,95 165,99 170,100 175,99 180,95 185,88 190,80 195,70 200,60 205,50 210,40 215,35 220,35 225,35 230,35 235,35 240,35 245,35 250,40 255,50 260,60" fill="none" stroke="#00e5ff" stroke-width="1"/>
-          </svg>
-          <div class="scope-legend">
-            <div class="scope-legend-ch"><div class="scope-legend-line" style="background:#ffd700"></div><span style="color:#ffd700;font-size:.68rem">CH1: Input (V<sub>s</sub>)</span></div>
-            <div class="scope-legend-ch"><div class="scope-legend-line" style="background:#00e5ff"></div><span style="color:#00e5ff;font-size:.68rem">CH2: Output (after C<sub>out</sub>)</span></div>
-          </div>
-        </div>
-        <div class="options" id="q3Options"></div>
-        <div class="result-banner" id="q3Banner"><span id="q3Icon"></span>&nbsp;<span id="q3BannerText"></span></div>
-        <div class="working-box" id="q3Working">
-          <div class="working-title">Fault Analysis</div>
-          <div id="q3WorkingContent"></div>
-        </div>
-        <div class="btn-row">
-          <button class="btn btn-prev" onclick="goBackToQuestion(3)">← Prev</button>
-          <button class="btn btn-check" id="q3Check" onclick="checkQ(3)" disabled>Check</button>
-          <button class="btn btn-summary" id="q3Summary" onclick="showSummary()" style="display:none">See Summary →</button>
-          <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
-        </div>
-      </div>
-
-      <!-- Summary -->
       <div id="summaryPanel" style="display:none">
         <div class="summary-head">
           <div class="summary-title">Quiz Summary</div>
@@ -594,9 +472,6 @@
 
   <script>Shapes.use('test-equipment', 'bjt-symbols', 'circuit-components');</script>
 <script>
-  const QIDS = ['q1','q2','q3'];
-  const QUIZ_QUESTION_COUNT = 3;
-  let cur = 'q1';
 
   // ── Component sets ──
   const EXAMPLE_SETS = {
@@ -697,76 +572,6 @@
   ];
 
   // ── State ──
-  const Q = { q1: {}, q2: {}, q3: {} };
-
-  function buildQuestion(n) {
-    const pool = [...SCENARIO_OPTIONS[n - 1]].sort(() => Math.random() - 0.5);
-    const cor = pool.findIndex(o => o.correct);
-    Q['q' + n] = { sel: null, ans: false, cor, opts: pool };
-    renderOptions('q' + n);
-  }
-
-  function renderOptions(qid) {
-    const st = Q[qid];
-    document.getElementById(qid + 'Options').innerHTML = st.opts.map((o, i) => `
-      <button class="option-btn" onclick="selectOpt('${qid}',${i})" id="${qid}opt${i}">
-        <span class="option-letter">${'ABCD'[i]}</span>
-        <span class="opt-content"><span class="opt-label">${o.label}</span><span class="opt-sub">${o.sub}</span></span>
-      </button>`).join('');
-    const chk = document.getElementById(qid + 'Check');
-    if (chk) { chk.disabled = true; }
-  }
-
-  function selectOpt(qid, i) {
-    const st = Q[qid];
-    if (st.ans) return;
-    st.sel = i;
-    document.querySelectorAll('#' + qid + 'Options .option-btn').forEach((b, j) => {
-      b.classList.toggle('selected', j === i);
-    });
-    const chk = document.getElementById(qid + 'Check');
-    if (chk) chk.disabled = false;
-  }
-
-  function checkQ(n) {
-    const qid = 'q' + n;
-    const st = Q[qid];
-    if (st.sel === null) return;
-    st.ans = true;
-    const ok = st.sel === st.cor;
-    // Style buttons
-    document.querySelectorAll('#' + qid + 'Options .option-btn').forEach((b, j) => {
-      b.disabled = true;
-      b.classList.remove('selected');
-      if (j === st.cor) b.classList.add('correct');
-      else if (j === st.sel && !ok) b.classList.add('wrong');
-      else b.classList.add('dimmed');
-    });
-    // Banner
-    const banner = document.getElementById(qid + 'Banner');
-    banner.className = 'result-banner ' + (ok ? 'correct' : 'wrong');
-    document.getElementById(qid + 'Icon').textContent = ok ? '✓' : '✗';
-    document.getElementById(qid + 'BannerText').textContent = ok
-      ? 'Correct! ' + st.opts[st.cor].label
-      : 'Incorrect. The fault was: ' + st.opts[st.cor].label;
-    banner.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    // Working
-    showWorking(n);
-    // Voltage indicators
-    showVoltageIndicators(n);
-    // Progress dot
-    const dot = document.getElementById('dot-' + qid); if (dot) dot.classList.add('done');
-    // Navigation button
-    if (n === QUIZ_QUESTION_COUNT) {
-      document.getElementById(qid + 'Summary').style.display = '';
-    } else {
-      document.getElementById(qid + 'Next').style.display = '';
-    }
-  }
-
-  function frac(n, d) {
-    return `<span class="working-frac"><span class="num">${n}</span><span class="den">${d}</span></span>`;
-  }
 
   function buildWorkings() {
     const h   = calcHealthy(V);
@@ -904,119 +709,10 @@
     document.getElementById('voltageLabels').setAttribute('display', 'none');
   }
 
-  function showWorking(n) {
-    const qid = 'q' + n;
-    document.getElementById(qid + 'Working').className = 'working-box visible';
-    document.getElementById(qid + 'WorkingContent').innerHTML = buildWorkings()[n - 1]();
-  }
-
-  function showQuestion(n) {
-    cur = 'q' + n;
-    document.getElementById('summaryPanel').style.display = 'none';
-    for (let i = 1; i <= QUIZ_QUESTION_COUNT; i++) {
-      const p = document.getElementById('q' + i + 'Panel');
-      if (p) p.style.display = i === n ? 'flex' : 'none';
-    }
-    if (Q['q' + n] && Q['q' + n].ans) showVoltageIndicators(n);
-    else hideVoltageIndicators();
-    updateProgress();
-  }
-
-  // Named distinctly from goBack(e) below (the top-of-page menu "← Back"
-  // link's history.back() handler) — both were previously named goBack,
-  // and since JS function declarations in the same scope don't overload,
-  // the later definition (goBack(e)) silently won for BOTH call sites,
-  // breaking this one (called as goBack(n) with a number, which has no
-  // .preventDefault()). Same bug/fix as bjt_npn_troubleshoot_dc.html.
-  function goBackToQuestion(n) {
-    const prev = n - 1;
-    resetQuestion(prev);
-    resetQuestion(n);
-    buildQuestion(prev);
-    buildQuestion(n);
-    showQuestion(prev);
-  }
-
-  function resetQuestion(n) {
-    const qid = 'q' + n;
-    Q[qid] = { sel: null, ans: false, cor: null, opts: [] };
-    hideVoltageIndicators();
-    const opts = document.getElementById(qid + 'Options'); if (opts) opts.innerHTML = '';
-    const banner = document.getElementById(qid + 'Banner'); if (banner) banner.className = 'result-banner';
-    const working = document.getElementById(qid + 'Working'); if (working) working.className = 'working-box';
-    const chk = document.getElementById(qid + 'Check'); if (chk) { chk.style.display = 'inline-flex'; chk.disabled = true; }
-    const nxt = document.getElementById(qid + 'Next'); if (nxt) nxt.style.display = 'none';
-    const sum = document.getElementById(qid + 'Summary'); if (sum) sum.style.display = 'none';
-  }
-
-  function updateProgress() {
-    QIDS.forEach(q => {
-      const d = document.getElementById('dot-' + q); if (!d) return;
-      d.className = 'progress-dot';
-      if (q === cur) d.classList.add('active');
-      else if (Q[q] && Q[q].ans) d.classList.add('done');
-    });
-    const n = QIDS.indexOf(cur) + 1;
-    const lbl = document.getElementById('progressLabel');
-    if (lbl && n > 0) lbl.textContent = n + ' / ' + QUIZ_QUESTION_COUNT;
-  }
-
-  function showSummary() {
-    cur = 'summary';
-    for (let i = 1; i <= QUIZ_QUESTION_COUNT; i++) {
-      const p = document.getElementById('q' + i + 'Panel'); if (p) p.style.display = 'none';
-    }
-    document.getElementById('summaryPanel').style.display = 'block';
-    const vals = `<div style="background:rgba(0,0,0,.2);border:1px solid var(--colour-border);border-radius:4px;padding:.8rem 1rem;margin-bottom:1.2rem;font-size:.82rem;line-height:2.1">
-      <span style="color:var(--colour-supply);font-weight:bold">V<sub>CC</sub></span> = <span style="color:var(--colour-supply)">${V.vcc} V</span>&nbsp;&nbsp;&nbsp;
-      <span style="color:var(--colour-resistor-labels);font-weight:bold">R1</span> = <span style="color:var(--colour-resistor-labels)">${fmtRtxt(V.r1)}</span>&nbsp;&nbsp;
-      <span style="color:var(--colour-resistor-labels);font-weight:bold">R2</span> = <span style="color:var(--colour-resistor-labels)">${fmtRtxt(V.r2)}</span>&nbsp;&nbsp;
-      <span style="color:var(--colour-resistor-labels);font-weight:bold">RC</span> = <span style="color:var(--colour-resistor-labels)">${fmtRtxt(V.rc)}</span>&nbsp;&nbsp;
-      <span style="color:var(--colour-resistor-labels);font-weight:bold">RE</span> = <span style="color:var(--colour-resistor-labels)">${fmtRtxt(V.re)}</span>
-    </div>`;
-    const scenarioTitles = ['Cutoff — flat 0 V output', 'Saturation — positive half clipped', 'Asymmetric clipping — positive peaks only'];
-    const items = QIDS.map((qid, i) => {
-      const st = Q[qid];
-      const ans = (st.sel != null && st.opts[st.sel]) ? st.opts[st.sel].label : '—';
-      const ok = st.sel === st.cor;
-      const colour = ok ? '#00ff99' : '#ff3366';
-      const working = document.getElementById(qid + 'WorkingContent').innerHTML;
-      return `<div class="summary-item">
-        <div class="summary-item-head"><span class="summary-qnum">Q${i + 1}</span><span class="summary-question">${scenarioTitles[i]}</span></div>
-        <div class="summary-answer" style="color:${colour}">You answered: ${ans} &nbsp; ${ok ? '✓' : '✗'}</div>
-        <div class="working-box visible" style="margin-top:.5rem">${working}</div>
-      </div>`;
-    }).join('');
-    document.getElementById('summaryContent').innerHTML = vals + items;
-    QIDS.forEach(q => { const d = document.getElementById('dot-' + q); if (d) d.className = 'progress-dot done'; });
-    document.getElementById('progressLabel').textContent = 'Complete';
-  }
-
-  function resetQuiz() {
-    for (let n = 1; n <= QUIZ_QUESTION_COUNT; n++) resetQuestion(n);
-    for (let n = 1; n <= QUIZ_QUESTION_COUNT; n++) buildQuestion(n);
-    showQuestion(1);
-  }
-
-  // ── Zoom modal ──
-  function openModal() {
-    const src = document.getElementById('circuitSvg'), dst = document.getElementById('modalSvg');
-    dst.innerHTML = src.innerHTML; dst.setAttribute('viewBox', src.getAttribute('viewBox'));
-    document.getElementById('diagramModal').classList.add('open');
-    document.body.style.overflow = 'hidden';
-  }
-  function closeModal() {
-    document.getElementById('diagramModal').classList.remove('open');
-    document.getElementById('modalSvg').innerHTML = '';
-    document.body.style.overflow = '';
-  }
-  function handleModalClick(e) { if (e.target.closest('.modal-close')) return; closeModal(); }
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
   // ── Init ──
-  setMode('example1');
 
-  function goBack(e) { e.preventDefault(); history.back(); }
   // Only show the back link if there's actually somewhere to go back to —
   // history.length is 1 when this page was opened directly (new tab, bookmark,
   // double-click) rather than reached by clicking a link from a menu page.
@@ -1024,49 +720,161 @@
     document.getElementById('menuLink').style.display = '';
   }
 
-  // Dev helpers
-  function jump(n, answered) {
-    if (n < 1 || n > QUIZ_QUESTION_COUNT) return;
-    showQuestion(n);
-    if (answered) { const st = Q['q' + n]; if (st) { st.sel = st.cor; checkQ(n); } }
-  }
-  window.jump = jump;
-  function jumpToSummary() {
-    for (let n = 1; n <= QUIZ_QUESTION_COUNT; n++) { const st = Q['q' + n]; if (!st.ans) { st.sel = st.cor; checkQ(n); } }
-    showSummary();
-  }
-  window.jumpToSummary = jumpToSummary;
+  // ══════════════════════════════════════════════════════════════════════
+  // QUESTIONS — quiz-engine.js format (one per fault scenario). The scope
+  // picture is a per-question field, drawn into #qScope by RENDER_EXTRA.
+  // ══════════════════════════════════════════════════════════════════════
+  const QUESTIONS = [
+      {
+        leftPanel: 'circuit',
+        scenarioTitle: 'Cutoff — flat 0 V output',
+        scope: `<div class="scope-wrap">
+          <svg viewBox="0 0 280 120" xmlns="http://www.w3.org/2000/svg" style="display:block;width:100%;height:auto;background:#030b0f">
+            <line x1="20" y1="20" x2="260" y2="20" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
+            <line x1="20" y1="40" x2="260" y2="40" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
+            <line x1="20" y1="60" x2="260" y2="60" stroke="rgba(0,200,255,.18)" stroke-width="1"/>
+            <line x1="20" y1="80" x2="260" y2="80" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
+            <line x1="20" y1="100" x2="260" y2="100" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
+            <line x1="20" y1="10" x2="20" y2="110" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
+            <line x1="80" y1="10" x2="80" y2="110" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
+            <line x1="140" y1="10" x2="140" y2="110" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
+            <line x1="200" y1="10" x2="200" y2="110" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
+            <line x1="260" y1="10" x2="260" y2="110" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
+            <text x="8" y="22" fill="rgba(0,200,255,.4)" font-size="8" font-family="monospace">+</text>
+            <text x="8" y="63" fill="rgba(0,200,255,.4)" font-size="8" font-family="monospace">0</text>
+            <text x="8" y="103" fill="rgba(0,200,255,.4)" font-size="8" font-family="monospace">−</text>
+            <text x="22" y="18" fill="#ffd700" font-size="8" font-family="monospace" opacity=".8">CH1 Vin</text>
+            <text x="22" y="28" fill="#00e5ff" font-size="8" font-family="monospace" opacity=".8">CH2 Vout</text>
+            <!-- CH1 input (small sine) -->
+            <path d="M 20,60 C 30.5,52.9 39.5,47 50,47 C 60.5,47 69.5,52.9 80,60 C 90.5,67.1 99.5,73 110,73 C 120.5,73 129.5,67.1 140,60 C 150.5,52.9 159.5,47 170,47 C 180.5,47 189.5,52.9 200,60 C 210.5,67.1 219.5,73 230,73 C 240.5,73 249.5,67.1 260,60" fill="none" stroke="#ffd700" stroke-width="1" opacity=".7"/>
+            <!-- CH2 output: FLAT 0V -->
+            <polyline points="20,60 260,60" fill="none" stroke="#00e5ff" stroke-width="1"/>
+          </svg>
+          <div class="scope-legend">
+            <div class="scope-legend-ch"><div class="scope-legend-line" style="background:#ffd700"></div><span style="color:#ffd700;font-size:.68rem">CH1: Input (V<sub>s</sub>)</span></div>
+            <div class="scope-legend-ch"><div class="scope-legend-line" style="background:#00e5ff"></div><span style="color:#00e5ff;font-size:.68rem">CH2: Output (after C<sub>out</sub>)</span></div>
+          </div>
+        </div>`,
+        text: () => `The output scope trace is a flat line at 0 V — the AC signal has completely disappeared. Which fault caused this?`,
+        hint: () => `Think about which fault would completely stop collector current, leaving nothing for C<sub>out</sub> to pass through to the load.`,
+        options: () => shuffle(SCENARIO_OPTIONS[0].map(o => ({
+          label: `<span class="opt-content"><span class="opt-label">${o.label}</span><span class="opt-sub">${o.sub}</span></span>`,
+          plain: o.label,
+          type: o.correct ? 'correct' : 'wrong',
+        }))),
+        correctExplain: () => SCENARIO_OPTIONS[0].find(o => o.correct).label,
+        working: () => buildWorkings()[0](),
+      },
+      {
+        leftPanel: 'circuit',
+        scenarioTitle: 'Saturation — positive half clipped',
+        scope: `<div class="scope-wrap">
+          <svg viewBox="0 0 280 120" xmlns="http://www.w3.org/2000/svg" style="display:block;width:100%;height:auto;background:#030b0f">
+            <line x1="20" y1="20" x2="260" y2="20" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
+            <line x1="20" y1="40" x2="260" y2="40" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
+            <line x1="20" y1="60" x2="260" y2="60" stroke="rgba(0,200,255,.18)" stroke-width="1"/>
+            <line x1="20" y1="80" x2="260" y2="80" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
+            <line x1="20" y1="100" x2="260" y2="100" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
+            <line x1="20" y1="10" x2="20" y2="110" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
+            <line x1="80" y1="10" x2="80" y2="110" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
+            <line x1="140" y1="10" x2="140" y2="110" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
+            <line x1="200" y1="10" x2="200" y2="110" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
+            <line x1="260" y1="10" x2="260" y2="110" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
+            <text x="8" y="22" fill="rgba(0,200,255,.4)" font-size="8" font-family="monospace">+</text>
+            <text x="8" y="63" fill="rgba(0,200,255,.4)" font-size="8" font-family="monospace">0</text>
+            <text x="8" y="103" fill="rgba(0,200,255,.4)" font-size="8" font-family="monospace">−</text>
+            <text x="22" y="18" fill="#ffd700" font-size="8" font-family="monospace" opacity=".8">CH1 Vin</text>
+            <text x="22" y="28" fill="#00e5ff" font-size="8" font-family="monospace" opacity=".8">CH2 Vout</text>
+            <path d="M 20,60 C 30.5,52.9 39.5,47 50,47 C 60.5,47 69.5,52.9 80,60 C 90.5,67.1 99.5,73 110,73 C 120.5,73 129.5,67.1 140,60 C 150.5,52.9 159.5,47 170,47 C 180.5,47 189.5,52.9 200,60 C 210.5,67.1 219.5,73 230,73 C 240.5,73 249.5,67.1 260,60" fill="none" stroke="#ffd700" stroke-width="1" opacity=".7"/>
+            <!-- Saturation: negative half normal, positive half clipped flat at y=50 -->
+            <polyline points="20,60 25,70 30,80 35,88 40,95 45,99 50,100 55,99 60,95 65,88 70,80 75,70 80,60 85,50 90,50 95,50 100,50 105,50 110,50 115,50 120,50 125,50 130,50 135,50 140,60 145,70 150,80 155,88 160,95 165,99 170,100 175,99 180,95 185,88 190,80 195,70 200,60 205,50 210,50 215,50 220,50 225,50 230,50 235,50 240,50 245,50 250,50 255,50 260,60" fill="none" stroke="#00e5ff" stroke-width="1"/>
+          </svg>
+          <div class="scope-legend">
+            <div class="scope-legend-ch"><div class="scope-legend-line" style="background:#ffd700"></div><span style="color:#ffd700;font-size:.68rem">CH1: Input (V<sub>s</sub>)</span></div>
+            <div class="scope-legend-ch"><div class="scope-legend-line" style="background:#00e5ff"></div><span style="color:#00e5ff;font-size:.68rem">CH2: Output (after C<sub>out</sub>)</span></div>
+          </div>
+        </div>`,
+        text: () => `The positive half of the output waveform is completely flattened — the transistor can't swing any higher. Which fault caused this?`,
+        hint: () => `The transistor is pegged at maximum conduction. Consider what pushes V<sub>B</sub> toward GND, flooding the base with current in a PNP circuit.`,
+        options: () => shuffle(SCENARIO_OPTIONS[1].map(o => ({
+          label: `<span class="opt-content"><span class="opt-label">${o.label}</span><span class="opt-sub">${o.sub}</span></span>`,
+          plain: o.label,
+          type: o.correct ? 'correct' : 'wrong',
+        }))),
+        correctExplain: () => SCENARIO_OPTIONS[1].find(o => o.correct).label,
+        working: () => buildWorkings()[1](),
+      },
+      {
+        leftPanel: 'circuit',
+        scenarioTitle: 'Asymmetric clipping — positive peaks only',
+        scope: `<div class="scope-wrap">
+          <svg viewBox="0 0 280 120" xmlns="http://www.w3.org/2000/svg" style="display:block;width:100%;height:auto;background:#030b0f">
+            <line x1="20" y1="20" x2="260" y2="20" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
+            <line x1="20" y1="40" x2="260" y2="40" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
+            <line x1="20" y1="60" x2="260" y2="60" stroke="rgba(0,200,255,.18)" stroke-width="1"/>
+            <line x1="20" y1="80" x2="260" y2="80" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
+            <line x1="20" y1="100" x2="260" y2="100" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
+            <line x1="20" y1="10" x2="20" y2="110" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
+            <line x1="80" y1="10" x2="80" y2="110" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
+            <line x1="140" y1="10" x2="140" y2="110" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
+            <line x1="200" y1="10" x2="200" y2="110" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
+            <line x1="260" y1="10" x2="260" y2="110" stroke="rgba(0,200,255,.07)" stroke-width="1"/>
+            <text x="8" y="22" fill="rgba(0,200,255,.4)" font-size="8" font-family="monospace">+</text>
+            <text x="8" y="63" fill="rgba(0,200,255,.4)" font-size="8" font-family="monospace">0</text>
+            <text x="8" y="103" fill="rgba(0,200,255,.4)" font-size="8" font-family="monospace">−</text>
+            <text x="22" y="18" fill="#ffd700" font-size="8" font-family="monospace" opacity=".8">CH1 Vin</text>
+            <text x="22" y="28" fill="#00e5ff" font-size="8" font-family="monospace" opacity=".8">CH2 Vout</text>
+            <path d="M 20,60 C 30.5,52.9 39.5,47 50,47 C 60.5,47 69.5,52.9 80,60 C 90.5,67.1 99.5,73 110,73 C 120.5,73 129.5,67.1 140,60 C 150.5,52.9 159.5,47 170,47 C 180.5,47 189.5,52.9 200,60 C 210.5,67.1 219.5,73 230,73 C 240.5,73 249.5,67.1 260,60" fill="none" stroke="#ffd700" stroke-width="1" opacity=".7"/>
+            <!-- Asymmetric: positive peaks clipped at y=35, negative half free -->
+            <polyline points="20,60 25,70 30,80 35,88 40,95 45,99 50,100 55,99 60,95 65,88 70,80 75,70 80,60 85,50 90,40 95,35 100,35 105,35 110,35 115,35 120,35 125,35 130,40 135,50 140,60 145,70 150,80 155,88 160,95 165,99 170,100 175,99 180,95 185,88 190,80 195,70 200,60 205,50 210,40 215,35 220,35 225,35 230,35 235,35 240,35 245,35 250,40 255,50 260,60" fill="none" stroke="#00e5ff" stroke-width="1"/>
+          </svg>
+          <div class="scope-legend">
+            <div class="scope-legend-ch"><div class="scope-legend-line" style="background:#ffd700"></div><span style="color:#ffd700;font-size:.68rem">CH1: Input (V<sub>s</sub>)</span></div>
+            <div class="scope-legend-ch"><div class="scope-legend-line" style="background:#00e5ff"></div><span style="color:#00e5ff;font-size:.68rem">CH2: Output (after C<sub>out</sub>)</span></div>
+          </div>
+        </div>`,
+        text: () => `Only the positive peaks are clipped — the negative half of the waveform is clean. Which fault caused this asymmetric clipping?`,
+        hint: () => `Both halves of the wave are present, so the transistor is still active. The DC bias point has shifted — which component would push V<sub>C</sub> too close to the emitter rail?`,
+        options: () => shuffle(SCENARIO_OPTIONS[2].map(o => ({
+          label: `<span class="opt-content"><span class="opt-label">${o.label}</span><span class="opt-sub">${o.sub}</span></span>`,
+          plain: o.label,
+          type: o.correct ? 'correct' : 'wrong',
+        }))),
+        correctExplain: () => SCENARIO_OPTIONS[2].find(o => o.correct).label,
+        working: () => buildWorkings()[2](),
+      },
+  ];
 
-  /* ─── DEV: xy ruler overlay, for lining up SVG coordinates by eye ────────
-     Console:   setXY(1) / setXY(0)     URL: ?xy=1 */
-  function buildXYRuler() {
-    const g = document.getElementById('xyRuler');
-    if (g.dataset.built) return;
-    g.dataset.built = '1';
-    const vb = document.getElementById('circuitSvg').viewBox.baseVal;
-    const W = vb.width, H = vb.height;
-    const hy = H - 10, vx = 10, col = '#ff00ff';
-    let svg = `<line x1="0" y1="${hy}" x2="${W}" y2="${hy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
-    for (let x = 0; x <= W; x += 10) {
-      const major = (x % 50 === 0), len = major ? 10 : 5;
-      svg += `<line x1="${x}" y1="${hy - len}" x2="${x}" y2="${hy}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
-      if (major) svg += `<text x="${x}" y="${hy - 13}" fill="${col}" font-size="8" text-anchor="middle">${x}</text>`;
-    }
-    svg += `<line x1="${vx}" y1="0" x2="${vx}" y2="${H}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
-    for (let y = 0; y <= H; y += 10) {
-      const major = (y % 50 === 0), len = major ? 10 : 5;
-      svg += `<line x1="${vx}" y1="${y}" x2="${vx + len}" y2="${y}" stroke="${col}" stroke-width="1" opacity="0.6"/>`;
-      if (major) svg += `<text x="${vx + 13}" y="${y + 3}" fill="${col}" font-size="8" text-anchor="start">${y}</text>`;
-    }
-    g.innerHTML = svg;
-  }
-  function setXY(on) {
-    if (on) buildXYRuler();
-    document.getElementById('xyRuler').setAttribute('display', on ? 'inline' : 'none');
-  }
-  window.setXY = setXY;
+  RENDER_EXTRA = function () {
+    const data = QUESTIONS[cur];
+    document.getElementById('qScope').innerHTML = data.scope;
+    // fault voltages appear on the circuit once the question is answered
+    if (Q[cur].ans) showVoltageIndicators(cur + 1); else hideVoltageIndicators();
+  };
 
-  { const p = new URLSearchParams(location.search); if (p.has('q')) { if (p.get('q')==='s') jumpToSummary(); else jump(+p.get('q'), p.has('ans')); } if (p.has('xy')) setXY(+p.get('xy') === 1); }
+  // Summary: component values on top, scenario title instead of the long stem.
+  SUMMARY_CIRCUIT_REF = { id: null, label: 'Circuit Diagram', viewBox: null };
+  SUMMARY_EXTRA = function () {
+    const c = document.getElementById('summaryContent');
+    c.querySelectorAll('.summary-item').forEach((item, i) => {
+      item.querySelector('.summary-question').textContent = QUESTIONS[i].scenarioTitle;
+      // headline label only (the two-line option's sub-text isn't needed here)
+      const st = Q[i], ok = isAnswerCorrect(QUESTIONS[i], st);
+      const ans = (st.sel != null && st.opts[st.sel]) ? st.opts[st.sel].plain : '—';
+      item.querySelector('.summary-answer').innerHTML = `You answered: ${ans} &nbsp; ${ok ? '✓' : '✗'}`;
+    });
+    c.insertAdjacentHTML('afterbegin', `<div style="background:rgba(0,0,0,.2);border:1px solid var(--colour-border);border-radius:4px;padding:.8rem 1rem;margin-bottom:1.2rem;font-size:.82rem;line-height:2">
+      <span style="color:var(--colour-supply);font-weight:bold">V<sub>CC</sub></span> = <span style="color:var(--colour-supply)">${V.vcc} V</span>&nbsp;&nbsp;&nbsp;
+      <span style="color:var(--colour-resistor-labels);font-weight:bold">R1</span> = <span style="color:var(--colour-resistor-labels)">${fmtRtxt(V.r1)}</span>&nbsp;&nbsp;
+      <span style="color:var(--colour-resistor-labels);font-weight:bold">R2</span> = <span style="color:var(--colour-resistor-labels)">${fmtRtxt(V.r2)}</span>&nbsp;&nbsp;
+      <span style="color:var(--colour-resistor-labels);font-weight:bold">RC</span> = <span style="color:var(--colour-resistor-labels)">${fmtRtxt(V.rc)}</span>&nbsp;&nbsp;
+      <span style="color:var(--colour-resistor-labels);font-weight:bold">RE</span> = <span style="color:var(--colour-resistor-labels)">${fmtRtxt(V.re)}</span>
+    </div>`);
+  };
+
+  initQuizNav();
+  setMode('example1');      // builds the value set, then resetQuiz()
+  initQuizFromURL();
 </script>
 </body>
 </html>
