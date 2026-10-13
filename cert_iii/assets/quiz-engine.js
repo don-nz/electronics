@@ -1283,6 +1283,74 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal()
 // calling correctExplain()/working() — then restores st's original
 // fields straight after, so a student's own in-progress interactive
 // answers on screen are never disturbed by printing.
+// Blank "answer area" for one question on the printed worksheet. Choice
+// questions print their options with tick boxes; table/placement kinds print
+// the empty grid or the term list, so the paper version can actually be
+// attempted. A page whose options are long calculation lines can set
+// PRINT_BLANK_LINES = true to get ruled lines instead (working-out space).
+let PRINT_BLANK_LINES = false;
+function printAnswerArea(data, st) {
+  const mark = '<span class="print-box"></span>';
+  if (isBits(data)) {
+    const head = document.querySelector('#qBits thead');
+    let h = '<table class="print-table">' + (head ? head.outerHTML : '<thead><tr><th>Value</th><th colspan="4">Bits</th></tr></thead>') + '<tbody>';
+    st.opts.forEach(row => { h += `<tr><td>${row.value}</td>${'<td class="print-cell"></td>'.repeat(4)}</tr>`; });
+    return h + '</tbody></table>';
+  }
+  if (isTruth(data)) {
+    const labels = data.inputCounts ? data.inputLabels(st.n) : data.inputLabels();
+    const trailing = data.trailingLabels ? data.trailingLabels() : [];
+    let h = '<table class="print-table"><thead><tr>' + labels.map(l => `<th>${l}</th>`).join('') + `<th>${data.outputLabel()}</th>` + trailing.map(l => `<th>${l}</th>`).join('') + '</tr></thead><tbody>';
+    st.opts.forEach(row => {
+      h += '<tr>' + row.inputs.map(v => `<td>${v}</td>`).join('') + '<td class="print-cell"></td>' + (row.trailing || []).map(v => `<td>${v === null ? '' : v}</td>`).join('') + '</tr>';
+    });
+    return h + '</tbody></table>';
+  }
+  if (isMatch(data)) {
+    const cols = data.columns();
+    const chip = o => o.shapeId ? `<svg viewBox="${data.shapeViewBox || SHAPE_VIEWBOX}" class="print-shape"><use href="#${o.shapeId}"/></svg>` : o.label;
+    const colHead = c => typeof c === 'string' ? c : `<svg viewBox="${data.shapeViewBox || SHAPE_VIEWBOX}" class="print-shape"><use href="#${c.shapeId}"/></svg>`;
+    return `<div class="print-pool">${st.opts.map(o => `<span class="print-term">${chip(o)}</span>`).join('')}</div>` +
+      `<table class="print-table print-match"><thead><tr>${cols.map(c => `<th>${colHead(c)}</th>`).join('')}</tr></thead><tbody><tr>${cols.map(() => '<td class="print-cell print-tall"></td>').join('')}</tr></tbody></table>`;
+  }
+  if (isFill(data)) {
+    return `<div class="print-pool">${st.opts.map(o => `<span class="print-term">${o.poolHtml}</span>`).join('')}</div>` +
+      `<div class="print-slots">${data.slotIds.map((_, s) => `<span class="print-slot">Slot ${s + 1}: <span class="print-blank-inline"></span></span>`).join('')}</div>`;
+  }
+  if (isSwitches(data)) {
+    return `<div class="print-slots">${data.switchLabels().map(l => `<span class="print-slot">${l}: <span class="print-box"></span> 0 <span class="print-box"></span> 1</span>`).join('')}</div>`;
+  }
+  if (!st.opts) return '';
+  if (PRINT_BLANK_LINES) return '<div class="print-options">' + st.opts.map(() => '<div class="print-blank-line"></div>').join('') + '</div>';
+  const grid = data.leftPanel === 'shapeGrid';
+  const label = (o, i) => o.shapeId
+    ? `<svg viewBox="${data.shapeViewBox || SHAPE_VIEWBOX}" class="print-shape"><use href="#${o.shapeId}"/></svg>`
+    : o.label;
+  return '<div class="print-options print-choices">' + st.opts.map((o, i) =>
+    `<div class="print-choice">${mark}<b>${grid ? i + 1 : LETTERS[i]}.</b> ${label(o, i)}</div>`).join('') + '</div>';
+}
+
+// Adds the "Print Worksheet" button and the #printWorksheet host to any page
+// that doesn't already carry its own — called from initQuizNav() so every
+// engine page gets printing without per-page markup. A page with its own
+// .print-worksheet-btn / #printWorksheet / printWorksheetNow() keeps them.
+function installPrintWorksheet() {
+  if (typeof QUESTIONS === 'undefined' || document.querySelector('.print-worksheet-btn')) return;
+  const check = document.getElementById('qCheck');
+  if (!check || !check.parentNode) return;
+  const btn = document.createElement('button');
+  btn.className = 'btn print-worksheet-btn';
+  btn.textContent = '🖨 Print Worksheet';
+  btn.addEventListener('click', () => { buildPrintWorksheet(); qeTriggerPrint(); });
+  check.parentNode.appendChild(btn);
+  if (!document.getElementById('printWorksheet')) {
+    const host = document.createElement('div');
+    host.id = 'printWorksheet';
+    host.className = 'print-only';
+    document.body.appendChild(host);
+  }
+}
+
 function buildPrintWorksheet() {
   const host = document.getElementById('printWorksheet');
   if (!host) return;
@@ -1293,9 +1361,15 @@ function buildPrintWorksheet() {
   if (h1) html += `<h1>${esc(h1.textContent)}</h1>`;
   if (sub) html += `<div class="print-subtitle">${esc(sub.textContent)}</div>`;
 
-  const circuitSvg = document.getElementById(CIRCUIT_SVG_ID);
-  const circuitPanel = document.querySelector('.circuit-panel');
-  if (circuitSvg && circuitPanel && getComputedStyle(circuitPanel).display !== 'none') {
+  // One shared reference circuit (printed once, above the questions) when the
+  // page keeps a single static circuit; per-question circuits (circuitId
+  // swapped by showCircuitRef) are printed under their own question instead.
+  // The panel may be hidden while this runs (e.g. Q1 has no circuit), so the
+  // check is on the questions' configuration, not on what is on screen now.
+  const perQuestion = QUESTIONS.some(d => d.circuitId);
+  const circuitSvg = document.getElementById(CIRCUIT_SVG_ID) || document.querySelector('.circuit-panel svg');
+  const usesCircuit = QUESTIONS.some(d => d.leftPanel === 'circuit' || d.circuitId);
+  if (circuitSvg && usesCircuit && !perQuestion) {
     const label = document.querySelector('.panel-label');
     html += `<div class="print-circuit">
       ${label ? `<div class="print-circuit-label">${esc(label.textContent)}</div>` : ''}
@@ -1307,11 +1381,11 @@ function buildPrintWorksheet() {
   QUESTIONS.forEach((data, i) => {
     const st = Q[i];
     html += `<div class="print-question"><span class="print-qnum">Q${i + 1}.</span> <span class="print-qtext">${data.text(st)}</span>`;
-    if (!isMatch(data) && !isBits(data) && !isTruth(data) && !isFill(data) && !isSwitches(data) && st.opts) {
-      html += '<div class="print-options">';
-      st.opts.forEach(() => { html += '<div class="print-blank-line"></div>'; });
-      html += '</div>';
+    if (data.circuitId && circuitSvg) {
+      const vb = data.circuitViewBox || DEFAULT_CIRCUIT_VIEWBOX || circuitSvg.getAttribute('viewBox');
+      html += `<div class="print-circuit"><svg viewBox="${vb}" xmlns="http://www.w3.org/2000/svg"><use href="#${data.circuitId}"/></svg></div>`;
     }
+    html += printAnswerArea(data, st);
     html += '</div>';
   });
   html += '</div>';
@@ -1420,6 +1494,7 @@ window.setXY = setXY;
 // each page needs. ──
 function initQuizNav() {
   buildProgressDots();
+  installPrintWorksheet();
   // Only show the back link if there's actually somewhere to go back to —
   // history.length is 1 when this page was opened directly (new tab,
   // bookmark, double-click) rather than reached by clicking a link from a

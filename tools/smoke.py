@@ -38,6 +38,7 @@ BLANK = ('<script>addEventListener("load",function(){'
          'for(var i=0;i<QUESTIONS.length;i++){try{goToQuestion(i+1);checkAnswer();}'
          'catch(e){window.__e.push("blank-check Q"+(i+1)+": "+e.message)}}'
          'try{showSummary();}catch(e){window.__e.push("blank-check summary: "+e.message)}'
+         'try{if(typeof buildPrintWorksheet==="function")buildPrintWorksheet();}catch(e){window.__e.push("blank-check print: "+e.message)}'
          '});</script>')
 
 
