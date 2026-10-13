@@ -201,14 +201,26 @@ def main():
     adopt = set(x for x in a.adopt.split(',') if x)
     paths = [os.path.abspath(p) for p in a.pages] if a.pages else list(all_pages())
     if a.list:
+        keep = set()
+        kp = os.path.join(HERE, 'shapes_intentional.txt')
+        if os.path.exists(kp):
+            for line in open(kp, encoding='utf-8'):
+                line = line.strip()
+                if line and not line.startswith('#') and '|' in line:
+                    keep.add(tuple(line.split('|', 1)))
         clean = 0
         for p in paths:
             todo, drift = classify(open(p, encoding='utf-8').read(), idx)
-            if not todo and not drift:
+            rel = os.path.relpath(p, ROOT).replace(os.sep, '/')
+            intentional = [d for d in drift if (rel, d) in keep]
+            drift = [d for d in drift if (rel, d) not in keep]
+            if not todo and not drift and not intentional:
                 continue
             clean += not drift
-            print(('OK   ' if not drift else 'DRIFT'), os.path.relpath(p, ROOT), f'match={len(todo)}',
-                  ('drift=' + ','.join(drift[:6])) if drift else '')
+            tag = 'OK   ' if not drift and not intentional else ('KEEP ' if not drift else 'DRIFT')
+            print(tag, rel, f'match={len(todo)}',
+                  ('drift=' + ','.join(drift[:6])) if drift else '',
+                  ('intentional=' + ','.join(intentional)) if intentional else '')
         print(f'{clean} pages fully migratable')
         return 0
     for p in paths:
