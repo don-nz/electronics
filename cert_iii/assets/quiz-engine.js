@@ -1080,6 +1080,7 @@ let CIRCUIT_REF_EXTRA = null;         // optional (id, loadTerminal, ammeter) =>
 let SUMMARY_CIRCUIT_REF = null;       // optional { id, label, viewBox } — if set, showSummary() shows this specific circuit instead of hiding the panel via swapLeftPanel('none')
 let RENDER_EXTRA = null;              // optional () => void, called at the end of every renderQuestion() — for per-file "runs on every render" logic quiz-engine.js can't know about, e.g. progressive-reveal value badges (re′/Zb/Zin/Zout) that persist once their own question is answered, independent of which question is currently on screen
 let RESET_EXTRA = null;               // optional () => void, called at the very START of every resetQuiz() (including on "Restart" clicks, not just the first load) — e.g. digital_gate_identification.html's own `shuffle(QUESTIONS)`, which shuffles the QUESTIONS array's ORDER itself (each of the 7 gates appears in a fixed slot, one per gate) rather than each question's own options, so every playthrough covers all 7 exactly once in a random order. When RESET_EXTRA reorders QUESTIONS like this, resetQuiz() itself automatically SKIPS calling it whenever the URL already has a ?q=N param (see resetQuiz()'s own comment) — no per-page opt-in needed, it's a plain "is ?q= present" check done once in the shared engine — so ?q=N stays a reliable, repeatable deep-link to "the Nth question as written" for debugging/sharing, while a plain load/Restart still shuffles normally
+let SUMMARY_EXTRA = null;            // optional () => void, called at the end of showSummary() — e.g. interactive-circuit.js uses it to set the inline circuit's label/viewBox for the summary page
 
 // For leftPanel:'circuit' questions that reference a DIFFERENT circuit per
 // question (rather than always the same static one) — swaps which <use>
@@ -1192,6 +1193,7 @@ function showSummary() {
   document.getElementById('summaryContent').innerHTML = items;
   QUESTIONS.forEach((_, i) => { const d = document.getElementById('dot-' + i); if (d) d.className = 'progress-dot done'; });
   document.getElementById('progressLabel').textContent = 'Complete';
+  if (SUMMARY_EXTRA) SUMMARY_EXTRA();
 }
 
 // ── zoom modal — fully defensive; pages without a #diagramModal simply
