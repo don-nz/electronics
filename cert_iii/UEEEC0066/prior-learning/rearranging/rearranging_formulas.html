@@ -1,0 +1,343 @@
+<!--
+  Rearranging formulas — practice, one algebra step per question.
+
+  Each PROBLEM starts from a formula and asks for one variable to be made the
+  subject. Every step is its own question: the student sees the equation so far
+  and picks the correct next line from four (one correct, three invalid — each
+  invalid line is a real, common slip: wrong operation, operation applied to one
+  side only, or the right operation on the wrong terms).
+
+  To add formulas, append to PROBLEMS below. A problem is:
+    { start, target, steps: [ { goal, line, wrong: [3 lines], why } ... ] }
+  `start` and every `line`/`wrong` entry are HTML (use the helpers V, I, R, ...
+  and frac()). QUESTIONS is generated from PROBLEMS at load, so nothing else
+  needs editing.
+
+  Built on the shared cert_iii/assets/quiz-engine.js (single column, no
+  circuit panel).
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../assets/theme-init.js"></script>
+  <script src="../../../assets/quiz-engine.js"></script>
+  <title>Rearranging Formulas</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../assets/quiz-common.css">
+  <script src="../../../assets/breadcrumb.js" defer></script>
+  <style>
+    .eq-strip {
+      margin: .7rem 0 .2rem;
+      padding: .7rem 1rem;
+      border: 1px solid var(--colour-border);
+      border-radius: 8px;
+      background: rgba(var(--colour-ui-primary-rgb), .06);
+      font-size: 1.15rem;
+      text-align: center;
+    }
+    .eq-strip .eq-label { display: block; font-size: .7rem; letter-spacing: .08em; text-transform: uppercase; color: var(--colour-label); margin-bottom: .2rem; }
+    .eq-goal { font-size: .85rem; }
+    .eq-line { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .4rem .7rem; }
+    .eq-arrow { color: var(--colour-label); }
+    .eq-step:last-child { font-weight: 700; }
+    /* 10^(A/20): the exponent holds a subscripted symbol, so keep it larger than the browser default */
+    .eq-strip sup, .option-btn sup, .working-box sup { font-size: .85em; line-height: 0; }
+    .eq-strip sup sub, .option-btn sup sub, .working-box sup sub { font-size: .8em; }
+  </style>
+</head>
+
+<body>
+  <div class="crumb" id="crumb" data-current="Rearranging Formulas"></div>
+  <header>
+    <h1>Rearranging Formulas</h1>
+    <p>Prior Learning · Make the Subject · One Step at a Time</p>
+  </header>
+
+  <div class="quiz-wrap single-col" id="quizWrap">
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+
+          <div class="options" id="qOptions"></div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ── symbol helpers: same colours as the rest of the course ──
+    const V = '<b class="colour-voltage">V</b>';
+    const I = '<b class="colour-current">I</b>';
+    const R = '<b class="colour-resistor">R</b>';
+    const F = '<b class="colour-gain">f</b>';
+    const C = '<b class="colour-cap">C</b>';
+    const PI2 = '2π';
+    const XC = '<b class="colour-cap">X<sub>C</sub></b>';
+    const AVDB = '<b class="colour-gain">A<sub>V(dB)</sub></b>';
+    const VIN = '<b class="colour-voltage">V<sub>in</sub></b>';
+    const VOUT = '<b class="colour-voltage">V<sub>out</sub></b>';
+    const LOGQ = `log(${frac(VOUT, VIN)})`;                  // log(Vout / Vin)
+    const POW = `10<sup>${AVDB}/20</sup>`;                   // 10^(AV(dB) / 20)
+    const X = ' × ', EQ = ' = ';
+
+    // ══════════════════════════════════════════════════════════════════════
+    // PROBLEMS — add new formulas here.
+    // ══════════════════════════════════════════════════════════════════════
+    const PROBLEMS = [
+      {
+        name: "Ohm's law — make R the subject",
+        start: `${I} = ${frac(V, R)}`,
+        target: R,
+        steps: [
+          {
+            goal: `${R} is stuck underneath ${V}, so it is being <b>divided</b> into it. Undo the divide by ${R} by doing the opposite to <b>both</b> sides.`,
+            line: `${I}${X}${R}${EQ}${V}`,
+            wrong: [
+              `${frac(I, R)}${EQ}${V}`,
+              `${I}${EQ}${V}${X}${R}`,
+              `${I} + ${R}${EQ}${V}`,
+            ],
+            why: `The opposite of ÷${R} is ×${R}. Multiply <b>both</b> sides by ${R}: on the right, ${frac(V, R)}${X}${R} cancels to ${V}; on the left, ${I} picks up the ${R}.`,
+          },
+          {
+            goal: `${R} is now multiplied by ${I}. Undo it with the opposite operation on both sides.`,
+            line: `${R}${EQ}${frac(V, I)}`,
+            wrong: [
+              `${R}${EQ}${V}${X}${I}`,
+              `${R}${EQ}${frac(I, V)}`,
+              `${R}${EQ}${V} − ${I}`,
+            ],
+            why: `The opposite of ×${I} is ÷${I}. Divide <b>both</b> sides by ${I}: the left becomes ${R}, the right becomes ${frac(V, I)}.`,
+          },
+        ],
+      },
+      {
+        name: "Ohm's law — make I the subject",
+        start: `${V}${EQ}${I}${X}${R}`,
+        target: I,
+        steps: [
+          {
+            goal: `${I} is multiplied by ${R}. Undo that by doing the opposite to <b>both</b> sides.`,
+            line: `${frac(V, R)}${EQ}${I}`,
+            wrong: [
+              `${V} − ${R}${EQ}${I}`,
+              `${V}${X}${R}${EQ}${I}`,
+              `${V}${EQ}${frac(I, R)}`,
+            ],
+            why: `The opposite of ×${R} is ÷${R}. Divide <b>both</b> sides by ${R}: the right becomes ${I}, the left becomes ${frac(V, R)}.`,
+          },
+          {
+            goal: `Write it with ${I} as the subject on the left.`,
+            line: `${I}${EQ}${frac(V, R)}`,
+            wrong: [
+              `${I}${EQ}${frac(R, V)}`,
+              `${I}${EQ}${V}${X}${R}`,
+              `${I}${EQ}${V} − ${R}`,
+            ],
+            why: `Swap the two sides. ${frac(V, R)}${EQ}${I} and ${I}${EQ}${frac(V, R)} say exactly the same thing.`,
+          },
+        ],
+      },
+      {
+        name: "Frequency (RC) — make R the subject",
+        start: `${F}${EQ}${frac('1', `${PI2}${X}${R}${X}${C}`)}`,
+        target: R,
+        steps: [
+          {
+            goal: `${R} is part of the bottom line, multiplied by ${PI2} and ${C}. Multiply <b>both</b> sides by ${R} to bring it out of the fraction.`,
+            line: `${F}${X}${R}${EQ}${frac('1', `${PI2}${X}${C}`)}`,
+            wrong: [
+              `${frac(F, R)}${EQ}${frac('1', `${PI2}${X}${C}`)}`,
+              `${F}${EQ}${frac('1', `${PI2}${X}${C}`)}`,
+              `${F}${X}${R}${EQ}${frac('1', `${PI2}${X}${R}${X}${C}`)}`,
+            ],
+            why: `Multiplying the right side by ${R} cancels the ${R} on the bottom, leaving ${frac('1', `${PI2}${X}${C}`)}. The left side must be multiplied by ${R} too: ${F}${X}${R}. Doing it to one side only (or dropping the ${R} without multiplying the left) breaks the equation.`,
+          },
+          {
+            goal: `${R} is now multiplied by ${F}. Do the opposite to <b>both</b> sides so ${R} is on its own.`,
+            line: `${R}${EQ}${frac('1', `${PI2}${X}${F}${X}${C}`)}`,
+            wrong: [
+              `${R}${EQ}${frac(F, `${PI2}${X}${C}`)}`,
+              `${R}${EQ}${frac('1', `${PI2}${X}${C}`)} − ${F}`,
+              `${R}${EQ}${PI2}${X}${F}${X}${C}`,
+            ],
+            why: `Divide <b>both</b> sides by ${F}. The left becomes ${R}; on the right, ${frac('1', `${PI2}${X}${C}`)} divided by ${F} puts the ${F} underneath alongside ${PI2} and ${C}.`,
+          },
+        ],
+      },
+      {
+        name: "Frequency (RC) — make C the subject",
+        start: `${F}${EQ}${frac('1', `${PI2}${X}${R}${X}${C}`)}`,
+        target: C,
+        steps: [
+          {
+            goal: `${C} is part of the bottom line, multiplied by ${PI2} and ${R}. Multiply <b>both</b> sides by ${C} to bring it out of the fraction.`,
+            line: `${F}${X}${C}${EQ}${frac('1', `${PI2}${X}${R}`)}`,
+            wrong: [
+              `${frac(F, C)}${EQ}${frac('1', `${PI2}${X}${R}`)}`,
+              `${F}${EQ}${frac('1', `${PI2}${X}${R}`)}`,
+              `${F}${X}${C}${EQ}${frac('1', `${PI2}${X}${R}${X}${C}`)}`,
+            ],
+            why: `Multiplying the right side by ${C} cancels the ${C} on the bottom, leaving ${frac('1', `${PI2}${X}${R}`)}. The left side must be multiplied by ${C} too: ${F}${X}${C}.`,
+          },
+          {
+            goal: `${C} is now multiplied by ${F}. Do the opposite to <b>both</b> sides so ${C} is on its own.`,
+            line: `${C}${EQ}${frac('1', `${PI2}${X}${F}${X}${R}`)}`,
+            wrong: [
+              `${C}${EQ}${frac(F, `${PI2}${X}${R}`)}`,
+              `${C}${EQ}${frac('1', `${PI2}${X}${R}`)} − ${F}`,
+              `${C}${EQ}${PI2}${X}${F}${X}${R}`,
+            ],
+            why: `Divide <b>both</b> sides by ${F}. The left becomes ${C}; on the right the ${F} goes underneath alongside ${PI2} and ${R}. The result has the same shape as the ${R} version — ${R} and ${C} swap places.`,
+          },
+        ],
+      },
+      {
+        name: "Capacitive reactance — make f the subject",
+        start: `${XC}${EQ}${frac('1', `${PI2}${X}${F}${X}${C}`)}`,
+        target: F,
+        steps: [
+          {
+            goal: `${F} is part of the bottom line, multiplied by ${PI2} and ${C}. Multiply <b>both</b> sides by ${F} to bring it out of the fraction.`,
+            line: `${XC}${X}${F}${EQ}${frac('1', `${PI2}${X}${C}`)}`,
+            wrong: [
+              `${frac(XC, F)}${EQ}${frac('1', `${PI2}${X}${C}`)}`,
+              `${XC}${EQ}${frac('1', `${PI2}${X}${C}`)}`,
+              `${XC}${X}${F}${EQ}${frac('1', `${PI2}${X}${F}${X}${C}`)}`,
+            ],
+            why: `Multiplying the right side by ${F} cancels the ${F} on the bottom, leaving ${frac('1', `${PI2}${X}${C}`)}. The left side must be multiplied by ${F} too: ${XC}${X}${F}.`,
+          },
+          {
+            goal: `${F} is now multiplied by ${XC}. Do the opposite to <b>both</b> sides so ${F} is on its own.`,
+            line: `${F}${EQ}${frac('1', `${PI2}${X}${XC}${X}${C}`)}`,
+            wrong: [
+              `${F}${EQ}${frac(XC, `${PI2}${X}${C}`)}`,
+              `${F}${EQ}${frac('1', `${PI2}${X}${C}`)} − ${XC}`,
+              `${F}${EQ}${PI2}${X}${XC}${X}${C}`,
+            ],
+            why: `Divide <b>both</b> sides by ${XC}. The left becomes ${F}; on the right the ${XC} goes underneath alongside ${PI2} and ${C}. The same pattern as making R or C the subject of f = 1/(2πRC).`,
+          },
+        ],
+      },
+      {
+        name: "Decibel voltage gain — make V<sub>in</sub> the subject",
+        start: `${AVDB}${EQ}20${X}${LOGQ}`,
+        target: VIN,
+        steps: [
+          {
+            goal: `The 20 is multiplying the log. Undo it by doing the opposite to <b>both</b> sides.`,
+            line: `${frac(AVDB, '20')}${EQ}${LOGQ}`,
+            wrong: [
+              `${AVDB} − 20${EQ}${LOGQ}`,
+              `${AVDB}${X}20${EQ}${LOGQ}`,
+              `${frac(AVDB, '20')}${EQ}${frac('log(' + VOUT + ')', 'log(' + VIN + ')')}`,
+            ],
+            why: `The opposite of ×20 is ÷20. Divide <b>both</b> sides by 20. (The log of a ratio can't be split into one log over another — leave ${LOGQ} as it is.)`,
+          },
+          {
+            goal: `Now ${VIN} is trapped inside a log. The opposite of log (base 10) is 10 to the power of — do it to <b>both</b> sides.`,
+            line: `${POW}${EQ}${frac(VOUT, VIN)}`,
+            wrong: [
+              `${frac(AVDB, '20')}${EQ}10<sup>${frac(VOUT, VIN)}</sup>`,
+              `10${X}${frac(AVDB, '20')}${EQ}${frac(VOUT, VIN)}`,
+              `(${frac(AVDB, '20')})<sup>10</sup>${EQ}${frac(VOUT, VIN)}`,
+            ],
+            why: `Raising 10 to a power undoes a base-10 log: 10<sup>log(x)</sup> = x. Apply it to <b>both</b> sides — the whole left side becomes the power, and the log on the right disappears leaving ${frac(VOUT, VIN)}.`,
+          },
+          {
+            goal: `${VIN} is on the bottom of the fraction. Multiply <b>both</b> sides by ${VIN} to bring it up.`,
+            line: `${VIN}${X}${POW}${EQ}${VOUT}`,
+            wrong: [
+              `${frac(POW, VIN)}${EQ}${VOUT}`,
+              `${VIN}${EQ}${VOUT}${X}${POW}`,
+              `${VIN} + ${POW}${EQ}${VOUT}`,
+            ],
+            why: `Multiplying the right side by ${VIN} cancels the ${VIN} underneath, leaving ${VOUT}. The left side gets ×${VIN} as well, so it becomes ${VIN}${X}${POW}.`,
+          },
+          {
+            goal: `${VIN} is now multiplied by ${POW}. Do the opposite to <b>both</b> sides so ${VIN} stands alone.`,
+            line: `${VIN}${EQ}${frac(VOUT, POW)}`,
+            wrong: [
+              `${VIN}${EQ}${VOUT}${X}${POW}`,
+              `${VIN}${EQ}${frac(POW, VOUT)}`,
+              `${VIN}${EQ}${VOUT} − ${POW}`,
+            ],
+            why: `Divide <b>both</b> sides by ${POW}. The left becomes ${VIN}; the right becomes ${frac(VOUT, POW)}. In words: the input voltage is the output voltage divided by the voltage gain, where the gain ratio is 10 to the power of (dB ÷ 20).`,
+          },
+        ],
+      },
+    ];
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS — generated: one question per step of every problem.
+    // The "current equation" for step n is the correct line from step n−1.
+    // ══════════════════════════════════════════════════════════════════════
+    const QUESTIONS = [];
+    PROBLEMS.forEach((p, pi) => {
+      p.steps.forEach((s, si) => {
+        const history = [p.start, ...p.steps.slice(0, si).map(prev => prev.line)];
+        const current = history[history.length - 1];
+        const strip = label => `<div class="eq-strip"><span class="eq-label">${label}</span><span class="eq-line">${history.map(h => `<span class="eq-step">${h}</span>`).join('<span class="eq-arrow">→</span>')}</span></div>`;
+        QUESTIONS.push({
+          leftPanel: 'none',
+          text: () => `<b>Problem ${pi + 1} of ${PROBLEMS.length}</b> — ${p.name}.<br>Step ${si + 1} of ${p.steps.length}: which line comes next?${strip('Equation so far')}`,
+          hint: () => `<span class="eq-goal">${s.goal}</span>`,
+          options: () => shuffle([
+            { label: s.line, type: 'correct' },
+            ...s.wrong.map(w => ({ label: w, type: 'wrong' })),
+          ]),
+          correctExplain: () => s.line,
+          working: () => `
+    <div class="working-line">${s.why}</div>
+    <div class="working-formula-row">${current} &nbsp;→&nbsp; ${s.line}</div>
+    ${si === p.steps.length - 1 ? `<div class="working-total">Done: ${p.target} is now the subject — ${s.line}</div>` : `<div class="working-line">Next step: carry on from ${s.line}.</div>`}`,
+        });
+      });
+    });
+
+    initQuizNav();
+    resetQuiz();
+    initQuizFromURL();
+  </script>
+</body>
+
+</html>
