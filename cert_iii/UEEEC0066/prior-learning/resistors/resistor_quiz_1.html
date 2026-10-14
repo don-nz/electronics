@@ -1,0 +1,753 @@
+<!--
+  Resistor Circuit Quiz 1 — series & parallel, equivalent resistance. Brought into the shared
+  framework (quiz-engine.js, quiz-common.css) from the original hand-built quiz/resistor page;
+  questions, wrong-answer logic and worked solutions are the original's, now driven by QUESTIONS[].
+
+  Circuit: R1,R2,R3 in series, then R4,R5,R6 in parallel (purple), then R7 in parallel with
+  R8+R9 in series (orange), then R10 back to the supply. The diagram is the original drawing;
+  what it shows at each question (banks collapsed to their equivalent resistance, R_T label,
+  current arrows, the question markers) is a pure function of the question number and whether it
+  has been answered — see applyCircuitState().
+
+  Example 1/2/3/Randomise as before: V holds the ten resistors and the supply voltage; D holds the
+  derived answers (recompute()). options() is called once per resetQuiz(), so setMode() always
+  recomputes before resetQuiz().
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../assets/theme-init.js"></script>
+  <script src="../../../assets/quiz-engine.js"></script>
+  <title>Resistor Circuit Quiz 1</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../assets/quiz-common.css">
+  <script src="../../../assets/breadcrumb.js" defer></script>
+  <style>
+    :root {
+      --colour-resistor-combo1: #a78bfa;
+      --colour-resistor-combo2: #ff6b35;
+      --colour-resistor-total: #f0f0e0;
+    }
+    :root[data-theme="light"] {
+      --colour-resistor-combo1: #6d28d9;
+      --colour-resistor-combo2: #c2410c;
+      --colour-resistor-total: #1d2939;
+    }
+    @media (prefers-color-scheme: light) {
+      :root:not([data-theme="dark"]) {
+        --colour-resistor-combo1: #6d28d9;
+        --colour-resistor-combo2: #c2410c;
+        --colour-resistor-total: #1d2939;
+      }
+    }
+    .c1 { color: var(--colour-resistor-combo1); }
+    .c2 { color: var(--colour-resistor-combo2); }
+    .ct { color: var(--colour-resistor-total); }
+    .cr { color: var(--colour-ui-correct); }
+    .cs { color: var(--colour-series); }
+    .q-note { font-weight: normal; font-size: .8rem; color: var(--colour-label); }
+  </style>
+</head>
+
+<body>
+  <div class="crumb" id="crumb" data-current="Resistor Quiz 1"></div>
+  <header>
+    <h1>Resistor Circuit Quiz 1</h1>
+    <p>Series &amp; Parallel · Equivalent Resistance</p>
+  </header>
+
+  <div class="quiz-wrap" id="quizWrap">
+
+    <div class="mode-toggle">
+      <div class="mode-seg" id="modeSeg">
+        <button id="modeExample1" class="active" onclick="setMode('example1')">Example 1</button>
+        <button id="modeExample2" onclick="setMode('example2')">Example 2</button>
+        <button id="modeExample3" onclick="setMode('example3')">Example 3</button>
+        <button id="modeRandomise" onclick="setMode('randomise')">Randomise</button>
+      </div>
+    </div>
+
+    <div class="circuit-col">
+      <div class="circuit-panel" onclick="openModal()" title="Click to zoom">
+        <div class="panel-label">Circuit Diagram — <span id="panelVoltLabel">12 V</span> Source</div>
+        <div class="zoom-hint">
+          <svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.8" fill="none" />
+            <line x1="12.5" y1="12.5" x2="17" y2="17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            <line x1="6" y1="8" x2="10" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+            <line x1="8" y1="6" x2="8" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+          </svg>
+          Zoom
+        </div>
+        <svg id="circuitSvg" viewBox="0 0 960 880" xmlns="http://www.w3.org/2000/svg"
+          font-family="'Share Tech Mono',monospace">
+
+          <!-- ════════════════════ DEFINITIONS ════════════════════ -->
+
+          <defs>
+            <filter id="glow">
+              <feGaussianBlur stdDeviation="2" result="b" />
+              <feMerge>
+                <feMergeNode in="b" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
+
+          <!-- ════════════════════ TOP ROW — R1, R2, R3 ════════════════════ -->
+          <line x1="50" y1="200" x2="100" y2="200" style="stroke: var(--colour-series)" stroke-width="2" />
+          <g id="r1Group" transform="translate(100,182)">
+            <rect id="box-r1" x="0" y="0" width="90" height="36" rx="3" style="fill: var(--colour-panel)" style="stroke: var(--colour-series)" stroke-width="2"
+              filter="url(#glow)" />
+            <text id="nm-r1" x="45" y="-12" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R1</text>
+            <text id="lblR1" x="45" y="54" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="15">—</text>
+          </g>
+          <line x1="190" y1="200" x2="230" y2="200" style="stroke: var(--colour-series)" stroke-width="2" />
+
+          <g id="r2Group" transform="translate(230,182)">
+            <rect id="box-r2" x="0" y="0" width="90" height="36" rx="3" style="fill: var(--colour-panel)" style="stroke: var(--colour-series)" stroke-width="2"
+              filter="url(#glow)" />
+            <text id="nm-r2" x="45" y="-12" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R2</text>
+            <text id="lblR2" x="45" y="54" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="15">—</text>
+          </g>
+          <line x1="320" y1="200" x2="360" y2="200" style="stroke: var(--colour-series)" stroke-width="2" />
+
+          <g id="r3Group" transform="translate(360,182)">
+            <rect id="box-r3" x="0" y="0" width="90" height="36" rx="3" style="fill: var(--colour-panel)" style="stroke: var(--colour-series)" stroke-width="2"
+              filter="url(#glow)" />
+            <text id="nm-r3" x="45" y="-12" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R3</text>
+            <text id="lblR3" x="45" y="54" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="15">—</text>
+          </g>
+          <line x1="450" y1="200" x2="520" y2="200" style="stroke: var(--colour-series)" stroke-width="2" />
+
+          <!-- ════════════════════ COMBO TOTAL LABELS ════════════════════ -->
+
+          <!-- ── R_T LABEL — group origin tracks the midpoint between the top rail -->
+          <!-- and the bottom rail; setCircuitState() below updates just this one -->
+          <!-- translate ── -->
+          <g id="rtotalLabel" display="none" transform="translate(150,440)">
+            <text x="0" y="-8" style="fill: var(--colour-resistor-total)" text-anchor="middle" font-size="16" font-weight="bold"
+              font-family="'Orbitron',sans-serif">R<tspan baseline-shift="sub" font-size="11">T</tspan></text>
+            <text id="lblRT" x="0" y="16" style="fill: var(--colour-resistor-total)" text-anchor="middle" font-size="15">—</text>
+          </g>
+
+          <!-- ── R4,5,6 LABEL — group origin tracks the midpoint between the top rail and rtotalLabel ── -->
+          <g id="r456Label" display="none" transform="translate(435,320)">
+            <text id="r456Heading" x="0" y="-8" style="fill: var(--colour-resistor-combo1)" text-anchor="middle" font-size="16" font-weight="bold"
+              font-family="'Orbitron',sans-serif">R<tspan baseline-shift="sub" font-size="11">4,5,6
+              </tspan></text>
+            <text id="lblR456total" x="0" y="16" style="fill: var(--colour-resistor-combo1)" text-anchor="middle" font-size="15">—</text>
+          </g>
+
+          <!-- ── R7,8,9 LABEL — group origin tracks the midpoint between rtotalLabel and the bottom rail ── -->
+          <g id="r789Label" display="none" transform="translate(435,560)">
+            <text id="r789Heading" x="0" y="-8" style="fill: var(--colour-resistor-combo2)" text-anchor="middle" font-size="16" font-weight="bold"
+              font-family="'Orbitron',sans-serif">R<tspan baseline-shift="sub" font-size="11">7,8,9
+              </tspan></text>
+            <text id="lblR789total" x="0" y="16" style="fill: var(--colour-resistor-combo2)" text-anchor="middle" font-size="15">—</text>
+          </g>
+
+          <!-- ════════════════════ QUESTION INDICATORS ════════════════════ -->
+
+          <!-- ── Q5 MARKER — group origin = circle centre ── -->
+          <g id="q5Marker" display="none" transform="translate(620,275)">
+            <circle cx="0" cy="0" r="16" fill="none" style="stroke: var(--colour-red)" stroke-width="2" filter="url(#glow)" />
+            <text x="0" y="6" style="fill: var(--colour-red)" text-anchor="middle" font-size="18" font-weight="bold">?</text>
+          </g>
+
+          <!-- ── Q7 MARKER — group origin = circle centre ── -->
+          <g id="q7Marker" display="none" transform="translate(620,262)">
+            <circle cx="0" cy="0" r="16" fill="none" style="stroke: var(--colour-current)" stroke-width="2" filter="url(#glow)" />
+            <text x="0" y="6" style="fill: var(--colour-current)" text-anchor="middle" font-size="18" font-weight="bold">?</text>
+          </g>
+
+          <!-- ── I_R5 LABEL — group origin = arrow position ── -->
+          <g id="iR5Label" display="none" transform="translate(620,256)">
+            <text x="0" y="0" style="fill: var(--colour-current)" text-anchor="middle" font-size="26" font-weight="bold" style="stroke: var(--colour-current)"
+              stroke-width="1" font-family="'Share Tech Mono',monospace">→</text>
+            <text x="0" y="0" style="fill: var(--colour-current)" text-anchor="middle" font-size="15"
+              font-family="'Share Tech Mono',monospace" dx="-22">I<tspan baseline-shift="sub"
+                font-size="11">R5</tspan></text>
+            <text id="iR5Value" x="0" y="22" style="fill: var(--colour-current)" text-anchor="middle" font-size="15"
+              font-family="'Share Tech Mono',monospace">—</text>
+          </g>
+
+          <!-- ── Q6 MARKERS ── -->
+          <g id="q6Markers" style="display:none">
+            <line x1="490" y1="200" x2="490" y2="440" style="stroke: var(--colour-red)" stroke-width="3.5" stroke-dasharray="8,5" />
+            <line x1="750" y1="200" x2="750" y2="440" style="stroke: var(--colour-red)" stroke-width="3.5" stroke-dasharray="8,5" />
+            <line x1="490" y1="440" x2="578" y2="440" style="stroke: var(--colour-red)" stroke-width="3.5" stroke-dasharray="8,5" />
+            <line x1="662" y1="440" x2="750" y2="440" style="stroke: var(--colour-red)" stroke-width="3.5" stroke-dasharray="8,5" />
+            <!-- group origin = big circle centre -->
+            <g id="r6BigCircle" display="none" transform="translate(620,440)">
+              <circle cx="0" cy="0" r="38" style="fill: var(--colour-panel); stroke: var(--colour-red)" stroke-width="2.5" filter="url(#glow)" />
+              <text id="r6BigValue" x="0" y="-6" style="fill: var(--colour-red)" text-anchor="middle" font-size="15"
+                font-weight="bold">—</text>
+              <text id="r6BigUnit" x="0" y="12" style="fill: var(--colour-red)" text-anchor="middle" font-size="15">V</text>
+            </g>
+            <!-- group origin = small circle centre -->
+            <g id="r6SmallCircle" display="none" transform="translate(620,118)">
+              <circle cx="0" cy="0" r="16" fill="none" style="stroke: var(--colour-red)" stroke-width="2" filter="url(#glow)" />
+              <text x="0" y="6" style="fill: var(--colour-red)" text-anchor="middle" font-size="18" font-weight="bold">?</text>
+            </g>
+          </g>
+
+          <!-- ── V_R6 BRACKET (square-bracket indicator at R6, shown on Q6 answer); -->
+          <!-- group origin = bracket centre-top ── -->
+          <g id="vr6Bracket" display="none" transform="translate(620,112)">
+            <line x1="-60" y1="0" x2="60" y2="0" style="stroke: var(--colour-red)" stroke-width="2.5" />
+            <line x1="-60" y1="-8" x2="-60" y2="0" style="stroke: var(--colour-red)" stroke-width="2.5" />
+            <line x1="60" y1="-8" x2="60" y2="0" style="stroke: var(--colour-red)" stroke-width="2.5" />
+            <text x="0" y="20" style="fill: var(--colour-red)" text-anchor="middle" font-size="16" font-weight="bold">V<tspan
+                id="vr6BracketSub" baseline-shift="sub" font-size="10">R6</tspan> = <tspan id="vr6BracketValue">—
+              </tspan></text>
+          </g>
+
+          <!-- ── CURRENT INDICATORS (I_T arrows on the wires — Quiz 2 style) ── -->
+          <g id="currentIndicators" display="none">
+            <!-- group origin = midpoint of the wire segment above the battery; -->
+            <!-- updateCurrentIndicatorPositions() below sets just this one translate -->
+            <g id="iLeftGroup">
+              <line id="iLeftStem" x1="50" y1="16" x2="50" y2="-4" style="stroke: var(--colour-current)" stroke-width="3" />
+              <polygon id="iLeftArrow" points="50,-16 43,-2 57,-2" style="fill: var(--colour-current)" filter="url(#glow)" />
+              <text id="iLeftLabel" x="90" y="-20" style="fill: var(--colour-current)" text-anchor="middle" font-size="20" font-weight="bold">I
+                <tspan baseline-shift="sub" font-size="13">T</tspan>
+              </text>
+              <text id="iLeftValue" x="90" y="2" style="fill: var(--colour-current)" text-anchor="middle" font-size="15"
+                font-weight="bold">—</text>
+              <text id="iLeftUnit" x="90" y="20" style="fill: var(--colour-current)" text-anchor="middle" font-size="15"
+                font-weight="bold">—</text>
+            </g>
+            <!-- group origin = midpoint of the wire segment above the bottom rail -->
+            <g id="iRightGroup">
+              <line id="iRightStem" x1="900" y1="-16" x2="900" y2="4" style="stroke: var(--colour-current)" stroke-width="3" />
+              <polygon id="iRightArrow" points="900,16 893,2 907,2" style="fill: var(--colour-current)" filter="url(#glow)" />
+              <text id="iRightLabel" x="850" y="-20" style="fill: var(--colour-current)" text-anchor="middle" font-size="20"
+                font-weight="bold">I<tspan baseline-shift="sub" font-size="13">T</tspan></text>
+              <text id="iRightValue" x="850" y="2" style="fill: var(--colour-current)" text-anchor="middle" font-size="15"
+                font-weight="bold">—</text>
+              <text id="iRightUnit" x="850" y="20" style="fill: var(--colour-current)" text-anchor="middle" font-size="15"
+                font-weight="bold">—</text>
+            </g>
+          </g>
+
+          <!-- Top rail continued after purple bank -->
+          <line x1="720" y1="200" x2="900" y2="200" style="stroke: var(--colour-series)" stroke-width="2" />
+
+          <!-- ════════════════════ PURPLE BANK — R4, R5, R6 ════════════════════ -->
+
+          <!-- ── EXPANDED ── -->
+          <g id="bankExpanded">
+            <line x1="520" y1="60" x2="520" y2="340" style="stroke: var(--colour-resistor-combo1)" stroke-width="2" />
+            <line x1="720" y1="60" x2="720" y2="340" style="stroke: var(--colour-resistor-combo1)" stroke-width="2" />
+            <line x1="520" y1="60" x2="560" y2="60" style="stroke: var(--colour-resistor-combo1)" stroke-width="2" />
+            <g id="r6Group" transform="translate(560,42)">
+              <rect x="0" y="0" width="120" height="36" rx="3" style="fill: var(--colour-panel); stroke: var(--colour-resistor-combo1)" stroke-width="2"
+                filter="url(#glow)" />
+              <text x="60" y="-12" style="fill: var(--colour-resistor-combo1)" text-anchor="middle" font-size="16" font-weight="bold">R6</text>
+              <text id="lblR6" x="60" y="52" style="fill: var(--colour-resistor-combo1)" text-anchor="middle" font-size="15">—</text>
+            </g>
+            <line x1="680" y1="60" x2="720" y2="60" style="stroke: var(--colour-resistor-combo1)" stroke-width="2" />
+            <line x1="520" y1="200" x2="560" y2="200" style="stroke: var(--colour-resistor-combo1)" stroke-width="2" />
+            <g id="r5Group" transform="translate(560,182)">
+              <rect x="0" y="0" width="120" height="36" rx="3" style="fill: var(--colour-panel); stroke: var(--colour-resistor-combo1)" stroke-width="2"
+                filter="url(#glow)" />
+              <text x="60" y="-12" style="fill: var(--colour-resistor-combo1)" text-anchor="middle" font-size="16" font-weight="bold">R5</text>
+              <text id="lblR5" x="60" y="54" style="fill: var(--colour-resistor-combo1)" text-anchor="middle" font-size="15">—</text>
+            </g>
+            <line x1="680" y1="200" x2="720" y2="200" style="stroke: var(--colour-resistor-combo1)" stroke-width="2" />
+            <line x1="520" y1="340" x2="560" y2="340" style="stroke: var(--colour-resistor-combo1)" stroke-width="2" />
+            <g id="r4Group" transform="translate(560,322)">
+              <rect x="0" y="0" width="120" height="36" rx="3" style="fill: var(--colour-panel); stroke: var(--colour-resistor-combo1)" stroke-width="2"
+                filter="url(#glow)" />
+              <text x="60" y="-12" style="fill: var(--colour-resistor-combo1)" text-anchor="middle" font-size="16" font-weight="bold">R4</text>
+              <text id="lblR4" x="60" y="54" style="fill: var(--colour-resistor-combo1)" text-anchor="middle" font-size="15">—</text>
+            </g>
+            <line x1="680" y1="340" x2="720" y2="340" style="stroke: var(--colour-resistor-combo1)" stroke-width="2" />
+            <circle cx="520" cy="200" r="7" style="fill: var(--colour-resistor-combo1)" filter="url(#glow)" />
+            <circle cx="720" cy="200" r="7" style="fill: var(--colour-resistor-combo1)" filter="url(#glow)" />
+          </g>
+
+          <!-- ── COLLAPSED ── -->
+          <g id="bankCollapsed" display="none">
+            <line x1="520" y1="200" x2="560" y2="200" style="stroke: var(--colour-resistor-combo1)" stroke-width="2" />
+            <g id="r456Group" transform="translate(560,182)">
+              <rect x="0" y="0" width="120" height="36" rx="3" style="fill: var(--colour-panel); stroke: var(--colour-resistor-combo1)" stroke-width="2"
+                filter="url(#glow)" />
+              <text x="60" y="-12" style="fill: var(--colour-resistor-combo1)" text-anchor="middle" font-size="13" font-weight="bold">R4,5,6</text>
+              <text id="lblR456" x="60" y="54" style="fill: var(--colour-resistor-combo1)" text-anchor="middle" font-size="15">—</text>
+            </g>
+            <line x1="680" y1="200" x2="720" y2="200" style="stroke: var(--colour-resistor-combo1)" stroke-width="2" />
+          </g>
+
+          <!-- ════════════════════ BATTERY & LEFT WALL ════════════════════ -->
+
+          <!-- ── V1: left wall top ── -->
+          <line id="V1" x1="50" y1="200" x2="50" y2="309" style="stroke: var(--colour-series)" stroke-width="2" />
+
+          <!-- ── BATTERY — standard battery (same group+translate pattern as quizzes 2-4), kept -->
+          <!-- vertically centred along the left rail (between the top rail and the bottom rail) -->
+          <!-- by setCircuitState() below, which updates just this one translate — V1/V2's -->
+          <!-- endpoints move with it. Initial position here matches the collapsed-state centring; -->
+          <!-- setCircuitState(1) recalculates it for the expanded view immediately on load. ── -->
+          <g id="batteryGroup" transform="translate(50,309)">
+            <line id="BattPlus" x1="-22" y1="0" x2="22" y2="0" style="stroke: var(--colour-red)" stroke-width="4" />
+            <line id="BattMinus" x1="-12" y1="30" x2="12" y2="30" style="stroke: var(--colour-red)" stroke-width="2" />
+            <text id="BattPlusLabel" x="34" y="5" style="fill: var(--colour-supply)" font-size="16" font-weight="bold">+</text>
+            <text id="BattMinusLabel" x="34" y="36" style="fill: var(--colour-supply)" font-size="16" font-weight="bold">−</text>
+            <text x="-30" y="-12" style="fill: var(--colour-supply)" font-size="15" text-anchor="end" font-weight="bold">E</text>
+            <text id="BattVoltLabel" x="-30" y="50" style="fill: var(--colour-supply)" font-size="15" text-anchor="end">10V</text>
+          </g>
+
+          <!-- ── V2: left wall bottom ── -->
+          <line id="V2" x1="50" y1="341" x2="50" y2="680" style="stroke: var(--colour-series)" stroke-width="2" />
+
+          <!-- ════════════════════ BOTTOM GROUP — R7, R8, R9, R10 ════════════════════ -->
+
+          <g id="bottomGroup">
+            <!-- ── ORANGE BANK (expanded) ── -->
+            <g id="orangeExpanded">
+              <line x1="520" y1="565" x2="720" y2="565" style="stroke: var(--colour-resistor-combo2)" stroke-width="2" />
+              <line x1="520" y1="795" x2="720" y2="795" style="stroke: var(--colour-resistor-combo2)" stroke-width="2" />
+              <line x1="520" y1="565" x2="520" y2="795" style="stroke: var(--colour-resistor-combo2)" stroke-width="2" />
+              <line x1="720" y1="565" x2="720" y2="795" style="stroke: var(--colour-resistor-combo2)" stroke-width="2" />
+              <g id="r8Group" transform="translate(530,547)">
+                <rect x="0" y="0" width="80" height="36" rx="3" style="fill: var(--colour-panel); stroke: var(--colour-resistor-combo2)" stroke-width="2"
+                  filter="url(#glow)" />
+                <text x="40" y="-12" style="fill: var(--colour-resistor-combo2)" text-anchor="middle" font-size="16" font-weight="bold">R8</text>
+                <text id="lblR8" x="40" y="52" style="fill: var(--colour-resistor-combo2)" text-anchor="middle" font-size="15">—</text>
+              </g>
+              <g id="r9Group" transform="translate(630,547)">
+                <rect x="0" y="0" width="80" height="36" rx="3" style="fill: var(--colour-panel); stroke: var(--colour-resistor-combo2)" stroke-width="2"
+                  filter="url(#glow)" />
+                <text x="40" y="-12" style="fill: var(--colour-resistor-combo2)" text-anchor="middle" font-size="16" font-weight="bold">R9</text>
+                <text id="lblR9" x="40" y="52" style="fill: var(--colour-resistor-combo2)" text-anchor="middle" font-size="15">—</text>
+              </g>
+              <g id="r7Group" transform="translate(570,777)">
+                <rect x="0" y="0" width="100" height="36" rx="3" style="fill: var(--colour-panel); stroke: var(--colour-resistor-combo2)" stroke-width="2"
+                  filter="url(#glow)" />
+                <text x="50" y="-12" style="fill: var(--colour-resistor-combo2)" text-anchor="middle" font-size="16" font-weight="bold">R7</text>
+                <text id="lblR7" x="50" y="54" style="fill: var(--colour-resistor-combo2)" text-anchor="middle" font-size="15">—</text>
+              </g>
+              <circle cx="520" cy="680" r="7" style="fill: var(--colour-resistor-combo2)" filter="url(#glow)" />
+              <circle cx="720" cy="680" r="7" style="fill: var(--colour-resistor-combo2)" filter="url(#glow)" />
+            </g>
+
+            <!-- ── ORANGE BANK (collapsed) ── -->
+            <g id="orangeCollapsed" display="none">
+              <line x1="520" y1="680" x2="560" y2="680" style="stroke: var(--colour-resistor-combo2)" stroke-width="2" />
+              <g id="r789Group" transform="translate(560,662)">
+                <rect x="0" y="0" width="120" height="36" rx="3" style="fill: var(--colour-panel); stroke: var(--colour-resistor-combo2)" stroke-width="2"
+                  filter="url(#glow)" />
+                <text x="60" y="-12" style="fill: var(--colour-resistor-combo2)" text-anchor="middle" font-size="13" font-weight="bold">R7,8,9</text>
+                <text id="lblR789" x="60" y="52" style="fill: var(--colour-resistor-combo2)" text-anchor="middle" font-size="15">—</text>
+              </g>
+              <line x1="680" y1="680" x2="720" y2="680" style="stroke: var(--colour-resistor-combo2)" stroke-width="2" />
+            </g>
+
+            <line id="BH3" x1="50" y1="680" x2="180" y2="680" style="stroke: var(--colour-series)" stroke-width="2" />
+            <g id="r10Group" transform="translate(180,662)">
+              <rect id="box-r10" x="0" y="0" width="160" height="36" rx="3" style="fill: var(--colour-panel)" style="stroke: var(--colour-series)" stroke-width="2"
+                filter="url(#glow)" />
+              <text id="nm-r10" x="80" y="-12" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R10</text>
+              <text id="lblR10" x="80" y="52" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="15">—</text>
+            </g>
+            <line id="BH2" x1="340" y1="680" x2="520" y2="680" style="stroke: var(--colour-series)" stroke-width="2" />
+            <line id="BH1" x1="720" y1="680" x2="900" y2="680" style="stroke: var(--colour-series)" stroke-width="2" />
+
+            <g id="nodeB2" transform="translate(759,656)">
+              <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5" />
+              <text x="-4" y="4" style="fill: var(--colour-node)" font-size="15" font-weight="bold">B</text>
+            </g>
+            <g id="nodeC" transform="translate(485,656)">
+              <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5" />
+              <text x="0" y="4" style="fill: var(--colour-node)" text-anchor="middle" font-size="15" font-weight="bold">C</text>
+            </g>
+          </g>
+
+          <!-- ════════════════════ NODES ════════════════════ -->
+
+          <!-- ── V3: right wall ── -->
+          <line id="V3" x1="900" y1="200" x2="900" y2="680" style="stroke: var(--colour-series)" stroke-width="2" />
+
+          <!-- ── NODE LABELS A, B (top copy) — always visible regardless of the bank -->
+          <!-- expanded/collapsed toggle, since the node's location doesn't change. -->
+          <!-- B appears again further down (inside #bottomGroup, so it shifts with -->
+          <!-- the collapsed-state transform) since it's the same electrical node,  -->
+          <!-- tied together by the plain wire down the right wall (V3) and along   -->
+          <!-- the bottom (BH1). ── -->
+          <g id="nodeA" transform="translate(485,176)">
+            <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5" />
+            <text x="0" y="4" style="fill: var(--colour-node)" text-anchor="middle" font-size="15" font-weight="bold">A</text>
+          </g>
+          <g id="nodeB1" transform="translate(759,176)">
+            <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5" />
+            <text x="-4" y="4" style="fill: var(--colour-node)" font-size="15" font-weight="bold">B</text>
+          </g>
+
+          <!-- ══ XY RULER (dev tool, off by default) — populated by buildXYRuler(), toggled by setXY() ══ -->
+          <g id="xyRuler" display="none"></g>
+
+        </svg>
+      </div>
+    </div>
+
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+          <div class="options" id="qOptions"></div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="diagram-modal" id="diagramModal" onclick="handleModalClick(event)">
+      <div class="modal-inner" id="modalInner">
+        <div class="modal-header">
+          <span class="modal-title">Circuit Diagram — <span id="modalVoltLabel">12 V</span> Source</span>
+          <button class="modal-close" onclick="closeModal()">✕ Close</button>
+        </div>
+        <svg id="modalSvg" viewBox="0 0 960 880" xmlns="http://www.w3.org/2000/svg"
+          font-family="'Share Tech Mono',monospace"></svg>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ══════════════════════════════════════════════════════════════════════
+    // VALUES — V: the ten resistors + supply; D: derived answers
+    // ══════════════════════════════════════════════════════════════════════
+    const EXAMPLE_SETS = {
+      example1: { r1: 100, r2: 220, r3: 150, r4: 330, r5: 470, r6: 680, r7: 560, r8: 120, r9: 180, r10: 270, vs: 12 },
+      example2: { r1: 47, r2: 68, r3: 82, r4: 220, r5: 330, r6: 470, r7: 1000, r8: 220, r9: 330, r10: 100, vs: 9 },
+      example3: { r1: 120, r2: 180, r3: 150, r4: 390, r5: 470, r6: 560, r7: 820, r8: 150, r9: 120, r10: 220, vs: 15 },
+    };
+    const E12_BASE = [10, 12, 15, 18, 22, 27, 33, 39, 47, 56, 68, 82];
+    const E12 = [];
+    [1, 10, 100].forEach(m => E12_BASE.forEach(v => E12.push(v * m)));
+    const VS_POOL = [8, 10, 12, 14, 16, 18];
+
+    let V = {}, D = {}, quizMode = 'example1';
+
+    function pickN(arr, n) { const a = [...arr], r = []; for (let i = 0; i < n; i++) { r.push(a.splice(Math.floor(Math.random() * a.length), 1)[0]); } return r; }
+    function parallelOf(...v) { return 1 / v.reduce((s, x) => s + 1 / x, 0); }
+
+    function recompute() {
+      D.r89 = V.r8 + V.r9;
+      D.R456 = parallelOf(V.r4, V.r5, V.r6);
+      D.R789 = parallelOf(V.r7, D.r89);
+      D.RT = V.r1 + V.r2 + V.r3 + D.R456 + D.R789 + V.r10;
+      D.I = V.vs / D.RT;
+      D.V456 = D.I * D.R456;
+      D.IR5 = D.V456 / V.r5;
+    }
+
+    // ── formatting ──
+    function fmt(v) { return v.toFixed(2); }
+    function fmtΩ(v) { return v >= 1000 ? (v / 1000).toFixed(2) + 'kΩ' : v + 'Ω'; }
+    function fmtV(v, d = 3) {
+      const a = Math.abs(v);
+      if (a >= 1) return v.toFixed(d) + ' V';
+      if (a >= 0.001) return (v * 1000).toFixed(d) + ' mV';
+      return (v * 1000000).toFixed(d) + ' µV';
+    }
+    function fmtVNum(v, d = 3) { const a = Math.abs(v); return a >= 1 ? v.toFixed(d) : a >= 0.001 ? (v * 1000).toFixed(d) : (v * 1000000).toFixed(d); }
+    function fmtVUnit(v) { const a = Math.abs(v); return a >= 1 ? 'V' : a >= 0.001 ? 'mV' : 'µV'; }
+    function fmtA(amps, d = 3) {
+      const a = Math.abs(amps);
+      if (a >= 1) return amps.toFixed(d) + ' A';
+      if (a >= 0.001) return (amps * 1000).toFixed(d) + ' mA';
+      return (amps * 1000000).toFixed(d) + ' µA';
+    }
+    const fmtOhm = v => fmt(v) + ' Ω';
+
+    // ── options: one correct + three wrong, wrong values that collide with the
+    //    correct label (or each other) are nudged by ±20–60 % until distinct ──
+    function dedup(correct, bases, fmtFn) {
+      const used = new Set([fmtFn(correct), fmtFn(0)]);
+      return bases.map(base => {
+        let val = base, label = fmtFn(val), attempts = 0;
+        while ((used.has(label) || val <= 0) && attempts < 200) {
+          const p = (0.2 + Math.random() * 0.4) * (Math.random() < 0.5 ? 1 : -1);
+          val = correct * (1 + p); label = fmtFn(val); attempts++;
+        }
+        used.add(label);
+        return label;
+      });
+    }
+    function jitter(correct) {
+      let w; do { const p = (0.06 + Math.random() * 0.18) * (Math.random() < .5 ? 1 : -1); w = correct * (1 + p); }
+      while (Math.abs(w - correct) < 0.02 || w <= 0);
+      return w;
+    }
+    function makeOptions(correct, wrongs, fmtFn) {
+      const labels = dedup(correct, wrongs, fmtFn);
+      return shuffle([{ label: fmtFn(correct), type: 'correct' }, ...labels.map(l => ({ label: l, type: 'wrong' }))]);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // CIRCUIT — what the diagram shows is a function of (question, answered)
+    // ══════════════════════════════════════════════════════════════════════
+    const SERIES = getComputedStyle(document.documentElement).getPropertyValue('--colour-series').trim();
+    const COL_RESISTOR = getComputedStyle(document.documentElement).getPropertyValue('--colour-resistor').trim();
+    const $ = id => document.getElementById(id);
+    const disp = (id, on) => { const el = $(id); if (el) el.setAttribute('display', on ? 'inline' : 'none'); };
+
+    function setCircuitShape(collapsed) {
+      const viewH = collapsed ? 650 : 880;
+      const shift = collapsed ? -230 : 0;
+      const railScreenY = 680 + shift;
+      const mid = Math.round((200 + railScreenY) / 2);
+      const battY = mid - 15;
+      $('circuitSvg').setAttribute('viewBox', `0 0 960 ${viewH}`);
+      $('bottomGroup').setAttribute('transform', `translate(0,${shift})`);
+      $('batteryGroup').setAttribute('transform', `translate(50,${battY})`);
+      $('V1').setAttribute('y2', String(battY));
+      $('V2').setAttribute('y1', String(battY + 30));
+      $('V2').setAttribute('y2', String(railScreenY));
+      $('V3').setAttribute('y2', String(railScreenY));
+      $('rtotalLabel').setAttribute('transform', `translate(150,${mid})`);
+      $('r456Label').setAttribute('transform', `translate(435,${Math.round((200 + mid) / 2)})`);
+      $('r789Label').setAttribute('transform', `translate(435,${Math.round((mid + railScreenY) / 2)})`);
+      $('iLeftGroup').setAttribute('transform', `translate(0,${Math.round((200 + battY) / 2)})`);
+      $('iRightGroup').setAttribute('transform', `translate(0,${Math.round((200 + railScreenY) / 2)})`);
+    }
+
+    function applyCircuitState() {
+      const i = cur, answered = Q[i] ? Q[i].ans : false;
+      const bankCollapsed = i >= 1 && i <= 4;       // Q2–Q5: R4,5,6 shown as one resistor
+      const orangeCollapsed = i >= 2 && i <= 4;     // Q3–Q5: R7,8,9 shown as one resistor
+      const rtShown = i >= 3;                       // Q4+: R_T known
+      setCircuitShape(i >= 1 && i <= 4);
+
+      disp('bankExpanded', !bankCollapsed); disp('bankCollapsed', bankCollapsed);
+      disp('orangeExpanded', !orangeCollapsed); disp('orangeCollapsed', orangeCollapsed);
+      $('lblR456').textContent = fmtOhm(D.R456);
+      $('lblR789').textContent = fmtOhm(D.R789);
+
+      ['r1', 'r2', 'r3', 'r10'].forEach(k => { const b = $('box-' + k); if (b) b.setAttribute('stroke', rtShown ? SERIES : COL_RESISTOR); });
+      disp('rtotalLabel', rtShown); $('lblRT').textContent = fmtOhm(D.RT);
+
+      const expandedWithLabels = i >= 5;            // Q6, Q7: banks back, with their totals labelled
+      disp('r456Label', expandedWithLabels); disp('r789Label', expandedWithLabels);
+      $('lblR456total').textContent = fmtOhm(D.R456);
+      $('lblR789total').textContent = fmtOhm(D.R789);
+
+      const iNum = D.I >= 1 ? D.I.toFixed(2) : D.I >= 0.001 ? (D.I * 1000).toFixed(2) : (D.I * 1e6).toFixed(2);
+      const iUnit = D.I >= 1 ? 'A' : D.I >= 0.001 ? 'mA' : 'µA';
+      ['Left', 'Right'].forEach(s => { $('i' + s + 'Value').textContent = iNum; $('i' + s + 'Unit').textContent = iUnit; });
+      disp('currentIndicators', i === 4);
+      disp('q5Marker', i === 4);
+
+      $('q6Markers').style.display = i >= 5 ? 'inline' : 'none';
+      disp('r6BigCircle', i === 5 || i === 6);
+      $('r6BigValue').textContent = fmtVNum(D.V456, 2);
+      $('r6BigUnit').textContent = fmtVUnit(D.V456);
+      const bracket = (i === 5 && answered) || i === 6;
+      disp('r6SmallCircle', i === 5 && !answered);
+      disp('vr6Bracket', bracket);
+      $('vr6BracketSub').textContent = 'R6';
+      $('vr6BracketValue').textContent = fmtV(D.V456, 2);
+
+      disp('q7Marker', i === 6 && !answered);
+      disp('iR5Label', i === 6 && answered);
+      $('iR5Value').textContent = fmtA(D.IR5, 2);
+    }
+    RENDER_EXTRA = applyCircuitState;
+
+    function refreshLabels() {
+      for (let n = 1; n <= 10; n++) { const el = $('lblR' + n); if (el) el.textContent = fmtΩ(V['r' + n]); }
+      $('BattVoltLabel').textContent = V.vs + 'V';
+      $('panelVoltLabel').textContent = V.vs + ' V';
+      $('modalVoltLabel').textContent = V.vs + ' V';
+    }
+
+    function setMode(mode) {
+      quizMode = mode;
+      if (mode === 'randomise') {
+        const r = pickN(E12, 10);
+        V = { r1: r[0], r2: r[1], r3: r[2], r4: r[3], r5: r[4], r6: r[5], r7: r[6], r8: r[7], r9: r[8], r10: r[9], vs: VS_POOL[Math.floor(Math.random() * VS_POOL.length)] };
+      } else {
+        V = { ...EXAMPLE_SETS[mode] };
+      }
+      recompute();
+      refreshLabels();
+      ['example1', 'example2', 'example3', 'randomise'].forEach(m => {
+        const b = $('mode' + m.charAt(0).toUpperCase() + m.slice(1));
+        if (b) b.classList.toggle('active', m === mode);
+      });
+      resetQuiz();
+    }
+
+    // ── zoom modal ──
+    // (quiz-engine.js provides openModal/closeModal/handleModalClick; the modal copies #circuitSvg)
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS
+    // ══════════════════════════════════════════════════════════════════════
+    const fr = frac;
+    const QUESTIONS = [
+      {
+        text: () => `What is the equivalent resistance of <span class="c1">R4, R5 and R6</span> in parallel?`,
+        hint: () => `Parallel resistors: take the reciprocal of the sum of the reciprocals.`,
+        options: () => makeOptions(D.R456, [V.r4 + V.r5 + V.r6, 1 / (V.r4 + V.r5 + V.r6), jitter(D.R456)], fmtOhm),
+        correctExplain: () => `<span class="c1">R<sub>4,5,6</sub></span> = ${fmt(D.R456)} Ω`,
+        working: () => {
+          const a = 1 / V.r4, b = 1 / V.r5, c = 1 / V.r6;
+          return `
+    <div class="working-line">Parallel resistors can't just be added — adding them directly is the usual slip, and it gives a value <i>bigger</i> than any single branch. A parallel group is always smaller than its smallest branch.</div>
+    <div class="working-line">Formula:</div>
+    <div class="working-formula-row"><span class="c1">R<sub>4,5,6</sub></span> = ${fr('1', `${fr('1', 'R4')} + ${fr('1', 'R5')} + ${fr('1', 'R6')}`)}</div>
+    <div class="working-line">Substituting values:</div>
+    <div class="working-formula-row"><span class="c1">R<sub>4,5,6</sub></span> = ${fr('1', `${fr('1', fmtΩ(V.r4))} + ${fr('1', fmtΩ(V.r5))} + ${fr('1', fmtΩ(V.r6))}`)}</div>
+    <div class="working-line">Calculating the reciprocals and summing:</div>
+    <div class="working-formula-row"><span class="c1">R<sub>4,5,6</sub></span> = ${fr('1', `${a.toFixed(5)} + ${b.toFixed(5)} + ${c.toFixed(5)}`)} = ${fr('1', (a + b + c).toFixed(5))}</div>
+    <div class="working-total"><span class="c1">R<sub>4,5,6</sub></span> = <span class="cr">${fmt(D.R456)} Ω</span></div>`;
+        },
+      },
+      {
+        text: () => `What is the equivalent resistance of <span class="c2">R7, R8 and R9</span>? <span class="q-note">(R8 and R9 are in series, parallel with R7)</span>`,
+        hint: () => `Add the series pair first, then treat the result as one branch in parallel with R7.`,
+        options: () => makeOptions(D.R789, [V.r7 + D.r89, 1 / (V.r7 + D.r89), jitter(D.R789)], fmtOhm),
+        correctExplain: () => `<span class="c2">R<sub>7,8,9</sub></span> = ${fmt(D.R789)} Ω`,
+        working: () => {
+          const a = 1 / V.r7, b = 1 / D.r89;
+          return `
+    <div class="working-line">R8 and R9 are in series — add them first:</div>
+    <div class="working-formula-row"><span class="c2">R<sub>89</sub></span> = ${fmtΩ(V.r8)} + ${fmtΩ(V.r9)} = <span class="cr">${fmtΩ(D.r89)}</span></div>
+    <div class="working-line">Then R7 is in parallel with R<sub>89</sub>:</div>
+    <div class="working-formula-row"><span class="c2">R<sub>7,8,9</sub></span> = ${fr('1', `${fr('1', 'R7')} + ${fr('1', 'R<sub>89</sub>')}`)}</div>
+    <div class="working-line">Substituting values:</div>
+    <div class="working-formula-row"><span class="c2">R<sub>7,8,9</sub></span> = ${fr('1', `${fr('1', fmtΩ(V.r7))} + ${fr('1', fmtΩ(D.r89))}`)}</div>
+    <div class="working-line">Calculating the reciprocals and summing:</div>
+    <div class="working-formula-row"><span class="c2">R<sub>7,8,9</sub></span> = ${fr('1', `${a.toFixed(5)} + ${b.toFixed(5)}`)} = ${fr('1', (a + b).toFixed(5))}</div>
+    <div class="working-total"><span class="c2">R<sub>7,8,9</sub></span> = <span class="cr">${fmt(D.R789)} Ω</span></div>`;
+        },
+      },
+      {
+        text: () => `What is the <span style="color:var(--colour-ui-primary)">total resistance</span> of the circuit?`,
+        hint: () => `Everything left is now in series — add the three series resistors, the two equivalent resistances and R10.`,
+        options: () => makeOptions(D.RT, [
+          V.r1 + V.r2 + V.r3 + V.r4 + V.r5 + V.r6 + V.r7 + V.r8 + V.r9 + V.r10,
+          V.r1 + V.r2 + V.r3 + D.R456 + V.r7 + V.r8 + V.r9 + V.r10,
+          jitter(D.RT)], fmtOhm),
+        correctExplain: () => `<span class="ct">R<sub>T</sub></span> = ${fmt(D.RT)} Ω`,
+        working: () => `
+    <div class="working-line">All remaining components are in series — add them:</div>
+    <div class="working-formula-row"><span class="ct">R<sub>T</sub></span> = R1 + R2 + R3 + <span class="c1">R<sub>456</sub></span> + <span class="c2">R<sub>789</sub></span> + R10</div>
+    <div class="working-line">Substituting values:</div>
+    <div class="working-formula-row"><span class="ct">R<sub>T</sub></span> = ${fmtΩ(V.r1)} + ${fmtΩ(V.r2)} + ${fmtΩ(V.r3)} + ${fmt(D.R456)} Ω + ${fmt(D.R789)} Ω + ${fmtΩ(V.r10)}</div>
+    <div class="working-total"><span class="ct">R<sub>T</sub></span> = <span class="cr">${fmt(D.RT)} Ω</span></div>`,
+      },
+      {
+        text: () => `What is the <span style="color:var(--colour-current)">circuit current</span>?`,
+        hint: () => `Ohm's law with the supply voltage and the total resistance.`,
+        options: () => makeOptions(D.I, [D.RT / V.vs, V.vs * D.RT, D.I * 1.5], v => fmtA(v)),
+        correctExplain: () => `I = ${fmtA(D.I)}`,
+        working: () => `
+    <div class="working-line">Formula: I = V ÷ R<sub>T</sub></div>
+    <div class="working-formula-row">I = ${fr('V', 'R<sub>T</sub>')}</div>
+    <div class="working-line">Substituting values:</div>
+    <div class="working-formula-row">I = ${fr(V.vs + ' V', fmt(D.RT) + ' Ω')}</div>
+    <div class="working-total">I = <span class="cr">${fmtA(D.I)}</span></div>`,
+      },
+      {
+        text: () => `What is the <span style="color:var(--colour-red)">potential difference</span> over the combined resistor <span class="c1">R4,5,6</span>?`,
+        hint: () => `The circuit current flows through the combined resistor — V = I × R.`,
+        options: () => makeOptions(D.V456, [D.I * D.RT, 10 * (D.R456 / D.RT), D.V456 * 1.5], v => fmtV(v)),
+        correctExplain: () => `V<sub>R456</sub> = ${fmtV(D.V456)}`,
+        working: () => `
+    <div class="working-line">Formula: V = I × <span class="c1">R<sub>4,5,6</sub></span></div>
+    <div class="working-formula-row"><span class="c1">V<sub>R456</sub></span> = I × R<sub>4,5,6</sub></div>
+    <div class="working-line">Substituting values:</div>
+    <div class="working-formula-row"><span class="c1">V<sub>R456</sub></span> = ${fmtA(D.I)} × ${fmt(D.R456)} Ω</div>
+    <div class="working-total"><span class="c1">V<sub>R456</sub></span> = <span class="cr">${fmtV(D.V456)}</span></div>`,
+      },
+      {
+        text: () => `What is the <span style="color:var(--colour-red)">potential difference</span> over <span class="c1">R6</span>?`,
+        hint: () => `R4, R5 and R6 are in parallel — think about the voltage across each branch.`,
+        options: () => makeOptions(D.V456, [D.V456 / V.r6 * (V.r6 + 10), 10 - D.V456, D.V456 * 1.5], v => fmtV(v)),
+        correctExplain: () => `V<sub>R6</sub> = ${fmtV(D.V456)}`,
+        working: () => `
+    <div class="working-line"><span class="c1">R4</span>, <span class="c1">R5</span> and <span class="c1">R6</span> are all connected in parallel.</div>
+    <div class="working-line">In a parallel circuit, the voltage across each branch is equal.</div>
+    <div class="working-line">Therefore the voltage across R6 equals the voltage across the combined <span class="c1">R<sub>4,5,6</sub></span>:</div>
+    <div class="working-formula-row">V<sub>R6</sub> = <span class="c1">V<sub>R456</sub></span> = ${fmtV(D.V456)}</div>
+    <div class="working-total"><span class="c1">V<sub>R6</sub></span> = <span class="cr">${fmtV(D.V456)}</span></div>`,
+      },
+      {
+        text: () => `What is the <span style="color:var(--colour-current)">current</span> through <span class="c1">R5</span>?`,
+        hint: () => `You know the voltage across R5 from the last question — Ohm's law again.`,
+        options: () => makeOptions(D.IR5, [D.V456 / V.r4, D.I, D.IR5 * 1.5], v => fmtA(v)),
+        correctExplain: () => `I<sub>R5</sub> = ${fmtA(D.IR5)}`,
+        working: () => `
+    <div class="working-line">Formula: I = V ÷ R</div>
+    <div class="working-formula-row"><span class="cr">I<sub>R5</sub></span> = ${fr('V<sub>R456</sub>', 'R5')}</div>
+    <div class="working-line">Substituting values:</div>
+    <div class="working-formula-row"><span class="cr">I<sub>R5</sub></span> = ${fr(fmtV(D.V456), fmtΩ(V.r5))}</div>
+    <div class="working-total"><span class="cr">I<sub>R5</sub></span> = <span class="cr">${fmtA(D.IR5)}</span></div>`,
+      },
+    ];
+    QUESTIONS.forEach(q => { q.leftPanel = 'circuit'; });
+
+    // Summary: the circuit values used, above the per-question review.
+    SUMMARY_CIRCUIT_REF = { id: '', label: '', viewBox: '' };
+    SUMMARY_EXTRA = () => {
+      applyCircuitState();
+      const item = (cls, name, val) => `<span class="${cls}" style="font-weight:bold">${name}</span> = <span class="${cls}">${val}</span>&nbsp;&nbsp;`;
+      const box = `<div style="border:1px solid var(--colour-border);border-radius:4px;padding:.9rem 1.2rem;margin-bottom:1.2rem;font-size:.82rem;line-height:2.2;">
+        ${item('colour-supply', 'Vs', V.vs + ' V')}
+        ${['r1', 'r2', 'r3'].map(k => item('cs', k.toUpperCase(), fmtΩ(V[k]))).join('')}
+        ${['r4', 'r5', 'r6'].map(k => item('c1', k.toUpperCase(), fmtΩ(V[k]))).join('')}
+        ${['r7', 'r8', 'r9'].map(k => item('c2', k.toUpperCase(), fmtΩ(V[k]))).join('')}
+        ${item('cs', 'R10', fmtΩ(V.r10))}
+      </div>`;
+      $('summaryContent').insertAdjacentHTML('afterbegin', box);
+    };
+
+    initQuizNav();
+    setMode('example1');
+    initQuizFromURL();
+  </script>
+</body>
+
+</html>
