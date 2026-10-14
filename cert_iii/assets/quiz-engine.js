@@ -919,6 +919,46 @@ function toggleSwitch(i) {
   renderQuestion();
 }
 
+// ── answer key appended to every worked solution of a sort/pick question ──
+// 'match': one bullet list per column with the statements that belong there
+// (plus a list of any decoys that belong nowhere). 'multi': the correct
+// selections and the ones that are not. Everything is derived from the same
+// options() data the question already has, so no page needs to write it.
+// A question can opt out with `noAnswerKey: true`.
+function answerKeyHtml(data, st) {
+  if (data.noAnswerKey || !st.opts) return '';
+  const vb = data.shapeViewBox || SHAPE_VIEWBOX;
+  const item = (o, i) => {
+    if (o.shapeId) return `<li><svg viewBox="${vb}" style="width:64px;height:auto;vertical-align:middle"><use href="#${o.shapeId}"/></svg>${data.leftPanel === 'shapeGrid' ? ` <span class="answer-key-num">${i + 1}</span>` : ''}</li>`;
+    return `<li>${o.label}</li>`;
+  };
+  const list = (title, entries) => entries.length
+    ? `<div class="answer-key-group"><div class="answer-key-title">${title}</div><ul class="answer-key">${entries.join('')}</ul></div>` : '';
+  const colTitle = c => typeof c === 'string' ? c : `<svg viewBox="${vb}" style="width:72px;height:auto;vertical-align:middle"><use href="#${c.shapeId}"/></svg>`;
+  let groups = '';
+  let heading = '';
+  if (isMatch(data)) {
+    heading = 'Where each one belongs';
+    const cols = data.columns();
+    cols.forEach((c, ci) => {
+      const here = st.opts.map((o, i) => ({ o, i })).filter(({ o }) => data.reusablePool ? (o.cols || []).includes(ci) : o.col === ci);
+      groups += list(colTitle(c), here.map(({ o, i }) => item(o, i)));
+    });
+    if (!data.reusablePool) {
+      const none = st.opts.map((o, i) => ({ o, i })).filter(({ o }) => o.col === null || o.col === undefined);
+      groups += list('Not in any column', none.map(({ o, i }) => item(o, i)));
+    }
+  } else if (isMulti(data)) {
+    heading = 'The selectable answers';
+    const yes = st.opts.map((o, i) => ({ o, i })).filter(({ o }) => o.type === 'correct');
+    const no = st.opts.map((o, i) => ({ o, i })).filter(({ o }) => o.type !== 'correct');
+    groups += list('Correct', yes.map(({ o, i }) => item(o, i)));
+    groups += list('Not correct', no.map(({ o, i }) => item(o, i)));
+  }
+  return groups ? `<div class="working-step answer-key-heading">${heading}:</div>${groups}` : '';
+}
+function workingHtml(data, st) { return data.working(st) + answerKeyHtml(data, st); }
+
 function renderQuestion() {
   const data = QUESTIONS[cur], st = Q[cur];
   const multi = isMulti(data);
@@ -987,7 +1027,7 @@ function renderQuestion() {
 
   const working = document.getElementById('qWorking');
   working.className = 'working-box' + (st.ans ? ' visible' : '');
-  document.getElementById('qWorkingContent').innerHTML = st.ans ? data.working(st) : '';
+  document.getElementById('qWorkingContent').innerHTML = st.ans ? workingHtml(data, st) : '';
 
   document.getElementById('qBack').style.display = cur > 0 ? 'inline-block' : 'none';
   const check = document.getElementById('qCheck');
@@ -1212,7 +1252,7 @@ function showSummary() {
     return `<div class="summary-item">
       <div class="summary-item-head"><span class="summary-qnum">Q${i + 1}</span><span class="summary-question">${data.text(st)}</span></div>
       <div class="summary-answer" style="color:${colour}">You answered: ${ans} &nbsp; ${mark}</div>
-      <div class="working-box visible">${st.ans ? data.working(st) : ''}</div>
+      <div class="working-box visible">${st.ans ? workingHtml(data, st) : ''}</div>
     </div>`;
   }).join('');
   document.getElementById('summaryContent').innerHTML = items;
@@ -1395,7 +1435,7 @@ function buildPrintWorksheet() {
     const st = Q[i];
     const snapshot = { sel: st.sel, clicks: st.clicks, slotPlaced: st.slotPlaced, switches: st.switches, assign: st.assign, place: st.place };
     fillCorrectSelection(i);
-    html += `<div class="print-answer"><span class="print-qnum">Q${i + 1}.</span> <span class="print-correct">${data.correctExplain(st)}</span><div class="print-working">${data.working(st)}</div></div>`;
+    html += `<div class="print-answer"><span class="print-qnum">Q${i + 1}.</span> <span class="print-correct">${data.correctExplain(st)}</span><div class="print-working">${workingHtml(data, st)}</div></div>`;
     Object.assign(st, snapshot);
   });
   html += '</div>';
