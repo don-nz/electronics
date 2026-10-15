@@ -1,0 +1,740 @@
+<!--
+  Resistor Circuit Quiz 4 — brought into the shared framework (quiz-engine.js, quiz-common.css) from the original
+  hand-built page in quiz/resistor/. The circuit drawing, example value sets, wrong-answer logic and
+  worked solutions are the original's; the question order, hints and per-question annotation states
+  (CIRCUIT_STATES) are unchanged. What the diagram shows at each question is applied by
+  applyCircuitState() from RENDER_EXTRA: the "enter" state on arrival and the "reveal" state once
+  answered.
+
+  Links: the Q1 hint's help button opens the matching step-by-step total-resistance walkthrough with
+  the current values (and a return key) in the URL; coming back with ?goto=N lands on question N
+  with the earlier ones answered.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../assets/theme-init.js"></script>
+  <script src="../../../assets/quiz-engine.js"></script>
+  <title>Resistor Circuit Quiz 4</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../assets/quiz-common.css">
+  <script src="../../../assets/breadcrumb.js" defer></script>
+</head>
+
+<body>
+  <div class="crumb" id="crumb" data-current="Resistor Circuit Quiz 4"></div>
+  <header>
+    <h1>Resistor Circuit Quiz 4</h1>
+    <p>Combined Series-Parallel · Beginner</p>
+  </header>
+
+  <div class="quiz-wrap" id="quizWrap">
+
+    <div class="mode-toggle">
+      <div class="mode-seg" id="modeSeg">
+        <button id="modeExample1" class="active" onclick="setMode('example1')">Example 1</button>
+        <button id="modeExample2" onclick="setMode('example2')">Example 2</button>
+        <button id="modeExample3" onclick="setMode('example3')">Example 3</button>
+        <button id="modeRandomise" onclick="setMode('randomise')">Randomise</button>
+      </div>
+    </div>
+
+    <div class="circuit-col">
+      <div class="circuit-panel" onclick="openModal()" title="Click to zoom">
+        <div class="panel-label">Circuit Diagram — <span id="panelVoltLabel">9 V</span> Source</div>
+        <div class="zoom-hint">
+          <svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.8" fill="none" />
+            <line x1="12.5" y1="12.5" x2="17" y2="17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            <line x1="6" y1="8" x2="10" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+            <line x1="8" y1="6" x2="8" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+          </svg>
+          Zoom
+        </div>
+        <svg id="circuitSvg" viewBox="0 0 520 560" xmlns="http://www.w3.org/2000/svg"
+           font-family="'Share Tech Mono',monospace">
+        <defs>
+          <filter id="glow"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        </defs>
+
+        <!-- ════════════════════ WIRES ════════════════════ -->
+
+        <!-- (cyan series rail) — grouped by geometry so a wrong connection is easy to spot. -->
+        <!-- Each wire also has a short right-hand comment naming what it joins. -->
+
+        <!-- ── LEFT VERTICAL ── -->
+        <line x1="70"  y1="90"  x2="70"  y2="240" style="stroke: var(--colour-series)" stroke-width="2"/><!-- Top-left corner down to Power +ve -->
+        <line x1="70"  y1="480" x2="70"  y2="290" style="stroke: var(--colour-series)" stroke-width="2"/><!-- Bottom-left corner up to left-rail junction -->
+        <line x1="70"  y1="270" x2="70"  y2="290" style="stroke: var(--colour-series)" stroke-width="2"/><!-- Power −ve down to left-rail junction -->
+
+        <!-- ── RIGHT VERTICAL ── -->
+        <line x1="435" y1="135"  x2="435" y2="240" style="stroke: var(--colour-series)" stroke-width="2"/><!-- Node A stub down to R3 -->
+        <line x1="435" y1="240" x2="435" y2="375" style="stroke: var(--colour-series)" stroke-width="2"/><!-- R3 down to R5 -->
+        <line x1="435" y1="435" x2="435" y2="480" style="stroke: var(--colour-series)" stroke-width="2"/><!-- R5 down to bottom-right corner -->
+
+        <!-- ── TOP HORIZONTAL ── -->
+        <line x1="70"  y1="90"  x2="130" y2="90"  style="stroke: var(--colour-series)" stroke-width="2"/><!-- Top-left corner across to R1 -->
+        <line x1="210" y1="90"  x2="285" y2="90"  style="stroke: var(--colour-series)" stroke-width="2"/><!-- R1 across to Node A -->
+
+        <!-- ── BOTTOM HORIZONTAL ── -->
+        <line x1="435" y1="480" x2="210" y2="480" style="stroke: var(--colour-series)" stroke-width="2"/><!-- Bottom-right corner across to R6 -->
+        <line x1="130" y1="480" x2="70"  y2="480" style="stroke: var(--colour-series)" stroke-width="2"/><!-- R6 across to bottom-left corner -->
+
+        <!-- ── CENTRE VERTICAL ── -->
+        <line x1="285" y1="90"  x2="285" y2="180" style="stroke: var(--colour-series)" stroke-width="2"/><!-- Node A down to R2 -->
+        <line x1="285" y1="240" x2="285" y2="345" style="stroke: var(--colour-series)" stroke-width="2"/><!-- R2 down to Node B -->
+        <line x1="285" y1="345" x2="285" y2="480" style="stroke: var(--colour-series)" stroke-width="2"/><!-- Node B down to bottom rail -->
+
+        <!-- ── CENTRE HORIZONTAL ── -->
+        <line x1="285" y1="135"  x2="435" y2="135"  style="stroke: var(--colour-series)" stroke-width="2"/><!-- Node A across to R3 -->
+        <line x1="210" y1="345" x2="285" y2="345" style="stroke: var(--colour-series)" stroke-width="2"/><!-- R4 across to Node B -->
+        <line x1="130" y1="345" x2="70"  y2="345" style="stroke: var(--colour-series)" stroke-width="2"/><!-- R4 across to Node C -->
+
+        <!-- ════════════════════ NODES ════════════════════ -->
+
+        <!-- (true 3-way branch points only) — each node's junction dot and label grouped -->
+        <!-- together. B appears twice (285,345) and (285,480) since the connecting stub -->
+        <!-- ties them to the same electrical node. Hidden until Q1 (total resistance) is -->
+        <!-- answered — see nodesGroup in applyCircuitState. -->
+        <g id="nodesGroup" display="none">
+
+        <!-- ── NODE A ── -->
+        <circle cx="285" cy="135"  r="5" style="fill: var(--colour-series)"/>
+        <g id="nodeA" transform="translate(264,136)">
+          <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5"/>
+          <text x="-4" y="4" style="fill: var(--colour-node)" font-size="15" font-weight="bold">A</text>
+        </g>
+
+        <!-- ── NODE B ── -->
+        <circle cx="285"  cy="345" r="5" style="fill: var(--colour-series)"/>
+        <g id="nodeB1" transform="translate(310,346)">
+          <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5"/>
+          <text x="-4" y="4" style="fill: var(--colour-node)" font-size="15" font-weight="bold">B</text>
+        </g>
+        <circle cx="285"  cy="480" r="5" style="fill: var(--colour-series)"/>
+        <g id="nodeB2" transform="translate(284,506)">
+          <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5"/>
+          <text x="-4" y="4" style="fill: var(--colour-node)" font-size="15" font-weight="bold">B</text>
+        </g>
+
+        <!-- ── NODE C ── -->
+        <circle cx="70"  cy="345" r="5" style="fill: var(--colour-series)"/>
+        <g id="nodeC" transform="translate(46,346)">
+          <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5"/>
+          <text x="4"  y="4" style="fill: var(--colour-node)" text-anchor="end" font-size="15" font-weight="bold">C</text>
+        </g>
+        </g>
+
+        <!-- ════════════════════ BATTERY ════════════════════ -->
+
+        <!-- (E, supply voltage) — group origin = wire attachment point (centre of + plate) -->
+        <g id="batteryGroup" transform="translate(70,240)">
+          <line x1="-22" y1="0" x2="22" y2="0" style="stroke: var(--colour-red)" stroke-width="4"/>
+          <line x1="-12" y1="30" x2="12" y2="30" style="stroke: var(--colour-red)" stroke-width="2"/>
+          <text x="34" y="5" style="fill: var(--colour-red)" font-size="16" font-weight="bold">+</text>
+          <text x="34" y="36" style="fill: var(--colour-red)" font-size="16" font-weight="bold">−</text>
+          <text x="-30" y="-12" style="fill: var(--colour-supply)" font-size="15" text-anchor="end" font-weight="bold">E</text>
+          <text id="battLabel" x="-30" y="50" style="fill: var(--colour-supply)" font-size="15" text-anchor="end" font-weight="bold">9V</text>
+        </g>
+
+        <!-- ════════════════════ RESISTORS ════════════════════ -->
+
+        <!-- ── R1 (series) — group origin = box top-left ── -->
+        <g id="r1Group" transform="translate(130,74)">
+          <rect id="box-r1" x="0" y="0" width="80" height="30" rx="3" style="fill: var(--colour-panel)" stroke=var(--colour-resistor) stroke-width="2" filter="url(#glow)"/>
+          <text id="nm-r1" x="40" y="-10" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="15" font-weight="bold">R1</text>
+          <text id="lbl-r1" x="40" y="52" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16">1kΩ</text>
+        </g>
+
+        <!-- ── R2 (branch 1, top) — group origin = box top-left ── -->
+        <g id="r2Group" transform="translate(270,180)">
+          <rect id="box-r2" x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke=var(--colour-resistor) stroke-width="2" filter="url(#glow)"/>
+          <text id="nm-r2" x="-10" y="40" fill="var(--colour-resistor-labels)" text-anchor="end" font-size="14" font-weight="bold">R2</text>
+          <text id="lbl-r2" x="40" y="40" fill="var(--colour-resistor-labels)" text-anchor="start" font-size="13">2kΩ</text>
+        </g>
+
+        <!-- ── R4 (branch 1, bottom) — group origin = box top-left ── -->
+        <g id="r4Group" transform="translate(130,330)">
+          <rect id="box-r4" x="0" y="0" width="80" height="30" rx="3" style="fill: var(--colour-panel)" stroke=var(--colour-resistor) stroke-width="2" filter="url(#glow)"/>
+          <text id="nm-r4" x="40" y="-10" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="15" font-weight="bold">R4</text>
+          <text id="lbl-r4" x="40" y="56" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16">4kΩ</text>
+        </g>
+
+        <!-- ── R3 (branch 2, top) — group origin = box top-left ── -->
+        <g id="r3Group" transform="translate(420,180)">
+          <rect id="box-r3" x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke=var(--colour-resistor) stroke-width="2" filter="url(#glow)"/>
+          <text id="nm-r3" x="-10" y="40" fill="var(--colour-resistor-labels)" text-anchor="end" font-size="14" font-weight="bold">R3</text>
+          <text id="lbl-r3" x="40" y="40" fill="var(--colour-resistor-labels)" text-anchor="start" font-size="13">3kΩ</text>
+        </g>
+
+        <!-- ── R5 (branch 2, middle) — group origin = box top-left ── -->
+        <g id="r5Group" transform="translate(420,355)">
+          <rect id="box-r5" x="0" y="0" width="30" height="80" rx="3" style="fill: var(--colour-panel)" stroke=var(--colour-resistor) stroke-width="2" filter="url(#glow)"/>
+          <text id="nm-r5" x="-10" y="40" fill="var(--colour-resistor-labels)" text-anchor="end" font-size="14" font-weight="bold">R5</text>
+          <text id="lbl-r5" x="40" y="40" fill="var(--colour-resistor-labels)" text-anchor="start" font-size="13">5kΩ</text>
+        </g>
+
+        <!-- ── R6 (branch 2, bottom) — group origin = box top-left ── -->
+        <g id="r6Group" transform="translate(130,464)">
+          <rect id="box-r6" x="0" y="0" width="80" height="30" rx="3" style="fill: var(--colour-panel)" stroke=var(--colour-resistor) stroke-width="2" filter="url(#glow)"/>
+          <text id="nm-r6" x="40" y="-10" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="15" font-weight="bold">R6</text>
+          <text id="lbl-r6" x="40" y="52" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16">6kΩ</text>
+        </g>
+
+        <!-- ════════════════════ QUESTION INDICATORS ════════════════════ -->
+
+        <!-- ── CURRENT INDICATOR (Q2) — total current I_T, on the main supply wire; -->
+        <!-- group origin = arrow tip ── -->
+        <g id="currentInd" display="none" transform="translate(70,95)">
+          <line x1="0" y1="65" x2="0" y2="10" style="stroke: var(--colour-current)" stroke-width="2.5"/>
+          <polygon points="0,0 -6,12 6,12" style="fill: var(--colour-current)"/>
+          <text x="-30" y="15" style="fill: var(--colour-current)" text-anchor="middle" font-size="18" font-weight="bold">I<tspan baseline-shift="sub" font-size="12">T</tspan></text>
+          <text id="itValue" x="-30" y="40" style="fill: var(--colour-current)" text-anchor="middle" font-size="13" font-weight="bold">—</text>
+          <text id="itUnit"  x="-30" y="55" style="fill: var(--colour-current)" text-anchor="middle" font-size="13" font-weight="bold">—</text>
+        </g>
+
+        <!-- ── EQUIVALENT-RESISTANCE LABELS (shown once Q1 is solved) ── -->
+        <g id="totalsLabels" display="none">
+          <!-- Step 1: R3+R5 (series); group origin = heading position -->
+          <g transform="translate(480,290)">
+            <text x="0" y="0" style="fill: var(--colour-resistor-combo1)" text-anchor="middle" font-size="16" font-weight="bold">R<tspan baseline-shift="sub" font-size="11">3,5</tspan></text>
+            <text id="lblR35" x="0" y="20" style="fill: var(--colour-resistor-combo1)" text-anchor="middle" font-size="15">—</text>
+          </g>
+          <!-- Step 2: R4∥R6 (parallel); group origin = heading position -->
+          <g transform="translate(240,405)">
+            <text x="0" y="0" style="fill: var(--colour-resistor-combo2)" text-anchor="middle" font-size="16" font-weight="bold">R<tspan baseline-shift="sub" font-size="11">4,6</tspan></text>
+            <text id="lblR46" x="0" y="20" style="fill: var(--colour-resistor-combo2)" text-anchor="middle" font-size="15">—</text>
+          </g>
+          <!-- Step 3: R2∥R3,5 (parallel); group origin = heading position -->
+          <g transform="translate(350,270)">
+            <text x="0" y="0" style="fill: var(--colour-resistor-combo3)" text-anchor="middle" font-size="16" font-weight="bold">R<tspan baseline-shift="sub" font-size="11">2,3,5</tspan></text>
+            <text id="lblR235" x="5" y="20" style="fill: var(--colour-resistor-combo3)" text-anchor="middle" font-size="15">—</text>
+          </g>
+          <!-- circuit total R_T; group origin = heading position -->
+          <g transform="translate(120,180)">
+            <text x="0" y="0" style="fill: var(--colour-resistor-total)" text-anchor="middle" font-size="16" font-weight="bold">R<tspan baseline-shift="sub" font-size="11">T</tspan></text>
+            <text id="lblRTtot" x="0" y="22" style="fill: var(--colour-resistor-total)" text-anchor="middle" font-size="15">—</text>
+          </g>
+        </g>
+
+        <!-- ── V_R2 VOLTAGE INDICATOR (shown on Q3) — across R2; group origin = top of spine ── -->
+        <g id="vr2Ind" display="none" transform="translate(235,190)">
+          <line x1="0" y1="0" x2="0" y2="55" style="stroke: var(--colour-red)" stroke-width="2"/>
+          <line x1="0" y1="0" x2="20" y2="0" style="stroke: var(--colour-red)" stroke-width="2"/>
+          <line x1="0" y1="55" x2="20" y2="55" style="stroke: var(--colour-red)" stroke-width="2"/>
+          <text x="5" y="-10" style="fill: var(--colour-red)" text-anchor="middle" font-size="14" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">R2</tspan></text>
+          <text x="5" y="75" style="fill: var(--colour-red)" text-anchor="middle" font-size="14" font-weight="bold"><tspan id="vr2Value">—</tspan></text>
+        </g>
+
+        <!-- ── V_R5 VOLTAGE INDICATOR (shown on Q4) — across R5; group origin = top of spine ── -->
+        <g id="vr5Ind" display="none" transform="translate(385,190)">
+          <line x1="0" y1="0" x2="0" y2="55" style="stroke: var(--colour-red)" stroke-width="2"/>
+          <line x1="0" y1="0" x2="20" y2="0" style="stroke: var(--colour-red)" stroke-width="2"/>
+          <line x1="0" y1="55" x2="20" y2="55" style="stroke: var(--colour-red)" stroke-width="2"/>
+          <text x="5" y="-10" style="fill: var(--colour-red)" text-anchor="middle" font-size="14" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">R5</tspan></text>
+          <text x="5" y="75" style="fill: var(--colour-red)" text-anchor="middle" font-size="14" font-weight="bold"><tspan id="vr5Value">—</tspan></text>
+        </g>
+
+        <!-- ── I_R4 CURRENT INDICATOR (shown on Q5) — through the R2,R4 branch; group origin = arrow tip ── -->
+        <g id="ir4Ind" display="none" transform="translate(77,345)">
+          <line x1="43" y1="0" x2="8" y2="0" style="stroke: var(--colour-current)" stroke-width="2.5"/>
+          <polygon points="0,0 12,-6 12,6" style="fill: var(--colour-current)"/>
+          <text x="26" y="15" style="fill: var(--colour-current)" text-anchor="middle" font-size="13" font-weight="bold">I<tspan baseline-shift="sub" font-size="9">R4</tspan></text>
+          <text id="ir4Value" x="26" y="35" style="fill: var(--colour-current)" text-anchor="middle" font-size="13" font-weight="bold">—</text>
+        </g>
+
+        <!-- ══ XY RULER (dev tool, off by default) — populated by buildXYRuler(), toggled by setXY() ══ -->
+        <g id="xyRuler" display="none"></g>
+      </svg>
+      </div>
+    </div>
+
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+          <div class="options" id="qOptions"></div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="diagram-modal" id="diagramModal" onclick="handleModalClick(event)">
+      <div class="modal-inner" id="modalInner">
+        <div class="modal-header">
+          <span class="modal-title" id="modalVoltLabel">Circuit Diagram — 9 V Source</span>
+          <button class="modal-close" onclick="closeModal()">✕ Close</button>
+        </div>
+        <svg id="modalSvg" viewBox="0 0 520 560" xmlns="http://www.w3.org/2000/svg"
+          font-family="'Share Tech Mono',monospace"></svg>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+const EXAMPLE_SETS = {
+  example1: { r1:1000, r2:2000, r3:3000, r4:4000, r5:5000, r6:6000, vs:9  },
+  example2: { r1:2000, r2:1000, r3:4000, r4:3000, r5:2000, r6:5000, vs:12 },
+  example3: { r1:1500, r2:3000, r3:2000, r4:1000, r5:4000, r6:2000, vs:15 }
+};
+let quizMode = 'example1';
+let V = { ...EXAMPLE_SETS.example1 };
+
+// Number of questions in the chain.
+// If you add or remove questions, update this AND CIRCUIT_STATES[],
+// QUESTION_BUILDERS[], the buildQnOptions/checkQn function sets, and
+// the matching HTML panels (q1Panel…qnPanel, q1Check…qnCheck, etc.).
+const QUIZ_QUESTION_COUNT = 5;
+const QIDS = Array.from({length: QUIZ_QUESTION_COUNT}, (_,i) => 'q'+(i+1));
+
+
+const LEGACY_QS = [
+  {
+    text: 'What is the <span style="color:var(--colour-ui-primary)">total resistance</span> R<sub>T</sub> of the circuit?',
+    hint: 'Combine R3+R5 (series) and R4∥R6 (parallel) first, combine R2 with the R3,5 result in parallel, then add R1 to both groups.<br>Don\'t know where to start? <button type="button" class="hint-help-btn" id="helpLink" onclick="goToHelp()">Click here for help</button>'
+  },
+  {
+    text: 'What is the <span style="color:var(--colour-current)">circuit current</span> I<sub>T</sub>?',
+    hint: 'Use Ohm\'s law with the total resistance you found in Q1.'
+  },
+  {
+    text: 'What is the <span style="color:var(--colour-red)">potential difference</span> across <span style="color:var(--colour-resistor-combo1)">R2</span>?',
+    hint: 'Find the voltage across the parallel section first (I<sub>T</sub> × R<sub>P</sub>), then use it to find the R2+R4 branch current.'
+  },
+  {
+    text: 'What is the <span style="color:var(--colour-red)">potential difference</span> across <span style="color:var(--colour-resistor-combo5)">R5</span>?',
+    hint: 'Use the same parallel-section voltage, but with the R3+R5+R6 branch current this time.'
+  },
+  {
+    text: 'What is the <span style="color:var(--colour-current)">current</span> through <span style="color:var(--colour-resistor-combo1)">R4</span>?',
+    hint: 'R4 is in series with R2 in the same branch, so the same current flows through both.'
+  }
+];
+
+
+// ── E12 pool + generator for Randomise mode ──
+const E12_BASE=[10,12,15,18,22,27,33,39,47,56,68,82];
+const E12=[]; [1,10].forEach(m=>E12_BASE.forEach(v=>E12.push(v*m)));
+function pickN(arr,n){const a=[...arr],r=[];for(let i=0;i<n;i++){r.push(a.splice(Math.floor(Math.random()*a.length),1)[0]);}return r;}
+function randomValues(){
+  const a=pickN(E12,6);
+  const vsOpts=[20,30,40,50,60,80,100];
+  return { r1:a[0],r2:a[1],r3:a[2],r4:a[3],r5:a[4],r6:a[5],
+           vs:vsOpts[Math.floor(Math.random()*vsOpts.length)] };
+}
+
+function fmtO(v){return v>=1000?(v/1000).toFixed(2)+' kΩ':v.toFixed(2)+' Ω';}
+function fmtO0(v){return v>=1000?(v/1000).toFixed(2)+'kΩ':v+'Ω';}
+function fmtA(a){const x=Math.abs(a);if(x>=1)return a.toFixed(3)+' A';if(x>=0.001)return (a*1000).toFixed(2)+' mA';return (a*1e6).toFixed(1)+' µA';}
+function fmtASplit(a){const x=Math.abs(a);if(x>=1)return {num:a.toFixed(3),unit:'A'};if(x>=0.001)return {num:(a*1000).toFixed(2),unit:'mA'};return {num:(a*1e6).toFixed(1),unit:'µA'};}
+function fmtV(v){const a=Math.abs(v);if(a>=1)return v.toFixed(2)+' V';if(a>=0.001)return (v*1000).toFixed(2)+' mV';return (v*1e6).toFixed(1)+' µV';}
+function frac(num,den){return `<span class="frac"><span class="num">${num}</span><span class="den">${den}</span></span>`;}
+
+// ── derived (recomputed whenever the value set changes) ──
+// NOTE: R24/R356/RP below reflect the OLD (incorrect) branch grouping and are
+// only used for Q3–Q5's per-branch voltage/current values, which have not
+// been reworked yet. RT (Q1) and IT (Q2) now use the corrected topology —
+// R1 + [R2∥(R3+R5)] + (R4∥R6) — matching resistor_quiz_5.html.
+let R24,R356,RP,R35,R46,R235,RT,IT,VP,I24,I356,VR2,VR5,IR4,RT_ALL,RT_B1ONLY,RT_B2ONLY;
+function recompute(){
+  R24  = V.r2 + V.r4;                          // branch 1 series sum: R2 + R4 (stale — Q3–Q5 only)
+  R356 = V.r3 + V.r5 + V.r6;                    // branch 2 series sum: R3 + R5 + R6 (stale — Q3–Q5 only)
+  RP   = 1/(1/R24 + 1/R356);                    // the two (stale) branches in parallel
+
+  R35  = V.r3 + V.r5;                           // R3 + R5 (series)
+  R46  = 1/(1/V.r4 + 1/V.r6);                   // R4 ∥ R6 (parallel)
+  R235 = 1/(1/V.r2 + 1/R35);                    // R2 ∥ (R3+R5) (parallel)
+  RT   = V.r1 + R235 + R46;                     // total: R1 + R2,3,5 + R4,6, all in series
+
+  IT   = V.vs / RT;                             // circuit current (now uses the corrected RT)
+  VP   = IT * RP;                               // voltage across the parallel section (Node A to N_NEG) — stale, Q3–Q5 only
+  I24  = VP / R24;                              // branch 1 current (through R2 and R4) — stale, Q3–Q5 only
+  I356 = VP / R356;                             // branch 2 current (through R3, R5 and R6) — stale, Q3–Q5 only
+  VR2  = I24 * V.r2;                            // V across R2 — stale, Q3–Q5 only
+  VR5  = I356 * V.r5;                           // V across R5 — stale, Q3–Q5 only
+  IR4  = I24;                                   // R4 is in series with R2, so shares its current — stale, Q3–Q5 only
+  // distractor R_T values (shared by Q1 and Q2), matching the corrected topology
+  RT_ALL    = V.r1+V.r2+V.r3+V.r4+V.r5+V.r6;   // everything in series
+  RT_B1ONLY = V.r1 + R235;                      // mistake: forgot the R4∥R6 group entirely
+  RT_B2ONLY = V.r1 + R46;                       // mistake: forgot the R2∥(R3+R5) group entirely
+}
+
+// ── mode switching ──
+function refreshLabels(){
+  for(let i=1;i<=6;i++) document.getElementById('lbl-r'+i).textContent=fmtO0(V['r'+i]);
+  document.getElementById('panelVoltLabel').textContent=V.vs+' V';
+  document.getElementById('battLabel').textContent=V.vs+'V';
+  const mt=document.getElementById('modalVoltLabel');
+  if(mt) mt.textContent=`Circuit Diagram — ${V.vs} V Source`;
+}
+function setMode(mode){
+  quizMode=mode;
+  V = (mode==='randomise') ? randomValues() : { ...EXAMPLE_SETS[mode] };
+  recompute();
+  refreshLabels();
+  ['example1','example2','example3','randomise'].forEach(m=>{
+    const b=document.getElementById('mode'+m.charAt(0).toUpperCase()+m.slice(1));
+    if(b) b.classList.toggle('active',m===mode);
+  });
+  resetQuiz();   // rebuilds options for the new values and returns to Q1
+  updateHelpLink();
+}
+
+// Applies an explicit value set (used when returning from the Q1 walkthrough,
+// so the values here match whatever the student was looking at over there —
+// no named example tab is highlighted since it may not match any of them,
+// e.g. when the student had been on Randomise).
+function applyValues(vals){
+  quizMode='custom';
+  V=vals;
+  recompute();
+  refreshLabels();
+  ['example1','example2','example3','randomise'].forEach(m=>{
+    const b=document.getElementById('mode'+m.charAt(0).toUpperCase()+m.slice(1));
+    if(b) b.classList.toggle('active',false);
+  });
+  resetQuiz();
+  updateHelpLink();
+}
+
+// The Q1 hint's help link always points at the walkthrough with the CURRENT
+// on-screen values baked in as query params, so it explains the same circuit
+// instance the student is looking at (not always its own default Example 1).
+function buildHelpParams(extra){
+  const p=new URLSearchParams();
+  ['r1','r2','r3','r4','r5','r6','vs'].forEach(k=>p.set(k,V[k]));
+  Object.entries(extra||{}).forEach(([k,v])=>p.set(k,v));
+  return p;
+}
+function updateHelpLink(){}
+function goToHelp(){
+  location.href='resistor_quiz_4_total_resistance.html?'+buildHelpParams({return:'quiz4'}).toString();
+}
+
+
+function buildQ1Options(){
+  // correct: R1 + [(R2+R4) ∥ (R3+R5+R6)]
+  // distractors: everything in series, or ignoring one branch entirely
+  return shuffle([
+    {label:fmtO(RT),type:'correct'},
+    {label:fmtO(RT_ALL),type:'wrong'},
+    {label:fmtO(RT_B1ONLY),type:'wrong'},
+    {label:fmtO(RT_B2ONLY),type:'wrong'},
+  ]);
+}
+function buildQ2Options(){
+  return shuffle([
+    {label:fmtA(IT),type:'correct'},
+    {label:fmtA(V.vs/RT_ALL),type:'wrong'},
+    {label:fmtA(V.vs/RT_B1ONLY),type:'wrong'},
+    {label:fmtA(V.vs/RT_B2ONLY),type:'wrong'},
+  ]);
+}
+function buildQ3Options(){
+  // correct: V_R2 = I_24 × R2, where I_24 = V_P / (R2+R4)
+  // distractors: V_P alone (forgot R4 also drops voltage), I_24×R4, I_T×R2 (wrong current)
+  return shuffle([
+    {label:fmtV(VR2),type:'correct'},
+    {label:fmtV(VP),type:'wrong'},
+    {label:fmtV(I24*V.r4),type:'wrong'},
+    {label:fmtV(IT*V.r2),type:'wrong'},
+  ]);
+}
+function buildQ4Options(){
+  // correct: V_R5 = I_356 × R5, where I_356 = V_P / (R3+R5+R6)
+  // distractors: V_P alone, I_356×R3 (wrong resistor), I_356×R6 (wrong resistor)
+  return shuffle([
+    {label:fmtV(VR5),type:'correct'},
+    {label:fmtV(VP),type:'wrong'},
+    {label:fmtV(I356*V.r3),type:'wrong'},
+    {label:fmtV(I356*V.r6),type:'wrong'},
+  ]);
+}
+function buildQ5Options(){
+  // correct: R4 shares R2's branch current, I_R4 = I_24 = V_P / (R2+R4)
+  // distractors: I_T (full current), I_356 (the other branch's current), V_P/R4 (wrong resistor alone)
+  return shuffle([
+    {label:fmtA(IR4),type:'correct'},
+    {label:fmtA(IT),type:'wrong'},
+    {label:fmtA(I356),type:'wrong'},
+    {label:fmtA(VP/V.r4),type:'wrong'},
+  ]);
+}
+
+
+// ── circuit-specific SVG colour and annotation functions ──
+const GRP1=getComputedStyle(document.documentElement).getPropertyValue('--colour-resistor-combo1').trim();
+const GRP2=getComputedStyle(document.documentElement).getPropertyValue('--colour-resistor-combo2').trim();
+const GRP3=getComputedStyle(document.documentElement).getPropertyValue('--colour-resistor-combo3').trim();
+const SERIES=getComputedStyle(document.documentElement).getPropertyValue('--colour-series').trim();
+const COL_RESISTOR=getComputedStyle(document.documentElement).getPropertyValue('--colour-resistor').trim();
+
+function setResistorColour(key,boxColour){
+  const box=document.getElementById('box-'+key); if(box) box.setAttribute('stroke',boxColour);
+}
+// Step 1: R3+R5 (series) → combo1. Step 2: R4∥R6 (parallel) → combo2.
+// Step 3: R2∥R3,5 (parallel) → combo3 (R2 is this step's "new" raw input — R3,5
+// already has its own colour from step 1). R1 stays the plain series colour,
+// since it's only added right at the end to form R_T.
+function recolourGroups(){
+  ['r3','r5'].forEach(k=>setResistorColour(k,GRP1));
+  ['r4','r6'].forEach(k=>setResistorColour(k,GRP2));
+  setResistorColour('r2',GRP3);
+  setResistorColour('r1',SERIES);
+}
+function recolourDefault(){
+  ['r1','r2','r3','r4','r5','r6'].forEach(k=>setResistorColour(k,COL_RESISTOR));
+}
+
+function showCurrentIndicator(){
+  const s=fmtASplit(IT);
+  document.getElementById('itValue').textContent=s.num;
+  document.getElementById('itUnit').textContent=s.unit;
+  document.getElementById('currentInd').setAttribute('display','inline');
+}
+function hideCurrentIndicator(){ document.getElementById('currentInd').setAttribute('display','none'); }
+
+function showTotals(){
+  document.getElementById('lblR35').textContent=fmtO(R35);
+  document.getElementById('lblR46').textContent=fmtO(R46);
+  document.getElementById('lblR235').textContent=fmtO(R235);
+  document.getElementById('lblRTtot').textContent=fmtO(RT);
+  document.getElementById('totalsLabels').setAttribute('display','inline');
+}
+function hideTotals(){ document.getElementById('totalsLabels').setAttribute('display','none'); }
+
+function showVR2(){
+  document.getElementById('vr2Value').textContent=fmtV(VR2);
+  document.getElementById('vr2Ind').setAttribute('display','inline');
+}
+function hideVR2(){ document.getElementById('vr2Ind').setAttribute('display','none'); }
+
+function showVR5(){
+  document.getElementById('vr5Value').textContent=fmtV(VR5);
+  document.getElementById('vr5Ind').setAttribute('display','inline');
+}
+function hideVR5(){ document.getElementById('vr5Ind').setAttribute('display','none'); }
+
+function showIR4(){
+  document.getElementById('ir4Value').textContent=fmtA(IR4);
+  document.getElementById('ir4Ind').setAttribute('display','inline');
+}
+function hideIR4(){ document.getElementById('ir4Ind').setAttribute('display','none'); }
+
+function showNodes(){ document.getElementById('nodesGroup').setAttribute('display','inline'); }
+function hideNodes(){ document.getElementById('nodesGroup').setAttribute('display','none'); }
+
+// ── Circuit state table ──────────────────────────────────────────────
+// One row per question. 'enter' = what's visible when the student arrives
+// at this question. 'reveal' = what's added after they answer it.
+// true = show, false = hide.
+// Add a property for each annotation in your circuit, then wire it into
+// applyCircuitState() below.
+const CIRCUIT_STATES = [
+  //        grp    tot    cur    vR2    vR5    iR4    nodes
+  { enter:  {grp:false,tot:false,cur:false,vR2:false,vR5:false,iR4:false,nodes:false},
+    reveal: {grp:true, tot:true, cur:false,vR2:false,vR5:false,iR4:false,nodes:true } }, // Q1 → R_T
+  { enter:  {grp:true, tot:true, cur:false,vR2:false,vR5:false,iR4:false,nodes:true },
+    reveal: {grp:true, tot:true, cur:true, vR2:false,vR5:false,iR4:false,nodes:true } }, // Q2 → I_T
+  { enter:  {grp:true, tot:true, cur:true, vR2:false,vR5:false,iR4:false,nodes:true },
+    reveal: {grp:true, tot:true, cur:true, vR2:true, vR5:false,iR4:false,nodes:true } }, // Q3 → V_R2
+  { enter:  {grp:true, tot:true, cur:true, vR2:true, vR5:false,iR4:false,nodes:true },
+    reveal: {grp:true, tot:true, cur:true, vR2:true, vR5:true, iR4:false,nodes:true } }, // Q4 → V_R5
+  { enter:  {grp:true, tot:true, cur:true, vR2:true, vR5:true, iR4:false,nodes:true },
+    reveal: {grp:true, tot:true, cur:true, vR2:true, vR5:true, iR4:true, nodes:true } }, // Q5 → I_R4
+];
+
+// Maps CIRCUIT_STATES property names to show/hide function pairs.
+// Update this to match your annotation names when building a new circuit.
+function applyCircuitState(s){
+  s.grp ? recolourGroups()       : recolourDefault();
+  s.tot ? showTotals()           : hideTotals();
+  s.cur ? showCurrentIndicator() : hideCurrentIndicator();
+  s.vR2 ? showVR2() : hideVR2();
+  s.vR5 ? showVR5() : hideVR5();
+  s.iR4 ? showIR4() : hideIR4();
+  s.nodes ? showNodes() : hideNodes();
+}
+
+
+const QUESTION_BUILDERS = [
+  buildQ1Options, buildQ2Options, buildQ3Options,
+  buildQ4Options, buildQ5Options,
+];
+
+// ── worked solutions (the legacy showQnWorking() bodies, returning their HTML) ──
+function workingQ1(){
+  const recip=x=>(1/x).toFixed(5);
+  const sum46=(1/V.r4+1/V.r6);
+  const sum235=(1/V.r2+1/R35);
+  return `
+    <div class="step-label">Step 1 — R3 + R5 (series)</div>
+    <div class="formula-row"><span class="c1">R<sub>3,5</sub></span> = ${fmtO0(V.r3)} + ${fmtO0(V.r5)} = <span class="cr">${fmtO0(R35)}</span></div>
+
+    <div class="step-label">Step 2 — R4 ∥ R6 (parallel)</div>
+    <div class="wlabel">Formula:</div>
+    <div class="formula-row"><span class="c2">R<sub>4,6</sub></span> = ${frac('1',`${frac('1','R4')} + ${frac('1','R6')}`)}</div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="c2">R<sub>4,6</sub></span> = ${frac('1',`${frac('1',fmtO0(V.r4))} + ${frac('1',fmtO0(V.r6))}`)}</div>
+    <div class="wlabel">Calculating denominators:</div>
+    <div class="formula-row"><span class="c2">R<sub>4,6</sub></span> = ${frac('1',`${recip(V.r4)} + ${recip(V.r6)}`)}</div>
+    <div class="wlabel">Summing:</div>
+    <div class="formula-row"><span class="c2">R<sub>4,6</sub></span> = ${frac('1',sum46.toFixed(5))}</div>
+    <div class="wline total"><span class="c2">R<sub>4,6</sub></span> = <span class="cr">${fmtO(R46)}</span></div>
+
+    <div class="step-label">Step 3 — R2 ∥ R<sub>3,5</sub> (parallel)</div>
+    <div class="wlabel">Formula:</div>
+    <div class="formula-row"><span class="c3">R<sub>2,3,5</sub></span> = ${frac('1',`${frac('1','R2')} + ${frac('1','R<sub>3,5</sub>')}`)}</div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="c3">R<sub>2,3,5</sub></span> = ${frac('1',`${frac('1',fmtO0(V.r2))} + ${frac('1',fmtO0(R35))}`)}</div>
+    <div class="wlabel">Calculating denominators:</div>
+    <div class="formula-row"><span class="c3">R<sub>2,3,5</sub></span> = ${frac('1',`${recip(V.r2)} + ${recip(R35)}`)}</div>
+    <div class="wlabel">Summing:</div>
+    <div class="formula-row"><span class="c3">R<sub>2,3,5</sub></span> = ${frac('1',sum235.toFixed(5))}</div>
+    <div class="wline total"><span class="c3">R<sub>2,3,5</sub></span> = <span class="cr">${fmtO(R235)}</span></div>
+
+    <div class="step-label">Step 4 — Final Result: R<sub>T</sub> = R1 + R<sub>2,3,5</sub> + R<sub>4,6</sub></div>
+    <div class="wline">R1, R<sub>2,3,5</sub> and R<sub>4,6</sub> are all in series — add them:</div>
+    <div class="formula-row"><span class="ct">R<sub>T</sub></span> = ${fmtO0(V.r1)} + ${fmtO(R235)} + ${fmtO(R46)}</div>
+    <div class="wline total"><span class="ct">R<sub>T</sub></span> = <span class="cr">${fmtO(RT)}</span></div>`;
+}
+
+function workingQ2(){
+  return `
+    <div class="wline">Use Ohm's law with the total resistance from Q1 (R<sub>T</sub> = ${fmtO(RT)}):</div>
+    <div class="wlabel">Formula:</div>
+    <div class="formula-row cr">I<sub>T</sub> = ${frac('V','R<sub>T</sub>')}</div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row cr">I<sub>T</sub> = ${frac(V.vs+' V', fmtO(RT))}</div>
+    <div class="wline total"><span class="cr">I<sub>T</sub></span> = <span class="cr">${fmtA(IT)}</span></div>`;
+}
+
+function workingQ3(){
+  return `
+    <div class="wline">First find the <span class="cv">voltage</span> across the whole parallel section (from Node A to the battery's − terminal) using <span class="cr">I<sub>T</sub></span> and <span class="c1">R<sub>P</sub></span> from Q1:</div>
+    <div class="formula-row">V<sub>P</sub> = <span class="cr">I<sub>T</sub></span> × R<sub>P</sub> = <span class="cr">${fmtA(IT)}</span> × ${fmtO(RP)} = <b>${fmtV(VP)}</b></div>
+    <div class="wline"><span class="c1">R2</span> and <span class="c1">R4</span> share that branch voltage, so the branch current is:</div>
+    <div class="formula-row">I<sub>2,4</sub> = ${frac('V<sub>P</sub>','R<sub>2,4</sub>')} = ${frac(fmtV(VP),fmtO0(R24))} = <b>${fmtA(I24)}</b></div>
+    <div class="wline">Now find the <span class="cv">voltage</span> across <span class="c1">R2</span> alone:</div>
+    <div class="wlabel">Formula:</div>
+    <div class="formula-row"><span class="c1">V<sub>R2</sub></span> = I<sub>2,4</sub> × R2</div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="c1">V<sub>R2</sub></span> = ${fmtA(I24)} × ${fmtO0(V.r2)}</div>
+    <div class="wline total"><span class="c1">V<sub>R2</sub></span> = <span class="cr">${fmtV(VR2)}</span></div>`;
+}
+
+function workingQ4(){
+  return `
+    <div class="wline">The parallel-section voltage <span class="cv">V<sub>P</sub> = ${fmtV(VP)}</span> (from Q3) is shared by both branches.</div>
+    <div class="wline"><span class="c2">R3</span>, <span class="c2">R5</span> and <span class="c2">R6</span> share that branch voltage, so their branch current is:</div>
+    <div class="formula-row">I<sub>3,5,6</sub> = ${frac('V<sub>P</sub>','R<sub>3,5,6</sub>')} = ${frac(fmtV(VP),fmtO0(R356))} = <b>${fmtA(I356)}</b></div>
+    <div class="wline">Now find the <span class="cv">voltage</span> across <span class="c2">R5</span> alone:</div>
+    <div class="wlabel">Formula:</div>
+    <div class="formula-row"><span class="c2">V<sub>R5</sub></span> = I<sub>3,5,6</sub> × R5</div>
+    <div class="wlabel">Substituting values:</div>
+    <div class="formula-row"><span class="c2">V<sub>R5</sub></span> = ${fmtA(I356)} × ${fmtO0(V.r5)}</div>
+    <div class="wline total"><span class="c2">V<sub>R5</sub></span> = <span class="cr">${fmtV(VR5)}</span></div>`;
+}
+
+function workingQ5(){
+  return `
+    <div class="wline"><span class="c1">R4</span> is in series with <span class="c1">R2</span> in the same branch, so the same current flows through both.</div>
+    <div class="wline">That branch current <span class="cr">I<sub>2,4</sub></span> was already found in Q3:</div>
+    <div class="wlabel">Therefore:</div>
+    <div class="formula-row"><span class="cr">I<sub>R4</sub></span> = <span class="cr">I<sub>2,4</sub></span></div>
+    <div class="wline total"><span class="cr">I<sub>R4</sub></span> = <span class="cr">${fmtA(IR4)}</span></div>`;
+}
+
+// ── engine bindings ──
+const EXPLAINS = [
+  () => `R<sub>T</sub> = ${fmtO(RT)}`,
+  () => `I<sub>T</sub> = ${fmtA(IT)}`,
+  () => `V<sub>R2</sub> = ${fmtV(VR2)}`,
+  () => `V<sub>R5</sub> = ${fmtV(VR5)}`,
+  () => `I<sub>R4</sub> = ${fmtA(IR4)}`
+];
+const WORKINGS = [workingQ1, workingQ2, workingQ3, workingQ4, workingQ5];
+const QUESTIONS = LEGACY_QS.map((q, i) => ({
+  leftPanel: 'circuit',
+  text: () => q.text,
+  hint: () => q.hint,
+  options: () => QUESTION_BUILDERS[i](),
+  correctExplain: EXPLAINS[i],
+  working: () => WORKINGS[i](),
+}));
+
+// What the diagram shows: the question's "enter" state on arrival, its "reveal" state once answered.
+RENDER_EXTRA = () => {
+  const st = CIRCUIT_STATES[cur];
+  if (st) applyCircuitState(Q[cur] && Q[cur].ans ? st.reveal : st.enter);
+};
+
+SUMMARY_CIRCUIT_REF = { id: '', label: '', viewBox: '' };
+SUMMARY_EXTRA = () => {
+  applyCircuitState(CIRCUIT_STATES[CIRCUIT_STATES.length - 1].reveal);
+  const vals = `<div class="summary-values">
+    <span style="color:var(--colour-supply);font-weight:bold">V<sub>S</sub></span> = <span style="color:var(--colour-supply)">${V.vs} V</span>&nbsp;&nbsp;&nbsp;
+    <span class="cs" style="font-weight:bold">R1</span> = <span class="cs">${fmtO0(V.r1)}</span>&nbsp;&nbsp;
+    <span class="c1" style="font-weight:bold">R2</span> = <span class="c1">${fmtO0(V.r2)}</span>&nbsp;&nbsp;
+    <span class="c2" style="font-weight:bold">R3</span> = <span class="c2">${fmtO0(V.r3)}</span>&nbsp;&nbsp;
+    <span class="c1" style="font-weight:bold">R4</span> = <span class="c1">${fmtO0(V.r4)}</span>&nbsp;&nbsp;
+    <span class="c2" style="font-weight:bold">R5</span> = <span class="c2">${fmtO0(V.r5)}</span>&nbsp;&nbsp;
+    <span class="c2" style="font-weight:bold">R6</span> = <span class="c2">${fmtO0(V.r6)}</span>
+  </div>`;
+  document.getElementById('summaryContent').insertAdjacentHTML('afterbegin', vals);
+};
+
+initQuizNav();
+setMode('example1');
+{ const p = new URLSearchParams(location.search);
+  const rKeys = ['r1','r2','r3','r4','r5','r6','vs'];
+  if (rKeys.every(k => p.has(k))) {
+    const vals = {}; rKeys.forEach(k => vals[k] = +p.get(k));
+    applyValues(vals);
+  }
+  // returning from the walkthrough: the earlier questions count as answered
+  if (p.has('goto') && !p.has('q')) jump(+p.get('goto'));
+}
+initQuizFromURL();
+  </script>
+</body>
+
+</html>
