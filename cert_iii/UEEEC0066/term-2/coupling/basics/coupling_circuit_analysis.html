@@ -1078,29 +1078,42 @@
     // extends further past its visible ink than the first one does, so an
     // equal pad on both sides looks visibly looser on the right.
     const HL_PAD_LEFT = 0;
-    const HL_PAD_RIGHT = -6;
+    const HL_PAD_RIGHT = -2;   // small trim: per-glyph extents already end at the last glyph's advance
     const HL_PAD_Y = -2;
     function addRevealHighlight(el) {
       if (el.hasAttribute('data-hl-built')) return;
       const texts = el.tagName.toLowerCase() === 'text' ? [el] : el.querySelectorAll('text');
       texts.forEach(t => {
-        const b = t.getBBox();
-        // HL_PAD_RIGHT is a fixed trim tuned against the LONGER lines
-        // (e.g. "≈ 10.29 kΩ", ~100 units wide) — fine there, but on a
-        // short 2-3 character label like "RT" (~20 units wide) that same
-        // fixed trim removes a third of the box and visibly clips the
-        // last letter. Capping it at 15% of the line's own width keeps
-        // long lines unchanged (15% of 100 is way more than 6) while
-        // protecting short ones.
-        const rightTrim = Math.min(-HL_PAD_RIGHT, b.width * 0.15);
-        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        rect.setAttribute('x', b.x - HL_PAD_LEFT);
-        rect.setAttribute('y', b.y - HL_PAD_Y);
-        rect.setAttribute('width', b.width + HL_PAD_LEFT - rightTrim);
-        rect.setAttribute('height', b.height + HL_PAD_Y * 2);
-        rect.setAttribute('rx', 3);
-        rect.style.fill = 'var(--colour-highlight)';
-        t.parentNode.insertBefore(rect, t);
+        // One rect per VISUAL line, from the glyph extents themselves, so each highlight
+        // starts and ends where its own line does — left-aligned for text-anchor="start",
+        // right-aligned for "end" — rather than one block sized to the widest line. A new
+        // line begins where a glyph sits below the previous line or its x jumps backwards.
+        const lines = [];
+        let cur = null, prevX = -Infinity;
+        for (let i = 0; i < t.getNumberOfChars(); i++) {
+          const e = t.getExtentOfChar(i);
+          if (!e.width && !e.height) continue;
+          if (!cur || e.x < prevX - 0.5 || e.y >= cur.y1 - 1) {
+            cur = { x0: e.x, y0: e.y, x1: e.x + e.width, y1: e.y + e.height };
+            lines.push(cur);
+          } else {
+            cur.x0 = Math.min(cur.x0, e.x); cur.y0 = Math.min(cur.y0, e.y);
+            cur.x1 = Math.max(cur.x1, e.x + e.width); cur.y1 = Math.max(cur.y1, e.y + e.height);
+          }
+          prevX = e.x;
+        }
+        lines.forEach(l => {
+          const w = l.x1 - l.x0;
+          const rightTrim = Math.min(-HL_PAD_RIGHT, w * 0.15);   // never clip a short label
+          const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          rect.setAttribute('x', l.x0 - HL_PAD_LEFT);
+          rect.setAttribute('y', l.y0 - HL_PAD_Y);
+          rect.setAttribute('width', w + HL_PAD_LEFT - rightTrim);
+          rect.setAttribute('height', (l.y1 - l.y0) + HL_PAD_Y * 2);
+          rect.setAttribute('rx', 3);
+          rect.style.fill = 'var(--colour-highlight)';
+          t.parentNode.insertBefore(rect, t);
+        });
       });
       el.setAttribute('data-hl-built', 'true');
     }
