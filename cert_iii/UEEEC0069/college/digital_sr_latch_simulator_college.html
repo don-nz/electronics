@@ -7,7 +7,7 @@
   change its output follows after a short gate delay, and the new level then TRAVELS along the
   feedback wire to the other gate's input (drawn as a coloured sweep along the wire), which may
   make that gate change in turn. Each wire is coloured by its logic level (green = 1, grey = 0).
-  Speed buttons (Slow / Normal / Fast) change the gate and wire delays. A status panel names the
+  Speed buttons (Normal / Fast) change the gate and wire delays. A status panel names the
   current state (Hold / Set / Reset / Invalid) and explains it, and the function table highlights
   the current row.
 
@@ -179,6 +179,11 @@
     #simSvg .sw { cursor: pointer; }
     #simSvg .sw:focus { outline: none; }
     #simSvg .sw:focus-visible rect.sw-box, #simSvg .sw:hover rect.sw-box { stroke: var(--colour-ui-primary); stroke-width: 3; }
+    /* feedback value / output about to change (see render()): blink + enlarge; reduced-motion users just get the larger number */
+    #simSvg .fb-flash { font-size: 21px; animation: fbBlink .18s linear infinite; }
+    #simSvg .out-flash { font-size: 27px; animation: fbBlink .18s linear infinite; }
+    @keyframes fbBlink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: .08; } }
+    @media (prefers-reduced-motion: reduce) { #simSvg .fb-flash, #simSvg .out-flash { animation: none; } }
     .sim-status { margin-top: .8rem; padding: .7rem .9rem; border: 1px solid var(--colour-border); border-radius: 6px; font-size: .85rem; line-height: 1.55; }
     .sim-status b.st { text-transform: uppercase; letter-spacing: .05em; }
     .sim-controls { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; margin-top: .8rem; font-size: .78rem; color: var(--colour-label); }
@@ -270,7 +275,6 @@
       <div class="sim-controls">
         <button type="button" class="sim-btn" onclick="resetSim()">↺ Reset to Hold</button>
         <span>Speed:</span>
-        <button type="button" class="sim-btn" id="spd-slow" onclick="setSpeed('slow')">Slow</button>
         <button type="button" class="sim-btn active" id="spd-normal" onclick="setSpeed('normal')">Normal</button>
         <button type="button" class="sim-btn" id="spd-fast" onclick="setSpeed('fast')">Fast</button>
       </div>
@@ -310,7 +314,7 @@
     // the lesson figures (NOR: R top, S bottom; NAND: S-bar top, R-bar bottom).
     // A small discrete-event engine models gate delay (an output changes a moment after
     // its inputs do) and wire travel time (so students can SEE the signal move).
-    const SPEEDS = { slow: { gate: 650, wire: 1600 }, normal: { gate: 380, wire: 950 }, fast: { gate: 150, wire: 380 } };
+    const SPEEDS = { normal: { gate: 780, wire: 1920 }, fast: { gate: 380, wire: 950 } };
     let speed = 'normal';
     let type = 'nor';
     let ext, out, inFb, flight, pendingOut, events = [], seq = 0, loopOn = false;
@@ -320,7 +324,7 @@
     const col = (v) => v ? HIGH : LOW;
 
     // geometry (matches the lesson-style latch figures)
-    const S = 2.2, GX = 135, G1Y = 22, G2Y = 150, XJ = 385, XL = 108, XOUT_END = 455;
+    const S = 2.2, GX = 135, G1Y = 22, G2Y = 157.6, XJ = 385, XL = 108, XOUT_END = 455;
     const T1 = G1Y + 8 * S, B1 = G1Y + 24 * S, O1 = G1Y + 16 * S;
     const T2 = G2Y + 8 * S, B2 = G2Y + 24 * S, O2 = G2Y + 16 * S;
     const XO = GX + 68 * S;
@@ -377,7 +381,7 @@
         ${sw(1, B2, nm.bottomPlain)}
         <text x="${XOUT_END + 8}" y="${O1 + 7}" font-size="22" font-weight="bold" id="qTxt" style="fill: var(--colour-text)"></text>
         <text x="${XOUT_END + 8}" y="${O2 + 7}" font-size="22" font-weight="bold" id="qbTxt" style="fill: var(--colour-text)"></text>
-        <text x="${XL - 20}" y="${B1 - 8}" text-anchor="middle" font-size="15" font-weight="bold" id="fbTxt0"></text>
+        <text x="${XL - 20}" y="${B1 + 20}" text-anchor="middle" font-size="15" font-weight="bold" id="fbTxt0"></text>
         <text x="${XL - 20}" y="${T2 - 8}" text-anchor="middle" font-size="15" font-weight="bold" id="fbTxt1"></text>
         <text x="${GX + 78}" y="${G1Y - 4}" text-anchor="middle" font-size="12" style="fill: var(--colour-label)">${type === 'nor' ? 'NOR' : 'NAND'}</text>
         <text x="${GX + 78}" y="${G2Y + 82}" text-anchor="middle" font-size="12" style="fill: var(--colour-label)">${type === 'nor' ? 'NOR' : 'NAND'}</text>`;
@@ -464,6 +468,10 @@
         } else ov.style.display = 'none';
         const t = document.getElementById('fbTxt' + d);
         t.textContent = inFb[d]; t.style.fill = col(inFb[d]);
+        // Draw the eye to the number that is about to change: while the sweep is in its final
+        // stretch towards the gate input, the (still old) value blinks and grows.
+        const flashing = f && (f.t1 - now) <= Math.min(800, SPEEDS[speed].wire * 0.6);
+        t.classList.toggle('fb-flash', !!flashing);
       });
       document.getElementById('j0').style.fill = col(out[0]);
       document.getElementById('j1').style.fill = col(out[1]);
@@ -476,6 +484,10 @@
       const q = document.getElementById('qTxt'), qb = document.getElementById('qbTxt');
       q.textContent = 'Q = ' + out[0]; q.style.fill = col(out[0]);
       qb.innerHTML = '<tspan style="text-decoration:overline">Q</tspan> = ' + out[1]; qb.style.fill = col(out[1]);
+      // An output is about to change: while its gate is still "thinking" (the gate delay), blink the
+      // current value so the eye is on the right place before the new level appears.
+      q.classList.toggle('out-flash', !!pendingOut[0]);
+      qb.classList.toggle('out-flash', !!pendingOut[1]);
       renderStatus();
     }
     const STATE_TEXT = {
@@ -525,7 +537,7 @@
     function resetSim() { initState(); render(); }
     function setSpeed(s) {
       speed = s;
-      ['slow', 'normal', 'fast'].forEach(k => document.getElementById('spd-' + k).classList.toggle('active', k === s));
+      ['normal', 'fast'].forEach(k => document.getElementById('spd-' + k).classList.toggle('active', k === s));
     }
 
     initState(); buildSvg(); buildTable(); render();
