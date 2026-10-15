@@ -19,6 +19,7 @@
 (function () {
     var LABELS = {
         cert_iii: 'Cert III',
+        'prior-learning': 'Prior Learning',
         UEEEC0066: 'UEEEC0066',
         UEEEC0069: 'UEEEC0069',
         bjt: 'BJT'
