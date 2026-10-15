@@ -928,9 +928,12 @@ function toggleSwitch(i) {
 function answerKeyHtml(data, st) {
   if (data.noAnswerKey || !st.opts) return '';
   const vb = data.shapeViewBox || SHAPE_VIEWBOX;
-  const item = (o, i) => {
-    if (o.shapeId) return `<li><svg viewBox="${vb}" style="width:64px;height:auto;vertical-align:middle"><use href="#${o.shapeId}"/></svg>${data.leftPanel === 'shapeGrid' ? ` <span class="answer-key-num">${i + 1}</span>` : ''}</li>`;
-    return `<li>${o.label}</li>`;
+  // status: 'correct' (the student got this one right), 'wrong', 'missed' (left
+  // unplaced / not picked though it applies) or '' (neutral — nothing to judge)
+  const item = (o, i, status) => {
+    const cls = status ? ` class="ak-${status}"` : '';
+    if (o.shapeId) return `<li${cls}><svg viewBox="${vb}" style="width:64px;height:auto;vertical-align:middle"><use href="#${o.shapeId}"/></svg>${data.leftPanel === 'shapeGrid' ? ` <span class="answer-key-num">${i + 1}</span>` : ''}</li>`;
+    return `<li${cls}>${o.label}</li>`;
   };
   const list = (title, entries) => entries.length
     ? `<div class="answer-key-group"><div class="answer-key-title">${title}</div><ul class="answer-key">${entries.join('')}</ul></div>` : '';
@@ -942,18 +945,31 @@ function answerKeyHtml(data, st) {
     const cols = data.columns();
     cols.forEach((c, ci) => {
       const here = st.opts.map((o, i) => ({ o, i })).filter(({ o }) => data.reusablePool ? (o.cols || []).includes(ci) : o.col === ci);
-      groups += list(colTitle(c), here.map(({ o, i }) => item(o, i)));
+      const status = i => {
+        if (data.reusablePool) {
+          if (st.assign[ci] === i) return 'correct';
+          return isColumnCorrectReusable(st, ci) ? '' : (st.assign[ci] === null ? 'missed' : 'wrong');
+        }
+        if (data.matchByLabel) {
+          const placedHere = st.opts.filter((_, k) => st.place[k] === ci).length;
+          return matchColumnCorrect(st, ci) ? 'correct' : (placedHere === 0 ? 'missed' : 'wrong');
+        }
+        const placed = st.place[i];
+        return placed === null ? 'missed' : (placed === ci ? 'correct' : 'wrong');
+      };
+      groups += list(colTitle(c), here.map(({ o, i }) => item(o, i, status(i))));
     });
     if (!data.reusablePool) {
       const none = st.opts.map((o, i) => ({ o, i })).filter(({ o }) => o.col === null || o.col === undefined);
-      groups += list('Not in any column', none.map(({ o, i }) => item(o, i)));
+      groups += list('Not in any column', none.map(({ o, i }) => item(o, i, st.place[i] === null ? 'correct' : 'wrong')));
     }
   } else if (isMulti(data)) {
     heading = 'The selectable answers';
+    const picked = i => st.sel.includes(i);
     const yes = st.opts.map((o, i) => ({ o, i })).filter(({ o }) => o.type === 'correct');
     const no = st.opts.map((o, i) => ({ o, i })).filter(({ o }) => o.type !== 'correct');
-    groups += list('Correct', yes.map(({ o, i }) => item(o, i)));
-    groups += list('Not correct', no.map(({ o, i }) => item(o, i)));
+    groups += list('Correct', yes.map(({ o, i }) => item(o, i, picked(i) ? 'correct' : 'missed')));
+    groups += list('Not correct', no.map(({ o, i }) => item(o, i, picked(i) ? 'wrong' : '')));
   }
   return groups ? `<div class="working-step answer-key-heading">${heading}:</div>${groups}` : '';
 }
@@ -1075,6 +1091,19 @@ function renderQuestion() {
   const panelMode = data.leftPanel || (data.circuitId ? 'circuit' : 'none');
   swapLeftPanel(panelMode);
   if (panelMode === 'circuit') showCircuitRef(data.circuitId, data.circuitLabel, data.circuitViewBox, data.circuitLoad, data.circuitAmmeter);
+  // Once the answer is displayed the worked solution carries the same
+  // information (answerKeyHtml), so the pick/place widgets are hidden to stop
+  // the page repeating itself. A shape grid stays: it is the figure itself.
+  // `keepPicker: true` on a question keeps them; `noAnswerKey: true` has no
+  // key to replace them, so they stay too.
+  const hidePicker = st.ans && !data.noAnswerKey && !data.keepPicker &&
+    (isMatch(data) || (isMulti(data) && data.leftPanel !== 'shapeGrid'));
+  if (hidePicker) {
+    if (qMatchEl) qMatchEl.style.display = 'none';
+    if (qOptionsEl) qOptionsEl.style.display = 'none';
+    const sl = document.getElementById('qSelectedList');
+    if (sl) sl.style.display = 'none';
+  }
   if (RENDER_EXTRA) RENDER_EXTRA();
   updateProgress();
 }
