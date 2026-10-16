@@ -71,7 +71,7 @@ Call it after `QUESTIONS` is defined. It installs `RENDER_EXTRA`, `SUMMARY_CIRCU
 - Show the device symbol with every behaviour/usage question; add CLK/D/Q-style traces where behaviour is over time.
 - Setup/hold rule: no D/J/K/data change on an active clock edge; no preset/clear asserted on or just before it.
 - Teacher-facing `*_college.html` live only in `cert_iii/UEEEC0069/college/` and must be self-contained.
-- Legacy folders (`quiz/`, `filter/`, `simulator/`) predate the framework and are migrated later.
+- The legacy `quiz/`, `filter/` and `simulator/` folders were migrated into `cert_iii/prior-learning/` and deleted; the last commit that still has them is tagged `pre-legacy-delete`.
 
 ## Changing shared files safely
 
