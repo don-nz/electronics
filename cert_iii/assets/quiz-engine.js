@@ -67,6 +67,11 @@
     swapLeftPanel('circuit') call matters for any page that ALSO uses
     leftPanel:'shapeGrid' on some questions — otherwise the shapeGrid panel
     from the last-viewed question would stay visible on the summary page.
+  - `printFigure(st)` / `printAnswerFigure(st)` — optional per-question
+    functions returning an HTML string (an <img>, an <svg>) that the print
+    worksheet places under the question / above its worked solution. For
+    pages whose per-question picture is not the shared circuit <svg> (e.g.
+    filter_gain_quiz.html's canvas graph, rendered to an image).
   - `RENDER_EXTRA` — optional `() => void`, called at the end of every
     renderQuestion(). For per-file logic that needs to run on EVERY render
     regardless of the current question — e.g. bjt_knowledge_ac_params_
@@ -1410,7 +1415,16 @@ function installPrintWorksheet() {
   const btn = document.createElement('button');
   btn.className = 'btn print-worksheet-btn';
   btn.textContent = '🖨 Print Worksheet';
-  btn.addEventListener('click', () => { buildPrintWorksheet(); qeTriggerPrint(); });
+  // Images in the worksheet (printFigure) are data: URLs that decode asynchronously; Chromium's
+  // print preview snapshots the page immediately, so wait for them before opening the dialog
+  // (Firefox waits on its own, which is why this only showed up in Chromium).
+  btn.addEventListener('click', () => {
+    buildPrintWorksheet();
+    const host = document.getElementById('printWorksheet');
+    const imgs = host ? [...host.querySelectorAll('img')] : [];
+    if (!imgs.length) { qeTriggerPrint(); return; }
+    Promise.all(imgs.map(im => (im.decode ? im.decode() : Promise.resolve()).catch(() => {}))).then(qeTriggerPrint);
+  });
   check.parentNode.appendChild(btn);
   if (!document.getElementById('printWorksheet')) {
     const host = document.createElement('div');
@@ -1454,6 +1468,7 @@ function buildPrintWorksheet() {
       const vb = data.circuitViewBox || DEFAULT_CIRCUIT_VIEWBOX || circuitSvg.getAttribute('viewBox');
       html += `<div class="print-circuit"><svg viewBox="${vb}" xmlns="http://www.w3.org/2000/svg"><use href="#${data.circuitId}"/></svg></div>`;
     }
+    if (data.printFigure) html += `<div class="print-circuit">${data.printFigure(st)}</div>`;
     html += printAnswerArea(data, st);
     html += '</div>';
   });
@@ -1464,7 +1479,7 @@ function buildPrintWorksheet() {
     const st = Q[i];
     const snapshot = { sel: st.sel, clicks: st.clicks, slotPlaced: st.slotPlaced, switches: st.switches, assign: st.assign, place: st.place };
     fillCorrectSelection(i);
-    html += `<div class="print-answer"><span class="print-qnum">Q${i + 1}.</span> <span class="print-correct">${data.correctExplain(st)}</span><div class="print-working">${workingHtml(data, st)}</div></div>`;
+    html += `<div class="print-answer"><span class="print-qnum">Q${i + 1}.</span> <span class="print-correct">${data.correctExplain(st)}</span>${data.printAnswerFigure ? `<div class="print-circuit">${data.printAnswerFigure(st)}</div>` : ''}<div class="print-working">${workingHtml(data, st)}</div></div>`;
     Object.assign(st, snapshot);
   });
   html += '</div>';

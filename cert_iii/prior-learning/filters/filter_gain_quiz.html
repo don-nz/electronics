@@ -140,14 +140,16 @@ const PALETTE = {
   light: { cyan: [14,116,144], orange: [194,65,12], green: [5,150,105], yellow: [161,98,7], text: [30,41,59], grid: [148,163,184] },
 };
 function K(name, a) {
-  const light = document.documentElement.getAttribute('data-theme') === 'light';
+  const light = forceLight || document.documentElement.getAttribute('data-theme') === 'light';
   const [r, g, b] = PALETTE[light ? 'light' : 'dark'][name];
   return a === 1 ? `rgb(${r},${g},${b})` : `rgba(${r},${g},${b},${a})`;
 }
 
 let questions = [];
-const graphCanvas = document.getElementById('quizGraph');
-const gCtx = graphCanvas.getContext('2d');
+let graphCanvas = document.getElementById('quizGraph');
+let gCtx = graphCanvas.getContext('2d');
+let drawDpr = 0;          // non-zero while drawing off screen for print
+let forceLight = false;   // true while drawing the print-worksheet images (paper is white)
 // Extra left padding to fit both max-gain and fc Y labels side by side
 const GP = { left: 88, right: 24, top: 54, bottom: 56 };
 
@@ -185,7 +187,7 @@ function resizeGraph() {
     }
 
     function drawGraph(q, reveal) {
-      const dpr = window.devicePixelRatio || 1;
+      const dpr = drawDpr || window.devicePixelRatio || 1;
       const fullW = graphCanvas.width / dpr;
       const fullH = graphCanvas.height / dpr;
       const plotW = fullW - GP.left - GP.right;
@@ -432,6 +434,24 @@ function workingFor(q) {
 
     
 
+// The print worksheet takes pictures, not the live canvas: draw the question's graph off screen in
+// the light palette (unknown point open for the question, revealed for the answer).
+function graphImage(q, reveal) {
+  const dpr = 2, W = 760, H = 500;
+  const off = document.createElement('canvas');
+  off.width = W * dpr; off.height = H * dpr;
+  const keepCanvas = graphCanvas, keepCtx = gCtx;
+  graphCanvas = off; gCtx = off.getContext('2d'); forceLight = true;
+  try {
+    drawDpr = dpr;
+    gCtx.scale(dpr, dpr);
+    drawGraph(q, reveal);
+    return `<img src="${off.toDataURL('image/png')}" style="width:100%;max-width:15cm;height:auto" alt="Gain versus frequency graph">`;
+  } finally {
+    graphCanvas = keepCanvas; gCtx = keepCtx; forceLight = false; drawDpr = 0;
+  }
+}
+
 // ── options: the right answer and three typical slips ──
 function gainOptions(q) {
   const s = q.startDb, o = q.octaves, d = q.decades;
@@ -478,6 +498,8 @@ const QUESTIONS = Array.from({ length: N_QUESTIONS }, (_, i) => ({
   options: () => questions[i].opts,
   correctExplain: () => `${questions[i].exactAnswer} dB`,
   working: () => workingFor(questions[i]),
+  printFigure: () => graphImage(questions[i], false),
+  printAnswerFigure: () => graphImage(questions[i], true),
 }));
 
 RESET_EXTRA = generateQuiz;
