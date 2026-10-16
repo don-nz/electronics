@@ -1,0 +1,656 @@
+<!--
+  Differential amplifier with a constant-current-source tail — step-by-step walkthrough, in the
+  same style as diff_amp_dc_bias_analysis.html: one circuit, Example 1/2/3/Randomise, and a
+  small value badge appears on the diagram as each question is answered.
+
+  Circuit: the long-tail pair (Q1, Q2, RC1 = RC2, RB1 = RB2 to ground) whose tail is a
+  constant current source: Q3 with its base held by a zener diode (D1) and bias resistor R1,
+  and an emitter resistor RE. The output is taken from Q1's collector (single-ended).
+
+  Method (the order of the questions):
+    1. VB3 = −VEE + Vz              the zener holds Q3's base Vz above the negative rail
+    2. VE3 = VB3 − VBE              VBE = 0.6 V (this project's convention)
+    3. IT  = (VE3 − (−VEE)) / RE    the tail current, fixed by Vz, VBE and RE alone
+    4. IC1 = IC2 = IT / 2           the matched pair share the tail current equally
+    5. re  = 26 mV / IC1            each transistor's internal emitter resistance
+    6. AV(Diff) = RC / (2 × re)
+    7. AV(CM)   = RC / (2 × Z)      Z = the current source's output impedance, given
+    8. CMRR     = 20 × Log(AV(Diff) / AV(CM))   in dB
+
+  V holds the independent values; D holds everything derived (recompute()). options() is
+  called once per resetQuiz(), so setMode() always recomputes before resetQuiz().
+  The component values are this page's own — chosen to be a similar circuit, not a copy of
+  any course-sheet figure.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../assets/theme-init.js"></script>
+  <script src="../../../assets/shapes.js"></script>
+  <script src="../../../assets/quiz-engine.js"></script>
+  <title>Differential Amplifier CCS Analysis</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../assets/quiz-common.css">
+  <script src="../../../assets/breadcrumb.js" defer></script>
+  <style>
+    .cr { color: var(--colour-ui-correct); }
+  </style>
+</head>
+
+<body>
+  <script>Shapes.use('circuit-components', 'bjt-symbols', 'diodes-led');</script>
+  <div class="crumb" id="crumb" data-current="CCS Differential Amplifier"></div>
+  <header>
+    <h1>Differential Amplifier with Constant Current Source</h1>
+    <p>Zener Bias → Tail Current → re → AV(Diff) → AV(CM) → CMRR</p>
+
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+      <defs>
+        <g id="current-arrow-down">
+          <polygon points="-6,0 6,0 0,16" style="fill: var(--colour-current)" />
+        </g>
+      </defs>
+    </svg>
+  </header>
+
+  <div class="quiz-wrap" id="quizWrap">
+
+    <div class="mode-toggle">
+      <div class="mode-seg" id="modeSeg">
+        <button id="modeExample1" class="active" onclick="setMode('example1')">Example 1</button>
+        <button id="modeExample2" onclick="setMode('example2')">Example 2</button>
+        <button id="modeExample3" onclick="setMode('example3')">Example 3</button>
+        <button id="modeRandomise" onclick="setMode('randomise')">Randomise</button>
+      </div>
+    </div>
+
+    <div class="circuit-col">
+      <div class="circuit-panel" onclick="openModal()" title="Click to zoom">
+        <div class="panel-label">Differential amplifier with constant current source — <span id="panelVoltLabel">±15 V</span> supplies</div>
+        <div class="zoom-hint">
+          <svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.8" fill="none" />
+            <line x1="12.5" y1="12.5" x2="17" y2="17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            <line x1="6" y1="8" x2="10" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+            <line x1="8" y1="6" x2="8" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+          </svg>
+          Zoom
+        </div>
+        <svg id="circuitSvg" viewBox="0 -20 640 740" xmlns="http://www.w3.org/2000/svg"
+          font-family="'Share Tech Mono',monospace" shape-rendering="crispEdges">
+
+          <!-- ══ rails ══ -->
+          <line x1="50" y1="20" x2="535" y2="20" style="stroke: var(--colour-series)" stroke-width="2" />
+          <line x1="50" y1="680" x2="535" y2="680" style="stroke: var(--colour-series)" stroke-width="2" />
+          <g transform="translate(535,-5)">
+            <text x="0" y="15" style="fill: var(--colour-voltage-label)" text-anchor="start" font-size="15" font-weight="bold">+V<tspan baseline-shift="sub" font-size="10">CC</tspan></text>
+            <text id="lblVCC" x="38" y="20" style="fill: var(--colour-text)" text-anchor="start" font-size="14" font-weight="bold">+15V</text>
+          </g>
+          <g transform="translate(535,665)">
+            <text x="0" y="15" style="fill: var(--colour-voltage-label)" text-anchor="start" font-size="15" font-weight="bold">−V<tspan baseline-shift="sub" font-size="10">EE</tspan></text>
+            <text id="lblVEE" x="38" y="20" style="fill: var(--colour-text)" text-anchor="start" font-size="14" font-weight="bold">−15V</text>
+          </g>
+
+          <!-- ══ Current arrows indicating IC1 and IC2 ══ -->
+          <use href="#current-arrow-down" transform="translate(200,50)" />
+          <use href="#current-arrow-down" transform="translate(380,50)" />
+
+          <!-- ══ RC1 / RC2 verticals (rail down to each collector) ══ -->
+          <line x1="200" y1="20" x2="200" y2="255" style="stroke: var(--colour-series)" stroke-width="2" />
+          <circle cx="200" cy="20" r="5" style="fill: var(--colour-series)" />
+          <g transform="translate(200,80)">
+            <use href="#resistor-vertical" />
+            <text x="-35" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R<tspan baseline-shift="sub" font-size="11">C1</tspan></text>
+            <text id="lblRC1" x="40" y="40" fill="var(--colour-text)" text-anchor="middle" font-size="14">3k3Ω</text>
+          </g>
+          <line x1="380" y1="20" x2="380" y2="255" style="stroke: var(--colour-series)" stroke-width="2" />
+          <circle cx="380" cy="20" r="5" style="fill: var(--colour-series)" />
+          <g transform="translate(380,80)">
+            <use href="#resistor-vertical" />
+            <text x="-35" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R<tspan baseline-shift="sub" font-size="11">C2</tspan></text>
+            <text id="lblRC2" x="40" y="40" fill="var(--colour-text)" text-anchor="middle" font-size="14">3k3Ω</text>
+          </g>
+
+          <!-- ══ output (single-ended, from Q1's collector) ══ -->
+          <line x1="100" y1="210" x2="200" y2="210" style="stroke: var(--colour-series)" stroke-width="2" />
+          <circle cx="200" cy="210" r="5" style="fill: var(--colour-series)" />
+          <text x="100" y="195" style="fill: var(--colour-signal)" text-anchor="start" font-size="15" font-weight="bold">Output</text>
+
+          <!-- ══ inputs and base resistors ══ -->
+          <line x1="50" y1="285" x2="200" y2="285" style="stroke: var(--colour-series)" stroke-width="2" />
+          <text x="50" y="252" style="fill: var(--colour-signal)" text-anchor="start" font-size="15" font-weight="bold">Inverting</text>
+          <text x="50" y="270" style="fill: var(--colour-signal)" text-anchor="start" font-size="15" font-weight="bold">Input</text>
+          <line x1="400" y1="285" x2="535" y2="285" style="stroke: var(--colour-series)" stroke-width="2" />
+          <text x="550" y="252" style="fill: var(--colour-signal)" text-anchor="end" font-size="15" font-weight="bold">Non-Inverting</text>
+          <text x="550" y="270" style="fill: var(--colour-signal)" text-anchor="end" font-size="15" font-weight="bold">Input</text>
+
+          <line x1="100" y1="285" x2="100" y2="415" style="stroke: var(--colour-series)" stroke-width="2" />
+          <circle cx="100" cy="285" r="5" style="fill: var(--colour-series)" />
+          <g transform="translate(100,330)">
+            <use href="#resistor-vertical" />
+            <text x="-35" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R<tspan baseline-shift="sub" font-size="11">B1</tspan></text>
+          </g>
+          <use href="#ground-shape" transform="translate(100,415)" />
+
+          <line x1="485" y1="285" x2="485" y2="415" style="stroke: var(--colour-series)" stroke-width="2" />
+          <circle cx="485" cy="285" r="5" style="fill: var(--colour-series)" />
+          <g transform="translate(485,330)">
+            <use href="#resistor-vertical" />
+            <text x="-35" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R<tspan baseline-shift="sub" font-size="11">B2</tspan></text>
+          </g>
+          <use href="#ground-shape" transform="translate(485,415)" />
+
+          <!-- ══ emitter join and the tail (a constant current source) ══ -->
+          <line x1="200" y1="285" x2="200" y2="350" style="stroke: var(--colour-series)" stroke-width="2" />
+          <line x1="380" y1="285" x2="380" y2="350" style="stroke: var(--colour-series)" stroke-width="2" />
+          <line x1="200" y1="350" x2="380" y2="350" style="stroke: var(--colour-series)" stroke-width="2" />
+          <line x1="290" y1="350" x2="290" y2="680" style="stroke: var(--colour-series)" stroke-width="2" />
+          <circle cx="290" cy="350" r="5" style="fill: var(--colour-series)" />
+          <circle cx="290" cy="680" r="5" style="fill: var(--colour-series)" />
+          <!-- tail-current arrow (conventional current flows down the tail) -->
+          <use href="#current-arrow-down" transform="translate(290,380)" />
+
+          <!-- ══ Q1 / Q2 ══ -->
+          <g transform="translate(186,285)">
+            <use href="#bjt-npn-shape" />
+            <text x="-30" y="-20" fill="var(--colour-bjt-labels)" text-anchor="start" font-size="14" font-weight="bold">Q<tspan baseline-shift="sub" font-size="10">1</tspan></text>
+          </g>
+          <g transform="translate(394,285)">
+            <g transform="scale(-1, 1)"><use href="#bjt-npn-shape" /></g>
+            <text x="30" y="-20" fill="var(--colour-bjt-labels)" text-anchor="end" font-size="14" font-weight="bold">Q<tspan baseline-shift="sub" font-size="10">2</tspan></text>
+          </g>
+
+          <!-- ══ the constant current source: R1 + zener D1 hold Q3's base, RE sets the current ══ -->
+          <line x1="50" y1="480" x2="266" y2="480" style="stroke: var(--colour-series)" stroke-width="2" />
+          <line x1="50" y1="480" x2="50" y2="550" style="stroke: var(--colour-series)" stroke-width="2" />
+          <use href="#ground-shape" transform="translate(50,550)" />
+
+          <g transform="translate(130,480)">
+            <use href="#resistor-horizontal" />
+            <text x="0" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R<tspan baseline-shift="sub" font-size="11">1</tspan></text>
+            <text id="lblR1" x="0" y="58" fill="var(--colour-text)" text-anchor="middle" font-size="14">2k2Ω</text>
+          </g>
+
+          <line x1="200" y1="480" x2="200" y2="680" style="stroke: var(--colour-series)" stroke-width="2" />
+          <g transform="translate(200,620)">
+            <use href="#zener-up" />
+            <text x="-30" y="10" fill="var(--colour-diode)" text-anchor="middle" font-size="16" font-weight="bold">D1</text>
+            <text id="lblVz" x="-30" y="28" fill="var(--colour-text)" text-anchor="middle" font-size="14">5V1</text>
+          </g>
+          <circle cx="200" cy="480" r="5" style="fill: var(--colour-series)" />
+          <circle cx="200" cy="680" r="5" style="fill: var(--colour-series)" />
+
+          <g transform="translate(276,480)">
+            <use href="#bjt-npn-shape" />
+            <text x="45" y="-20" fill="var(--colour-bjt-labels)" text-anchor="end" font-size="14" font-weight="bold">Q<tspan baseline-shift="sub" font-size="10">3</tspan></text>
+          </g>
+
+          <g transform="translate(290,550)">
+            <use href="#resistor-vertical" />
+            <text x="-30" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R<tspan baseline-shift="sub" font-size="11">E</tspan></text>
+            <text id="lblRE" x="40" y="40" fill="var(--colour-text)" text-anchor="middle" font-size="14">2k2Ω</text>
+          </g>
+
+          <!-- the current source's own output impedance is a GIVEN, not derived -->
+          <text x="345" y="470" style="fill: var(--colour-label)" text-anchor="start" font-size="13" font-style="italic">Constant current source</text>
+          <text id="lblZ" x="345" y="488" style="fill: var(--colour-label)" text-anchor="start" font-size="13" font-style="italic">(impedance 120kΩ)</text>
+
+          <!-- ════════════════════ KNOWN VALUES — revealed as each question is answered ════════════════════ -->
+          <text x="320" y="718" style="fill: var(--colour-label)" text-anchor="middle" font-size="12" font-style="italic">— known values, revealed as you answer —</text>
+
+          <g id="revealVB3" display="none">
+            <text x="192" y="444" text-anchor="end" font-size="14" font-weight="bold"><tspan style="fill: var(--colour-voltage-label)">V<tspan baseline-shift="sub" font-size="10">B3</tspan></tspan><tspan style="fill: var(--colour-text)"> = <tspan id="valVB3">−9.9V</tspan></tspan></text>
+          </g>
+          <g id="revealVE3" display="none">
+            <text x="304" y="514" font-size="14" font-weight="bold"><tspan style="fill: var(--colour-voltage-label)">V<tspan baseline-shift="sub" font-size="10">E3</tspan></tspan><tspan style="fill: var(--colour-text)"> = <tspan id="valVE3">−10.5V</tspan></tspan></text>
+          </g>
+          <g id="revealIT" display="none">
+            <text x="304" y="390" font-size="14" font-weight="bold"><tspan style="fill: var(--colour-current)">I<tspan baseline-shift="sub" font-size="10">T</tspan></tspan><tspan style="fill: var(--colour-text)"> = <tspan id="valIT">2.05mA</tspan></tspan></text>
+          </g>
+          <g id="revealIC" display="none">
+            <text x="290" y="60" text-anchor="middle" font-size="14" font-weight="bold">
+              <tspan style="fill: var(--colour-current)">I<tspan baseline-shift="sub" font-size="10">C1</tspan>
+              <tspan style="fill: var(--colour-text)"> = <tspan id="valIC">1.02mA</tspan> = </tspan>
+              <tspan style="fill: var(--colour-current)">I<tspan baseline-shift="sub" font-size="10">C2</tspan></tspan>
+            </text>
+          </g>
+          <g id="revealRE" display="none">
+            <text x="290" y="338" text-anchor="middle" font-size="14" font-weight="bold"><tspan style="fill: var(--colour-bjt)">r<tspan baseline-shift="sub" font-size="10">e1</tspan> = r<tspan baseline-shift="sub" font-size="10">e2</tspan></tspan><tspan style="fill: var(--colour-text)"> = <tspan id="valRE">25.4Ω</tspan></tspan></text>
+          </g>
+          <g id="revealAD" display="none">
+            <text x="410" y="170" font-size="14" font-weight="bold"><tspan style="fill: var(--colour-gain)">A<tspan baseline-shift="sub" font-size="10">V(Diff)</tspan></tspan><tspan style="fill: var(--colour-text)"> = <tspan id="valAD">64.9</tspan></tspan></text>
+          </g>
+          <g id="revealAC" display="none">
+            <text x="410" y="196" font-size="14" font-weight="bold"><tspan style="fill: var(--colour-gain)">A<tspan baseline-shift="sub" font-size="10">V(CM)</tspan></tspan><tspan style="fill: var(--colour-text)"> = <tspan id="valAC">0.0138</tspan></tspan></text>
+          </g>
+          <g id="revealCM" display="none">
+            <text x="410" y="222" font-size="14" font-weight="bold"><tspan style="fill: var(--colour-gain)">CMRR</tspan><tspan style="fill: var(--colour-text)"> = <tspan id="valCM">73.5dB</tspan></tspan></text>
+          </g>
+
+          <g id="xyRuler" display="none"></g>
+        </svg>
+      </div>
+    </div>
+
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+          <div class="options" id="qOptions"></div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="diagram-modal" id="diagramModal" onclick="handleModalClick(event)">
+      <div class="modal-inner" id="modalInner">
+        <div class="modal-header">
+          <span class="modal-title" id="modalTitle">Differential amplifier with constant current source</span>
+          <button class="modal-close" onclick="closeModal()">✕ Close</button>
+        </div>
+        <svg id="modalSvg" viewBox="0 -20 640 740" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ══════════════════════════════════════════════════════════════════════
+    // VALUES — V: independent values; D: derived (recompute())
+    // ══════════════════════════════════════════════════════════════════════
+    // vee is the MAGNITUDE of the negative rail (−VEE = −vee V). z is the current source's
+    // output impedance, given (not derived from Q3's own parameters).
+    const EXAMPLE_SETS = {
+      example1: { vcc: 15, vee: 15, rc: 3300, re: 2200, vz: 5.1, r1: 2200, z: 120e3, vbe: 0.6 },
+      example2: { vcc: 12, vee: 12, rc: 2200, re: 1500, vz: 4.7, r1: 1500, z: 100e3, vbe: 0.6 },
+      example3: { vcc: 18, vee: 18, rc: 4700, re: 3900, vz: 6.8, r1: 2700, z: 150e3, vbe: 0.6 },
+    };
+    const VCC_POOL = [9, 12, 15, 18];
+    const VEE_POOL = [9, 12, 15, 18];
+    const RC_POOL = [2200, 3300, 4700, 5600];
+    const RE_POOL = [680, 1000, 1500, 2200, 3300, 3900];
+    const VZ_POOL = [3.3, 3.9, 4.7, 5.1, 5.6, 6.2, 6.8];
+    const R1_POOL = [1000, 1200, 1500, 1800, 2200, 2700, 3300, 3900];
+    const Z_POOL = [50e3, 80e3, 100e3, 120e3, 150e3, 180e3];
+    function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
+
+    let V = {}, D = {}, quizMode = 'example1';
+
+    // Retries until the pair sits comfortably in the active region: a sensible drop across RC
+    // and VCE of at least 2 V, a tail current of 1–8 mA, and a zener that stays in regulation.
+    function randomValues() {
+      for (let attempt = 0; attempt < 80; attempt++) {
+        const v = { vcc: pick(VCC_POOL), vee: pick(VEE_POOL), rc: pick(RC_POOL), re: pick(RE_POOL), vz: pick(VZ_POOL), r1: pick(R1_POOL), z: pick(Z_POOL), vbe: 0.6 };
+        if (v.vz > v.vee - 3) continue;
+        const it = (v.vz - v.vbe) / v.re, ic = it / 2, vrc = ic * v.rc, vc = v.vcc - vrc;
+        if (it < 0.001 || it > 0.008) continue;
+        if (vrc < 1 || vrc > v.vcc * 0.6) continue;
+        if (vc - (-v.vbe) < 2) continue;
+        const iz = (v.vee - v.vz) / v.r1;       // zener current through R1
+        if (iz < 0.002 || iz > 0.012) continue;
+        return v;
+      }
+      return { ...EXAMPLE_SETS.example1 };
+    }
+
+    function recompute() {
+      D.VB3 = -V.vee + V.vz;                 // the zener holds the base Vz above −VEE
+      D.VE3 = D.VB3 - V.vbe;
+      D.IT = (D.VE3 - (-V.vee)) / V.re;      // = (Vz − VBE) / RE
+      D.IC = D.IT / 2;
+      D.re = 0.026 / D.IC;
+      D.Ad = V.rc / (2 * D.re);
+      D.Acm = V.rc / (2 * V.z);
+      D.CMRR = 20 * Math.log10(D.Ad / D.Acm);
+    }
+
+    // ── formatting ──
+    const MINUS = '−';
+    function sig3(v) { return parseFloat(Number(v).toPrecision(3)); }
+    function fmtR(v) { return v >= 1000 ? sig3(v / 1000) + 'kΩ' : sig3(v) + 'Ω'; }
+    function fmtOhm(v) { return v >= 1000 ? sig3(v / 1000) + ' kΩ' : sig3(v) + ' Ω'; }
+    function fmtV(v) { return (v < 0 ? MINUS : '') + Math.abs(v).toFixed(2) + ' V'; }
+    function fmtVs(v) { return (v < 0 ? MINUS : '') + sig3(Math.abs(v)) + 'V'; }   // short, for the diagram
+    function fmtA(a) {
+      const x = Math.abs(a), s = a < 0 ? MINUS : '';
+      if (x >= 1) return s + x.toFixed(2) + ' A';
+      if (x >= 0.001) return s + (x * 1000).toFixed(2) + ' mA';
+      return s + (x * 1e6).toFixed(1) + ' µA';
+    }
+    function fmtAs(a) { return fmtA(a).replace(' ', ''); }
+    function fmtG(g) { return String(sig3(g)); }
+    function fmtDB(d) { return d.toFixed(1) + ' dB'; }
+
+    // distinct wrong values: nudge any that collide with the correct label or each other
+    function distinct(correctLabel, wrongs, fmt) {
+      const used = new Set([correctLabel]);
+      return wrongs.map(w => {
+        let val = w, label = fmt(val), tries = 0;
+        while (used.has(label) && tries < 40) { val = w * (1 + 0.15 * (tries + 1)); label = fmt(val); tries++; }
+        used.add(label);
+        return { val, label };
+      });
+    }
+
+    function refreshLabels() {
+      const ge = id => document.getElementById(id);
+      ge('lblVCC').textContent = '+' + V.vcc + 'V';
+      ge('lblVEE').textContent = MINUS + V.vee + 'V';
+      ge('lblRC1').textContent = fmtR(V.rc);
+      ge('lblRC2').textContent = fmtR(V.rc);
+      ge('lblRE').textContent = fmtR(V.re);
+      ge('lblR1').textContent = fmtR(V.r1);
+      ge('lblVz').textContent = V.vz.toString().replace('.', 'V') + (Number.isInteger(V.vz) ? 'V' : '');
+      ge('lblZ').textContent = `(impedance ${fmtR(V.z)})`;
+      ge('panelVoltLabel').textContent = V.vcc === V.vee ? `±${V.vcc} V` : `+${V.vcc} V / ${MINUS}${V.vee} V`;
+      ge('modalTitle').textContent = `Differential amplifier with constant current source — ${ge('panelVoltLabel').textContent} supplies`;
+    }
+
+    function setMode(mode) {
+      quizMode = mode;
+      V = (mode === 'randomise') ? randomValues() : { ...EXAMPLE_SETS[mode] };
+      recompute();
+      refreshLabels();
+      clearRevealHighlights();
+      ['example1', 'example2', 'example3', 'randomise'].forEach(m => {
+        const b = document.getElementById('mode' + m.charAt(0).toUpperCase() + m.slice(1));
+        if (b) b.classList.toggle('active', m === mode);
+      });
+      resetQuiz();
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS
+    // ══════════════════════════════════════════════════════════════════════
+    const cV = s => `<b class="colour-voltage">${s}</b>`;
+    const cI = s => `<b class="colour-current">${s}</b>`;
+    const cR = s => `<b class="colour-resistor">${s}</b>`;
+    const cG = s => `<b class="colour-gain">${s}</b>`;
+    const cB = s => `<b class="colour-bjt">${s}</b>`;
+    const sup = s => `<b class="colour-supply">${s}</b>`;
+    const VB3 = cV('V<sub>B3</sub>'), VE3 = cV('V<sub>E3</sub>'), VZ = cV('V<sub>Z</sub>');
+    const ITs = cI('I<sub>T</sub>'), ICs = cI('I<sub>C</sub>'), IC1 = cI('I<sub>C1</sub>');
+    const REs = cR('R<sub>E</sub>'), RCs = cR('R<sub>C</sub>');
+    const VEEs = sup('V<sub>EE</sub>');
+    const res = cB('r<sub>e</sub>');
+    const ADs = cG('A<sub>V(Diff)</sub>'), ACs = cG('A<sub>V(CM)</sub>'), CMs = cG('CMRR');
+    const Zs = cR('Z<sub>CCS</sub>');
+
+    const QUESTIONS = [
+      // 1 ── VB3
+      {
+        text: () => `Q3's base is held by the zener diode D1 (${VZ} = ${V.vz} V), which runs from the base down to the ${MINUS}${V.vee} V rail. What is ${VB3}?`,
+        hint: () => `The zener sits between Q3's base and the negative rail, so it holds the base ${VZ} <i>above</i> ${VEEs}.`,
+        options: () => shuffle([
+          { label: `${VB3} = ${MINUS}${VEEs} + ${VZ} = ${MINUS}${V.vee} + ${V.vz} = ${fmtV(D.VB3)}`, type: 'correct' },
+          { label: `${VB3} = ${MINUS}${VZ} = ${MINUS}${V.vz} V`, type: 'wrong' },
+          { label: `${VB3} = ${MINUS}${VEEs} − ${VZ} = ${MINUS}${V.vee} − ${V.vz} = ${fmtV(-V.vee - V.vz)}`, type: 'wrong' },
+          { label: `${VB3} = +${VZ} = +${V.vz} V`, type: 'wrong' },
+        ]),
+        correctExplain: () => `${VB3} = ${fmtV(D.VB3)}`,
+        working: () => `
+    <div class="working-line">R1 feeds current from ground into the zener, which breaks down and holds its own voltage steady at ${V.vz} V. Its lower end is on the ${MINUS}${V.vee} V rail, so the junction at Q3's base is ${V.vz} V above that rail:</div>
+    <div class="working-formula-row">${VB3} = ${MINUS}${VEEs} + ${VZ} = ${MINUS}${V.vee} + ${V.vz}</div>
+    <div class="working-total">${VB3} = <span class="cr">${fmtV(D.VB3)}</span> — not ${MINUS}${V.vz} V: the zener is measured from the <i>negative rail</i>, not from ground.</div>`
+      },
+      // 2 ── VE3
+      {
+        text: () => `What is the DC voltage at Q3's emitter, ${VE3}? (V<sub>BE</sub> = ${V.vbe} V)`,
+        hint: () => `An NPN transistor's emitter sits one V<sub>BE</sub> below its base: ${VE3} = ${VB3} − V<sub>BE</sub>.`,
+        options: () => shuffle([
+          { label: `${VE3} = ${VB3} − V<sub>BE</sub> = ${MINUS}${Math.abs(D.VB3).toFixed(2)} − ${V.vbe} = ${fmtV(D.VE3)}`, type: 'correct' },
+          { label: `${VE3} = ${VB3} + V<sub>BE</sub> = ${MINUS}${Math.abs(D.VB3).toFixed(2)} + ${V.vbe} = ${fmtV(D.VB3 + V.vbe)}`, type: 'wrong' },
+          { label: `${VE3} = ${VB3} = ${fmtV(D.VB3)}`, type: 'wrong' },
+          { label: `${VE3} = ${MINUS}${VEEs} = ${MINUS}${V.vee} V`, type: 'wrong' },
+        ]),
+        correctExplain: () => `${VE3} = ${fmtV(D.VE3)}`,
+        working: () => `
+    <div class="working-formula-row">${VE3} = ${VB3} − V<sub>BE</sub> = ${fmtV(D.VB3)} − ${V.vbe} V</div>
+    <div class="working-total">${VE3} = <span class="cr">${fmtV(D.VE3)}</span> — the emitter sits ${V.vbe} V <i>below</i> the base, so it is a little more negative than ${VB3}.</div>`
+      },
+      // 3 ── IT
+      {
+        text: () => `What is the tail current ${ITs} drawn through ${REs} = ${fmtR(V.re)}?`,
+        hint: () => `${REs} has ${VE3} at its top and the negative rail ${MINUS}${V.vee} V at its bottom: ${ITs} = (${VE3} − (−${VEEs})) / ${REs}.`,
+        options: () => {
+          const c = fmtA(D.IT);
+          const w = distinct(c, [V.vee / V.re, Math.abs(D.VE3) / V.re, V.vz / V.re], fmtA);
+          return shuffle([
+            { label: `${ITs} = ${frac(`${VE3} − (−${VEEs})`, REs)} = ${frac(`${fmtV(D.VE3)} − (${MINUS}${V.vee} V)`, fmtR(V.re))} ≈ ${c}`, type: 'correct' },
+            { label: `${ITs} = ${frac(VEEs, REs)} = ${frac(`${V.vee} V`, fmtR(V.re))} ≈ ${w[0].label}`, type: 'wrong' },
+            { label: `${ITs} = ${frac(`${MINUS}${VE3}`, REs)} = ${frac(`${Math.abs(D.VE3).toFixed(2)} V`, fmtR(V.re))} ≈ ${w[1].label}`, type: 'wrong' },
+            { label: `${ITs} = ${frac(VZ, REs)} = ${frac(`${V.vz} V`, fmtR(V.re))} ≈ ${w[2].label}`, type: 'wrong' },
+          ]);
+        },
+        correctExplain: () => `${ITs} ≈ ${fmtA(D.IT)}`,
+        working: () => `
+    <div class="working-line">${REs} runs from Q3's emitter (${VE3} = ${fmtV(D.VE3)}) to the ${MINUS}${V.vee} V rail, so the voltage across it is the difference:</div>
+    <div class="working-formula-row">V<sub>RE</sub> = ${VE3} − (−${VEEs}) = ${fmtV(D.VE3)} − (${MINUS}${V.vee} V) = ${(D.VE3 + V.vee).toFixed(2)} V</div>
+    <div class="working-formula-row">${ITs} = ${frac('V<sub>RE</sub>', REs)} = ${frac(`${(D.VE3 + V.vee).toFixed(2)} V`, fmtR(V.re))}</div>
+    <div class="working-total">${ITs} ≈ <span class="cr">${fmtA(D.IT)}</span> — and since V<sub>RE</sub> = ${VZ} − V<sub>BE</sub>, it does not depend on the supply voltage at all. That is what makes this a <i>constant</i> current source. (Q3's collector current ≈ its emitter current.)</div>`
+      },
+      // 4 ── IC1 = IC2
+      {
+        text: () => `What is the collector current in each of Q1 and Q2, ${cI('I<sub>C1</sub>')} and ${cI('I<sub>C2</sub>')}?`,
+        hint: () => `Q1 and Q2 are matched and their bases sit at the same voltage, so they share the tail current equally.`,
+        options: () => {
+          const c = fmtA(D.IC);
+          const w = distinct(c, [D.IT, D.IT * 2, D.IT / 4], fmtA);
+          return shuffle([
+            { label: `${ICs} = ${frac(ITs, '2')} = ${frac(fmtA(D.IT), '2')} ≈ ${c}`, type: 'correct' },
+            { label: `${ICs} = ${ITs} ≈ ${w[0].label}`, type: 'wrong' },
+            { label: `${ICs} = 2 × ${ITs} ≈ ${w[1].label}`, type: 'wrong' },
+            { label: `${ICs} = ${frac(ITs, '4')} ≈ ${w[2].label}`, type: 'wrong' },
+          ]);
+        },
+        correctExplain: () => `${ICs} = ${ITs} / 2 ≈ ${fmtA(D.IC)}`,
+        working: () => `
+    <div class="working-line">${ITs} reaches the joined emitters of Q1 and Q2 and splits between them. The transistors are matched with equal base voltages, so it divides equally:</div>
+    <div class="working-formula-row">${cI('I<sub>C1</sub>')} = ${cI('I<sub>C2</sub>')} = ${frac(ITs, '2')} = ${frac(fmtA(D.IT), '2')}</div>
+    <div class="working-total">${ICs} ≈ <span class="cr">${fmtA(D.IC)}</span> each. This is the figure that sets each transistor's r<sub>e</sub> in the next step.</div>`
+      },
+      // 5 ── re
+      {
+        text: () => `Calculate ${res} — the internal emitter resistance of Q1 (and Q2).`,
+        hint: () => `${res} = 26 mV / I<sub>C</sub> — use Q1's <i>own</i> share of the tail current, not the whole ${ITs}.`,
+        options: () => {
+          const c = fmtOhm(D.re);
+          const w = distinct(c, [0.026 / D.IT, 0.6 / D.IC, D.IC / 0.026], fmtOhm);
+          return shuffle([
+            { label: `${res} = ${frac('26 mV', IC1)} = ${frac('26 mV', fmtA(D.IC))} ≈ ${c}`, type: 'correct' },
+            { label: `${res} = ${frac('26 mV', ITs)} = ${frac('26 mV', fmtA(D.IT))} ≈ ${w[0].label}`, type: 'wrong' },
+            { label: `${res} = ${frac('0.6 V', IC1)} = ${frac('0.6 V', fmtA(D.IC))} ≈ ${w[1].label}`, type: 'wrong' },
+            { label: `${res} = ${frac(IC1, '26 mV')} = ${frac(fmtA(D.IC), '26 mV')} ≈ ${fmtG(D.IC / 0.026)}`, type: 'wrong' },
+          ]);
+        },
+        correctExplain: () => `${res} = 26 mV / I<sub>C1</sub> ≈ ${fmtOhm(D.re)}`,
+        working: () => `
+    <div class="working-formula-row">${res} = ${frac('26 mV', IC1)} = ${frac('26 mV', fmtA(D.IC))}</div>
+    <div class="working-total">${cB('r<sub>e1</sub>')} = ${cB('r<sub>e2</sub>')} ≈ <span class="cr">${fmtOhm(D.re)}</span></div>
+    <div class="working-line">Using the full tail current would halve the answer. Using 0.6 V confuses V<sub>BE</sub> with the 26 mV thermal-voltage constant. Turning the fraction upside down gives a number, not a resistance.</div>`
+      },
+      // 6 ── AV(Diff)
+      {
+        text: () => `Using ${res} ≈ ${fmtOhm(D.re)}, calculate ${ADs}, the differential voltage gain. (${RCs} = ${fmtR(V.rc)})`,
+        hint: () => `${ADs} = ${RCs} / (2 × ${res}).`,
+        options: () => {
+          const c = fmtG(D.Ad);
+          const w = distinct(c, [V.rc / D.re, V.rc / (4 * D.re), (2 * V.rc) / D.re], fmtG);
+          return shuffle([
+            { label: `${ADs} = ${frac(RCs, `2 × ${res}`)} = ${frac(fmtR(V.rc), `2 × ${fmtOhm(D.re)}`)} ≈ ${c}`, type: 'correct' },
+            { label: `${ADs} = ${frac(RCs, res)} = ${frac(fmtR(V.rc), fmtOhm(D.re))} ≈ ${w[0].label}`, type: 'wrong' },
+            { label: `${ADs} = ${frac(RCs, `4 × ${res}`)} = ${frac(fmtR(V.rc), `4 × ${fmtOhm(D.re)}`)} ≈ ${w[1].label}`, type: 'wrong' },
+            { label: `${ADs} = ${frac(`2 × ${RCs}`, res)} = ${frac(`2 × ${fmtR(V.rc)}`, fmtOhm(D.re))} ≈ ${w[2].label}`, type: 'wrong' },
+          ]);
+        },
+        correctExplain: () => `${ADs} = ${RCs} / (2 × ${res}) ≈ ${fmtG(D.Ad)}`,
+        working: () => `
+    <div class="working-formula-row">${ADs} = ${frac(RCs, `2 × ${res}`)} = ${frac(fmtR(V.rc), `2 × ${fmtOhm(D.re)}`)}</div>
+    <div class="working-total">${ADs} ≈ <span class="cr">${fmtG(D.Ad)}</span></div>
+    <div class="working-line">The 2 belongs under the fraction with r<sub>e</sub>: the signal passes through <i>both</i> transistors' emitter resistances in the loop, so the effective resistance is 2 × r<sub>e</sub>. Dropping it doubles the answer; doubling it twice quarters it; putting it on top doubles ${RCs} instead.</div>`
+      },
+      // 7 ── AV(CM)
+      {
+        text: () => `The constant current source has an output impedance of ${Zs} = ${fmtR(V.z)}. Calculate ${ACs}, the common-mode voltage gain.`,
+        hint: () => `Common-mode gain has the same shape as ${ADs}, but the resistance in the tail is the current source's impedance ${Zs}: ${ACs} = ${RCs} / (2 × ${Zs}).`,
+        options: () => {
+          const c = fmtG(D.Acm);
+          const w = distinct(c, [V.rc / V.z, V.z / (2 * V.rc), D.Ad], fmtG);
+          return shuffle([
+            { label: `${ACs} = ${frac(RCs, `2 × ${Zs}`)} = ${frac(fmtR(V.rc), `2 × ${fmtR(V.z)}`)} ≈ ${c}`, type: 'correct' },
+            { label: `${ACs} = ${frac(RCs, Zs)} = ${frac(fmtR(V.rc), fmtR(V.z))} ≈ ${w[0].label}`, type: 'wrong' },
+            { label: `${ACs} = ${frac(Zs, `2 × ${RCs}`)} = ${frac(fmtR(V.z), `2 × ${fmtR(V.rc)}`)} ≈ ${w[1].label}`, type: 'wrong' },
+            { label: `${ACs} = ${frac(RCs, `2 × ${res}`)} = ${frac(fmtR(V.rc), `2 × ${fmtOhm(D.re)}`)} ≈ ${w[2].label}`, type: 'wrong' },
+          ]);
+        },
+        correctExplain: () => `${ACs} = ${RCs} / (2 × ${Zs}) ≈ ${fmtG(D.Acm)}`,
+        working: () => `
+    <div class="working-formula-row">${ACs} = ${frac(RCs, `2 × ${Zs}`)} = ${frac(fmtR(V.rc), `2 × ${fmtR(V.z)}`)}</div>
+    <div class="working-total">${ACs} ≈ <span class="cr">${fmtG(D.Acm)}</span> — tiny, which is exactly the goal: a signal common to both inputs is barely amplified.</div>
+    <div class="working-line">Getting a large answer (${fmtG(D.Ad)}) means r<sub>e</sub> was used by mistake — that is the ${ADs} formula. The current source's very high impedance in the tail is what crushes the common-mode gain; a plain resistor of a few kΩ there could not do this.</div>`
+      },
+      // 8 ── CMRR
+      {
+        text: () => `Using ${ADs} ≈ ${fmtG(D.Ad)} and ${ACs} ≈ ${fmtG(D.Acm)}, calculate the CMRR in dB.`,
+        hint: () => `${CMs}(dB) = 20 × Log(${ADs} / ${ACs}).`,
+        options: () => {
+          const c = fmtDB(D.CMRR);
+          const w = distinct(c, [10 * Math.log10(D.Ad / D.Acm), -D.CMRR, D.Ad / D.Acm], v => (Math.abs(v) > 1000 ? fmtG(v) : fmtDB(v)));
+          return shuffle([
+            { label: `${CMs} = 20 × Log(${frac(ADs, ACs)}) = 20 × Log(${frac(fmtG(D.Ad), fmtG(D.Acm))}) ≈ ${c}`, type: 'correct' },
+            { label: `${CMs} = 10 × Log(${frac(ADs, ACs)}) = 10 × Log(${frac(fmtG(D.Ad), fmtG(D.Acm))}) ≈ ${w[0].label}`, type: 'wrong' },
+            { label: `${CMs} = 20 × Log(${frac(ACs, ADs)}) = 20 × Log(${frac(fmtG(D.Acm), fmtG(D.Ad))}) ≈ ${w[1].label}`, type: 'wrong' },
+            { label: `${CMs} = ${frac(ADs, ACs)} = ${frac(fmtG(D.Ad), fmtG(D.Acm))} ≈ ${fmtG(D.Ad / D.Acm)}`, type: 'wrong' },
+          ]);
+        },
+        correctExplain: () => `${CMs} = 20 × Log(${ADs}/${ACs}) ≈ ${fmtDB(D.CMRR)}`,
+        working: () => `
+    <div class="working-formula-row">${CMs} = 20 × Log(${frac(ADs, ACs)}) = 20 × Log(${frac(fmtG(D.Ad), fmtG(D.Acm))}) = 20 × Log(${fmtG(D.Ad / D.Acm)})</div>
+    <div class="working-total">${CMs} ≈ <span class="cr">${fmtDB(D.CMRR)}</span> — the wanted differential signal is amplified about ${fmtG(D.Ad / D.Acm)} times more than a common-mode signal. The higher the figure, the better the rejection.</div>
+    <div class="working-line">The ratio is voltage gain, so the multiplier is 20, not 10 (that is for power). Inverting the ratio gives a negative figure — a <i>worse</i> amplifier would score higher — and quoting the bare ratio leaves out the dB conversion.</div>`
+      },
+    ];
+    QUESTIONS.forEach(q => { q.leftPanel = 'circuit'; });
+
+    // ── reveal: each badge appears once its question is answered, with a highlighter-
+    // marker rect behind each line of text (see diff_amp_dc_bias_analysis.html for the
+    // full explanation). Built once per mode; setMode() clears them because the numbers
+    // (and so the widths) change. ──
+    const HL_PAD_LEFT = 0;
+    const HL_PAD_RIGHT = -2;
+    const HL_PAD_Y = -2;
+    function addRevealHighlight(el) {
+      if (el.hasAttribute('data-hl-built')) return;
+      const texts = el.tagName.toLowerCase() === 'text' ? [el] : el.querySelectorAll('text');
+      texts.forEach(t => {
+        const lines = [];
+        let cur = null, prevX = -Infinity;
+        for (let i = 0; i < t.getNumberOfChars(); i++) {
+          const e = t.getExtentOfChar(i);
+          if (!e.width && !e.height) continue;
+          if (!cur || e.x < prevX - 0.5 || e.y >= cur.y1 - 1) {
+            cur = { x0: e.x, y0: e.y, x1: e.x + e.width, y1: e.y + e.height };
+            lines.push(cur);
+          } else {
+            cur.x0 = Math.min(cur.x0, e.x); cur.y0 = Math.min(cur.y0, e.y);
+            cur.x1 = Math.max(cur.x1, e.x + e.width); cur.y1 = Math.max(cur.y1, e.y + e.height);
+          }
+          prevX = e.x;
+        }
+        lines.forEach(l => {
+          const w = l.x1 - l.x0;
+          const rightTrim = Math.min(-HL_PAD_RIGHT, w * 0.15);
+          const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          rect.setAttribute('x', l.x0 - HL_PAD_LEFT);
+          rect.setAttribute('y', l.y0 - HL_PAD_Y);
+          rect.setAttribute('width', w + HL_PAD_LEFT - rightTrim);
+          rect.setAttribute('height', (l.y1 - l.y0) + HL_PAD_Y * 2);
+          rect.setAttribute('rx', 3);
+          rect.style.fill = 'var(--colour-highlight)';
+          t.parentNode.insertBefore(rect, t);
+        });
+      });
+      el.setAttribute('data-hl-built', 'true');
+    }
+    function clearRevealHighlights() {
+      document.querySelectorAll('#circuitSvg [data-hl-built]').forEach(el => {
+        el.removeAttribute('data-hl-built');
+        el.querySelectorAll('rect').forEach(r => r.remove());
+      });
+    }
+
+    RENDER_EXTRA = () => {
+      const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+      const reveal = (id, on) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.setAttribute('display', on ? 'inline' : 'none');
+        if (on) addRevealHighlight(el);
+      };
+      // values first, so a highlight is measured against the final text
+      set('valVB3', fmtVs(D.VB3)); set('valVE3', fmtVs(D.VE3)); set('valIT', fmtAs(D.IT)); set('valIC', fmtAs(D.IC));
+      set('valRE', sig3(D.re) + 'Ω'); set('valAD', fmtG(D.Ad)); set('valAC', fmtG(D.Acm)); set('valCM', D.CMRR.toFixed(1) + 'dB');
+      ['revealVB3', 'revealVE3', 'revealIT', 'revealIC', 'revealRE', 'revealAD', 'revealAC', 'revealCM']
+        .forEach((id, i) => reveal(id, Q[i].ans));
+    };
+
+    // Summary: the circuit values used, above the per-question review.
+    SUMMARY_CIRCUIT_REF = { id: '', label: '', viewBox: '' };
+    SUMMARY_EXTRA = () => {
+      const box = `<div style="border:1px solid var(--colour-border);border-radius:4px;padding:.9rem 1.2rem;margin-bottom:1.2rem;font-size:.82rem;line-height:2.2;">
+        <b class="colour-supply">V<sub>CC</sub></b> = ${V.vcc} V &nbsp;
+        <b class="colour-supply">V<sub>EE</sub></b> = ${MINUS}${V.vee} V &nbsp;
+        <b class="colour-resistor">R<sub>C1</sub> = R<sub>C2</sub></b> = ${fmtR(V.rc)} &nbsp;
+        <b class="colour-resistor">R<sub>E</sub></b> = ${fmtR(V.re)} &nbsp;
+        <b class="colour-resistor">R<sub>1</sub></b> = ${fmtR(V.r1)} &nbsp;
+        <b class="colour-voltage">V<sub>Z</sub></b> = ${V.vz} V &nbsp;
+        <b class="colour-resistor">Z<sub>CCS</sub></b> = ${fmtR(V.z)} &nbsp;
+        V<sub>BE</sub> = ${V.vbe} V
+      </div>`;
+      document.getElementById('summaryContent').insertAdjacentHTML('afterbegin', box);
+    };
+
+    initQuizNav();
+    setMode('example1');
+    initQuizFromURL();
+  </script>
+</body>
+
+</html>
