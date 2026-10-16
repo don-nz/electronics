@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<!--
+  Exam Builder — first draft.
+
+  A fully independent teacher's tool: one file, no libraries, no network, no server. Open it in a
+  browser, load a question bank saved as .xlsx or .csv, choose how many questions come from each
+  section, and print the exam paper and the marking guide.
+
+  Why it exists: writing an exam takes a long time, and in a trade course two semesters of students
+  often mix, so the paper needs changing every semester. Keep one large question bank in a
+  spreadsheet and let the tool draw a fresh paper from it each time.
+
+  Spreadsheet format — one question per row, a header row of column names (any order):
+
+    id            optional label, e.g. R-014 (used when saving/loading a selection)
+    section       questions are drawn per section, e.g. "A - Multiple choice"
+    pick          how many items to draw from the section (put it on any row of the section)
+    group         rows sharing a group value are one related set: drawn together, the shared
+                  diagram printed once above them (walk-throughs, "use the circuit below")
+    type          mc | multi | tf | short | long | calc | fill | stem
+                  (stem = the shared introduction of a group: text and/or diagram, no marks)
+    marks         whole number; sensible defaults are used when blank
+    question      the question text. <sub> <sup> <b> <i> <u> <br> are allowed. For type fill,
+                  write each blank as [[answer]] (or [[mean/average]] for alternatives).
+    a b c d e f   multiple-choice options
+    answer        mc: the letter (B) or the option text;  multi: letters (A,C);  tf: true/false;
+                  short/long/calc: the model answer;  fill: not needed (taken from [[ ]])
+    explanation   optional working / marking notes, shown in the marking guide only
+    diagram       an inline <svg>…</svg>, or an image file/URL/data: URI
+    lines         optional number of answer lines to print for short/long
+    section_order optional; not required — sections appear in the order they first occur
+
+  The "Pick" count counts items: a group is one item, however many questions it holds.
+-->
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Exam Builder</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      --bg: #f1f5f9; --panel: #ffffff; --ink: #0f172a; --muted: #64748b; --line: #cbd5e1;
+      --accent: #2563eb; --accent-soft: #dbeafe; --ok: #15803d; --warn: #b45309; --bad: #b91c1c;
+      --radius: 8px;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    h1, h2, h3 { margin: 0; }
+    .app-head { padding: 1rem 1.25rem .6rem; }
+    .app-head h1 { font-size: 1.4rem; }
+    .app-head p { margin: .15rem 0 0; color: var(--muted); font-size: .9rem; }
+    .app { display: grid; grid-template-columns: minmax(320px, 400px) 1fr; gap: 1rem; padding: 0 1.25rem 2rem; align-items: start; }
+    @media (max-width: 900px) { .app { grid-template-columns: 1fr; } }
+    .controls { display: flex; flex-direction: column; gap: .9rem; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: .9rem 1rem; }
+    .card h2 { font-size: .95rem; margin-bottom: .55rem; }
+    .step { display: inline-block; background: var(--accent); color: #fff; border-radius: 99px; width: 1.4rem; height: 1.4rem; text-align: center; font-size: .8rem; line-height: 1.4rem; margin-right: .35rem; }
+    label { display: block; font-size: .8rem; color: var(--muted); margin: .5rem 0 .15rem; }
+    input[type=text], input[type=number], input[type=date], textarea, select {
+      width: 100%; padding: .4rem .5rem; border: 1px solid var(--line); border-radius: 6px; font: inherit; background: #fff; color: var(--ink);
+    }
+    textarea { min-height: 4.2rem; resize: vertical; }
+    button, .btn { font: inherit; cursor: pointer; border: 1px solid var(--line); background: #fff; border-radius: 6px; padding: .4rem .75rem; color: var(--ink); }
+    button:hover { border-color: var(--accent); }
+    button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    button.small { padding: .15rem .45rem; font-size: .8rem; }
+    .row { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
+    .row > * { flex: 0 0 auto; }
+    .drop { border: 2px dashed var(--line); border-radius: var(--radius); padding: .9rem; text-align: center; color: var(--muted); }
+    .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+    .msg { font-size: .85rem; margin-top: .5rem; }
+    .msg.ok { color: var(--ok); } .msg.warn { color: var(--warn); } .msg.bad { color: var(--bad); }
+    ul.warnlist { margin: .3rem 0 0 1.1rem; padding: 0; font-size: .82rem; color: var(--warn); max-height: 9rem; overflow: auto; }
+    table.sections { width: 100%; border-collapse: collapse; font-size: .85rem; }
+    table.sections th, table.sections td { text-align: left; padding: .3rem .3rem; border-bottom: 1px solid var(--line); vertical-align: middle; }
+    table.sections input[type=number] { width: 4rem; }
+    .num { text-align: right; white-space: nowrap; }
+    details > summary { cursor: pointer; font-weight: 600; }
+    details table { border-collapse: collapse; font-size: .8rem; margin-top: .5rem; }
+    details td, details th { border: 1px solid var(--line); padding: .2rem .4rem; text-align: left; vertical-align: top; }
+    code { background: #e2e8f0; padding: 0 .25rem; border-radius: 3px; font-size: .85em; }
+
+    /* ── preview ── */
+    .viewbar { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; margin-bottom: .6rem; }
+    .viewbar .tab.active { background: var(--accent-soft); border-color: var(--accent); font-weight: 600; }
+    .viewbar .spacer { flex: 1; }
+    .page { background: #fff; color: #000; border: 1px solid var(--line); border-radius: var(--radius); padding: 1.6rem 1.9rem; box-shadow: 0 1px 4px rgba(0,0,0,.06); font-family: Georgia, "Times New Roman", serif; font-size: 12pt; line-height: 1.45; }
+    body[data-view="paper"] #guide, body[data-view="guide"] #paper { display: none; }
+    .page h1 { font-size: 1.5rem; margin-bottom: .2rem; }
+    .page .meta { display: flex; flex-wrap: wrap; gap: .2rem 1.5rem; font-size: .95rem; margin-bottom: .6rem; }
+    .page .fields { display: flex; gap: 1.5rem; margin: .8rem 0; }
+    .page .fields span { flex: 1; border-bottom: 1px solid #000; padding-bottom: 1.1rem; font-size: .85rem; }
+    .page .instr { border: 1px solid #000; padding: .5rem .7rem; margin: .6rem 0 1rem; font-size: .95rem; white-space: pre-line; }
+    .page h2.sec { font-size: 1.1rem; border-bottom: 2px solid #000; padding-bottom: .15rem; margin: 1.3rem 0 .2rem; display: flex; justify-content: space-between; }
+    .page .secnote { font-size: .85rem; font-style: italic; margin-bottom: .6rem; }
+    .item { position: relative; margin: 1.5rem 0 .9rem; }
+    .item.grouped { border-left: 3px solid #000; padding-left: .8rem; }
+    .item-tools { position: absolute; right: 0; top: -1.35rem; display: flex; gap: .2rem; }
+    .item-tools button { padding: 0 .35rem; font-size: .75rem; line-height: 1.4; }
+    .item-tools button.on { background: var(--accent-soft); border-color: var(--accent); }
+    .stem { margin-bottom: .5rem; }
+    .stem-ref { font-size: .85rem; font-style: italic; }
+    .figure { margin: .5rem 0; text-align: center; }
+    .figure svg, .figure img { max-width: 100%; max-height: 9cm; height: auto; }
+    .q { margin: .7rem 0; break-inside: avoid; }
+    .q-head { display: flex; gap: .6rem; }
+    .q-num { font-weight: bold; min-width: 2.2rem; }
+    .q-text { flex: 1; }
+    .q-marks { white-space: nowrap; font-size: .85rem; }
+    .opts { list-style: none; margin: .35rem 0 0 2.8rem; padding: 0; }
+    .opts li { margin: .15rem 0; }
+    .box { display: inline-block; width: .85em; height: .85em; border: 1.3px solid #000; margin-right: .45rem; vertical-align: -.05em; }
+    .box.round { border-radius: 50%; }
+    .hint { margin: .2rem 0 0 2.8rem; font-size: .85rem; font-style: italic; }
+    .lines { margin: .4rem 0 0 2.8rem; }
+    .lines div { border-bottom: 1px solid #555; height: 1.7rem; }
+    .working { margin: .4rem 0 0 2.8rem; border: 1px solid #555; min-height: 4.2cm; padding: .2rem .4rem; font-size: .8rem; color: #555; }
+    .ansline { margin: .5rem 0 0 2.8rem; }
+    .ansline span.fill { display: inline-block; border-bottom: 1px solid #000; width: 7cm; }
+    .blank { display: inline-block; min-width: 3.4cm; border-bottom: 1px solid #000; margin: 0 .15rem; height: 1.1em; vertical-align: baseline; }
+    .blank.key { border-bottom: 1px dashed #15803d; color: #15803d; font-weight: bold; padding: 0 .3rem; text-align: center; height: auto; }
+    .guide-row { display: grid; grid-template-columns: 2.6rem 1fr 3.2rem; gap: .5rem; border-bottom: 1px solid #ddd; padding: .35rem 0; break-inside: avoid; }
+    .guide-row .ans { font-weight: bold; }
+    .guide-row .why { font-size: .9rem; color: #333; }
+    .guide-row .qtxt { font-size: .9rem; color: #444; }
+    .empty { color: var(--muted); font-family: system-ui, sans-serif; padding: 2.5rem 1rem; text-align: center; }
+
+    @media print {
+      @page { margin: 1.5cm; }
+      body { background: #fff; }
+      .app-head, .controls, .viewbar, .item-tools { display: none !important; }
+      .app { display: block; padding: 0; }
+      body[data-print="exam"] #guide, body[data-print="guide"] #paper { display: none !important; }
+      body[data-print="exam"] #paper, body[data-print="guide"] #guide { display: block !important; }
+      .page { border: none; box-shadow: none; padding: 0; border-radius: 0; }
+      .item { break-inside: avoid; }
+      .page h2.sec { break-after: avoid; }
+    }
+  </style>
+</head>
+
+<body data-view="paper">
+  <header class="app-head">
+    <h1>Exam Builder</h1>
+    <p>Load a question bank, choose how many questions each section contributes, and print the paper and marking guide.</p>
+  </header>
+
+  <main class="app">
+    <aside class="controls">
+
+      <section class="card">
+        <h2><span class="step">1</span>Question bank</h2>
+        <div class="drop" id="drop">
+          Drop an <b>.xlsx</b> or <b>.csv</b> file here, or
+          <input type="file" id="file" accept=".xlsx,.csv,.txt,.tsv" hidden>
+          <button id="chooseFile">choose a file</button>
+        </div>
+        <div class="row" style="margin-top:.5rem">
+          <button id="loadSample" class="small">Try the sample bank</button>
+          <button id="dlTemplate" class="small">Download template (CSV)</button>
+        </div>
+        <div id="loadMsg" class="msg"></div>
+        <ul id="warnList" class="warnlist"></ul>
+        <details style="margin-top:.6rem">
+          <summary>Spreadsheet format</summary>
+          <p style="font-size:.82rem;margin:.4rem 0">One question per row, with these column names in the first row. Save as .xlsx or CSV (Excel and LibreOffice both do this). Only <code>question</code> is required.</p>
+          <table>
+            <tr><th>Column</th><th>Meaning</th></tr>
+            <tr><td><code>section</code></td><td>Questions are drawn per section.</td></tr>
+            <tr><td><code>pick</code></td><td>How many items to draw from the section (any row of the section).</td></tr>
+            <tr><td><code>group</code></td><td>Same value = one related set, drawn together; its diagram prints once above them.</td></tr>
+            <tr><td><code>type</code></td><td><code>mc</code> <code>multi</code> <code>tf</code> <code>short</code> <code>long</code> <code>calc</code> <code>fill</code> <code>stem</code> (stem = a group's shared intro/diagram).</td></tr>
+            <tr><td><code>marks</code></td><td>Whole number (defaults: mc/tf/short 1, long 2, calc 3, fill = blanks).</td></tr>
+            <tr><td><code>question</code></td><td>Text. <code>&lt;sub&gt;</code> <code>&lt;sup&gt;</code> <code>&lt;b&gt;</code> <code>&lt;i&gt;</code> allowed. Fill: <code>[[answer]]</code> or <code>[[mean/average]]</code>.</td></tr>
+            <tr><td><code>a</code>–<code>f</code></td><td>Multiple-choice options.</td></tr>
+            <tr><td><code>answer</code></td><td>mc: letter or option text · multi: <code>A,C</code> · tf: true/false · others: model answer.</td></tr>
+            <tr><td><code>explanation</code></td><td>Working / marking notes (guide only).</td></tr>
+            <tr><td><code>diagram</code></td><td>Inline <code>&lt;svg&gt;…&lt;/svg&gt;</code>, or an image path / URL / data URI.</td></tr>
+            <tr><td><code>lines</code></td><td>Answer lines to print (short/long).</td></tr>
+            <tr><td><code>id</code></td><td>Optional label, e.g. R-014.</td></tr>
+          </table>
+        </details>
+      </section>
+
+      <section class="card" id="cardSections" hidden>
+        <h2><span class="step">2</span>Sections &amp; selection</h2>
+        <table class="sections" id="secTable"></table>
+        <div class="row" style="margin-top:.6rem">
+          <button id="reroll" class="primary">New random paper</button>
+          <span style="font-size:.8rem;color:var(--muted)">Pinned items stay.</span>
+        </div>
+        <label for="seed">Seed (same seed + bank = same paper)</label>
+        <input type="text" id="seed">
+        <label style="display:flex;gap:.4rem;align-items:center;margin-top:.7rem"><input type="checkbox" id="optShuffle"> Shuffle multiple-choice options</label>
+        <label style="display:flex;gap:.4rem;align-items:center"><input type="checkbox" id="secShuffle"> Shuffle order of items within each section</label>
+        <div class="row" style="margin-top:.6rem">
+          <button id="saveSel" class="small">Save selection (.json)</button>
+          <button id="loadSelBtn" class="small">Load selection</button>
+          <input type="file" id="loadSel" accept=".json" hidden>
+        </div>
+      </section>
+
+      <section class="card" id="cardSettings" hidden>
+        <h2><span class="step">3</span>Paper details</h2>
+        <label for="title">Exam title</label><input type="text" id="title" value="Written Examination">
+        <label for="course">Unit / course</label><input type="text" id="course" placeholder="e.g. UEEEC0066 — Amplifier configurations">
+        <div class="row">
+          <div style="flex:1"><label for="date">Date</label><input type="date" id="date"></div>
+          <div style="flex:1"><label for="time">Time allowed</label><input type="text" id="time" placeholder="e.g. 90 minutes"></div>
+        </div>
+        <label for="teacher">Teacher / version</label><input type="text" id="teacher" placeholder="e.g. Don — Version A">
+        <label for="instr">Instructions</label>
+        <textarea id="instr">Answer all questions in the spaces provided.
+Calculators and drawing instruments may be used.
+Show all working for calculation questions.</textarea>
+        <label style="display:flex;gap:.4rem;align-items:center"><input type="checkbox" id="showNameLines" checked> Name / student ID lines</label>
+      </section>
+
+    </aside>
+
+    <section>
+      <div class="viewbar">
+        <button class="tab active" id="tabPaper">Exam paper</button>
+        <button class="tab" id="tabGuide">Marking guide</button>
+        <span class="spacer"></span>
+        <span id="totals" style="font-size:.9rem;color:var(--muted)"></span>
+        <button id="printPaper" class="primary">Print paper</button>
+        <button id="printGuide">Print marking guide</button>
+      </div>
+      <article class="page" id="paper"><div class="empty">Load a question bank to begin.</div></article>
+      <article class="page" id="guide"></article>
+    </section>
+  </main>
+
+  <script>
+  'use strict';
+  // ════════════════════════════════════════════════════════════════════════
+  //  Spreadsheet reading: CSV (hand-written parser) and XLSX (zip + XML, using the
+  //  browser's built-in DecompressionStream) — no libraries.
+  // ════════════════════════════════════════════════════════════════════════
+
+  function parseCSV(text) {
+    text = text.replace(/^﻿/, '');
+    const firstLine = text.split(/\r?\n/, 1)[0] || '';
+    const delim = [',', ';', '\t'].map(d => [d, firstLine.split(d).length]).sort((a, b) => b[1] - a[1])[0][0];
+    const rows = [];
+    let row = [], cell = '', inQ = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (inQ) {
+        if (c === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else inQ = false; }
+        else cell += c;
+      } else if (c === '"') inQ = true;
+      else if (c === delim) { row.push(cell); cell = ''; }
+      else if (c === '\n' || c === '\r') {
+        if (c === '\r' && text[i + 1] === '\n') i++;
+        row.push(cell); rows.push(row); row = []; cell = '';
+      } else cell += c;
+    }
+    if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
+    return rows;
+  }
+
+  function toCSV(rows) {
+    return rows.map(r => r.map(v => {
+      v = v == null ? '' : String(v);
+      return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+    }).join(',')).join('\r\n');
+  }
+
+  async function inflateRaw(bytes) {
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+
+  async function readZip(buf) {
+    const dv = new DataView(buf), u8 = new Uint8Array(buf);
+    let i = buf.byteLength - 22;
+    while (i >= 0 && dv.getUint32(i, true) !== 0x06054b50) i--;
+    if (i < 0) throw new Error('Not a zip/xlsx file');
+    const count = dv.getUint16(i + 10, true);
+    let p = dv.getUint32(i + 16, true);
+    const dec = new TextDecoder();
+    const entries = {};
+    for (let k = 0; k < count; k++) {
+      if (dv.getUint32(p, true) !== 0x02014b50) break;
+      const method = dv.getUint16(p + 10, true), csize = dv.getUint32(p + 20, true);
+      const nlen = dv.getUint16(p + 28, true), elen = dv.getUint16(p + 30, true), clen = dv.getUint16(p + 32, true);
+      const lho = dv.getUint32(p + 42, true);
+      const name = dec.decode(u8.subarray(p + 46, p + 46 + nlen));
+      entries[name] = { method, csize, lho };
+      p += 46 + nlen + elen + clen;
+    }
+    return {
+      has: n => n in entries,
+      async text(n) {
+        const e = entries[n]; if (!e) return null;
+        const nl = dv.getUint16(e.lho + 26, true), el = dv.getUint16(e.lho + 28, true);
+        const start = e.lho + 30 + nl + el;
+        let data = u8.subarray(start, start + e.csize);
+        if (e.method === 8) data = await inflateRaw(data);
+        else if (e.method !== 0) throw new Error('Unsupported zip compression');
+        return dec.decode(data);
+      }
+    };
+  }
+
+  function colIndex(ref) {
+    const m = /^([A-Z]+)/.exec(ref); let n = 0;
+    for (const ch of m[1]) n = n * 26 + ch.charCodeAt(0) - 64;
+    return n - 1;
+  }
+
+  async function parseXLSX(buf) {
+    const zip = await readZip(buf);
+    const xml = async n => { const t = await zip.text(n); return t == null ? null : new DOMParser().parseFromString(t, 'application/xml'); };
+    const wb = await xml('xl/workbook.xml');
+    if (!wb) throw new Error('No workbook found — is this an .xlsx file?');
+    const sheets = [...wb.getElementsByTagName('sheet')];
+    const pick = sheets.find(s => /question|bank/i.test(s.getAttribute('name'))) || sheets[0];
+    const rid = pick.getAttribute('r:id') || pick.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id');
+    const rels = await xml('xl/_rels/workbook.xml.rels');
+    let target = 'worksheets/sheet1.xml';
+    if (rels) {
+      const rel = [...rels.getElementsByTagName('Relationship')].find(r => r.getAttribute('Id') === rid);
+      if (rel) target = rel.getAttribute('Target');
+    }
+    const path = target.startsWith('/') ? target.slice(1) : 'xl/' + target;
+    const sst = await xml('xl/sharedStrings.xml');
+    const shared = sst ? [...sst.getElementsByTagName('si')].map(si => [...si.getElementsByTagName('t')].map(t => t.textContent).join('')) : [];
+    const sheet = await xml(path);
+    if (!sheet) throw new Error('Worksheet data not found');
+    const rows = [];
+    [...sheet.getElementsByTagName('row')].forEach(r => {
+      const out = [];
+      [...r.getElementsByTagName('c')].forEach(c => {
+        const ref = c.getAttribute('r'); if (!ref) return;
+        const idx = colIndex(ref), t = c.getAttribute('t');
+        let v = '';
+        if (t === 'inlineStr') v = [...c.getElementsByTagName('t')].map(x => x.textContent).join('');
+        else {
+          const ve = c.getElementsByTagName('v')[0];
+          v = ve ? ve.textContent : '';
+          if (t === 's') v = shared[+v] ?? '';
+          else if (t === 'b') v = v === '1' ? 'TRUE' : 'FALSE';
+        }
+        out[idx] = v;
+      });
+      const rn = +r.getAttribute('r') - 1;
+      for (let i = 0; i < out.length; i++) if (out[i] === undefined) out[i] = '';
+      rows[isNaN(rn) ? rows.length : rn] = out;
+    });
+    for (let i = 0; i < rows.length; i++) if (!rows[i]) rows[i] = [];
+    return rows;
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  //  Bank: rows → questions → items (an item is a single question or a whole group)
+  // ════════════════════════════════════════════════════════════════════════
+
+  const ALIASES = {
+    q: 'question', qn: 'question', text: 'question', question_text: 'question', stem: 'question',
+    topic: 'section', sec: 'section', section_name: 'section',
+    group_id: 'group', set: 'group', related: 'group',
+    mark: 'marks', points: 'marks',
+    n: 'pick', select: 'pick', choose: 'pick', draw: 'pick',
+    option_a: 'a', option_b: 'b', option_c: 'c', option_d: 'd', option_e: 'e', option_f: 'f',
+    'a)': 'a', 'b)': 'b', 'c)': 'c', 'd)': 'd',
+    correct: 'answer', correct_answer: 'answer', key: 'answer', solution: 'answer',
+    working: 'explanation', notes: 'explanation', marking_notes: 'explanation', rationale: 'explanation',
+    image: 'diagram', figure: 'diagram', svg: 'diagram',
+    answer_lines: 'lines', qtype: 'type', kind: 'type',
+  };
+  const TYPE_ALIASES = {
+    mcq: 'mc', multiple_choice: 'mc', choice: 'mc', single: 'mc', multichoice: 'mc',
+    multiple_answer: 'multi', multi_select: 'multi', checkbox: 'multi',
+    truefalse: 'tf', true_false: 'tf', 'true/false': 'tf', boolean: 'tf',
+    shortanswer: 'short', short_answer: 'short', sa: 'short',
+    longanswer: 'long', long_answer: 'long', extended: 'long', essay: 'long', written: 'long',
+    calculation: 'calc', calculate: 'calc', numeric: 'calc',
+    fillin: 'fill', fill_in: 'fill', blanks: 'fill', cloze: 'fill',
+    intro: 'stem', info: 'stem', context: 'stem',
+  };
+  const OPTION_KEYS = ['a', 'b', 'c', 'd', 'e', 'f'];
+  const LETTERS = 'ABCDEF';
+
+  function buildBank(rows) {
+    const warnings = [];
+    if (!rows.length) throw new Error('The file is empty.');
+    const header = rows[0].map(h => {
+      const k = String(h || '').trim().toLowerCase().replace(/[\s\-]+/g, '_');
+      return ALIASES[k] || k;
+    });
+    if (!header.includes('question')) throw new Error('No "question" column found in the first row. Download the template to see the expected columns.');
+    const col = name => header.indexOf(name);
+    const questions = [];
+    const seenIds = new Set();
+    rows.slice(1).forEach((r, ri) => {
+      const get = n => { const i = col(n); return i < 0 ? '' : String(r[i] ?? '').trim(); };
+      const rawText = String(r[col('question')] ?? '').trim();
+      const rowNum = ri + 2;
+      if (!rawText && !get('diagram')) return;   // blank row
+      let type = get('type').toLowerCase().replace(/[\s\-]+/g, '_');
+      type = TYPE_ALIASES[type] || type;
+      const options = OPTION_KEYS.map(k => get(k)).filter(v => v !== '');
+      if (!type) type = options.length ? 'mc' : (/\[\[.+?\]\]/.test(rawText) ? 'fill' : 'short');
+      if (!['mc', 'multi', 'tf', 'short', 'long', 'calc', 'fill', 'stem'].includes(type)) {
+        warnings.push(`Row ${rowNum}: unknown type "${get('type')}" — treated as short answer.`);
+        type = 'short';
+      }
+      let id = get('id') || `Q${rowNum}`;
+      if (seenIds.has(id)) { warnings.push(`Row ${rowNum}: duplicate id "${id}" — renamed.`); id = `${id}#${rowNum}`; }
+      seenIds.add(id);
+      const q = {
+        id, rowNum, type,
+        section: get('section') || 'General',
+        group: get('group'),
+        pick: get('pick') === '' ? null : parseInt(get('pick'), 10),
+        text: rawText,
+        options: type === 'tf' ? ['True', 'False'] : options,
+        answer: get('answer'),
+        explanation: get('explanation'),
+        diagram: String(r[col('diagram')] ?? '').trim(),
+        lines: get('lines') === '' ? null : parseInt(get('lines'), 10),
+        marksGiven: get('marks') === '' ? null : parseFloat(get('marks')),
+      };
+      // marks
+      const blanks = type === 'fill' ? (rawText.match(/\[\[.+?\]\]/g) || []).length : 0;
+      const defaults = { mc: 1, multi: 1, tf: 1, short: 1, long: 2, calc: 3, fill: Math.max(1, blanks), stem: 0 };
+      q.marks = type === 'stem' ? 0 : (q.marksGiven != null && !isNaN(q.marksGiven) ? q.marksGiven : defaults[type]);
+      // validation
+      if (type === 'mc' || type === 'multi') {
+        if (q.options.length < 2) warnings.push(`${id} (row ${rowNum}): ${type} needs at least two options.`);
+        if (!q.answer) warnings.push(`${id} (row ${rowNum}): no answer given.`);
+        else if (!resolveChoice(q).length) warnings.push(`${id} (row ${rowNum}): answer "${q.answer}" doesn't match an option.`);
+      } else if (type === 'tf') {
+        if (!/^(t|f|true|false|yes|no)$/i.test(q.answer)) warnings.push(`${id} (row ${rowNum}): true/false question needs answer true or false.`);
+      } else if (type === 'fill') {
+        if (!blanks) warnings.push(`${id} (row ${rowNum}): fill-in question has no [[blank]] markers.`);
+      } else if (type !== 'stem' && !q.answer) {
+        warnings.push(`${id} (row ${rowNum}): no model answer given.`);
+      }
+      if (q.pick != null && isNaN(q.pick)) q.pick = null;
+      questions.push(q);
+    });
+    if (!questions.length) throw new Error('No questions found below the header row.');
+
+    // items
+    const items = [];            // {key, section, qs:[...], group, stem?, diagram?}
+    const byGroup = new Map();
+    questions.forEach(q => {
+      if (q.group) {
+        let it = byGroup.get(q.group);
+        if (!it) { it = { key: 'G:' + q.group, group: q.group, section: q.section, qs: [] }; byGroup.set(q.group, it); items.push(it); }
+        else if (it.section !== q.section) warnings.push(`Group "${q.group}" spans sections "${it.section}" and "${q.section}" — kept in "${it.section}".`);
+        it.qs.push(q);
+      } else items.push({ key: 'Q:' + q.id, group: '', section: q.section, qs: [q] });
+    });
+    items.forEach(it => {
+      it.stem = it.qs.filter(q => q.type === 'stem');
+      it.qs = it.qs.filter(q => q.type !== 'stem');
+      it.diagram = (it.stem.concat(it.qs).find(q => q.diagram) || {}).diagram || '';
+      if (!it.qs.length) warnings.push(`Group "${it.group}" has only stem rows and no questions — ignored.`);
+      it.marks = it.qs.reduce((s, q) => s + q.marks, 0);
+    });
+    const live = items.filter(it => it.qs.length);
+
+    // sections (first-seen order)
+    const sections = [];
+    live.forEach(it => {
+      let s = sections.find(x => x.name === it.section);
+      if (!s) { s = { name: it.section, pick: null, items: [] }; sections.push(s); }
+      s.items.push(it);
+    });
+    questions.forEach(q => {
+      const s = sections.find(x => x.name === q.section);
+      if (s && q.pick != null && s.pick == null) s.pick = q.pick;
+    });
+    sections.forEach(s => { if (s.pick == null || s.pick > s.items.length) s.pick = s.pick == null ? s.items.length : s.items.length; });
+    return { questions, items: live, sections, warnings };
+  }
+
+  // indices (into q.options) of the correct option(s)
+  function resolveChoice(q) {
+    const ans = q.answer.trim();
+    if (!ans) return [];
+    if (/^[A-Fa-f](\s*[,;&/ ]\s*[A-Fa-f])*$/.test(ans)) {
+      const idx = ans.toUpperCase().split(/[^A-F]+/).filter(Boolean).map(l => LETTERS.indexOf(l));
+      if (idx.every(i => i < q.options.length)) return [...new Set(idx)];
+    }
+    const parts = ans.split(/\s*[|;]\s*/);
+    const found = parts.map(p => q.options.findIndex(o => o.trim().toLowerCase() === p.toLowerCase())).filter(i => i >= 0);
+    return [...new Set(found)];
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  //  Text, diagrams
+  // ════════════════════════════════════════════════════════════════════════
+
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  function rich(s) {
+    return esc(s)
+      .replace(/&lt;(\/?)(sub|sup|b|i|u|em|strong)&gt;/gi, '<$1$2>')
+      .replace(/&lt;br\s*\/?&gt;/gi, '<br>')
+      .replace(/\r?\n/g, '<br>');
+  }
+
+  function cleanSvg(markup) {
+    const doc = new DOMParser().parseFromString(markup, 'image/svg+xml');
+    const root = doc.documentElement;
+    if (!root || root.nodeName.toLowerCase() !== 'svg' || doc.getElementsByTagName('parsererror').length) return null;
+    root.querySelectorAll('script, foreignObject, iframe, object, embed').forEach(n => n.remove());
+    root.querySelectorAll('*').forEach(n => {
+      [...n.attributes].forEach(a => {
+        const name = a.name.toLowerCase();
+        if (name.startsWith('on')) n.removeAttribute(a.name);
+        else if ((name === 'href' || name === 'xlink:href') && /^\s*javascript:/i.test(a.value)) n.removeAttribute(a.name);
+      });
+    });
+    root.removeAttribute('width'); root.removeAttribute('height');
+    if (!root.getAttribute('viewBox')) root.setAttribute('viewBox', '0 0 400 240');
+    return new XMLSerializer().serializeToString(root);
+  }
+  function diagramHtml(src) {
+    if (!src) return '';
+    if (/^\s*<svg[\s>]/i.test(src)) {
+      const svg = cleanSvg(src);
+      return svg ? `<div class="figure">${svg}</div>` : '<div class="figure">[diagram could not be read]</div>';
+    }
+    if (/^(data:image\/(png|jpe?g|gif|webp);|https?:\/\/|\.{0,2}\/|[\w\- .]+\.(png|jpe?g|gif|svg|webp)$)/i.test(src))
+      return `<div class="figure"><img src="${esc(src)}" alt="Diagram"></div>`;
+    return '<div class="figure">[unrecognised diagram value]</div>';
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  //  Selection state & generation
+  // ════════════════════════════════════════════════════════════════════════
+
+  const S = {
+    bank: null,
+    seed: '',
+    sel: {},            // section name -> [item keys]
+    pickOverride: {},   // section name -> number
+    pinned: new Set(),  // item keys
+    excluded: new Set(),
+    rng: null,
+  };
+
+  function hashStr(s) { let h = 1779033703 ^ s.length; for (let i = 0; i < s.length; i++) { h = Math.imul(h ^ s.charCodeAt(i), 3432918353); h = (h << 13) | (h >>> 19); } return h >>> 0; }
+  function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  function shuffled(arr, rng) { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+  const itemByKey = key => S.bank.items.find(i => i.key === key);
+  const sectionTarget = s => Math.max(0, Math.min(s.items.length, S.pickOverride[s.name] ?? s.pick));
+
+  function generate(fresh) {
+    if (!S.bank) return;
+    if (fresh || !S.rng) S.rng = mulberry32(hashStr('exam|' + S.seed));
+    S.bank.sections.forEach(sec => {
+      const valid = new Set(sec.items.filter(i => !S.excluded.has(i.key)).map(i => i.key));
+      let cur = (fresh ? [] : (S.sel[sec.name] || [])).filter(k => valid.has(k));
+      sec.items.forEach(i => { if (S.pinned.has(i.key) && valid.has(i.key) && !cur.includes(i.key)) cur.push(i.key); });
+      const target = sectionTarget(sec);
+      while (cur.length > target) {                     // drop unpinned from the end first
+        let idx = -1;
+        for (let k = cur.length - 1; k >= 0; k--) if (!S.pinned.has(cur[k])) { idx = k; break; }
+        if (idx < 0) break;
+        cur.splice(idx, 1);
+      }
+      const pool = shuffled(sec.items.filter(i => valid.has(i.key) && !cur.includes(i.key)).map(i => i.key), S.rng);
+      while (cur.length < target && pool.length) cur.push(pool.shift());
+      if ($('secShuffle').checked && fresh) cur = shuffled(cur, S.rng);
+      else if (fresh) cur.sort((a, b) => sec.items.findIndex(i => i.key === a) - sec.items.findIndex(i => i.key === b));
+      S.sel[sec.name] = cur;
+    });
+  }
+
+  function swapItem(secName, key, exclude) {
+    const sec = S.bank.sections.find(s => s.name === secName);
+    const cur = S.sel[secName];
+    const pos = cur.indexOf(key);
+    if (exclude) S.excluded.add(key);
+    S.pinned.delete(key);
+    const pool = sec.items.filter(i => !cur.includes(i.key) && !S.excluded.has(i.key));
+    if (!S.rng) S.rng = mulberry32(hashStr('exam|' + S.seed));
+    if (pool.length) cur[pos] = pool[Math.floor(S.rng() * pool.length)].key;
+    else if (exclude) cur.splice(pos, 1);
+    render();
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  //  Rendering
+  // ════════════════════════════════════════════════════════════════════════
+
+  const $ = id => document.getElementById(id);
+
+  function optionOrder(q) {
+    const idx = q.options.map((_, i) => i);
+    const lock = !$('optShuffle').checked || q.type === 'tf' ||
+      q.options.some(o => /\b(all|none|both|any)\s+of\s+the\s+(above|these|options)\b|\bboth\s+[a-f]\s+and\s+[a-f]\b/i.test(o));
+    if (lock) return idx;
+    return shuffled(idx, mulberry32(hashStr(S.seed + '|' + q.id + '|opt')));
+  }
+
+  function fillParts(text) {
+    const out = [];
+    text.split(/\[\[(.+?)\]\]/g).forEach((part, i) => out.push(i % 2 ? { blank: part } : { text: part }));
+    return out;
+  }
+  function fillHtml(text, key) {
+    return fillParts(text).map(p => p.blank !== undefined
+      ? (key ? `<span class="blank key">${esc(p.blank.split('/')[0])}${p.blank.includes('/') ? ' <small>(' + esc(p.blank.split('/').slice(1).join(' / ')) + ')</small>' : ''}</span>` : '<span class="blank"></span>')
+      : rich(p.text)).join('');
+  }
+
+  function plainMarks(m) { return m === 1 ? '1 mark' : `${m} marks`; }
+
+  function questionNumbers() {
+    // returns [{section, items:[{item, nums:[...] }]}] in paper order
+    let n = 0;
+    return S.bank.sections.map(sec => ({
+      sec,
+      items: (S.sel[sec.name] || []).map(k => itemByKey(k)).filter(Boolean).map(item => ({ item, nums: item.qs.map(() => ++n) })),
+    }));
+  }
+
+  function renderQuestion(q, num) {
+    let body = '';
+    const head = (txt) => `<div class="q-head"><span class="q-num">${num}.</span><span class="q-text">${txt}</span><span class="q-marks">[${plainMarks(q.marks)}]</span></div>`;
+    if (q.type === 'fill') {
+      return `<div class="q">${head(fillHtml(q.text, false))}</div>`;
+    }
+    if (q.type === 'mc' || q.type === 'multi' || q.type === 'tf') {
+      const order = optionOrder(q);
+      const round = q.type !== 'multi';
+      body = (q.type === 'multi' ? '<div class="hint">Select all that apply.</div>' : '') +
+        '<ul class="opts">' + order.map((oi, k) => `<li><span class="box${round ? ' round' : ''}"></span><b>${LETTERS[k]}.</b>&nbsp;${rich(q.options[oi])}</li>`).join('') + '</ul>';
+    } else if (q.type === 'short') {
+      const n = q.lines || 2;
+      body = '<div class="lines">' + '<div></div>'.repeat(n) + '</div>';
+    } else if (q.type === 'long') {
+      const n = q.lines || Math.max(4, q.marks * 2 + 1);
+      body = '<div class="lines">' + '<div></div>'.repeat(n) + '</div>';
+    } else if (q.type === 'calc') {
+      body = '<div class="working">Working:</div><div class="ansline">Answer: <span class="fill"></span></div>';
+    }
+    return `<div class="q">${head(rich(q.text))}${body}</div>`;
+  }
+
+  function renderPaper() {
+    const el = $('paper');
+    if (!S.bank) { el.innerHTML = '<div class="empty">Load a question bank to begin.</div>'; return; }
+    const nums = questionNumbers();
+    const total = nums.reduce((t, s) => t + s.items.reduce((a, x) => a + x.item.marks, 0), 0);
+    const qCount = nums.reduce((t, s) => t + s.items.reduce((a, x) => a + x.item.qs.length, 0), 0);
+    $('totals').textContent = `${qCount} questions · ${total} marks`;
+
+    let h = `<h1>${esc($('title').value || 'Examination')}</h1><div class="meta">`;
+    if ($('course').value) h += `<span><b>${esc($('course').value)}</b></span>`;
+    if ($('date').value) h += `<span>Date: ${esc($('date').value)}</span>`;
+    if ($('time').value) h += `<span>Time allowed: ${esc($('time').value)}</span>`;
+    h += `<span>Total marks: ${total}</span>`;
+    if ($('teacher').value) h += `<span>${esc($('teacher').value)}</span>`;
+    h += '</div>';
+    if ($('showNameLines').checked) h += '<div class="fields"><span>Student name</span><span>Student ID</span><span>Result</span></div>';
+    if ($('instr').value.trim()) h += `<div class="instr">${esc($('instr').value.trim())}</div>`;
+
+    let letter = 0;
+    nums.forEach(({ sec, items }) => {
+      if (!items.length) return;
+      const secMarks = items.reduce((a, x) => a + x.item.marks, 0);
+      const title = /^[A-Z]\s*[-–—:.)]/.test(sec.name) ? sec.name : `Section ${String.fromCharCode(65 + letter)} — ${sec.name}`;
+      letter++;
+      h += `<h2 class="sec"><span>${esc(title)}</span><span>${secMarks} marks</span></h2>`;
+      if (sec.items.length > items.length || items.length !== sec.items.length)
+        h += `<div class="secnote">Answer all ${items.reduce((a, x) => a + x.item.qs.length, 0)} questions in this section.</div>`;
+      items.forEach(({ item, nums: ns }, pos) => {
+        const grouped = item.qs.length > 1 || item.stem.length || item.group;
+        const pinned = S.pinned.has(item.key);
+        h += `<div class="item${grouped ? ' grouped' : ''}" data-sec="${esc(sec.name)}" data-key="${esc(item.key)}">`;
+        h += `<div class="item-tools">
+          <button data-act="up" title="Move up">↑</button><button data-act="down" title="Move down">↓</button>
+          <button data-act="pin" class="${pinned ? 'on' : ''}" title="Keep this item when re-rolling">📌</button>
+          <button data-act="swap" title="Replace with a different item">↻</button>
+          <button data-act="exclude" title="Never use this item">✕</button></div>`;
+        if (grouped) {
+          const lo = ns[0], hi = ns[ns.length - 1];
+          if (item.stem.length) h += `<div class="stem">${item.stem.map(s => rich(s.text)).filter(Boolean).map(t => `<div>${t}</div>`).join('')}</div>`;
+          if (item.diagram) h += diagramHtml(item.diagram);
+          if (item.diagram || item.stem.length) h += `<div class="stem-ref">${lo === hi ? `Question ${lo} refers` : `Questions ${lo}–${hi} refer`} to the information above.</div>`;
+        } else if (item.diagram) h += diagramHtml(item.diagram);
+        item.qs.forEach((q, i) => { h += renderQuestion(q, ns[i]); });
+        h += '</div>';
+      });
+    });
+    el.innerHTML = h;
+  }
+
+  function renderGuide() {
+    const el = $('guide');
+    if (!S.bank) { el.innerHTML = ''; return; }
+    const nums = questionNumbers();
+    const total = nums.reduce((t, s) => t + s.items.reduce((a, x) => a + x.item.marks, 0), 0);
+    let h = `<h1>${esc($('title').value || 'Examination')} — Marking guide</h1><div class="meta">`;
+    if ($('course').value) h += `<span><b>${esc($('course').value)}</b></span>`;
+    h += `<span>Total marks: ${total}</span>`;
+    if ($('teacher').value) h += `<span>${esc($('teacher').value)}</span>`;
+    h += '</div>';
+    nums.forEach(({ sec, items }) => {
+      if (!items.length) return;
+      h += `<h2 class="sec"><span>${esc(sec.name)}</span><span>${items.reduce((a, x) => a + x.item.marks, 0)} marks</span></h2>`;
+      items.forEach(({ item, nums: ns }) => {
+        item.qs.forEach((q, i) => {
+          let ans = '', qtxt = '';
+          if (q.type === 'mc' || q.type === 'multi') {
+            const order = optionOrder(q);
+            const correct = resolveChoice(q);
+            ans = order.map((oi, k) => correct.includes(oi) ? `${LETTERS[k]}. ${rich(q.options[oi])}` : null).filter(Boolean).join('<br>') || '<i>no answer set</i>';
+            qtxt = rich(q.text);
+          } else if (q.type === 'tf') {
+            ans = /^(t|true|yes)$/i.test(q.answer) ? 'True' : /^(f|false|no)$/i.test(q.answer) ? 'False' : '<i>no answer set</i>';
+            qtxt = rich(q.text);
+          } else if (q.type === 'fill') {
+            qtxt = fillHtml(q.text, true); ans = '';
+          } else { ans = rich(q.answer) || '<i>no answer set</i>'; qtxt = rich(q.text); }
+          h += `<div class="guide-row"><div><b>${ns[i]}.</b></div><div>
+            ${q.type === 'fill' ? `<div class="qtxt">${qtxt}</div>` : `<div class="qtxt">${qtxt}</div><div class="ans">${ans}</div>`}
+            ${q.explanation ? `<div class="why">${rich(q.explanation)}</div>` : ''}
+            ${item.group && i === 0 ? `<div class="why"><i>Group ${esc(item.group)}${item.diagram ? ' (with diagram)' : ''}</i></div>` : ''}
+            </div><div>${q.marks}</div></div>`;
+        });
+      });
+    });
+    el.innerHTML = h;
+  }
+
+  function renderSections() {
+    const t = $('secTable');
+    let h = '<tr><th>Section</th><th class="num">In bank</th><th>Pick</th><th class="num">Marks</th></tr>';
+    S.bank.sections.forEach(sec => {
+      const qs = sec.items.reduce((a, i) => a + i.qs.length, 0);
+      const sel = (S.sel[sec.name] || []).map(itemByKey).filter(Boolean);
+      const marks = sel.reduce((a, i) => a + i.marks, 0);
+      const groups = sec.items.filter(i => i.group).length;
+      h += `<tr><td>${esc(sec.name)}</td>
+        <td class="num">${sec.items.length} item${sec.items.length === 1 ? '' : 's'}<br><small style="color:var(--muted)">${qs} q${groups ? ` · ${groups} group${groups === 1 ? '' : 's'}` : ''}</small></td>
+        <td><input type="number" min="0" max="${sec.items.length}" value="${sectionTarget(sec)}" data-sec="${esc(sec.name)}"></td>
+        <td class="num">${marks}</td></tr>`;
+    });
+    t.innerHTML = h;
+    t.querySelectorAll('input[type=number]').forEach(inp => inp.addEventListener('change', () => {
+      const v = parseInt(inp.value, 10);
+      S.pickOverride[inp.dataset.sec] = isNaN(v) ? 0 : v;
+      generate(false); render();
+    }));
+  }
+
+  function render() {
+    if (!S.bank) return;
+    renderSections();
+    renderPaper();
+    renderGuide();
+    saveSettings();
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  //  Loading, saving, wiring
+  // ════════════════════════════════════════════════════════════════════════
+
+  function setBank(rows, label) {
+    const bank = buildBank(rows);
+    S.bank = bank;
+    S.pickOverride = {}; S.pinned = new Set(); S.excluded = new Set(); S.sel = {};
+    S.seed = String(Math.floor(Math.random() * 1e6));
+    $('seed').value = S.seed;
+    generate(true);
+    $('cardSections').hidden = false; $('cardSettings').hidden = false;
+    const qn = bank.questions.filter(q => q.type !== 'stem').length;
+    const m = $('loadMsg');
+    m.className = 'msg ok';
+    m.textContent = `${label}: ${qn} questions in ${bank.sections.length} section${bank.sections.length === 1 ? '' : 's'} (${bank.items.length} items).`;
+    $('warnList').innerHTML = bank.warnings.map(w => `<li>${esc(w)}</li>`).join('');
+    if (bank.warnings.length) { m.className = 'msg warn'; m.textContent += ` ${bank.warnings.length} warning${bank.warnings.length === 1 ? '' : 's'}:`; }
+    render();
+  }
+
+  async function loadFile(file) {
+    const m = $('loadMsg');
+    try {
+      let rows;
+      if (/\.xlsx$/i.test(file.name)) rows = await parseXLSX(await file.arrayBuffer());
+      else if (/\.(xls|ods)$/i.test(file.name)) throw new Error('Please save the spreadsheet as .xlsx or CSV and load that.');
+      else rows = parseCSV(await file.text());
+      setBank(rows, file.name);
+    } catch (e) {
+      m.className = 'msg bad'; m.textContent = e.message || String(e); $('warnList').innerHTML = '';
+    }
+  }
+
+  const SAMPLE_HEADER = ['id', 'section', 'pick', 'group', 'type', 'marks', 'question', 'a', 'b', 'c', 'd', 'e', 'f', 'answer', 'explanation', 'diagram', 'lines'];
+  const SVG_SERIES = '<svg viewBox="0 0 360 170" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif" font-size="13" stroke="#000" fill="none" stroke-width="2"><path d="M40 40 H110 M170 40 H260 M320 40 H340 V130 H40 V92 M40 76 V40"/><rect x="110" y="28" width="60" height="24"/><rect x="260" y="28" width="60" height="24"/><path d="M26 76 H54 M33 92 H47" /><text x="128" y="20" stroke="none" fill="#000">R1</text><text x="278" y="20" stroke="none" fill="#000">R2</text><text x="108" y="70" stroke="none" fill="#000">1 kΩ</text><text x="258" y="70" stroke="none" fill="#000">3 kΩ</text><text x="60" y="88" stroke="none" fill="#000">12 V</text></svg>';
+  const SVG_PARALLEL = '<svg viewBox="0 0 320 190" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif" font-size="13" stroke="#000" fill="none" stroke-width="2"><path d="M40 30 H280 M40 160 H280 M40 30 V80 M40 96 V160 M26 80 H54 M33 96 H47 M140 30 V60 M140 100 V160 M240 30 V60 M240 100 V160"/><rect x="128" y="60" width="24" height="40"/><rect x="228" y="60" width="24" height="40"/><text x="160" y="85" stroke="none" fill="#000">R1 100 Ω</text><text x="188" y="120" stroke="none" fill="#000"></text><text x="258" y="85" stroke="none" fill="#000">R2 100 Ω</text><text x="56" y="92" stroke="none" fill="#000">10 V</text></svg>';
+  const SAMPLE_ROWS = [
+    // A — multiple choice (pick 5 of 8)
+    ['A1', 'A - Multiple choice', 5, '', 'mc', 1, 'What is the SI unit of electrical resistance?', 'Volt', 'Ampere', 'Ohm', 'Watt', '', '', 'C', 'Resistance is measured in ohms (Ω).', '', ''],
+    ['A2', 'A - Multiple choice', '', '', 'mc', 1, 'A 12 V supply is connected across a 4 Ω resistor. What current flows?', '0.33 A', '3 A', '8 A', '48 A', '', '', 'B', 'I = V / R = 12 / 4 = 3 A.', '', ''],
+    ['A3', 'A - Multiple choice', '', '', 'mc', 1, 'Which quantity is the same at every point in a series circuit?', 'Voltage', 'Resistance', 'Current', 'Power', '', '', 'C', '', '', ''],
+    ['A4', 'A - Multiple choice', '', '', 'mc', 1, 'Two resistors of 100 Ω and 220 Ω are connected in series. The total resistance is:', '69 Ω', '120 Ω', '320 Ω', '22 000 Ω', '', '', 'C', 'Series resistances add.', '', ''],
+    ['A5', 'A - Multiple choice', '', '', 'mc', 1, 'A capacitor stores energy in:', 'a magnetic field', 'an electric field', 'its resistance', 'a chemical reaction', '', '', 'B', '', '', ''],
+    ['A6', 'A - Multiple choice', '', '', 'mc', 1, 'An LED is normally operated with:', 'a series resistor', 'a parallel capacitor', 'no other components', 'reverse bias', '', '', 'A', 'The resistor limits the current.', '', ''],
+    ['A7', 'A - Multiple choice', '', '', 'mc', 1, 'The approximate forward voltage drop of a silicon diode is:', '0.07 V', '0.7 V', '7 V', '70 V', '', '', 'B', '', '', ''],
+    ['A8', 'A - Multiple choice', '', '', 'multi', 2, 'Select <b>all</b> of the materials that are good electrical conductors.', 'Copper', 'Rubber', 'Aluminium', 'Glass', '', '', 'A,C', '', '', ''],
+    // B — short answer (pick 3 of 5)
+    ['B1', 'B - Short answer and calculation', 3, '', 'tf', 1, 'A short circuit has a very high resistance.', '', '', '', '', '', '', 'false', 'A short circuit has very low resistance and a very high current.', '', ''],
+    ['B2', 'B - Short answer and calculation', '', '', 'short', 2, 'State Ohm\'s law and give the formula.', '', '', '', '', '', '', 'The current through a conductor is proportional to the voltage across it (at constant temperature): V = I × R.', '1 mark statement, 1 mark formula.', '', 3],
+    ['B3', 'B - Short answer and calculation', '', '', 'long', 3, 'Explain why a resistor is connected in series with an LED.', '', '', '', '', '', '', 'An LED has almost no resistance once it conducts, so the current would rise until it is destroyed. The series resistor drops the surplus supply voltage and limits the current to a safe value.', '1 mark: LED conducts with little resistance; 1 mark: current would be excessive; 1 mark: resistor limits current.', '', 5],
+    ['B4', 'B - Short answer and calculation', '', '', 'calc', 3, 'A 330 Ω resistor has 5 V across it. Calculate the power it dissipates.', '', '', '', '', '', '', 'P = V² / R = 25 / 330 = 0.076 W (76 mW)', '1 mark formula, 1 mark substitution, 1 mark answer with unit.', '', ''],
+    ['B5', 'B - Short answer and calculation', '', '', 'calc', 3, 'Three 30 Ω resistors are connected in parallel. Calculate the equivalent resistance.', '', '', '', '', '', '', '10 Ω', 'R = 30 / 3 = 10 Ω.', '', ''],
+    // C — circuit analysis, related groups (pick 1 group)
+    ['C1-stem', 'C - Circuit analysis', 1, 'G-series', 'stem', 0, 'A 12 V supply feeds two resistors connected in series, as shown.', '', '', '', '', '', '', '', '', SVG_SERIES, ''],
+    ['C1-a', 'C - Circuit analysis', '', 'G-series', 'calc', 2, 'Calculate the total resistance of the circuit.', '', '', '', '', '', '', '4 kΩ', 'R<sub>T</sub> = 1 k + 3 k.', '', ''],
+    ['C1-b', 'C - Circuit analysis', '', 'G-series', 'calc', 2, 'Calculate the current in the circuit.', '', '', '', '', '', '', '3 mA', 'I = 12 V / 4 kΩ.', '', ''],
+    ['C1-c', 'C - Circuit analysis', '', 'G-series', 'mc', 1, 'What is the voltage across R2?', '3 V', '4 V', '9 V', '12 V', '', '', 'C', 'V = 3 mA × 3 kΩ = 9 V.', '', ''],
+    ['C2-stem', 'C - Circuit analysis', '', 'G-parallel', 'stem', 0, 'Two 100 Ω resistors are connected in parallel across a 10 V supply, as shown.', '', '', '', '', '', '', '', '', SVG_PARALLEL, ''],
+    ['C2-a', 'C - Circuit analysis', '', 'G-parallel', 'calc', 2, 'Calculate the equivalent resistance.', '', '', '', '', '', '', '50 Ω', '', '', ''],
+    ['C2-b', 'C - Circuit analysis', '', 'G-parallel', 'calc', 2, 'Calculate the total supply current.', '', '', '', '', '', '', '200 mA', 'I = 10 / 50.', '', ''],
+    ['C2-c', 'C - Circuit analysis', '', 'G-parallel', 'tf', 1, 'The current through each resistor is the same as the supply current.', '', '', '', '', '', '', 'false', 'Each branch carries half.', '', ''],
+    // D — fill in (pick 2 of 3)
+    ['D1', 'D - Fill in the blanks', 2, '', 'fill', '', 'In a series circuit the [[current]] is the same through every component and the [[voltages]] add up to the supply voltage.', '', '', '', '', '', '', '', '', '', ''],
+    ['D2', 'D - Fill in the blanks', '', '', 'fill', '', 'A diode conducts when it is [[forward]] biased and blocks current when it is [[reverse]] biased.', '', '', '', '', '', '', '', '', '', ''],
+    ['D3', 'D - Fill in the blanks', '', '', 'fill', '', 'Power is calculated by multiplying [[voltage]] by [[current]], and is measured in [[watts/W]].', '', '', '', '', '', '', '', '', '', ''],
+  ];
+
+  function download(name, text, mime) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: mime || 'text/plain' }));
+    a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+
+  function printNow(which) {
+    document.body.dataset.print = which;
+    const imgs = [...document.querySelectorAll(which === 'exam' ? '#paper img' : '#guide img')];
+    // Chromium snapshots the page immediately; wait for inline images to decode first.
+    Promise.all(imgs.map(im => (im.decode ? im.decode() : Promise.resolve()).catch(() => {}))).then(() => window.print());
+  }
+
+  const SETTING_IDS = ['title', 'course', 'date', 'time', 'teacher', 'instr'];
+  function saveSettings() {
+    try {
+      const o = {}; SETTING_IDS.forEach(id => o[id] = $(id).value);
+      o.optShuffle = $('optShuffle').checked; o.secShuffle = $('secShuffle').checked; o.showNameLines = $('showNameLines').checked;
+      localStorage.setItem('examBuilder.settings', JSON.stringify(o));
+    } catch (e) { /* storage may be unavailable */ }
+  }
+  function restoreSettings() {
+    try {
+      const o = JSON.parse(localStorage.getItem('examBuilder.settings') || 'null'); if (!o) return;
+      SETTING_IDS.forEach(id => { if (o[id] != null) $(id).value = o[id]; });
+      ['optShuffle', 'secShuffle', 'showNameLines'].forEach(id => { if (o[id] != null) $(id).checked = o[id]; });
+    } catch (e) { /* ignore */ }
+  }
+
+  function wire() {
+    restoreSettings();
+    $('chooseFile').addEventListener('click', () => $('file').click());
+    $('file').addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); e.target.value = ''; });
+    const drop = $('drop');
+    ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+    ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+    drop.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) loadFile(f); });
+    $('loadSample').addEventListener('click', () => setBank([SAMPLE_HEADER, ...SAMPLE_ROWS], 'Sample bank'));
+    $('dlTemplate').addEventListener('click', () => download('exam_bank_template.csv', '﻿' + toCSV([SAMPLE_HEADER, ...SAMPLE_ROWS]), 'text/csv'));
+
+    $('reroll').addEventListener('click', () => { S.seed = String(Math.floor(Math.random() * 1e6)); $('seed').value = S.seed; generate(true); render(); });
+    $('seed').addEventListener('change', () => { S.seed = $('seed').value.trim(); generate(true); render(); });
+    ['optShuffle', 'showNameLines'].forEach(id => $(id).addEventListener('change', render));
+    $('secShuffle').addEventListener('change', () => { generate(true); render(); });
+    SETTING_IDS.forEach(id => $(id).addEventListener('input', () => { renderPaper(); renderGuide(); saveSettings(); }));
+
+    $('tabPaper').addEventListener('click', () => { document.body.dataset.view = 'paper'; $('tabPaper').classList.add('active'); $('tabGuide').classList.remove('active'); });
+    $('tabGuide').addEventListener('click', () => { document.body.dataset.view = 'guide'; $('tabGuide').classList.add('active'); $('tabPaper').classList.remove('active'); });
+    $('printPaper').addEventListener('click', () => printNow('exam'));
+    $('printGuide').addEventListener('click', () => printNow('guide'));
+
+    $('paper').addEventListener('click', e => {
+      const btn = e.target.closest('button[data-act]'); if (!btn) return;
+      const box = btn.closest('.item'); const sec = box.dataset.sec, key = box.dataset.key, act = btn.dataset.act;
+      const list = S.sel[sec], i = list.indexOf(key);
+      if (act === 'up' && i > 0) { [list[i - 1], list[i]] = [list[i], list[i - 1]]; render(); }
+      else if (act === 'down' && i < list.length - 1) { [list[i + 1], list[i]] = [list[i], list[i + 1]]; render(); }
+      else if (act === 'pin') { S.pinned.has(key) ? S.pinned.delete(key) : S.pinned.add(key); render(); }
+      else if (act === 'swap') swapItem(sec, key, false);
+      else if (act === 'exclude') swapItem(sec, key, true);
+    });
+
+    $('saveSel').addEventListener('click', () => {
+      if (!S.bank) return;
+      const o = { app: 'exam-builder', version: 1, seed: S.seed, sel: S.sel, pickOverride: S.pickOverride, pinned: [...S.pinned], excluded: [...S.excluded],
+        settings: Object.fromEntries(SETTING_IDS.map(id => [id, $(id).value])), optShuffle: $('optShuffle').checked };
+      download('exam_selection.json', JSON.stringify(o, null, 2), 'application/json');
+    });
+    $('loadSelBtn').addEventListener('click', () => $('loadSel').click());
+    $('loadSel').addEventListener('change', async e => {
+      const f = e.target.files[0]; e.target.value = ''; if (!f || !S.bank) return;
+      try {
+        const o = JSON.parse(await f.text());
+        if (o.app !== 'exam-builder') throw new Error('Not an Exam Builder selection file.');
+        const keys = new Set(S.bank.items.map(i => i.key));
+        let missing = 0;
+        S.sel = {};
+        Object.entries(o.sel || {}).forEach(([sec, list]) => { S.sel[sec] = list.filter(k => keys.has(k) || (missing++, false)); });
+        S.pickOverride = o.pickOverride || {};
+        S.pinned = new Set((o.pinned || []).filter(k => keys.has(k)));
+        S.excluded = new Set((o.excluded || []).filter(k => keys.has(k)));
+        S.seed = o.seed || S.seed; $('seed').value = S.seed;
+        Object.entries(o.settings || {}).forEach(([k, v]) => { if ($(k)) $(k).value = v; });
+        if (o.optShuffle != null) $('optShuffle').checked = o.optShuffle;
+        generate(false); render();
+        $('loadMsg').className = 'msg ' + (missing ? 'warn' : 'ok');
+        $('loadMsg').textContent = missing ? `Selection loaded; ${missing} item(s) are no longer in this bank and were replaced.` : 'Selection loaded.';
+      } catch (err) { $('loadMsg').className = 'msg bad'; $('loadMsg').textContent = err.message; }
+    });
+  }
+
+  // a small public surface so the page can be exercised from the console / tests
+  window.ExamBuilder = { parseCSV, toCSV, parseXLSX, buildBank, setBank, S, generate, render };
+  wire();
+  </script>
+</body>
+
+</html>
