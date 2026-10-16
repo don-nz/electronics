@@ -1,0 +1,502 @@
+<!--
+  Filter Gain Quiz — brought into the shared framework (quiz-engine.js, quiz-common.css) from the
+  original early page in quiz/filter/. Same generator (low/high pass, octave and decade steps from a
+  known gain), same graph drawing and same worked solution.
+
+  One deliberate change: the answer is now chosen from four options (the right dB value and three
+  typical slips — treating a decade as an octave or the reverse, counting only one of the two, or
+  getting the direction wrong) rather than typed in, because the shared engine marks choices.
+  The graph is drawn on a canvas in the left panel and redrawn on each question, once answered
+  (the unknown point turns green), and when the theme changes.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../assets/theme-init.js"></script>
+  <script src="../../assets/quiz-engine.js"></script>
+  <title>Filter Gain Quiz</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../assets/quiz-common.css">
+  <script src="../../assets/breadcrumb.js" defer></script>
+  <style>
+    .graph-panel canvas { width: 100%; display: block; }
+    .badge-lp, .badge-hp { font-size: .62rem; padding: 2px 8px; border-radius: 2px; letter-spacing: .1em; text-transform: uppercase; border: 1px solid; }
+    .badge-lp { color: var(--colour-ui-primary); border-color: var(--colour-ui-primary); }
+    .badge-hp { color: var(--colour-ui-restart); border-color: var(--colour-ui-restart); }
+    .scenario { line-height: 1.9; font-weight: normal; margin-bottom: .5rem; }
+    .scenario .h1 { color: var(--colour-ui-primary); font-weight: bold; }
+    .scenario .h2 { color: var(--colour-ui-summary); font-weight: bold; }
+    .working-line { line-height: 2; }
+    .working-line .w-val { color: var(--colour-ui-primary); }
+    .working-line .w-val2 { color: var(--colour-ui-restart); }
+    .working-line .w-val3 { color: var(--colour-ui-correct); font-weight: bold; }
+    .working-line.total { margin-top: .4rem; padding-top: .4rem; border-top: 1px solid var(--colour-border); }
+  </style>
+</head>
+
+<body>
+  <div class="crumb" id="crumb" data-current="Filter Gain Quiz"></div>
+  <header>
+    <h1>Filter Gain Quiz</h1>
+    <p>RC Filter · Octaves &amp; Decades · Gain Calculation</p>
+  </header>
+
+  <div class="quiz-wrap" id="quizWrap">
+
+    <div class="circuit-col">
+      <div class="circuit-panel graph-panel">
+        <div class="panel-label">Gain vs Frequency — First Order RC Filter</div>
+        <canvas id="quizGraph" height="500"></canvas>
+      </div>
+    </div>
+
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+          <div class="options" id="qOptions"></div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+const VALID_STEPS = [];
+    for (let dec = 0; dec <= 2; dec++) {
+      for (let oct = 0; oct <= 3; oct++) {
+        if (dec === 0 && oct === 0) continue;
+        const ratio = Math.pow(2, oct) * Math.pow(10, dec);
+        if (ratio > 200) continue;
+        VALID_STEPS.push({ octaves: oct, decades: dec, ratio });
+      }
+    }
+    const BASE_FREQS = [44, 50, 100, 125, 250, 440, 500, 1000, 2000, 2500, 5000, 10000];
+    const START_DBS = [-6, -10, -12, -20, -26, -30, -32, -40, -46, -50];
+    const INSERTION_LOSS_DB = 3;
+
+    
+function formatFreq(f) {
+      if (f >= 1000) return (f / 1000 % 1 === 0 ? f / 1000 : (f / 1000).toFixed(1)) + 'kHz';
+      return f + 'Hz';
+    }
+
+    function generateQuestion() {
+      const filterType = Math.random() < 0.5 ? 'low' : 'high';
+      const step = VALID_STEPS[Math.floor(Math.random() * VALID_STEPS.length)];
+      let fA, fB, attempts = 0;
+      do {
+        fA = BASE_FREQS[Math.floor(Math.random() * BASE_FREQS.length)];
+        fB = filterType === 'low' ? fA * step.ratio : fA / step.ratio;
+        attempts++;
+      } while ((fB < 20 || fB > 300000) && attempts < 50);
+      const startDb = START_DBS[Math.floor(Math.random() * START_DBS.length)];
+      const rolloff = step.octaves * 6 + step.decades * 20;
+      return { filterType, fA, fB, startDb, exactAnswer: startDb - rolloff, rolloff, octaves: step.octaves, decades: step.decades, ratio: step.ratio };
+    }
+
+    
+// ── theme-aware palette for the canvas (dark values are the original's) ──
+const PALETTE = {
+  dark:  { cyan: [0,229,255], orange: [255,107,53], green: [0,255,153], yellow: [255,230,0], text: [200,220,240], grid: [30,45,74] },
+  light: { cyan: [14,116,144], orange: [194,65,12], green: [5,150,105], yellow: [161,98,7], text: [30,41,59], grid: [148,163,184] },
+};
+function K(name, a) {
+  const light = document.documentElement.getAttribute('data-theme') === 'light';
+  const [r, g, b] = PALETTE[light ? 'light' : 'dark'][name];
+  return a === 1 ? `rgb(${r},${g},${b})` : `rgba(${r},${g},${b},${a})`;
+}
+
+let questions = [];
+const graphCanvas = document.getElementById('quizGraph');
+const gCtx = graphCanvas.getContext('2d');
+// Extra left padding to fit both max-gain and fc Y labels side by side
+const GP = { left: 88, right: 24, top: 54, bottom: 56 };
+
+function resizeGraph() {
+      const dpr = window.devicePixelRatio || 1;
+      const rect = graphCanvas.parentElement.getBoundingClientRect();
+      graphCanvas.width = rect.width * dpr;
+      graphCanvas.height = 500 * dpr;
+      graphCanvas.style.height = '500px';
+      gCtx.scale(dpr, dpr);
+    }
+
+    function dottedLine(x1, y1, x2, y2, colour, width, dash) {
+      gCtx.strokeStyle = colour; gCtx.lineWidth = width || 1.2;
+      gCtx.setLineDash(dash || [5, 4]);
+      gCtx.beginPath(); gCtx.moveTo(x1, y1); gCtx.lineTo(x2, y2); gCtx.stroke();
+      gCtx.setLineDash([]);
+    }
+
+    function solidLine(x1, y1, x2, y2, colour, width) {
+      gCtx.strokeStyle = colour; gCtx.lineWidth = width || 1;
+      gCtx.beginPath(); gCtx.moveTo(x1, y1); gCtx.lineTo(x2, y2); gCtx.stroke();
+    }
+
+    function dot(x, y, colour, radius, glowColour) {
+      gCtx.fillStyle = colour; gCtx.shadowColor = glowColour || colour; gCtx.shadowBlur = 14;
+      gCtx.beginPath(); gCtx.arc(x, y, radius || 7, 0, Math.PI * 2); gCtx.fill();
+      gCtx.shadowBlur = 0;
+    }
+
+    // Y axis label — right-aligned, sitting at GP.left - gap
+    function yLabel(text, y, colour, gap) {
+      gCtx.fillStyle = colour; gCtx.font = 'bold 13px Share Tech Mono'; gCtx.textAlign = 'right';
+      gCtx.fillText(text, GP.left - (gap || 6), y + 5);
+    }
+
+    function drawGraph(q, reveal) {
+      const dpr = window.devicePixelRatio || 1;
+      const fullW = graphCanvas.width / dpr;
+      const fullH = graphCanvas.height / dpr;
+      const plotW = fullW - GP.left - GP.right;
+      const plotH = fullH - GP.top - GP.bottom;
+
+      gCtx.clearRect(0, 0, fullW, fullH);
+
+      const passbandDb = -INSERTION_LOSS_DB;
+      const logFA = Math.log10(q.fA);
+      const logFB = Math.log10(q.fB);
+      const logFmin_data = Math.min(logFA, logFB);
+      const logFmax_data = Math.max(logFA, logFB);
+      const logFminExt = q.filterType === 'low' ? logFmin_data - 3.0 : logFmin_data - 1.0;
+      const logFmaxExt = q.filterType === 'low' ? logFmax_data + 1.0 : logFmax_data + 3.0;
+
+      const dbTop = 5;
+      const dbBot = Math.min(q.exactAnswer - 16, -70);
+      const dbRange = dbTop - dbBot;
+
+      function dbToY(db) { return GP.top + plotH * (1 - (db - dbBot) / dbRange); }
+      function logFtoX(lf) { return GP.left + plotW * (lf - logFminExt) / (logFmaxExt - logFminExt); }
+
+      // Derive fc
+      const gainAtA = Math.pow(10, q.startDb / 20);
+      const fc = q.filterType === 'low'
+        ? q.fA / Math.sqrt(1 / (gainAtA * gainAtA) - 1)
+        : q.fA * Math.sqrt(1 / (gainAtA * gainAtA) - 1);
+      const logFc = Math.log10(fc);
+      const xFc = logFtoX(logFc);
+
+      function curveDb(f) {
+        const ratio = f / fc;
+        const gain = q.filterType === 'low'
+          ? 1 / Math.sqrt(1 + ratio * ratio)
+          : ratio / Math.sqrt(1 + ratio * ratio);
+        return 20 * Math.log10(Math.max(gain, 1e-10)) + passbandDb;
+      }
+
+      // Key Y positions
+      const y0db = dbToY(0);
+      const yPb = dbToY(passbandDb);       // max gain = passbandDb
+      const yFcDb = dbToY(passbandDb - 3);     // fc = 3dB below passband
+
+      // ── Plot border ───────────────────────────────────────────────────────
+      gCtx.strokeStyle = K('cyan',0.2); gCtx.lineWidth = 1;
+      gCtx.strokeRect(GP.left, GP.top, plotW, plotH);
+
+      // ── Background grid ───────────────────────────────────────────────────
+      gCtx.setLineDash([2, 5]);
+      for (let db = Math.ceil(dbBot / 10) * 10; db <= dbTop; db += 10) {
+        const y = dbToY(db);
+        if (y < GP.top || y > GP.top + plotH) continue;
+        gCtx.strokeStyle = K('grid',0.5); gCtx.lineWidth = 1;
+        gCtx.beginPath(); gCtx.moveTo(GP.left, y); gCtx.lineTo(GP.left + plotW, y); gCtx.stroke();
+      }
+      for (let lf = Math.floor(logFminExt); lf <= Math.ceil(logFmaxExt); lf++) {
+        const x = logFtoX(lf);
+        if (x < GP.left || x > GP.left + plotW) continue;
+        gCtx.strokeStyle = K('grid',0.5); gCtx.lineWidth = 1;
+        gCtx.beginPath(); gCtx.moveTo(x, GP.top); gCtx.lineTo(x, GP.top + plotH); gCtx.stroke();
+      }
+      gCtx.setLineDash([]);
+
+      // ── 1. 0dB line — cyan ────────────────────────────────────────────────
+      if (y0db >= GP.top && y0db <= GP.top + plotH) {
+        dottedLine(GP.left, y0db, GP.left + plotW, y0db, K('cyan',0.55), 1.5);
+        yLabel('0dB', y0db, K('cyan',1));
+      }
+
+      // ── 2. Max gain (passband) line — YELLOW ─────────────────────────────
+      if (yPb >= GP.top && yPb <= GP.top + plotH) {
+        dottedLine(GP.left, yPb, GP.left + plotW, yPb, K('yellow',0.5), 1.5);
+        // Y axis short tick and label — yellow, left column
+        solidLine(GP.left - 22, yPb, GP.left, yPb, K('yellow',0.5), 1);
+      }
+
+      // ── 3. fc / -3dB line — GREEN, stops at xFc ──────────────────────────
+      if (yFcDb >= GP.top && yFcDb <= GP.top + plotH) {
+        dottedLine(GP.left, yFcDb, xFc, yFcDb, K('green',0.4), 1.5);
+        // Y axis short tick and label — green, right column (closer to plot)
+        solidLine(GP.left - 22, yFcDb, GP.left, yFcDb, K('green',0.4), 1);
+      }
+
+      // ── −3dB bracket on Y axis between max gain and fc ────────────────────
+      if (yPb >= GP.top && yFcDb <= GP.top + plotH) {
+        const bracketX = GP.left - 36;  // sits between the two label columns
+        const midY = (yPb + yFcDb) / 2;
+
+        // Vertical line of bracket
+        solidLine(bracketX, yPb, bracketX, yFcDb, K('green',0.6), 1.5);
+        solidLine(bracketX, yPb, bracketX + 6, yPb, K('green',0.6), 1.5);
+        solidLine(bracketX, yFcDb, bracketX + 6, yFcDb, K('green',0.6), 1.5);
+
+        gCtx.fillStyle = K('green',1);
+        gCtx.font = 'bold 14px Share Tech Mono';
+        gCtx.textAlign = 'left';
+        gCtx.fillText('−3dB', bracketX - 40, midY + 5);
+      }
+
+      // ── Insertion loss annotation ─────────────────────────────────────────
+      if (y0db >= GP.top && y0db <= GP.top + plotH && yPb >= GP.top && yPb <= GP.top + plotH) {
+        const arrowX = GP.left + plotW * 0.38;
+        const ilMidY = (y0db + yPb) / 2;
+        gCtx.strokeStyle = K('orange',0.75); gCtx.fillStyle = K('orange',0.75); gCtx.lineWidth = 1.2;
+        gCtx.beginPath(); gCtx.moveTo(arrowX, y0db + 3); gCtx.lineTo(arrowX, yPb - 3); gCtx.stroke();
+        gCtx.beginPath(); gCtx.moveTo(arrowX, y0db + 2); gCtx.lineTo(arrowX - 4, y0db + 10); gCtx.lineTo(arrowX + 4, y0db + 10); gCtx.closePath(); gCtx.fill();
+        gCtx.beginPath(); gCtx.moveTo(arrowX, yPb - 2); gCtx.lineTo(arrowX - 4, yPb - 10); gCtx.lineTo(arrowX + 4, yPb - 10); gCtx.closePath(); gCtx.fill();
+        gCtx.fillStyle = K('orange',0.85);
+        gCtx.font = 'bold 10px Share Tech Mono'; gCtx.textAlign = 'left';
+        gCtx.fillText('Insertion Loss', arrowX + 7, ilMidY + 4);
+      }
+
+      // ── Cutoff frequency vertical marker — GREEN ──────────────────────────
+      const yCurveAtFc = dbToY(curveDb(fc));
+      if (xFc >= GP.left && xFc <= GP.left + plotW) {
+        dottedLine(xFc, yCurveAtFc, xFc, GP.top + plotH, K('green',0.4), 1.2);
+        gCtx.fillStyle = K('green',0.7);
+        gCtx.font = 'bold 11px Share Tech Mono'; gCtx.textAlign = 'center';
+        gCtx.fillText('fc', xFc, GP.top + plotH + 14);
+      }
+
+      // ── Draw filter curve ─────────────────────────────────────────────────
+      const samples = plotW * 3;
+      gCtx.shadowColor = K('cyan',0.4); gCtx.shadowBlur = 8;
+      gCtx.strokeStyle = K('cyan',0.2); gCtx.lineWidth = 4;
+      gCtx.beginPath(); let started = false;
+      for (let px = 0; px <= samples; px++) {
+        const lf = logFminExt + (px / samples) * (logFmaxExt - logFminExt);
+        const f = Math.pow(10, lf);
+        const x = logFtoX(lf);
+        const y = Math.max(GP.top, Math.min(GP.top + plotH, dbToY(curveDb(f))));
+        if (!started) { gCtx.moveTo(x, y); started = true; } else gCtx.lineTo(x, y);
+      }
+      gCtx.stroke();
+      gCtx.shadowBlur = 0; gCtx.strokeStyle = K('cyan',1); gCtx.lineWidth = 2.5;
+      gCtx.beginPath(); started = false;
+      for (let px = 0; px <= samples; px++) {
+        const lf = logFminExt + (px / samples) * (logFmaxExt - logFminExt);
+        const f = Math.pow(10, lf);
+        const x = logFtoX(lf);
+        const y = Math.max(GP.top, Math.min(GP.top + plotH, dbToY(curveDb(f))));
+        if (!started) { gCtx.moveTo(x, y); started = true; } else gCtx.lineTo(x, y);
+      }
+      gCtx.stroke();
+
+      // ── Known point — CYAN ────────────────────────────────────────────────
+      const xA = logFtoX(logFA);
+      const yCurveA = Math.max(GP.top, Math.min(GP.top + plotH, dbToY(curveDb(q.fA))));
+
+      dottedLine(xA, yCurveA, xA, GP.top + plotH, K('cyan',0.45), 1.2);
+      dottedLine(GP.left, yCurveA, xA, yCurveA, K('cyan',0.45), 1.2);
+      dot(xA, yCurveA, K('cyan',1), 7, K('cyan',0.9));
+
+      // Known freq label below plot — cyan
+      gCtx.fillStyle = K('cyan',1); gCtx.font = 'bold 14px Share Tech Mono'; gCtx.textAlign = 'center';
+      gCtx.fillText(formatFreq(q.fA), xA, GP.top + plotH + 36);
+      solidLine(xA, GP.top + plotH, xA, GP.top + plotH + 16, K('cyan',0.4), 1);
+
+      // Known dB on Y axis — cyan
+      yLabel(`${q.startDb}dB`, yCurveA, K('cyan',1));
+
+      // ── Unknown point — ORANGE ────────────────────────────────────────────
+      const xB = logFtoX(logFB);
+      const yCurveB = Math.max(GP.top, Math.min(GP.top + plotH, dbToY(curveDb(q.fB))));
+
+      dottedLine(xB, yCurveB, xB, GP.top + plotH, K('orange',0.45), 1.2);
+      dottedLine(GP.left, yCurveB, xB, yCurveB, K('orange',0.55), 1.2);
+
+      if (reveal) {
+        dot(xB, yCurveB, K('green',1), 7, K('green',0.9));
+        dottedLine(GP.left, yCurveB, xB, yCurveB, K('green',0.55), 1.2);
+      } else {
+        dot(xB, yCurveB, K('orange',1), 7, K('orange',0.9));
+      }
+
+      // Unknown freq label below plot — orange
+      gCtx.fillStyle = reveal ? K('green',1) : K('orange',1);
+      gCtx.font = 'bold 14px Share Tech Mono'; gCtx.textAlign = 'center';
+      gCtx.fillText(formatFreq(q.fB), xB, GP.top + plotH + 36);
+      solidLine(xB, GP.top + plotH, xB, GP.top + plotH + 16, reveal ? K('green',0.5) : K('orange',0.5), 1);
+
+      // Unknown dB on Y axis
+      if (reveal) {
+        yLabel(`${q.exactAnswer}dB`, yCurveB, K('green',1));
+        const midX = (xA + xB) / 2; const midY = (yCurveA + yCurveB) / 2;
+        gCtx.fillStyle = K('text',0.6); gCtx.font = 'bold 11px Share Tech Mono'; gCtx.textAlign = 'center';
+        gCtx.fillText(`−${q.rolloff} dB`, midX, midY - 12);
+      } else {
+        yLabel('?dB', yCurveB, K('orange',1));
+      }
+
+      // ── X axis decade labels ──────────────────────────────────────────────
+      gCtx.fillStyle = K('text',0.3); gCtx.font = '9px Share Tech Mono'; gCtx.textAlign = 'center';
+      for (let lf = Math.floor(logFminExt); lf <= Math.ceil(logFmaxExt); lf++) {
+        const x = logFtoX(lf);
+        if (x < GP.left || x > GP.left + plotW) continue;
+        gCtx.fillText(formatFreq(Math.pow(10, lf)), x, GP.top + plotH + 48);
+      }
+
+      // Axis titles
+      gCtx.fillStyle = K('text',0.3); gCtx.font = '8px Share Tech Mono'; gCtx.textAlign = 'center';
+      gCtx.fillText('FREQUENCY', GP.left + plotW / 2, fullH - 2);
+      gCtx.save(); gCtx.translate(10, GP.top + plotH / 2); gCtx.rotate(-Math.PI / 2);
+      gCtx.fillText('GAIN (dB)', 0, 0); gCtx.restore();
+    }
+
+    
+function workingFor(q) {
+            const decDb = q.decades * 20, octDb = q.octaves * 6;
+
+      // Build frequency steps
+      let steps = '';
+      let currentF = q.fA;
+
+      // Decades first
+      for (let d = 0; d < q.decades; d++) {
+        const nextF=q.fA>q.fB?currentF/10:currentF*10;
+        const op=q.fA>q.fB?'÷ 10':'× 10';
+        steps += `<div class="working-line"><span class="w-val">${formatFreq(currentF)}</span> ${op} = <span class="w-val">${formatFreq(nextF)}</span> <span style="color:var(--colour-ui-restart)">(${d + 1} decade${d + 1 > 1 ? 's' : ''})</span></div>`;
+        currentF = nextF;
+      }
+
+      // Octaves after
+      for (let o = 0; o < q.octaves; o++) {
+        const nextF=q.fA>q.fB?currentF/2:currentF*2;
+        const op=q.fA>q.fB?'÷ 2':'× 2';
+        steps += `<div class="working-line"><span class="w-val">${formatFreq(currentF)}</span> ${op} = <span class="w-val">${formatFreq(nextF)}</span> <span style="color:var(--colour-ui-primary)">(${o + 1} octave${o + 1 > 1 ? 's' : ''})</span></div>`;
+        currentF = nextF;
+      }
+
+      return `
+    <div class="working-line">Frequency steps: <span class="w-val">${formatFreq(q.fA)}</span> → <span class="w-val">${formatFreq(q.fB)}</span></div>
+    ${steps}
+    <br>
+    <div class="working-line" style="color:var(--colour-ui-summary);">Roll-off calculation:</div>
+    <div class="working-line">Decades: <span class="w-val2">${q.decades} × 20 dB = ${decDb} dB</span></div>
+    <div class="working-line">Octaves: <span class="w-val">${q.octaves} × 6 dB = ${octDb} dB</span></div>
+    <div class="working-line">Total roll-off: <span class="w-val">${decDb} + ${octDb} = ${q.rolloff} dB</span></div>
+    <br>
+    <div class="working-line total">
+      Gain at ${formatFreq(q.fB)} = ${q.startDb} dB − ${q.rolloff} dB = <span class="w-val3">${q.exactAnswer} dB</span>
+    </div>`;
+    }
+
+    
+
+// ── options: the right answer and three typical slips ──
+function gainOptions(q) {
+  const s = q.startDb, o = q.octaves, d = q.decades;
+  const cands = [
+    s - 6 * (o + d),    // treated every decade as an octave
+    s - 20 * (o + d),   // treated every octave as a decade
+    s + q.rolloff,      // gain went the wrong way
+    s - 6 * o,          // forgot the decades
+    s - 20 * d,         // forgot the octaves
+    s - Math.round(q.rolloff / 2),
+    s - q.rolloff - 6, s - q.rolloff + 6, s - q.rolloff - 20,
+  ];
+  const used = new Set([q.exactAnswer]);
+  const wrongs = [];
+  cands.forEach(v => { if (!used.has(v) && wrongs.length < 3) { used.add(v); wrongs.push(v); } });
+  const opts = [{ label: `${q.exactAnswer} dB`, type: 'correct' }, ...wrongs.map(v => ({ label: `${v} dB`, type: 'wrong' }))];
+  return shuffle(opts);
+}
+
+// ── engine bindings ──
+const N_QUESTIONS = 10;
+function generateQuiz() {
+  questions = [];
+  for (let i = 0; i < N_QUESTIONS; i++) {
+    const q = generateQuestion();
+    q.opts = gainOptions(q);
+    questions.push(q);
+  }
+}
+const QUESTIONS = Array.from({ length: N_QUESTIONS }, (_, i) => ({
+  leftPanel: 'circuit',
+  text: () => {
+    const q = questions[i];
+    const lp = q.filterType === 'low';
+    const dir = lp ? 'frequency increases into the stopband' : 'frequency decreases into the stopband';
+    return `<div class="scenario"><span class="${lp ? 'badge-lp' : 'badge-hp'}">${lp ? 'Low Pass' : 'High Pass'}</span><br>
+      A <strong>${lp ? 'low pass' : 'high pass'}</strong> filter has a gain of
+      <span class="h1">${q.startDb} dB</span> at <span class="h1">${formatFreq(q.fA)}</span>.
+      <br>As ${dir}, the gain rolls off at
+      <span class="h2">−6 dB/octave / −20 dB/decade</span>.</div>
+      What is the gain at <span style="color:var(--colour-ui-restart)">${formatFreq(q.fB)}</span>?`;
+  },
+  hint: () => 'Count the octaves and decades between the two frequencies, then take the roll-off from the known gain.',
+  options: () => questions[i].opts,
+  correctExplain: () => `${questions[i].exactAnswer} dB`,
+  working: () => workingFor(questions[i]),
+}));
+
+RESET_EXTRA = generateQuiz;
+RENDER_EXTRA = () => {
+  const q = questions[cur];
+  if (!q) return;
+  resizeGraph();
+  drawGraph(q, !!(Q[cur] && Q[cur].ans));
+};
+SUMMARY_EXTRA = () => {};
+
+window.addEventListener('resize', () => RENDER_EXTRA());
+new MutationObserver(() => RENDER_EXTRA()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+generateQuiz();           // ?q=N deep links skip RESET_EXTRA, so generate once up front
+initQuizNav();
+resetQuiz();
+initQuizFromURL();
+  </script>
+</body>
+
+</html>
