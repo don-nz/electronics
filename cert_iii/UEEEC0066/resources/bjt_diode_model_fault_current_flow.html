@@ -1,0 +1,638 @@
+<!--
+  BJT as TWO DIODES — fault current-flow simulator. A companion to bjt_fault_current_flow.html: the
+  same voltage-divider-biased common-emitter circuit and the same six internal faults, but the transistor
+  is replaced by the two junctions it is built from:
+      D_BE  base → emitter   (anode at the base junction X)
+      D_BC  base → collector (anode at the base junction X)
+  and, optionally, the one thing two diodes cannot do on their own — a current source that pulls
+  β × (the current in D_BE) from collector to emitter. The toggle above the circuit switches between
+  "diodes only" and "diodes + β source" so the difference is visible.
+
+  What to expect (the point of the page):
+    · Diodes only: no transistor action, so a healthy circuit shows IC = 0 — nothing can get from
+      collector to emitter. The faults where the transistor action doesn't matter (base open,
+      emitter open, B-E short, C-B short, C-E short) come out the SAME in both models.
+    · Diodes + β source: reproduces the BJT simulator (healthy 2.17 mA / 2.18 mA, B-E short, C-B short…)
+      — with ONE exception worth knowing about. COLLECTOR OPEN: with the collector lead gone the device is
+      only a diode from base to emitter, so IE ≈ IB ≈ 0.05 mA, not the 2.18 mA the original simulator
+      (and the quiz data it copies) shows. Same applies to RC open in the resistor-fault simulator.
+
+  Solver (DC, plain JavaScript, no libraries): nodal analysis. Diodes use the constant 0.6 V model (ON = a
+  0.6 V source with 10 mΩ in series, OFF = open); the four ON/OFF combinations are tried and the first
+  consistent one is kept. Open leads remove an element, shorts merge two nodes. There is no VCE(sat):
+  when D_BC turns on the collector simply sits 0.6 V below the base. Numbers can therefore differ a
+  little (hundredths of a volt) from the BJT simulator's, which uses VCE(sat) = 0.2 V.
+
+  Animated segments: IR1, IB, IR2, IC, IE, the current in each diode, the β source and the short wire,
+  all dashed overlays flowing along the wire in the direction of conventional current, speed scaled to
+  that segment's own value in the SAME model's healthy circuit (<5% stopped, <75% slow, ≤150% normal, fast above).
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../assets/theme-init.js"></script>
+  <script src="../../assets/shapes.js"></script>
+  <title>BJT as Two Diodes — Fault Current Flow</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../assets/quiz-common.css">
+  <script src="../../assets/breadcrumb.js" defer></script>
+  <style>
+    .sim-wrap { width: 100%; max-width: 700px; margin: 0 auto; }
+    .circuit-panel { cursor: default; }
+    .back-link-row { width: 100%; max-width: 700px; margin: 0 auto .5rem; text-align: right; }
+    .intro { color: var(--colour-label); font-size: .85rem; line-height: 1.5; text-align: center; margin-bottom: 1rem; }
+
+    .flow-line { fill: none; stroke: var(--colour-flow); stroke-width: 4; stroke-linecap: round; stroke-dasharray: 2, 11; opacity: .9; }
+    .flow-stopped { opacity: .35; }
+
+    .fault-caption { text-align: center; font-size: .85rem; color: var(--colour-label); margin-top: .6rem; min-height: 3.6em; }
+    .fault-caption b { color: var(--colour-ui-primary); }
+
+    .diode-states {
+      max-width: 560px; margin: .8rem auto 0; padding: .7rem 1rem;
+      border: 1px solid var(--colour-border); border-radius: var(--radius-sm, 6px);
+      background: rgba(var(--colour-label-rgb), .04);
+      font-family: 'Share Tech Mono', monospace; font-size: .78rem; line-height: 1.8; color: var(--colour-text);
+    }
+    .diode-states .row { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+    .diode-states .on { color: var(--colour-ui-correct); font-weight: bold; }
+    .diode-states .off { color: var(--colour-label); }
+    .diode-states sub { font-size: .7em; }
+    .model-note { text-align: center; font-size: .78rem; color: var(--colour-label); margin: .3rem auto 0; max-width: 560px; }
+  </style>
+</head>
+
+<body>
+  <script>Shapes.use('circuit-components', 'diodes-led', 'test-equipment');</script>
+
+  <div class="crumb" id="crumb" data-current="BJT as Two Diodes"></div>
+  <header>
+    <h1>BJT as Two Diodes — Fault Current Flow</h1>
+    <p>Common Emitter · The Transistor Replaced by Its Two Junctions</p>
+  </header>
+
+  <div class="back-link-row">
+    <a id="backLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+  </div>
+
+  <p class="intro">The transistor here is just two diodes: base→emitter and base→collector. Switch the β source on to add the one thing two diodes can't do alone — collector current controlled by the base. Then pick a fault and watch which diodes conduct.</p>
+
+  <div class="sim-wrap">
+    <div id="modelSeg" class="mode-toggle" style="justify-content:center; flex-wrap:wrap">
+      <div class="mode-seg">
+        <button class="active" onclick="setModel('beta')">Diodes + β source</button>
+        <button onclick="setModel('diodes')">Diodes only</button>
+      </div>
+    </div>
+    <div id="faultSeg">
+      <div class="mode-toggle" style="justify-content:center; flex-wrap:wrap">
+        <div class="mode-seg">
+          <button class="active" onclick="setFault('healthy')">Normal</button>
+        </div>
+      </div>
+      <div class="mode-toggle" style="justify-content:center; flex-wrap:wrap">
+        <div class="mode-seg">
+          <button onclick="setFault('base-open')">Base Open</button>
+          <button onclick="setFault('emitter-open')">Emitter Open</button>
+          <button onclick="setFault('collector-open')">Collector Open</button>
+        </div>
+      </div>
+      <div class="mode-toggle" style="justify-content:center; flex-wrap:wrap">
+        <div class="mode-seg">
+          <button onclick="setFault('be-short')">B-E Short</button>
+          <button onclick="setFault('cb-short')">C-B Short</button>
+          <button onclick="setFault('ce-short')">C-E Short</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="circuit-panel">
+      <svg id="circuitSvg" viewBox="-10 -100 690 670" xmlns="http://www.w3.org/2000/svg"
+        font-family="'Share Tech Mono',monospace" shape-rendering="crispEdges">
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── RAILS — full length, components sit on top ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <line x1="160" y1="-70" x2="480" y2="-70" style="stroke: var(--colour-series)" stroke-width="2" />
+        <line x1="30" y1="535" x2="600" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── DIVIDER COLUMN — R1 over R2, node B between them ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <line x1="200" y1="-70" x2="200" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="200" cy="-70" r="5" style="fill: var(--colour-series)" />
+        <circle cx="200" cy="535" r="5" style="fill: var(--colour-series)" />
+        <circle cx="200" cy="245" r="5" style="fill: var(--colour-series)" />
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── BASE LEAD — node B across to the base junction X; the IB ammeter sits on it ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <line x1="200" y1="245" x2="360" y2="245" style="stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="360" cy="245" r="5" style="fill: var(--colour-series)" />
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── THE TWO DIODES' WIRES — D_BC up to the collector node, D_BE down to the emitter node ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <line x1="360" y1="245" x2="360" y2="185" style="stroke: var(--colour-series)" stroke-width="2" />
+        <line x1="360" y1="185" x2="440" y2="185" style="stroke: var(--colour-series)" stroke-width="2" />
+        <line x1="360" y1="245" x2="360" y2="310" style="stroke: var(--colour-series)" stroke-width="2" />
+        <line x1="360" y1="310" x2="440" y2="310" style="stroke: var(--colour-series)" stroke-width="2" />
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── COLLECTOR COLUMN (rail down to the collector node) and EMITTER COLUMN (emitter node down to common) ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <line x1="440" y1="-70" x2="440" y2="185" style="stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="440" cy="-70" r="5" style="fill: var(--colour-series)" />
+        <circle cx="440" cy="185" r="5" style="fill: var(--colour-series)" />
+        <line x1="440" y1="310" x2="440" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="440" cy="310" r="5" style="fill: var(--colour-series)" />
+        <circle cx="440" cy="535" r="5" style="fill: var(--colour-series)" />
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── β SOURCE BRANCH — collector node to emitter node, only with the β source switched on ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <g id="beta-branch">
+          <line x1="440" y1="185" x2="500" y2="185" style="stroke: var(--colour-series)" stroke-width="2" />
+          <line x1="500" y1="185" x2="500" y2="310" style="stroke: var(--colour-series)" stroke-width="2" />
+          <line x1="500" y1="310" x2="440" y2="310" style="stroke: var(--colour-series)" stroke-width="2" />
+        </g>
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── FAULT WIRES — the short circuits, drawn only when active ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <g id="short-wires">
+          <line id="short-BE" x1="360" y1="245" x2="395" y2="245" display="none" style="stroke: var(--colour-ui-wrong)" stroke-width="2.5" />
+          <line id="short-BE-v" x1="395" y1="245" x2="395" y2="310" display="none" style="stroke: var(--colour-ui-wrong)" stroke-width="2.5" />
+          <line id="short-CB-v" x1="395" y1="185" x2="395" y2="245" display="none" style="stroke: var(--colour-ui-wrong)" stroke-width="2.5" />
+          <line id="short-CE-v" x1="415" y1="185" x2="415" y2="310" display="none" style="stroke: var(--colour-ui-wrong)" stroke-width="2.5" />
+        </g>
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── FLOW OVERLAYS (animated) — direction of conventional current ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <line id="flow-IR1" class="flow-line" x1="200" y1="-70" x2="200" y2="245" />
+        <line id="flow-IB" class="flow-line" x1="200" y1="245" x2="360" y2="245" />
+        <line id="flow-IR2" class="flow-line" x1="200" y1="245" x2="200" y2="535" />
+        <line id="flow-IC" class="flow-line" x1="440" y1="-70" x2="440" y2="185" />
+        <line id="flow-IE" class="flow-line" x1="440" y1="310" x2="440" y2="535" />
+        <path id="flow-DBE" class="flow-line" d="M 360,245 L 360,310 L 440,310" />
+        <path id="flow-DBC" class="flow-line" d="M 440,185 L 360,185 L 360,245" />
+        <path id="flow-CS" class="flow-line" d="M 440,185 L 500,185 L 500,310 L 440,310" />
+        <line id="flow-short-BE" class="flow-line" x1="395" y1="245" x2="395" y2="310" display="none" />
+        <line id="flow-short-CB" class="flow-line" x1="395" y1="185" x2="395" y2="245" display="none" />
+        <line id="flow-short-CE" class="flow-line" x1="415" y1="185" x2="415" y2="310" display="none" />
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── NODES — the points the voltmeters measure ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <g transform="translate(180,250)">  <!-- ══ B ══ -->
+          <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5" />
+          <text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14" font-weight="bold">B</text>
+        </g>
+        <g transform="translate(465,165)">  <!-- ══ C ══ -->
+          <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5" />
+          <text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14" font-weight="bold">C</text>
+        </g>
+        <g transform="translate(465,330)">  <!-- ══ E ══ -->
+          <circle cx="0" cy="0" r="12" fill="none" style="stroke: var(--colour-series)" stroke-width="1.5" />
+          <text x="0" y="5" style="fill: var(--colour-node)" text-anchor="middle" font-size="14" font-weight="bold">E</text>
+        </g>
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── RAIL LABELS ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <g transform="translate(490,-80)">  <!-- ══ VCC ══ -->
+          <text x="0" y="15" style="fill: var(--colour-voltage-label)" text-anchor="start" font-size="15" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">CC</tspan>
+            <tspan style="fill: var(--colour-text)" font-size="14"> + 12 V</tspan></text>
+        </g>
+        <text x="120" y="560" fill="var(--colour-gnd)" text-anchor="middle" font-size="14" font-weight="bold">Common</text>
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── METERS — voltmeters on the nodes and across each junction, ammeters in the legs ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <g id="meterVB" transform="translate(105,250)">  <!-- ══ VB ══ -->
+          <use href="#meter-shape" />
+          <text x="45" y="0" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">B</tspan></text>
+          <text id="meterVBValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">0.00</text>
+          <text x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle" font-size="14">V</text>
+          <g id="meterVBGhost" display="none" transform="translate(0,55)">
+            <text id="meterVBGhostText" text-anchor="middle">
+              <tspan id="meterVBGhostArrow"></tspan>
+              <tspan id="meterVBGhostDelta" dx="-3"></tspan>
+            </text>
+          </g>
+        </g>
+        <g id="meterVC" transform="translate(575,150)">  <!-- ══ VC ══ -->
+          <use href="#meter-shape" />
+          <text x="-45" y="0" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">C</tspan></text>
+          <text id="meterVCValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">0.00</text>
+          <text x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle" font-size="14">V</text>
+          <g id="meterVCGhost" display="none" transform="translate(0,55)">
+            <text id="meterVCGhostText" text-anchor="middle">
+              <tspan id="meterVCGhostArrow"></tspan>
+              <tspan id="meterVCGhostDelta" dx="-3"></tspan>
+            </text>
+          </g>
+        </g>
+        <g id="meterVE" transform="translate(575,335)">  <!-- ══ VE ══ -->
+          <use href="#meter-shape" />
+          <text x="-45" y="0" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">E</tspan></text>
+          <text id="meterVEValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">0.00</text>
+          <text x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle" font-size="14">V</text>
+          <g id="meterVEGhost" display="none" transform="translate(0,55)">
+            <text id="meterVEGhostText" text-anchor="middle">
+              <tspan id="meterVEGhostArrow"></tspan>
+              <tspan id="meterVEGhostDelta" dx="-3"></tspan>
+            </text>
+          </g>
+        </g>
+        <g id="meterVCB" transform="translate(300,120)">  <!-- ══ VCB ══ -->
+          <use href="#meter-shape" />
+          <text x="0" y="-38" style="fill: var(--colour-voltage-label)" text-anchor="middle" font-size="14" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">CB</tspan></text>
+          <text id="meterVCBValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">0.00</text>
+          <text x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle" font-size="14">V</text>
+          <g id="meterVCBGhost" display="none" transform="translate(0,52)">
+            <text id="meterVCBGhostText" text-anchor="middle">
+              <tspan id="meterVCBGhostArrow"></tspan>
+              <tspan id="meterVCBGhostDelta" dx="-3"></tspan>
+            </text>
+          </g>
+        </g>
+        <g id="meterVBE" transform="translate(290,395)">  <!-- ══ VBE ══ -->
+          <use href="#meter-shape" />
+          <text x="38" y="-6" style="fill: var(--colour-voltage-label)" text-anchor="start" font-size="14" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">BE</tspan></text>
+          <text id="meterVBEValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">0.00</text>
+          <text x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle" font-size="14">V</text>
+          <g id="meterVBEGhost" display="none" transform="translate(0,-52)">
+            <text id="meterVBEGhostText" text-anchor="middle">
+              <tspan id="meterVBEGhostArrow"></tspan>
+              <tspan id="meterVBEGhostDelta" dx="-3"></tspan>
+            </text>
+          </g>
+        </g>
+        <g id="ammeterIBGroup" transform="translate(280,245)">  <!-- ══ IB ══ -->
+          <use href="#ammeter-shape" />
+          <text x="0" y="-40" style="fill: var(--colour-current)" text-anchor="middle" font-size="14" font-weight="bold">I<tspan baseline-shift="sub" font-size="10">B</tspan></text>
+          <text id="ammeterIBValue" x="0" y="-2" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">0.00</text>
+          <text x="0" y="15" style="fill: var(--colour-current)" text-anchor="middle" font-size="12">mA</text>
+          <g id="ammeterIBGroupGhost" display="none" transform="translate(-40,55)">
+            <text id="ammeterIBGroupGhostText" text-anchor="start">
+              <tspan id="ammeterIBGroupGhostArrow"></tspan>
+              <tspan id="ammeterIBGroupGhostDelta" dx="-3"></tspan>
+            </text>
+          </g>
+        </g>
+        <g id="ammeterICGroup" transform="translate(440,-10)">  <!-- ══ IC ══ -->
+          <use href="#ammeter-shape" />
+          <text x="-45" y="-10" style="fill: var(--colour-current)" text-anchor="middle" font-size="14" font-weight="bold">I<tspan baseline-shift="sub" font-size="10">C</tspan></text>
+          <text id="ammeterICValue" x="0" y="-2" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">0.00</text>
+          <text x="0" y="15" style="fill: var(--colour-current)" text-anchor="middle" font-size="12">mA</text>
+          <g id="ammeterICGroupGhost" display="none" transform="translate(40,4)">
+            <text id="ammeterICGroupGhostText" text-anchor="start">
+              <tspan id="ammeterICGroupGhostArrow"></tspan>
+              <tspan id="ammeterICGroupGhostDelta" dx="-3"></tspan>
+            </text>
+          </g>
+        </g>
+        <g id="ammeterIEGroup" transform="translate(440,480)">  <!-- ══ IE ══ -->
+          <use href="#ammeter-shape" />
+          <text x="-45" y="-10" style="fill: var(--colour-current)" text-anchor="middle" font-size="14" font-weight="bold">I<tspan baseline-shift="sub" font-size="10">E</tspan></text>
+          <text id="ammeterIEValue" x="0" y="-2" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">0.00</text>
+          <text x="0" y="15" style="fill: var(--colour-current)" text-anchor="middle" font-size="12">mA</text>
+          <g id="ammeterIEGroupGhost" display="none" transform="translate(40,4)">
+            <text id="ammeterIEGroupGhostText" text-anchor="start">
+              <tspan id="ammeterIEGroupGhostArrow"></tspan>
+              <tspan id="ammeterIEGroupGhostDelta" dx="-3"></tspan>
+            </text>
+          </g>
+        </g>
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── RESISTORS — shape and labels grouped, move each as one ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <g id="comp-R1" transform="translate(200,10)">  <!-- ══ R1 ══ -->
+          <use href="#resistor-vertical" />
+          <text x="-35" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R<tspan baseline-shift="sub" font-size="11">1</tspan></text>
+          <text x="50" y="40" text-anchor="middle" font-size="16"><tspan fill="var(--colour-text)">120</tspan><tspan fill="var(--colour-resistor-labels)"> kΩ</tspan></text>
+        </g>
+        <g id="comp-R2" transform="translate(200,385)">  <!-- ══ R2 ══ -->
+          <use href="#resistor-vertical" />
+          <text x="-35" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R<tspan baseline-shift="sub" font-size="11">2</tspan></text>
+          <text x="50" y="40" text-anchor="middle" font-size="16"><tspan fill="var(--colour-text)">15</tspan><tspan fill="var(--colour-resistor-labels)"> kΩ</tspan></text>
+        </g>
+        <g id="comp-RC" transform="translate(440,50)">  <!-- ══ RC ══ -->
+          <use href="#resistor-vertical" />
+          <text x="-35" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R<tspan baseline-shift="sub" font-size="11">C</tspan></text>
+          <text x="50" y="40" text-anchor="middle" font-size="16"><tspan fill="var(--colour-text)">1.8</tspan><tspan fill="var(--colour-resistor-labels)"> kΩ</tspan></text>
+        </g>
+        <g id="comp-RE" transform="translate(440,345)">  <!-- ══ RE ══ -->
+          <use href="#resistor-vertical" />
+          <text x="-35" y="50" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R<tspan baseline-shift="sub" font-size="11">E</tspan></text>
+          <text x="50" y="50" text-anchor="middle" font-size="16"><tspan fill="var(--colour-text)">270</tspan><tspan fill="var(--colour-resistor-labels)"> Ω</tspan></text>
+        </g>
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── THE TWO DIODES ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <g transform="translate(360,215)">  <!-- ══ D_BC ══ -->
+          <use href="#diode-up" />
+          <text x="-14" y="5" fill="var(--colour-diode)" text-anchor="end" font-size="14" font-weight="bold">D<tspan baseline-shift="sub" font-size="10">BC</tspan></text>
+        </g>
+        <g transform="translate(360,277)">  <!-- ══ D_BE ══ -->
+          <use href="#diode-down" />
+          <text x="-14" y="5" fill="var(--colour-diode)" text-anchor="end" font-size="14" font-weight="bold">D<tspan baseline-shift="sub" font-size="10">BE</tspan></text>
+        </g>
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── β SOURCE — pulls β × I(D_BE) from the collector node to the emitter node ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <g id="beta-source" transform="translate(500,247)">  <!-- ══ β·I_BE ══ -->
+          <circle cx="0" cy="0" r="20" style="fill: var(--colour-panel); stroke: var(--colour-current)" stroke-width="2" />
+          <polygon points="0,10 -6,-2 6,-2" style="fill: var(--colour-current)" />
+          <line x1="0" y1="-10" x2="0" y2="2" style="stroke: var(--colour-current)" stroke-width="2" />
+          <text x="26" y="-6" style="fill: var(--colour-current)" text-anchor="start" font-size="13" font-weight="bold">β·I<tspan baseline-shift="sub" font-size="9">BE</tspan></text>
+          <text id="betaValue" x="26" y="12" style="fill: var(--colour-text)" text-anchor="start" font-size="13" font-weight="bold">2.17 mA</text>
+        </g>
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── OPEN FAULTS — a gap in the wire with an X on it ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <g id="open-base" transform="translate(322,245)" display="none">
+          <rect x="-12" y="-5" width="24" height="10" style="fill: var(--colour-panel)" />
+          <line x1="-8" y1="-8" x2="8" y2="8" style="stroke: var(--colour-ui-wrong)" stroke-width="3" stroke-linecap="round" />
+          <line x1="-8" y1="8" x2="8" y2="-8" style="stroke: var(--colour-ui-wrong)" stroke-width="3" stroke-linecap="round" />
+        </g>
+        <g id="open-collector" transform="translate(405,185)" display="none">
+          <rect x="-12" y="-5" width="24" height="10" style="fill: var(--colour-panel)" />
+          <line x1="-8" y1="-8" x2="8" y2="8" style="stroke: var(--colour-ui-wrong)" stroke-width="3" stroke-linecap="round" />
+          <line x1="-8" y1="8" x2="8" y2="-8" style="stroke: var(--colour-ui-wrong)" stroke-width="3" stroke-linecap="round" />
+        </g>
+        <g id="open-emitter" transform="translate(405,310)" display="none">
+          <rect x="-12" y="-5" width="24" height="10" style="fill: var(--colour-panel)" />
+          <line x1="-8" y1="-8" x2="8" y2="8" style="stroke: var(--colour-ui-wrong)" stroke-width="3" stroke-linecap="round" />
+          <line x1="-8" y1="8" x2="8" y2="-8" style="stroke: var(--colour-ui-wrong)" stroke-width="3" stroke-linecap="round" />
+        </g>
+      </svg>
+    </div>
+
+    <div class="fault-caption" id="faultCaption"></div>
+    <div class="diode-states" id="diodeStates"></div>
+    <div class="model-note" id="modelNote"></div>
+  </div>
+
+  <footer>Electronics // Cert III // UEEEC0066 // Resources</footer>
+
+  <script>
+// ── DC solver for the CE bias circuit with the BJT replaced by two diodes (+ optional β·I_BE source) ──
+const VCC = 12, R1 = 120e3, R2 = 15e3, RC = 1800, RE = 270;
+const VF = 0.6, RD = 0.01, GMIN = 1e-12;
+
+// fault: { open: 'base'|'emitter'|'collector'|null, short: 'BE'|'CB'|'CE'|null }
+function solveCircuit(fault, beta) {
+  // nodes: B (external base), X (junction), CP (collector pin), EP (emitter pin), C, E (external)
+  const parent = {};
+  const find = n => parent[n] === undefined || parent[n] === n ? n : (parent[n] = find(parent[n]));
+  const union = (a, b) => { parent[find(a)] = find(b); };
+  if (fault.open !== 'base') union('B', 'X');
+  if (fault.open !== 'collector') union('CP', 'C');
+  if (fault.open !== 'emitter') union('EP', 'E');
+  if (fault.short === 'BE') union('X', 'EP');
+  if (fault.short === 'CB') union('X', 'CP');
+  if (fault.short === 'CE') union('CP', 'EP');
+  const names = ['B', 'X', 'CP', 'EP', 'C', 'E'];
+  const groups = [...new Set(names.map(find))];
+  const idx = Object.fromEntries(groups.map((g, i) => [g, i]));
+  const n = groups.length;
+  const ix = name => idx[find(name)];
+  const gD = 1 / RD;
+
+  function attempt(onBE, onBC) {
+    const G = Array.from({ length: n }, () => new Array(n).fill(0)), I = new Array(n).fill(0);
+    const stampR = (a, b, g) => { // a, b: index | 'GND' | 'VCC'
+      const va = a === 'VCC' ? VCC : a === 'GND' ? 0 : null, vb = b === 'VCC' ? VCC : b === 'GND' ? 0 : null;
+      if (va === null) { G[a][a] += g; if (vb === null) { G[a][b] -= g; } else I[a] += g * vb; }
+      if (vb === null) { G[b][b] += g; if (va === null) { G[b][a] -= g; } else I[b] += g * va; }
+    };
+    stampR('VCC', ix('B'), 1 / R1); stampR(ix('B'), 'GND', 1 / R2);
+    stampR('VCC', ix('C'), 1 / RC); stampR(ix('E'), 'GND', 1 / RE);
+    for (let i = 0; i < n; i++) G[i][i] += GMIN;
+    const diode = (a, c, on) => { if (!on) return; const A = ix(a), C = ix(c); if (A === C) return; G[A][A] += gD; G[C][C] += gD; G[A][C] -= gD; G[C][A] -= gD; I[A] += gD * VF; I[C] -= gD * VF; };
+    diode('X', 'EP', onBE); diode('X', 'CP', onBC);
+    if (beta && onBE && ix('X') !== ix('EP')) {
+      // current beta*iBE flows CP -> EP, iBE = gD (VX - VEP - VF)
+      const X = ix('X'), EP = ix('EP'), CP = ix('CP');
+      G[CP][X] += beta * gD; G[CP][EP] -= beta * gD; I[CP] += beta * gD * VF;
+      G[EP][X] -= beta * gD; G[EP][EP] += beta * gD; I[EP] -= beta * gD * VF;
+    }
+    // Gaussian elimination
+    const M = G.map((r, i) => [...r, I[i]]);
+    for (let c = 0; c < n; c++) {
+      let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+      [M[c], M[p]] = [M[p], M[c]];
+      for (let r = 0; r < n; r++) if (r !== c) { const f = M[r][c] / M[c][c]; for (let k = c; k <= n; k++) M[r][k] -= f * M[c][k]; }
+    }
+    return M.map((r, i) => r[n] / r[i]);
+  }
+
+  const combos = [[0, 0], [1, 0], [0, 1], [1, 1]];
+  let best = null, bestViol = Infinity;
+  for (const [onBE, onBC] of combos) {
+    const V = attempt(onBE, onBC);
+    const v = nm => V[ix(nm)];
+    const vBE = v('X') - v('EP'), vBC = v('X') - v('CP');
+    const iBE = onBE && ix('X') !== ix('EP') ? gD * (vBE - VF) : 0, iBC = onBC && ix('X') !== ix('CP') ? gD * (vBC - VF) : 0;
+    const sameBE = ix('X') === ix('EP'), sameBC = ix('X') === ix('CP');
+    const violBE = sameBE ? 0 : onBE ? Math.max(0, -iBE) : Math.max(0, vBE - VF);
+    const violBC = sameBC ? 0 : onBC ? Math.max(0, -iBC) : Math.max(0, vBC - VF);
+    const viol = violBE * 1e3 + violBC * 1e3 + (onBE && !sameBE ? 0 : 0);
+    if (viol < bestViol - 1e-12) { bestViol = viol; best = { V, onBE, onBC, iBE, iBC, vBE, vBC, ix }; }
+    if (viol < 1e-9) break;
+  }
+  const { V, iBE, iBC, ix: ixf } = best;
+  const vOf = nm => V[ixf(nm)];
+  const VB = vOf('B'), VC = vOf('C'), VE = vOf('E');
+  const IR1 = (VCC - VB) / R1, IR2 = VB / R2, IB = IR1 - IR2;
+  const IC = (VCC - VC) / RC, IE = VE / RE;
+  const iS = beta && best.onBE ? beta * iBE : 0;
+  // current in the short wires (see the page's header comment)
+  const shortCur = fault.short === 'BE' ? IB - iBC : fault.short === 'CB' ? IC + iBC - iS : fault.short === 'CE' ? IC + iBC - iS : 0;
+  return { VB, VC, VE, VX: vOf('X'), IR1, IR2, IB, IC, IE, iBE, iBC, iS, onBE: best.onBE, onBC: best.onBC, vBE: best.vBE, vBC: best.vBC, shortCur, viol: bestViol };
+}
+
+    // ══════════════════════════════════════════════════════════════════════
+    // STATES — the six internal faults, solved for each model
+    // ══════════════════════════════════════════════════════════════════════
+    const BETA = 200;
+    const FAULTS = {
+      'healthy':        { open: null, short: null },
+      'base-open':      { open: 'base', short: null },
+      'emitter-open':   { open: 'emitter', short: null },
+      'collector-open': { open: 'collector', short: null },
+      'be-short':       { open: null, short: 'BE' },
+      'cb-short':       { open: null, short: 'CB' },
+      'ce-short':       { open: null, short: 'CE' },
+    };
+    const SOLUTION = { beta: {}, diodes: {} };
+    Object.entries(FAULTS).forEach(([k, f]) => {
+      SOLUTION.beta[k] = solveCircuit(f, BETA);
+      SOLUTION.diodes[k] = solveCircuit(f, 0);
+    });
+
+    // What each fault does in terms of the diodes — {diodes} = the diodes-only model, {beta} = with the source
+    const CAPTIONS = {
+      'healthy': {
+        beta: 'Healthy: <b>D<sub>BE</sub></b> is forward biased and carries the base current; the β source turns that small current into a collector current 200 times bigger. <b>D<sub>BC</sub></b> is reverse biased — the collector is higher than the base.',
+        diodes: 'Healthy, diodes only: <b>D<sub>BE</sub></b> conducts the base current, <b>D<sub>BC</sub></b> is reverse biased, and nothing joins collector to emitter — so <b>I<sub>C</sub> = 0</b>. This is what two diodes alone can\'t do: there is no transistor action without the β source.',
+      },
+      'base-open': {
+        beta: '<b>Base open</b> — the junction is cut off from the divider, so neither diode has a voltage across it. Nothing conducts through the device and the divider simply runs on its own.',
+        diodes: '<b>Base open</b> — same as with the β source: no voltage reaches the junction, both diodes are off. (The β source would be controlled by a current of zero anyway.)',
+      },
+      'emitter-open': {
+        beta: '<b>Emitter open</b> — D<sub>BE</sub> has no return path, so it carries nothing; the β source it controls is then zero as well, and D<sub>BC</sub> is still reverse biased. Nothing flows anywhere.',
+        diodes: '<b>Emitter open</b> — D<sub>BE</sub> cannot conduct without a return path and D<sub>BC</sub> stays reverse biased. Identical to the β-source model.',
+      },
+      'collector-open': {
+        beta: '<b>Collector open</b> — with the collector lead gone the device is just a diode from base to emitter. D<sub>BE</sub> still conducts, and because the β source has no collector to draw from, its current has to come through D<sub>BC</sub> from the base: total base current = emitter current ≈ 0.05 mA. <b>The original BJT simulator shows 2.18 mA here, which this model does not support.</b>',
+        diodes: '<b>Collector open</b> — D<sub>BE</sub> conducts exactly as in the healthy diodes-only circuit: base current flows base→emitter→R<sub>E</sub> and nothing else. I<sub>E</sub> = I<sub>B</sub> ≈ 0.05 mA.',
+      },
+      'be-short': {
+        beta: '<b>B-E short</b> — the wire across D<sub>BE</sub> holds it at 0 V, so it cannot turn on and the β source sees zero control current: I<sub>C</sub> = 0. Base current now flows through the short wire instead, into R<sub>E</sub>.',
+        diodes: '<b>B-E short</b> — the wire across D<sub>BE</sub> holds it at 0 V, so D<sub>BE</sub> is off; base current takes the short wire to R<sub>E</sub>. Identical to the β-source model.',
+      },
+      'cb-short': {
+        beta: '<b>C-B short</b> — R<sub>C</sub> now feeds the base node straight through the short wire. D<sub>BE</sub> conducts a lot more, I<sub>C</sub> and I<sub>E</sub> surge, and the base current is pushed backwards out of the base lead into R<sub>1</sub>/R<sub>2</sub>.',
+        diodes: '<b>C-B short</b> — R<sub>C</sub> feeds the base node through the short wire and the current finds its way through D<sub>BE</sub> to R<sub>E</sub>: almost identical to the β-source model, because the surge here is just current through the junction, not transistor action.',
+      },
+      'ce-short': {
+        beta: '<b>C-E short</b> — a wire straight from collector to emitter: R<sub>C</sub> and R<sub>E</sub> divide V<sub>CC</sub> directly. The emitter ends up higher than the base, so D<sub>BE</sub> is reverse biased and off.',
+        diodes: '<b>C-E short</b> — the wire joins collector to emitter, R<sub>C</sub> and R<sub>E</sub> divide V<sub>CC</sub>, and D<sub>BE</sub> is reverse biased. Identical to the β-source model.',
+      },
+    };
+
+    // ══════════════════════════════════════════════════════════════════════
+    // Display
+    // ══════════════════════════════════════════════════════════════════════
+    let model = 'beta', faultKey = 'healthy';
+    const mA = x => x * 1000;
+    const fmtV = x => (Math.abs(x) < 0.005 ? 0 : x).toFixed(2).replace('-0.00', '0.00');
+    const fmtI = x => (Math.abs(x) < 0.0000005 ? 0 : mA(x)).toFixed(2);
+
+    // Tiers per segment, against that segment's own healthy value in the same model
+    function tier(value, healthy) {
+      if (Math.abs(value) < 0.0000005) return 'stopped';           // < 0.0005 mA
+      if (Math.abs(healthy) < 0.0000005) return 'normal';          // nothing to compare with
+      const ratio = Math.abs(value / healthy) * 100;
+      if (ratio < 5) return 'stopped';
+      if (ratio < 75) return 'slow';
+      if (ratio <= 150) return 'normal';
+      return 'fast';
+    }
+    const TIER_DURATION = { slow: 1.8, normal: 0.8, fast: 0.35 };
+    const SVGNS = 'http://www.w3.org/2000/svg';
+    function applyFlow(el, tierName, reversed) {
+      const old = el.querySelector('animate'); if (old) old.remove();
+      el.classList.toggle('flow-stopped', tierName === 'stopped');
+      if (tierName === 'stopped') { el.setAttribute('stroke-dashoffset', '0'); return; }
+      const anim = document.createElementNS(SVGNS, 'animate');
+      anim.setAttribute('attributeName', 'stroke-dashoffset');
+      anim.setAttribute('values', reversed ? '0;13' : '0;-13');
+      anim.setAttribute('dur', TIER_DURATION[tierName].toFixed(2) + 's');
+      anim.setAttribute('repeatCount', 'indefinite');
+      anim.setAttribute('calcMode', 'linear');
+      el.appendChild(anim);
+    }
+    function addGhost(groupId, wentUp, deltaStr) {
+      const g = document.getElementById(groupId + 'Ghost'); if (!g) return;
+      document.getElementById(groupId + 'GhostText').setAttribute('class', wentUp ? 'ghost-text ghost-up' : 'ghost-text ghost-down');
+      document.getElementById(groupId + 'GhostArrow').setAttribute('class', 'ghost-arrow');
+      document.getElementById(groupId + 'GhostDelta').setAttribute('class', 'ghost-delta');
+      document.getElementById(groupId + 'GhostArrow').textContent = wentUp ? '⬆' : '⬇';
+      document.getElementById(groupId + 'GhostDelta').textContent = deltaStr;
+      g.setAttribute('display', 'inline');
+    }
+    function removeGhost(groupId) { const g = document.getElementById(groupId + 'Ghost'); if (g) g.setAttribute('display', 'none'); }
+
+    const GHOSTS = [
+      { group: 'meterVB', val: s => s.VB, unit: 'V', scale: 1 },
+      { group: 'meterVC', val: s => s.VC, unit: 'V', scale: 1 },
+      { group: 'meterVE', val: s => s.VE, unit: 'V', scale: 1 },
+      { group: 'meterVBE', val: s => s.VB - s.VE, unit: 'V', scale: 1 },
+      { group: 'meterVCB', val: s => s.VC - s.VB, unit: 'V', scale: 1 },
+      { group: 'ammeterIBGroup', val: s => s.IB, unit: 'mA', scale: 1000 },
+      { group: 'ammeterICGroup', val: s => s.IC, unit: 'mA', scale: 1000 },
+      { group: 'ammeterIEGroup', val: s => s.IE, unit: 'mA', scale: 1000 },
+    ];
+
+    function refresh() {
+      const s = SOLUTION[model][faultKey], h = SOLUTION[model]['healthy'], f = FAULTS[faultKey];
+      const set = (id, t) => { document.getElementById(id).textContent = t; };
+      set('meterVBValue', fmtV(s.VB)); set('meterVCValue', fmtV(s.VC)); set('meterVEValue', fmtV(s.VE));
+      set('meterVBEValue', fmtV(s.VB - s.VE)); set('meterVCBValue', fmtV(s.VC - s.VB));
+      set('ammeterIBValue', fmtI(s.IB)); set('ammeterICValue', fmtI(s.IC)); set('ammeterIEValue', fmtI(s.IE));
+      set('betaValue', fmtI(s.iS) + ' mA');
+
+      GHOSTS.forEach(g => {
+        const delta = (g.val(s) - g.val(h)) * g.scale;
+        if (Math.abs(delta) < 0.005) { removeGhost(g.group); return; }
+        addGhost(g.group, delta > 0, `${delta > 0 ? '+' : '−'}${Math.abs(delta).toFixed(2)}${g.unit}`);
+      });
+
+      // fault markers
+      ['base', 'collector', 'emitter'].forEach(k => document.getElementById('open-' + k).setAttribute('display', f.open === k ? 'inline' : 'none'));
+      ['short-BE', 'short-BE-v'].forEach(id => document.getElementById(id).setAttribute('display', f.short === 'BE' ? 'inline' : 'none'));
+      document.getElementById('short-CB-v').setAttribute('display', f.short === 'CB' ? 'inline' : 'none');
+      document.getElementById('short-CE-v').setAttribute('display', f.short === 'CE' ? 'inline' : 'none');
+      document.getElementById('short-BE').setAttribute('display', (f.short === 'BE' || f.short === 'CB') ? 'inline' : 'none');
+      document.getElementById('beta-branch').setAttribute('display', model === 'beta' ? 'inline' : 'none');
+      document.getElementById('beta-source').setAttribute('display', model === 'beta' ? 'inline' : 'none');
+
+      // flow overlays: each [element id, current (A, signed along the drawn direction), healthy current]
+      const segs = [
+        ['flow-IR1', s.IR1, h.IR1], ['flow-IB', s.IB, h.IB], ['flow-IR2', s.IR2, h.IR2],
+        ['flow-IC', s.IC, h.IC], ['flow-IE', s.IE, h.IE],
+        ['flow-DBE', s.iBE, h.iBE],
+        ['flow-DBC', -s.iBC, -h.iBC],                 // drawn collector→base; the diode current runs base→collector
+        ['flow-CS', model === 'beta' ? s.iS : 0, model === 'beta' ? h.iS : 0],
+      ];
+      segs.forEach(([id, cur, hcur]) => {
+        const el = document.getElementById(id);
+        el.setAttribute('display', (id === 'flow-CS' && model !== 'beta') ? 'none' : 'inline');
+        applyFlow(el, tier(cur, hcur), cur < 0);
+      });
+      const sc = s.shortCur;
+      [['flow-short-BE', 'BE', sc], ['flow-short-CB', 'CB', -sc], ['flow-short-CE', 'CE', sc]].forEach(([id, k, cur]) => {
+        const el = document.getElementById(id);
+        if (f.short === k) { el.setAttribute('display', 'inline'); applyFlow(el, tier(cur, 0.0001), k === 'CB' ? sc > 0 : cur < 0); }
+        else el.setAttribute('display', 'none');
+      });
+
+      // caption + diode states
+      document.getElementById('faultCaption').innerHTML = CAPTIONS[faultKey][model];
+      const dstate = (name, on, v, i, extra) => `<span>${name}: <span class="${on ? 'on' : 'off'}">${on ? 'ON' : 'off'}</span> &nbsp;${on ? `(${fmtI(i)} mA, 0.6 V across)` : `(${fmtV(v)} V across)`}${extra || ''}</span>`;
+      const be = f.short === 'BE' ? '<span><b>D<sub>BE</sub></b>: shorted out by the wire</span>' : dstate('<b>D<sub>BE</sub></b>', s.onBE, s.vBE, s.iBE);
+      const bc = f.short === 'CB' ? '<span><b>D<sub>BC</sub></b>: shorted out by the wire</span>' : dstate('<b>D<sub>BC</sub></b>', s.onBC, s.vBC, s.iBC);
+      document.getElementById('diodeStates').innerHTML =
+        `<div class="row">${be}${bc}</div>` +
+        (model === 'beta' ? `<div class="row"><span>β source: <b>${fmtI(s.iS)} mA</b> = ${BETA} × ${fmtI(s.iBE)} mA (the current in D<sub>BE</sub>)</span></div>` : '<div class="row"><span>No β source in this model — nothing connects collector to emitter except the faults.</span></div>');
+      document.getElementById('modelNote').textContent = model === 'beta'
+        ? 'Constant 0.6 V diodes, β = 200, no VCE(sat): numbers can differ by a few hundredths of a volt from the BJT simulator.'
+        : '';
+      document.querySelectorAll('#modelSeg button').forEach((b, i) => b.classList.toggle('active', (i === 0) === (model === 'beta')));
+      document.querySelectorAll('#faultSeg button').forEach((b, i) => b.classList.toggle('active', Object.keys(FAULTS)[i] === faultKey));
+    }
+    function setFault(k) { faultKey = k; refresh(); }
+    function setModel(m) { model = m; refresh(); }
+
+    refresh();
+    function goBack(e) { e.preventDefault(); history.back(); }
+    if (history.length > 1) { document.getElementById('backLink').style.display = ''; }
+  </script>
+</body>
+
+</html>

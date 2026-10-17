@@ -476,13 +476,11 @@
       },
       'rc-open': {
         openR: 'RC',
-        VB: '1.2', VC: '0.8', VE: '0.6', IC: 0.00, IE: 2.18,
-        caption: '<b>RC open</b> — the base-emitter loop never touches RC at all, so IB/IE keep flowing normally; only IC (in series with the break) dies.',
-        ibEq: "<span class=\"eq-var\">I<sub>B</sub></span> = <span class=\"eq-var\">I<sub>R1</sub></span> − <span class=\"eq-var\">I<sub>R2</sub></span> = 0.09 − 0.08 = <b>0.01 mA</b> — base-emitter loop unaffected",
-        icEq: "<span class=\"eq-var\">I<sub>C</sub></span> = <b>0 mA</b> — RC broken, no path out",
-        // Same "device stops amplifying" reasoning as the sibling internal-
-        // fault file's own collector-open — see that file's ieEq comment.
-        ieEq: `<span class="eq-var">I<sub>E</sub></span> = ${frac('<span class="eq-var">V<sub>E</sub></span>', '<span class="eq-var">R<sub>E</sub></span>')} = ${frac('0.6', '270')} = <b>2.18 mA</b> — NOT <span class="eq-var">I<sub>B</sub></span>+<span class="eq-var">I<sub>C</sub></span> here: with RC open, the device stops amplifying and just conducts B→E like a plain diode`,
+        VB: '0.61', VC: '0.01', VE: '0.01', IC: 0.00, IE: 0.05,
+        caption: '<b>RC open</b> — with RC broken nothing can leave through the collector, so there is no transistor action: only a forward-biased diode from base to emitter is left. IC = 0 and IE falls to just IB (about 0.05 mA). The collector pin floats one diode drop below the base.',
+        ibEq: '<span class="eq-var">I<sub>B</sub></span> = <span class="eq-var">I<sub>R1</sub></span> − <span class="eq-var">I<sub>R2</sub></span> = 0.095 − 0.041 = <b>0.054 mA</b>',
+        icEq: '<span class="eq-var">I<sub>C</sub></span> = <b>0 mA</b> — no path out through the collector',
+        ieEq: '<span class="eq-var">I<sub>E</sub></span> = <span class="eq-var">I<sub>B</sub></span> = <b>0.05 mA</b> — only a forward-biased diode from base to emitter is left',
       },
       're-open': {
         openR: 'RE',
@@ -575,7 +573,26 @@
       ] };
     }
 
+    // Collector path gone (collector lead open, or RC open): with nothing able to leave through the
+    // collector there is no transistor action, only a forward-biased diode from base to emitter, so
+    // I_E = I_B = (V_TH − V_BE) / (R_TH + R_E) — no (β+1) multiplier.
+    // vcWhere: what the collector node reads — the supply (the lead is cut inside the device, RC
+    // still connected to VCC) or about one diode drop below the base (RC itself is open and the
+    // collector pin floats, held there by the conducting collector junction).
+    function diodeOnlyWorkings(rc_open) {
+      const vth = VCC * R2_HEALTHY / (R1_HEALTHY + R2_HEALTHY), rth = R1_HEALTHY * R2_HEALTHY / (R1_HEALTHY + R2_HEALTHY);
+      const ib = (vth - VBE_ON) / (rth + RE_H);
+      const ve = ib * RE_H, vb = ve + VBE_ON, vc = rc_open ? vb - VBE_ON : VCC;
+      return { steps: [
+        st('Thevenin-equivalent the divider', `${eqv('V', 'TH')} = ${eqv('V', 'CC')} × ${eqv('R', '2')} / (${eqv('R', '1')} + ${eqv('R', '2')}) = 12 × ${fk(R2_HEALTHY)} / (${fk(R1_HEALTHY)} + ${fk(R2_HEALTHY)}) = <b>${sf(vth)} V</b> &nbsp; ${eqv('R', 'TH')} = ${eqv('R', '1')} ∥ ${eqv('R', '2')} = <b>${fk(rth)}</b>`),
+        st('No collector path, no transistor action', `${eqv('I', 'C')} = <b>0 mA</b> — nothing can leave through the collector, so there is no ${eqv('β')} × ${eqv('I', 'B')} current. All that is left is the base-emitter junction, acting as a plain forward-biased diode.`),
+        st('Base (= emitter) current', `${eqv('I', 'B')} = ${eqv('I', 'E')} = (${eqv('V', 'TH')} − ${eqv('V', 'BE')}) / (${eqv('R', 'TH')} + ${eqv('R', 'E')}) = (${sf(vth)} − 0.6) / (${fk(rth)} + ${fk(RE_H)}) = <b>${(ib * 1000).toFixed(3)} mA</b> — compare 2.18 mA when healthy: without ${eqv('β')} the emitter current is tiny`),
+        st('Voltages', `${eqv('V', 'E')} = ${eqv('I', 'E')} × ${eqv('R', 'E')} = ${(ib * 1000).toFixed(3)} mA × ${fk(RE_H)} = <b>${ve.toFixed(2)} V</b> &nbsp; ${eqv('V', 'B')} = ${eqv('V', 'E')} + ${eqv('V', 'BE')} = <b>${vb.toFixed(2)} V</b> &nbsp; ${eqv('V', 'C')} = ${rc_open ? `${eqv('V', 'B')} − 0.6 = <b>${vc.toFixed(2)} V</b> — the collector pin floats one diode drop below the base` : `${eqv('V', 'CC')} = <b>12 V</b> — no current in ${eqv('R', 'C')}, so no drop`}`),
+      ] };
+    }
+
     Object.assign(STATES['healthy'], activeWorkings(R1_HEALTHY, R2_HEALTHY, RC_H, RE_H));
+    Object.assign(STATES['rc-open'], diodeOnlyWorkings(true));
     Object.assign(STATES['r1-open'], cutoffWorkings(`${eqv('R', '1')} is open, so nothing pulls the base up: ${eqv('V', 'TH')} = <b>0 V</b>`));
     Object.assign(STATES['r1-high'], activeWorkings(2 * R1_HEALTHY, R2_HEALTHY, RC_H, RE_H, `doubling ${eqv('R', '1')} lowers ${eqv('V', 'TH')}, so the base drive falls`));
     Object.assign(STATES['r2-high'], activeWorkings(R1_HEALTHY, 2 * R2_HEALTHY, RC_H, RE_H, `doubling ${eqv('R', '2')} raises ${eqv('V', 'TH')}, so the base drive rises`));
