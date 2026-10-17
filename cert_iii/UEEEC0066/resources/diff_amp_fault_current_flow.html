@@ -1,0 +1,559 @@
+<!--
+  DIFFERENTIAL AMPLIFIER resistor-fault CURRENT-FLOW SIMULATOR — a sibling to
+  bjt_resistor_fault_current_flow.html (same SMIL flow engine, up/down "ghost"
+  deltas, fault markers and current-equation box) for the long-tail pair from
+  diff-amp/diff_amp_dc_bias_analysis.html: ±12 V, RC1 = RC2 = 2k2, RE = 4k7,
+  bases at ≈0 V through RB1/RB2, VBE = 0.6 V.
+
+  Faults: ONE of the mirrored collector resistors (RC1 or RC2) goes OPEN or HIGH,
+  or the shared tail resistor RE goes OPEN or HIGH. HIGH doubles the resistor
+  (HIGH_FACTOR), the same convention as the other resistor-fault simulators here.
+  The printed resistor value never changes — the marker on the box is the cue.
+
+  Model (DC only, ideal matched transistors, base currents ignored):
+    VE  = −VBE                       (the emitter node is held one VBE below the 0 V bases)
+    IT  = (VE − (−VEE)) / RE         the tail current is set by RE alone
+    each transistor would take IT/2, but a side can only pass
+    Imax = (VCC − VE − VCE(sat)) / RC — if its share is more than that it saturates and
+    the other transistor takes the rest of IT.
+    VC  = VCC − IC × RC              (VE + VCE(sat) when saturated)
+  Special cases, kept as plain data below:
+    RC open  → that side passes nothing; the other transistor carries all of IT; the open
+               side's collector node floats (a meter pulls it to ≈0 V).
+    RE open  → no tail current at all: both transistors cut off, both collectors at VCC,
+               VE ≈ 0 V (no current → no VBE drop).
+
+  Animated segments (dashed overlay lines on top of the static wire, flowing in the
+  direction of conventional current): IC1, IC2 (rail → collector), the internal collector/
+  emitter leads of Q1/Q2, IE1, IE2 (emitter → tail node) and IT (tail node → −VEE).
+  Speed is scaled per segment against THAT segment's own healthy value:
+    <5% stopped, 5–75% slow, 75–150% normal, >150% fast. (The slow band reaches higher than in the
+  BJT simulators so that RE high — half the tail current — visibly slows the flow.)
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../assets/theme-init.js"></script>
+  <script src="../../assets/shapes.js"></script>
+  <title>Differential Amplifier Fault — Current Flow Simulator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../assets/quiz-common.css">
+  <script src="../../assets/breadcrumb.js" defer></script>
+  <style>
+    .sim-wrap { width: 100%; max-width: 700px; margin: 0 auto; }
+    .circuit-panel { cursor: default; }
+    .back-link-row { width: 100%; max-width: 700px; margin: 0 auto .5rem; text-align: right; }
+
+    .intro { color: var(--colour-label); font-size: .85rem; line-height: 1.5; text-align: center; margin-bottom: 1rem; }
+
+    /* Flow overlay lines — dashed, on top of the static wire so moving dashes read as "flow".
+       Motion comes from an SVG SMIL <animate> child (see applyFlow()), not CSS keyframes:
+       the CSS version never visibly repainted in WebKit on iPhone. */
+    .flow-line {
+      fill: none;
+      stroke: var(--colour-flow);
+      stroke-width: 4;
+      stroke-linecap: round;
+      stroke-dasharray: 2, 11;
+      opacity: .9;
+    }
+    .flow-stopped { opacity: .35; }
+
+    .fault-caption { text-align: center; font-size: .85rem; color: var(--colour-label); margin-top: .6rem; min-height: 2.4em; }
+    .fault-caption b { color: var(--colour-ui-primary); }
+
+    .current-equations {
+      max-width: 520px;
+      margin: .8rem auto 0;
+      padding: .7rem 1rem;
+      border: 1px solid var(--colour-border);
+      border-radius: var(--radius-sm, 6px);
+      background: rgba(var(--colour-label-rgb), .04);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: .78rem;
+      line-height: 1.8;
+      color: var(--colour-text);
+    }
+    .eq-line sub, .steps sub { font-size: .7em; }
+    .steps-title { font-family: 'Orbitron', sans-serif; font-size: .65rem; letter-spacing: .15em; text-transform: uppercase; color: var(--colour-label); margin-bottom: .4rem; }
+    .steps { margin: 0; padding-left: 1.5rem; }
+    .steps li { margin: 0 0 .45rem; }
+    .steps .step-title { display: block; font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: var(--colour-label); }
+    .eq-var { color: var(--colour-current); }
+    .eq-v { color: var(--colour-voltage-label); }
+  </style>
+</head>
+
+<body>
+  <script>Shapes.use('circuit-components', 'bjt-symbols', 'test-equipment');</script>
+
+  <div class="crumb" id="crumb" data-current="Diff Amp Fault Current Flow"></div>
+  <header>
+    <h1>Differential Amplifier Fault — Current Flow</h1>
+    <p>Long-Tail Pair · RC1 / RC2 / RE Open or High · Interactive Simulator</p>
+  </header>
+
+  <div class="back-link-row">
+    <a id="backLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+  </div>
+
+  <p class="intro">Pick a fault below — the meters update and the animated current shows where (and how fast) current is really flowing, scaled to each path's own healthy value.</p>
+
+  <div class="sim-wrap">
+    <!-- id="faultSeg" wraps all three rows — setFault() finds the 7 buttons in DOM order,
+         which must match STATES' own key order 1:1. -->
+    <div id="faultSeg">
+      <div class="mode-toggle" style="justify-content:center; flex-wrap:wrap">
+        <div class="mode-seg">
+          <button class="active" onclick="setFault('healthy')">Normal</button>
+        </div>
+      </div>
+      <div class="mode-toggle" style="justify-content:center; flex-wrap:wrap">
+        <div class="mode-seg">
+          <button onclick="setFault('rc1-open')">RC1 Open</button>
+          <button onclick="setFault('rc2-open')">RC2 Open</button>
+          <button onclick="setFault('re-open')">RE Open</button>
+        </div>
+      </div>
+      <div class="mode-toggle" style="justify-content:center; flex-wrap:wrap">
+        <div class="mode-seg">
+          <button onclick="setFault('rc1-high')">RC1 High</button>
+          <button onclick="setFault('rc2-high')">RC2 High</button>
+          <button onclick="setFault('re-high')">RE High</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="circuit-panel">
+      <svg id="circuitSvg" viewBox="0 -40 640 700" xmlns="http://www.w3.org/2000/svg"
+        font-family="'Share Tech Mono',monospace" shape-rendering="crispEdges">
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── RAILS — full length, components sit on top ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <line x1="50" y1="0" x2="560" y2="0" style="stroke: var(--colour-series)" stroke-width="2" />
+        <line x1="50" y1="620" x2="560" y2="620" style="stroke: var(--colour-series)" stroke-width="2" />
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── COLLECTOR COLUMNS — rail down to each collector; ammeter and RC sit on them ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <line x1="200" y1="0" x2="200" y2="270" style="stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="200" cy="0" r="5" style="fill: var(--colour-series)" />
+        <line x1="380" y1="0" x2="380" y2="270" style="stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="380" cy="0" r="5" style="fill: var(--colour-series)" />
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── COLLECTOR TAPS — the voltmeters measure each collector ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <circle cx="200" cy="250" r="5" style="fill: var(--colour-series)" />
+        <circle cx="380" cy="250" r="5" style="fill: var(--colour-series)" />
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── BASES — each base to ground through its own resistor ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <line x1="100" y1="300" x2="200" y2="300" style="stroke: var(--colour-series)" stroke-width="2" />
+        <line x1="100" y1="300" x2="100" y2="430" style="stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="100" cy="300" r="5" style="fill: var(--colour-series)" />
+        <line x1="380" y1="300" x2="480" y2="300" style="stroke: var(--colour-series)" stroke-width="2" />
+        <line x1="480" y1="300" x2="480" y2="430" style="stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="480" cy="300" r="5" style="fill: var(--colour-series)" />
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── EMITTER JOIN AND TAIL — down to −VEE; ammeter and RE sit on it ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <line x1="200" y1="300" x2="200" y2="365" style="stroke: var(--colour-series)" stroke-width="2" />
+        <line x1="380" y1="300" x2="380" y2="365" style="stroke: var(--colour-series)" stroke-width="2" />
+        <line x1="200" y1="365" x2="380" y2="365" style="stroke: var(--colour-series)" stroke-width="2" />
+        <line x1="290" y1="365" x2="290" y2="620" style="stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="290" cy="365" r="5" style="fill: var(--colour-series)" />
+        <circle cx="290" cy="620" r="5" style="fill: var(--colour-series)" />
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── EMITTER TAP — the VE voltmeter measures the joined emitters ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <circle cx="290" cy="385" r="5" style="fill: var(--colour-series)" />
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── FLOW OVERLAYS (animated) — direction of conventional current ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <line id="flow-IC1" class="flow-line" x1="200" y1="0" x2="200" y2="270" />
+        <line id="flow-IC2" class="flow-line" x1="380" y1="0" x2="380" y2="270" />
+        <path id="flow-IE1" class="flow-line" d="M 200,300 L 200,365 L 290,365" />
+        <path id="flow-IE2" class="flow-line" d="M 380,300 L 380,365 L 290,365" />
+        <line id="flow-IT" class="flow-line" x1="290" y1="365" x2="290" y2="620" />
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── RAIL LABELS ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <g transform="translate(470,-30)">  <!-- ══ VCC ══ -->
+          <text x="0" y="15" style="fill: var(--colour-voltage-label)" text-anchor="start" font-size="15" font-weight="bold">+V<tspan baseline-shift="sub" font-size="10">CC</tspan>
+            <tspan style="fill: var(--colour-text)" font-size="14"> +12 V</tspan></text>
+        </g>
+        <g transform="translate(470,630)">  <!-- ══ VEE ══ -->
+          <text x="0" y="15" style="fill: var(--colour-voltage-label)" text-anchor="start" font-size="15" font-weight="bold">−V<tspan baseline-shift="sub" font-size="10">EE</tspan>
+            <tspan style="fill: var(--colour-text)" font-size="14"> −12 V</tspan></text>
+        </g>
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── METERS — voltmeters on the collectors and the emitter join ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <g id="meterVC1" transform="translate(130,220)">  <!-- ══ VC1 ══ -->
+          <use href="#meter-shape" />
+          <text x="60" y="30" style="fill: var(--colour-voltage-label)" text-anchor="end" font-size="16" font-weight="bold">V<tspan baseline-shift="sub" font-size="12">C1</tspan></text>
+          <text id="meterVC1Value" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">9.33</text>
+          <text x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle" font-size="14">V</text>
+          <g id="meterVC1Ghost" display="none" transform="translate(-70,30)">
+            <text id="meterVC1GhostText" text-anchor="middle" font-weight="bold" font-family="'Share Tech Mono',monospace">
+              <tspan id="meterVC1GhostArrow" font-size="18"></tspan>
+              <tspan id="meterVC1GhostDelta" font-size="13" dx="-3"></tspan>
+            </text>
+          </g>
+        </g>
+        <g id="meterVC2" transform="translate(450,220)">  <!-- ══ VC2 ══ -->
+          <use href="#meter-shape" />
+          <text x="-55" y="30" style="fill: var(--colour-voltage-label)" text-anchor="start" font-size="16" font-weight="bold">V<tspan baseline-shift="sub" font-size="12">C2</tspan></text>
+          <text id="meterVC2Value" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">9.33</text>
+          <text x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle" font-size="14">V</text>
+          <g id="meterVC2Ghost" display="none" transform="translate(60, 30)">
+            <text id="meterVC2GhostText" text-anchor="middle" font-weight="bold" font-family="'Share Tech Mono',monospace">
+              <tspan id="meterVC2GhostArrow" font-size="18"></tspan>
+              <tspan id="meterVC2GhostDelta" font-size="13" dx="-3"></tspan>
+            </text>
+          </g>
+        </g>
+        <g id="meterVE" transform="translate(230,410)">  <!-- ══ VE ══ -->
+          <use href="#meter-shape" />
+          <text x="50" y="-15" style="fill: var(--colour-voltage-label)" text-anchor="end" font-size="14" font-weight="bold">V<tspan baseline-shift="sub" font-size="10">E</tspan></text>
+          <text id="meterVEValue" x="0" y="4" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">−0.60</text>
+          <text x="0" y="22" style="fill: var(--colour-red)" text-anchor="middle" font-size="14">V</text>
+          <g id="meterVEGhost" display="none" transform="translate(-60,-15)">
+            <text id="meterVEGhostText" text-anchor="middle" font-weight="bold" font-family="'Share Tech Mono',monospace">
+              <tspan id="meterVEGhostArrow" font-size="18"></tspan>
+              <tspan id="meterVEGhostDelta" font-size="13" dx="-3"></tspan>
+            </text>
+          </g>
+        </g>
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── AMMETERS — IC1 and IC2 on the collector columns, IT on the tail ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <g id="ammeterIC1Group" transform="translate(200,50)">  <!-- ══ IC1 ══ -->
+          <use href="#ammeter-shape" />
+          <text x="-42" y="-8" style="fill: var(--colour-current)" text-anchor="end" font-size="14" font-weight="bold">I<tspan baseline-shift="sub" font-size="10">C1</tspan></text>
+          <text id="ammeterIC1Value" x="0" y="-2" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">1.21</text>
+          <text x="0" y="15" style="fill: var(--colour-current)" text-anchor="middle" font-size="12">mA</text>
+          <g id="ammeterIC1GroupGhost" display="none" transform="translate(-42,14)">
+            <text id="ammeterIC1GroupGhostText" text-anchor="end" font-weight="bold" font-family="'Share Tech Mono',monospace">
+              <tspan id="ammeterIC1GroupGhostArrow" font-size="18"></tspan>
+              <tspan id="ammeterIC1GroupGhostDelta" font-size="13" dx="-3"></tspan>
+            </text>
+          </g>
+        </g>
+        <g id="ammeterIC2Group" transform="translate(380,50)">  <!-- ══ IC2 ══ -->
+          <use href="#ammeter-shape" />
+          <text x="42" y="-8" style="fill: var(--colour-current)" text-anchor="start" font-size="14" font-weight="bold">I<tspan baseline-shift="sub" font-size="10">C2</tspan></text>
+          <text id="ammeterIC2Value" x="0" y="-2" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">1.21</text>
+          <text x="0" y="15" style="fill: var(--colour-current)" text-anchor="middle" font-size="12">mA</text>
+          <g id="ammeterIC2GroupGhost" display="none" transform="translate(42,14)">
+            <text id="ammeterIC2GroupGhostText" text-anchor="start" font-weight="bold" font-family="'Share Tech Mono',monospace">
+              <tspan id="ammeterIC2GroupGhostArrow" font-size="18"></tspan>
+              <tspan id="ammeterIC2GroupGhostDelta" font-size="13" dx="-3"></tspan>
+            </text>
+          </g>
+        </g>
+        <g id="ammeterITGroup" transform="translate(290,460)">  <!-- ══ IT ══ -->
+          <use href="#ammeter-shape" />
+          <text x="42" y="-8" style="fill: var(--colour-current)" text-anchor="start" font-size="14" font-weight="bold">I<tspan baseline-shift="sub" font-size="10">T</tspan></text>
+          <text id="ammeterITValue" x="0" y="-2" style="fill: var(--colour-text)" text-anchor="middle" font-size="15" font-weight="bold">2.43</text>
+          <text x="0" y="15" style="fill: var(--colour-current)" text-anchor="middle" font-size="12">mA</text>
+          <g id="ammeterITGroupGhost" display="none" transform="translate(42,14)">
+            <text id="ammeterITGroupGhostText" text-anchor="start" font-weight="bold" font-family="'Share Tech Mono',monospace">
+              <tspan id="ammeterITGroupGhostArrow" font-size="18"></tspan>
+              <tspan id="ammeterITGroupGhostDelta" font-size="13" dx="-3"></tspan>
+            </text>
+          </g>
+        </g>
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── RESISTORS — shape, labels and fault markers grouped, move each as one ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <g id="comp-RC1" transform="translate(200,100)">  <!-- ══ RC1 ══ -->
+          <use href="#resistor-vertical" />
+          <text x="-35" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R<tspan baseline-shift="sub" font-size="11">C1</tspan></text>
+          <text x="40" y="40" fill="var(--colour-text)" text-anchor="middle" font-size="14">2k2Ω</text>
+          <g id="fault-x-RC1" transform="translate(0,40)" display="none">
+            <line x1="-10" y1="-10" x2="10" y2="10" style="stroke: var(--colour-ui-wrong)" stroke-width="3.5" stroke-linecap="round" />
+            <line x1="-10" y1="10" x2="10" y2="-10" style="stroke: var(--colour-ui-wrong)" stroke-width="3.5" stroke-linecap="round" />
+          </g>
+          <g id="fault-high-RC1" transform="translate(0,40)" display="none">
+            <line x1="0" y1="-25" x2="0" y2="25" style="stroke: var(--colour-ui-wrong)" stroke-width="3.5" stroke-linecap="round" />
+            <line x1="0" y1="-25" x2="10" y2="0" style="stroke: var(--colour-ui-wrong)" stroke-width="3.5" stroke-linecap="round" />
+            <line x1="0" y1="-25" x2="-10" y2="0" style="stroke: var(--colour-ui-wrong)" stroke-width="3.5" stroke-linecap="round" />
+          </g>
+        </g>
+        <g id="comp-RC2" transform="translate(380,100)">  <!-- ══ RC2 ══ -->
+          <use href="#resistor-vertical" />
+          <text x="-35" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R<tspan baseline-shift="sub" font-size="11">C2</tspan></text>
+          <text x="40" y="40" fill="var(--colour-text)" text-anchor="middle" font-size="14">2k2Ω</text>
+          <g id="fault-x-RC2" transform="translate(0,40)" display="none">
+            <line x1="-10" y1="-10" x2="10" y2="10" style="stroke: var(--colour-ui-wrong)" stroke-width="3.5" stroke-linecap="round" />
+            <line x1="-10" y1="10" x2="10" y2="-10" style="stroke: var(--colour-ui-wrong)" stroke-width="3.5" stroke-linecap="round" />
+          </g>
+          <g id="fault-high-RC2" transform="translate(0,40)" display="none">
+            <line x1="0" y1="-25" x2="0" y2="25" style="stroke: var(--colour-ui-wrong)" stroke-width="3.5" stroke-linecap="round" />
+            <line x1="0" y1="-25" x2="10" y2="0" style="stroke: var(--colour-ui-wrong)" stroke-width="3.5" stroke-linecap="round" />
+            <line x1="0" y1="-25" x2="-10" y2="0" style="stroke: var(--colour-ui-wrong)" stroke-width="3.5" stroke-linecap="round" />
+          </g>
+        </g>
+        <g id="comp-RB1" transform="translate(100,345)">  <!-- ══ RB1 ══ -->
+          <use href="#resistor-vertical" />
+          <text x="-35" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R<tspan baseline-shift="sub" font-size="11">B1</tspan></text>
+          <text x="-35" y="58" fill="var(--colour-text)" text-anchor="middle" font-size="14">39kΩ</text>
+        </g>
+        <g id="comp-RB2" transform="translate(480,345)">  <!-- ══ RB2 ══ -->
+          <use href="#resistor-vertical" />
+          <text x="40" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R<tspan baseline-shift="sub" font-size="11">B2</tspan></text>
+          <text x="40" y="58" fill="var(--colour-text)" text-anchor="middle" font-size="14">39kΩ</text>
+        </g>
+        <g id="comp-RE" transform="translate(290,510)">  <!-- ══ RE ══ -->
+          <use href="#resistor-vertical" />
+          <text x="-35" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R<tspan baseline-shift="sub" font-size="11">E</tspan></text>
+          <text x="40" y="40" fill="var(--colour-text)" text-anchor="middle" font-size="14">4k7Ω</text>
+          <g id="fault-x-RE" transform="translate(0,40)" display="none">
+            <line x1="-10" y1="-10" x2="10" y2="10" style="stroke: var(--colour-ui-wrong)" stroke-width="3.5" stroke-linecap="round" />
+            <line x1="-10" y1="10" x2="10" y2="-10" style="stroke: var(--colour-ui-wrong)" stroke-width="3.5" stroke-linecap="round" />
+          </g>
+          <g id="fault-high-RE" transform="translate(0,40)" display="none">
+            <line x1="0" y1="-25" x2="0" y2="25" style="stroke: var(--colour-ui-wrong)" stroke-width="3.5" stroke-linecap="round" />
+            <line x1="0" y1="-25" x2="10" y2="0" style="stroke: var(--colour-ui-wrong)" stroke-width="3.5" stroke-linecap="round" />
+            <line x1="0" y1="-25" x2="-10" y2="0" style="stroke: var(--colour-ui-wrong)" stroke-width="3.5" stroke-linecap="round" />
+          </g>
+        </g>
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── TRANSISTORS — Q1 and Q2, with the flow along their own collector and emitter leads ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <g transform="translate(186,300)">  <!-- ══ Q1 ══ -->
+          <use href="#bjt-npn-shape" />
+          <path id="flow-lead-C1" class="flow-line" d="M 14,-34 L 14,-20 L 0,-8" />
+          <path id="flow-lead-E1" class="flow-line" d="M 0,8 L 14,20 L 14,34" />
+          <text x="-30" y="-20" fill="var(--colour-bjt-labels)" text-anchor="start" font-size="14" font-weight="bold">Q<tspan baseline-shift="sub" font-size="10">1</tspan></text>
+        </g>
+        <g transform="translate(394,300)">  <!-- ══ Q2 ══ -->
+          <g transform="scale(-1, 1)">
+            <use href="#bjt-npn-shape" />
+            <path id="flow-lead-C2" class="flow-line" d="M 14,-34 L 14,-20 L 0,-8" />
+            <path id="flow-lead-E2" class="flow-line" d="M 0,8 L 14,20 L 14,34" />
+          </g>
+          <text x="30" y="-20" fill="var(--colour-bjt-labels)" text-anchor="end" font-size="14" font-weight="bold">Q<tspan baseline-shift="sub" font-size="10">2</tspan></text>
+        </g>
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── GROUND SYMBOLS ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <use href="#ground-shape" transform="translate(100,430)" />
+        <use href="#ground-shape" transform="translate(480,430)" />
+      </svg>
+    </div>
+    <div class="fault-caption" id="faultCaption"></div>
+    <div class="current-equations">
+      <div class="steps-title">Working it out, step by step</div>
+      <ol class="steps" id="steps"></ol>
+    </div>
+  </div>
+
+  <footer>Electronics // Cert III // UEEEC0066 // Resources</footer>
+
+  <script>
+    // ══════════════════════════════════════════════════════════════════════
+    // MODEL — the dc-bias walkthrough's circuit (Example 1), solved for each fault
+    // ══════════════════════════════════════════════════════════════════════
+    const VCC = 12, VEE = 12, RC = 2200, RE = 4700, VBE = 0.6, VCE_SAT = 0.2;
+    const HIGH_FACTOR = 2;            // "goes high" = the resistor doubles
+    const OPEN = Infinity;
+
+    // Solves the pair for the given resistor values. Returns every figure the page shows.
+    function solve(rc1, rc2, re) {
+      let VE, IT;
+      if (!isFinite(re)) { IT = 0; VE = 0; }              // RE open: no current, no VBE drop
+      else { VE = -VBE; IT = (VE + VEE) / re; }
+      const imax = rc => isFinite(rc) ? Math.max(0, (VCC - VE - VCE_SAT) / rc) : 0;
+      let IC1 = IT / 2, IC2 = IT / 2, sat1 = false, sat2 = false;
+      if (IC1 > imax(rc1)) { IC1 = imax(rc1); sat1 = true; IC2 = Math.min(IT - IC1, imax(rc2)); }
+      else if (IC2 > imax(rc2)) { IC2 = imax(rc2); sat2 = true; IC1 = Math.min(IT - IC2, imax(rc1)); }
+      const vc = (ic, rc, sat) => !isFinite(rc) ? 0 : sat ? VE + VCE_SAT : VCC - ic * rc;   // open RC: floating node, meter pulls it to ≈0
+      return { VE, IT: IC1 + IC2, IC1: IC1, IC2: IC2, VC1: vc(IC1, rc1, sat1), VC2: vc(IC2, rc2, sat2), sat1, sat2, rc1, rc2, re };
+    }
+
+    const cv = s => `<span class="eq-var">${s}</span>`;
+    const vv = s => `<span class="eq-v">${s}</span>`;
+    const mA = x => (x * 1000).toFixed(2) + ' mA';
+    const V2 = x => (x < 0 ? '−' : '') + Math.abs(x).toFixed(2) + ' V';
+    const kOhm = r => (r / 1000).toFixed(1).replace(/\.0$/, '') + ' kΩ';
+    const st = (title, html) => ({ title, html });
+
+    // The steps are in the order you would solve the circuit by hand: fix the emitter
+    // voltage, find the tail current it drives through RE, share that between the two
+    // transistors, then work out the collector voltages and check nothing is saturated.
+    const stepVE = () => st('Emitter voltage', `${vv('V<sub>E</sub>')} = −${vv('V<sub>BE</sub>')} = <b>−0.6 V</b> — the bases sit at ≈ 0 V through RB1/RB2, so the joined emitters are one V<sub>BE</sub> below ground`);
+    const stepIT = (m, note) => st('Tail current', `${cv('I<sub>T</sub>')} = (${vv('V<sub>E</sub>')} − (−${vv('V<sub>EE</sub>')})) / ${cv('R<sub>E</sub>')} = (−0.6 − (−12)) / ${kOhm(m.re)} = <b>${mA(m.IT)}</b>${note ? ' — ' + note : ''}`);
+    const stepShare = (m, note) => st('Share the tail current', `${cv('I<sub>C1</sub>')} = ${cv('I<sub>C2</sub>')} = ${cv('I<sub>T</sub>')} / 2 = ${mA(m.IT)} / 2 = <b>${mA(m.IC1)}</b>${note ? ' — ' + note : ''}`);
+    const vcLine = (n, ic, rc, vc) => `${vv(`V<sub>C${n}</sub>`)} = ${vv('V<sub>CC</sub>')} − ${cv(`I<sub>C${n}</sub>`)} × ${cv(`R<sub>C${n}</sub>`)} = 12 − ${(ic * 1000).toFixed(2)} mA × ${kOhm(rc)} = <b>${V2(vc)}</b>`;
+    const stepCheck = (m) => {
+      const vce = (n, vc) => `${vv(`V<sub>CE${n}</sub>`)} = ${V2(vc)} − (−0.6 V) = ${(vc + 0.6).toFixed(2)} V`;
+      return st('Check the transistors are not saturated', `${vce(1, m.VC1)} &nbsp; ${vce(2, m.VC2)} — both well above 0.2 V, so each stays in the active region and the current-source behaviour holds`);
+    };
+
+    const HEALTHY = solve(RC, RC, RE);
+    function state(label, openR, highR, rc1, rc2, re, caption, stepsFn) {
+      const m = solve(rc1, rc2, re);
+      return { label, openR, highR, m, caption, steps: stepsFn(m) };
+    }
+
+    const STATES = {
+      'healthy': state('Normal (healthy)', null, null, RC, RC, RE,
+        'Healthy circuit — <b>I<sub>T</sub></b> is set by R<sub>E</sub> alone and split equally, so I<sub>C1</sub> = I<sub>C2</sub> and both collectors sit at the same voltage.',
+        m => [stepVE(), stepIT(m), stepShare(m),
+          st('Collector voltages', vcLine(1, m.IC1, RC, m.VC1) + `<br>${vcLine(2, m.IC2, RC, m.VC2)}`),
+          stepCheck(m)]),
+      'rc1-open': state('RC1 open', 'RC1', null, OPEN, RC, RE,
+        '<b>RC1 open</b> — no path from the supply into Q1\'s collector, so I<sub>C1</sub> = 0. The tail current has to go somewhere, so Q2 carries <i>all</i> of it: I<sub>C2</sub> doubles and V<sub>C2</sub> falls. V<sub>C1</sub> is a floating node (a meter pulls it to ≈ 0 V).',
+        m => [stepVE(), stepIT(m, 'unchanged, RE hasn\'t changed'),
+          st('The open resistor', `${cv('I<sub>C1</sub>')} = <b>0 mA</b> — RC1 is open, there is no path for collector current`),
+          st('Q2 carries the rest', `${cv('I<sub>C2</sub>')} = ${cv('I<sub>T</sub>')} − ${cv('I<sub>C1</sub>')} = ${mA(m.IT)} − 0 = <b>${mA(m.IC2)}</b>`),
+          st('Collector voltages', `${vcLine(2, m.IC2, RC, m.VC2)}<br>${vv('V<sub>C1</sub>')} ≈ <b>0 V</b> — a floating node, a meter pulls it to ground`)]),
+      'rc2-open': state('RC2 open', 'RC2', null, RC, OPEN, RE,
+        '<b>RC2 open</b> — mirror image of RC1 open: I<sub>C2</sub> = 0 and Q1 carries the whole tail current, so I<sub>C1</sub> doubles and V<sub>C1</sub> falls. V<sub>C2</sub> is a floating node (a meter pulls it to ≈ 0 V).',
+        m => [stepVE(), stepIT(m, 'unchanged, RE hasn\'t changed'),
+          st('The open resistor', `${cv('I<sub>C2</sub>')} = <b>0 mA</b> — RC2 is open, there is no path for collector current`),
+          st('Q1 carries the rest', `${cv('I<sub>C1</sub>')} = ${cv('I<sub>T</sub>')} − ${cv('I<sub>C2</sub>')} = ${mA(m.IT)} − 0 = <b>${mA(m.IC1)}</b>`),
+          st('Collector voltages', `${vcLine(1, m.IC1, RC, m.VC1)}<br>${vv('V<sub>C2</sub>')} ≈ <b>0 V</b> — a floating node, a meter pulls it to ground`)]),
+      're-open': state('RE open', 'RE', null, RC, RC, OPEN,
+        '<b>RE open</b> — the only path to −V<sub>EE</sub> is broken, so I<sub>T</sub> = 0. Both transistors are cut off: I<sub>C1</sub> = I<sub>C2</sub> = 0 and both collectors rise to V<sub>CC</sub>. V<sub>E</sub> reads ≈ 0 V (no current, so no V<sub>BE</sub> drop).',
+        m => [st('Tail current', `${cv('I<sub>T</sub>')} = <b>0 mA</b> — ${cv('R<sub>E</sub>')} is open, so the tail has no path to −${vv('V<sub>EE</sub>')}`),
+          st('Emitter voltage', `With no current there is no ${vv('V<sub>BE</sub>')} drop, so ${vv('V<sub>E</sub>')} ≈ <b>0 V</b> (the same as the bases)`),
+          st('Collector currents', `${cv('I<sub>C1</sub>')} = ${cv('I<sub>C2</sub>')} = ${cv('I<sub>T</sub>')} / 2 = <b>0 mA</b>`),
+          st('Collector voltages', `${vv('V<sub>C1</sub>')} = ${vv('V<sub>C2</sub>')} = ${vv('V<sub>CC</sub>')} − 0 × ${cv('R<sub>C</sub>')} = <b>${V2(m.VC1)}</b>`)]),
+      'rc1-high': state('RC1 high', null, 'RC1', RC * HIGH_FACTOR, RC, RE,
+        '<b>RC1 high</b> — the transistors and the tail don\'t care: I<sub>T</sub>, I<sub>C1</sub> and I<sub>C2</sub> are all <i>unchanged</i>. Only the voltage across the bigger RC1 grows, so V<sub>C1</sub> falls while V<sub>C2</sub> stays put — the pair is unbalanced at the output.',
+        m => [stepVE(), stepIT(m, 'unchanged'), stepShare(m, 'RC1 doesn\'t set the current'),
+          st('Collector voltages', `${vcLine(1, m.IC1, m.rc1, m.VC1)}<br>${vcLine(2, m.IC2, RC, m.VC2)}`),
+          stepCheck(m)]),
+      'rc2-high': state('RC2 high', null, 'RC2', RC, RC * HIGH_FACTOR, RE,
+        '<b>RC2 high</b> — mirror image: I<sub>T</sub>, I<sub>C1</sub> and I<sub>C2</sub> are <i>unchanged</i>; only V<sub>C2</sub> falls, because the same current now drops more across the bigger RC2.',
+        m => [stepVE(), stepIT(m, 'unchanged'), stepShare(m, 'RC2 doesn\'t set the current'),
+          st('Collector voltages', `${vcLine(1, m.IC1, RC, m.VC1)}<br>${vcLine(2, m.IC2, m.rc2, m.VC2)}`),
+          stepCheck(m)]),
+      're-high': state('RE high', null, 'RE', RC, RC, RE * HIGH_FACTOR,
+        '<b>RE high</b> — the shared tail resistor sets I<sub>T</sub>, so it falls. Both transistors still share it equally: I<sub>C1</sub> and I<sub>C2</sub> drop together and both collectors rise toward V<sub>CC</sub> by the same amount — still balanced, but the gain falls because r′<sub>e</sub> rises as the current drops.',
+        m => [stepVE(), stepIT(m, 'falls, because RE is bigger'), stepShare(m, 'still equal, so still balanced'),
+          st('Collector voltages', vcLine(1, m.IC1, RC, m.VC1) + `<br>${vcLine(2, m.IC2, RC, m.VC2)}`),
+          stepCheck(m)]),
+    };
+
+    // Tiers per segment, each against that segment's own healthy value.
+    function tier(value, healthy) {
+      if (Math.abs(value) < 0.00005) return 'stopped';
+      const ratio = healthy === 0 ? Infinity : Math.abs(value / healthy) * 100;
+      if (ratio < 5) return 'stopped';
+      if (ratio < 75) return 'slow';
+      if (ratio <= 150) return 'normal';
+      return 'fast';
+    }
+    Object.values(STATES).forEach(s => {
+      const t1 = tier(s.m.IC1, HEALTHY.IC1), t2 = tier(s.m.IC2, HEALTHY.IC2), tt = tier(s.m.IT, HEALTHY.IT);
+      s.tiers = { IC1: t1, 'lead-C1': t1, 'lead-E1': t1, IE1: t1, IC2: t2, 'lead-C2': t2, 'lead-E2': t2, IE2: t2, IT: tt };
+    });
+
+    const FLOW_IDS = ['IC1', 'lead-C1', 'lead-E1', 'IE1', 'IC2', 'lead-C2', 'lead-E2', 'IE2', 'IT'];
+    const RESISTOR_IDS = ['RC1', 'RC2', 'RE'];
+    const TIER_DURATION = { slow: 1.8, normal: 0.8, fast: 0.35 };   // seconds
+
+    const SVGNS = 'http://www.w3.org/2000/svg';
+    // Motion via an SVG SMIL <animate> child; the element is removed and recreated each time
+    // rather than mutated, since SMIL implementations disagree about restarting a running one.
+    function applyFlow(el, tierName) {
+      const old = el.querySelector('animate');
+      if (old) old.remove();
+      el.classList.toggle('flow-stopped', tierName === 'stopped');
+      if (tierName === 'stopped') { el.setAttribute('stroke-dashoffset', '0'); return; }
+      const anim = document.createElementNS(SVGNS, 'animate');
+      anim.setAttribute('attributeName', 'stroke-dashoffset');
+      anim.setAttribute('values', '0;-13');
+      anim.setAttribute('dur', TIER_DURATION[tierName].toFixed(2) + 's');
+      anim.setAttribute('repeatCount', 'indefinite');
+      anim.setAttribute('calcMode', 'linear');
+      el.appendChild(anim);
+    }
+
+    // Up/down ghost — arrow + delta beside a meter once it differs from the healthy baseline.
+    function addGhost(groupId, wentUp, deltaStr) {
+      const g = document.getElementById(groupId + 'Ghost'); if (!g) return;
+      document.getElementById(groupId + 'GhostText').setAttribute('class', wentUp ? 'ghost-text ghost-up' : 'ghost-text ghost-down');
+      document.getElementById(groupId + 'GhostArrow').setAttribute('class', 'ghost-arrow');
+      document.getElementById(groupId + 'GhostDelta').setAttribute('class', 'ghost-delta');
+      document.getElementById(groupId + 'GhostArrow').textContent = wentUp ? '⬆' : '⬇';
+      document.getElementById(groupId + 'GhostDelta').textContent = deltaStr;
+      g.setAttribute('display', 'inline');
+    }
+    function removeGhost(groupId) {
+      const g = document.getElementById(groupId + 'Ghost'); if (g) g.setAttribute('display', 'none');
+    }
+    const GHOST_METERS = [
+      { group: 'meterVC1', key: 'VC1', unit: 'V', scale: 1 },
+      { group: 'meterVC2', key: 'VC2', unit: 'V', scale: 1 },
+      { group: 'meterVE', key: 'VE', unit: 'V', scale: 1 },
+      { group: 'ammeterIC1Group', key: 'IC1', unit: 'mA', scale: 1000 },
+      { group: 'ammeterIC2Group', key: 'IC2', unit: 'mA', scale: 1000 },
+      { group: 'ammeterITGroup', key: 'IT', unit: 'mA', scale: 1000 },
+    ];
+    const VALUE_IDS = { VC1: 'meterVC1Value', VC2: 'meterVC2Value', VE: 'meterVEValue', IC1: 'ammeterIC1Value', IC2: 'ammeterIC2Value', IT: 'ammeterITValue' };
+    const fmtMeter = (key, x) => key[0] === 'V' ? (x < 0 ? '−' : '') + Math.abs(x).toFixed(2) : (x * 1000).toFixed(2);
+
+    function setFault(key) {
+      const s = STATES[key], m = s.m;
+
+      // Meters
+      Object.keys(VALUE_IDS).forEach(k => { document.getElementById(VALUE_IDS[k]).textContent = fmtMeter(k, m[k]); });
+
+      // Ghosts — arrow + delta vs the healthy baseline, hidden when unchanged
+      GHOST_METERS.forEach(g => {
+        const delta = (m[g.key] - HEALTHY[g.key]) * g.scale;
+        if (Math.abs(delta) < 0.005) { removeGhost(g.group); return; }
+        addGhost(g.group, delta > 0, `${delta > 0 ? '+' : '−'}${Math.abs(delta).toFixed(2)}${g.unit}`);
+      });
+
+      // Fault markers — X (open) or up-arrow (high) on the faulted resistor's own box
+      RESISTOR_IDS.forEach(id => {
+        const xEl = document.getElementById('fault-x-' + id);
+        if (xEl) xEl.setAttribute('display', id === s.openR ? 'inline' : 'none');
+        const hEl = document.getElementById('fault-high-' + id);
+        if (hEl) hEl.setAttribute('display', id === s.highR ? 'inline' : 'none');
+      });
+
+      // Flow animation
+      FLOW_IDS.forEach(id => {
+        const el = document.getElementById('flow-' + id);
+        if (el) applyFlow(el, s.tiers[id]);
+      });
+
+      // Caption, current equations, active button
+      document.getElementById('faultCaption').innerHTML = s.caption;
+      document.getElementById('steps').innerHTML = s.steps.map(x => `<li><span class="step-title">${x.title}</span>${x.html}</li>`).join('');
+      document.querySelectorAll('#faultSeg button').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('#faultSeg button')[Object.keys(STATES).indexOf(key)].classList.add('active');
+    }
+
+    setFault('healthy');
+
+    function goBack(e) { e.preventDefault(); history.back(); }
+    if (history.length > 1) { document.getElementById('backLink').style.display = ''; }
+  </script>
+</body>
+
+</html>

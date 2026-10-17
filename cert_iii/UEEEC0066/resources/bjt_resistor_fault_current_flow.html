@@ -94,6 +94,11 @@
     }
     .eq-line sub { font-size: .7em; }
     .eq-var { color: var(--colour-current); }
+    .steps-title { font-family: 'Orbitron', sans-serif; font-size: .65rem; letter-spacing: .15em; text-transform: uppercase; color: var(--colour-label); margin-bottom: .4rem; }
+    .steps { margin: 0; padding-left: 1.5rem; }
+    .steps li { margin: 0 0 .45rem; }
+    .steps sub { font-size: .7em; }
+    .steps .step-title { display: block; font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: var(--colour-label); }
   </style>
 </head>
 
@@ -409,9 +414,8 @@
     </div>
     <div class="fault-caption" id="faultCaption"></div>
     <div class="current-equations">
-      <div class="eq-line" id="eqIB"></div>
-      <div class="eq-line" id="eqIC"></div>
-      <div class="eq-line" id="eqIE"></div>
+      <div class="steps-title">Working it out, step by step</div>
+      <ol class="steps" id="steps"></ol>
     </div>
   </div>
 
@@ -525,6 +529,92 @@
       },
     };
 
+
+    // ══════════════════════════════════════════════════════════════════════
+    // WORKED CALCULATIONS — shown under the circuit as numbered steps, in the order you would
+    // solve it by hand: formula → numbers → result, computed here from the resistor values
+    // (not typed in). Each state's `steps` array replaces the hand-typed ibEq/icEq/ieEq
+    // strings above; a state without one falls back to those strings (see setFault()).
+    //
+    // Active region (the healthy circuit and every fault that leaves the transistor
+    // conducting normally): Thevenin-equivalent the divider, then
+    //     V_TH = V_CC × R2/(R1+R2)      R_TH = R1 ∥ R2
+    //     I_B  = (V_TH − V_BE) / (R_TH + (β+1) × R_E)
+    //     I_C  = β × I_B                I_E = (β+1) × I_B
+    // with β = 200 and V_BE = 0.6 V, then check V_CE is above saturation. These reproduce the
+    // meter values above exactly (to the displayed rounding), because those came from the
+    // same model.
+    // ══════════════════════════════════════════════════════════════════════
+    const BETA = 200, VBE_ON = 0.6, VCE_SAT = 0.2, RC_H = 1800, RE_H = 270;
+    const eqv = (s, sub) => `<span class="eq-var">${s}${sub ? `<sub>${sub}</sub>` : ''}</span>`;
+    const sf = (x, n) => String(+Number(x).toPrecision(n || 3));
+    const fk = r => !isFinite(r) ? '∞' : r >= 1000 ? sf(r / 1000) + ' kΩ' : sf(r) + ' Ω';
+    const st = (title, html) => ({ title, html });
+
+    function activeWorkings(r1, r2, rc, re, note) {
+      const vth = VCC * r2 / (r1 + r2), rth = r1 * r2 / (r1 + r2);
+      const ib = (vth - VBE_ON) / (rth + (BETA + 1) * re) * 1000;   // mA
+      const ic = ib * BETA, ie = ib * (BETA + 1);
+      const ve = ie / 1000 * re, vc = VCC - ic / 1000 * rc;
+      return { steps: [
+        st('Thevenin-equivalent the divider', `${eqv('V', 'TH')} = ${eqv('V', 'CC')} × ${eqv('R', '2')} / (${eqv('R', '1')} + ${eqv('R', '2')}) = 12 × ${fk(r2)} / (${fk(r1)} + ${fk(r2)}) = <b>${sf(vth)} V</b> &nbsp; ${eqv('R', 'TH')} = ${eqv('R', '1')} ∥ ${eqv('R', '2')} = <b>${fk(rth)}</b>${note ? ' — ' + note : ''}`),
+        st('Base current', `${eqv('I', 'B')} = (${eqv('V', 'TH')} − ${eqv('V', 'BE')}) / (${eqv('R', 'TH')} + (${eqv('β')}+1) × ${eqv('R', 'E')}) = (${sf(vth)} − 0.6) / (${fk(rth)} + 201 × ${fk(re)}) = <b>${sf(ib, 4)} mA</b>`),
+        st('Collector current', `${eqv('I', 'C')} = ${eqv('β')} × ${eqv('I', 'B')} = 200 × ${sf(ib, 4)} mA = <b>${ic.toFixed(2)} mA</b>`),
+        st('Emitter current', `${eqv('I', 'E')} = (${eqv('β')}+1) × ${eqv('I', 'B')} = 201 × ${sf(ib, 4)} mA = <b>${ie.toFixed(2)} mA</b> &nbsp; (= ${eqv('I', 'B')} + ${eqv('I', 'C')})`),
+        st('Check the transistor is not saturated', `${eqv('V', 'E')} = ${eqv('I', 'E')} × ${eqv('R', 'E')} = ${ie.toFixed(2)} mA × ${fk(re)} = ${ve.toFixed(2)} V &nbsp; ${eqv('V', 'C')} = ${eqv('V', 'CC')} − ${eqv('I', 'C')} × ${eqv('R', 'C')} = 12 − ${ic.toFixed(2)} mA × ${fk(rc)} = ${vc.toFixed(2)} V &nbsp; ${eqv('V', 'CE')} = ${(vc - ve).toFixed(2)} V — above 0.2 V, so the active-region formulas hold`),
+      ] };
+    }
+    // Cut-off: V_TH below V_BE means the base-emitter junction never turns on.
+    function cutoffWorkings(why) {
+      return { steps: [
+        st('Divider voltage', why),
+        st('Base current', `${eqv('V', 'TH')} is below ${eqv('V', 'BE')} (0.6 V), so the base-emitter junction never turns on: ${eqv('I', 'B')} = <b>0 mA</b>`),
+        st('Collector current', `${eqv('I', 'C')} = ${eqv('β')} × ${eqv('I', 'B')} = 200 × 0 = <b>0 mA</b>`),
+        st('Emitter current', `${eqv('I', 'E')} = (${eqv('β')}+1) × ${eqv('I', 'B')} = 201 × 0 = <b>0 mA</b>`),
+        st('Voltages', `No current, so no drops: ${eqv('V', 'E')} = 0 V and ${eqv('V', 'C')} = ${eqv('V', 'CC')} = <b>12 V</b>`),
+      ] };
+    }
+
+    Object.assign(STATES['healthy'], activeWorkings(R1_HEALTHY, R2_HEALTHY, RC_H, RE_H));
+    Object.assign(STATES['r1-open'], cutoffWorkings(`${eqv('R', '1')} is open, so nothing pulls the base up: ${eqv('V', 'TH')} = <b>0 V</b>`));
+    Object.assign(STATES['r1-high'], activeWorkings(2 * R1_HEALTHY, R2_HEALTHY, RC_H, RE_H, `doubling ${eqv('R', '1')} lowers ${eqv('V', 'TH')}, so the base drive falls`));
+    Object.assign(STATES['r2-high'], activeWorkings(R1_HEALTHY, 2 * R2_HEALTHY, RC_H, RE_H, `doubling ${eqv('R', '2')} raises ${eqv('V', 'TH')}, so the base drive rises`));
+    Object.assign(STATES['rc-high'], activeWorkings(R1_HEALTHY, R2_HEALTHY, 2 * RC_H, RE_H, `${eqv('R', 'C')} appears nowhere in the currents; it only changes ${eqv('V', 'C')}`));
+    // R2 open: the base is driven so hard the active-region formula would call for a collector
+    // current far beyond what the supply can deliver, so the transistor saturates and the
+    // currents come from the collector-emitter loop instead.
+    (function () {
+      const vth = VCC, rth = R1_HEALTHY;
+      const ibAct = (vth - VBE_ON) / (rth + (BETA + 1) * RE_H) * 1000;       // mA, active-region prediction
+      const ie = (VCC - VCE_SAT) / (RC_H + RE_H) * 1000;                       // mA
+      const ve = ie / 1000 * RE_H, vb = ve + VBE_ON;
+      const ib = (VCC - vb) / R1_HEALTHY * 1000, ic = ie - ib, vc = ve + VCE_SAT;
+      STATES['r2-open'].steps = [
+        st('Divider voltage', `${eqv('R', '2')} is open, so nothing pulls the base down: ${eqv('V', 'TH')} = ${eqv('V', 'CC')} = <b>12 V</b> and ${eqv('R', 'TH')} = ${eqv('R', '1')} = ${fk(R1_HEALTHY)}`),
+        st('Try the active-region formulas', `${eqv('I', 'B')} = (12 − 0.6) / (${fk(R1_HEALTHY)} + 201 × ${fk(RE_H)}) = ${sf(ibAct, 3)} mA, so ${eqv('I', 'C')} = ${eqv('β')} × ${eqv('I', 'B')} ≈ <b>${sf(ibAct * BETA, 2)} mA</b> — far more than ${eqv('R', 'C')} and ${eqv('R', 'E')} could ever pass from a 12 V supply, so that cannot be right`),
+        st('So the transistor is saturated', `Use the collector-emitter loop instead: ${eqv('I', 'E')} = (${eqv('V', 'CC')} − ${eqv('V', 'CE')}(sat)) / (${eqv('R', 'C')} + ${eqv('R', 'E')}) = (12 − 0.2) / (${fk(RC_H)} + ${fk(RE_H)}) = <b>${ie.toFixed(2)} mA</b>`),
+        st('Emitter and base voltages', `${eqv('V', 'E')} = ${eqv('I', 'E')} × ${eqv('R', 'E')} = ${ie.toFixed(2)} mA × ${fk(RE_H)} = <b>${ve.toFixed(2)} V</b> &nbsp; ${eqv('V', 'B')} = ${eqv('V', 'E')} + ${eqv('V', 'BE')} = ${ve.toFixed(2)} + 0.6 = <b>${vb.toFixed(2)} V</b> &nbsp; ${eqv('V', 'C')} = ${eqv('V', 'E')} + ${eqv('V', 'CE')}(sat) = <b>${vc.toFixed(2)} V</b>`),
+        st('Base current', `${eqv('I', 'B')} = (${eqv('V', 'CC')} − ${eqv('V', 'B')}) / ${eqv('R', '1')} = (12 − ${vb.toFixed(2)}) / ${fk(R1_HEALTHY)} = <b>${sf(ib, 3)} mA</b>`),
+        st('Collector current', `${eqv('I', 'C')} = ${eqv('I', 'E')} − ${eqv('I', 'B')} = ${ie.toFixed(2)} − ${sf(ib, 3)} = <b>${ic.toFixed(2)} mA</b> — not ${eqv('β')} × ${eqv('I', 'B')}: saturation caps it`),
+      ];
+    })();
+    // RE high / open: the course's stiff-divider convention — V_B stays at its healthy 1.2 V,
+    // so V_E = V_B − V_BE stays 0.6 V and the emitter current is simply V_E / R_E.
+    function stiffWorkings(re) {
+      const ie = isFinite(re) ? 0.6 / re * 1000 : 0;
+      const vc = VCC - ie / 1000 * RC_H;
+      return { steps: [
+        st('Base voltage', `Stiff divider: ${eqv('V', 'B')} stays at <b>1.2 V</b> whatever ${eqv('R', 'E')} is`),
+        st('Emitter voltage', `${eqv('V', 'E')} = ${eqv('V', 'B')} − ${eqv('V', 'BE')} = 1.2 − 0.6 = <b>0.6 V</b>`),
+        st('Emitter current', `${eqv('I', 'E')} = ${eqv('V', 'E')} / ${eqv('R', 'E')} = 0.6 / ${fk(re)} = <b>${ie.toFixed(2)} mA</b>${isFinite(re) ? '' : ' — there is no path through RE at all'}`),
+        st('Collector current', `${eqv('I', 'C')} ≈ ${eqv('I', 'E')} = <b>${ie.toFixed(2)} mA</b>`),
+        st('Base current', `${eqv('I', 'B')} = ${eqv('I', 'R1')} − ${eqv('I', 'R2')} = (12 − 1.2) / ${fk(R1_HEALTHY)} − 1.2 / ${fk(R2_HEALTHY)} = 0.09 − 0.08 = <b>0.01 mA</b> — ${eqv('R', 'E')} doesn't enter this`),
+        st('Collector voltage', `${eqv('V', 'C')} = ${eqv('V', 'CC')} − ${eqv('I', 'C')} × ${eqv('R', 'C')} = 12 − ${ie.toFixed(2)} mA × ${fk(RC_H)} = <b>${vc.toFixed(2)} V</b>`),
+      ] };
+    }
+    Object.assign(STATES['re-high'], stiffWorkings(2 * RE_H));
+    Object.assign(STATES['re-open'], stiffWorkings(Infinity));
+
     // Derived junction voltages — VBE/VCB, same as the sibling file.
     Object.values(STATES).forEach(s => {
       s.VBE = (parseFloat(s.VB) - parseFloat(s.VE)).toFixed(2);
@@ -608,8 +698,9 @@
     // Up/down ghost — same convention as the sibling file's own addGhost().
     function addGhost(groupId, wentUp, deltaStr) {
       const g = document.getElementById(groupId + 'Ghost'); if (!g) return;
-      const clr = wentUp ? 'var(--colour-up)' : 'var(--colour-down)';
-      document.getElementById(groupId + 'GhostText').setAttribute('fill', clr);
+      document.getElementById(groupId + 'GhostText').setAttribute('class', wentUp ? 'ghost-text ghost-up' : 'ghost-text ghost-down');
+      document.getElementById(groupId + 'GhostArrow').setAttribute('class', 'ghost-arrow');
+      document.getElementById(groupId + 'GhostDelta').setAttribute('class', 'ghost-delta');
       document.getElementById(groupId + 'GhostArrow').textContent = wentUp ? '⬆' : '⬇';
       document.getElementById(groupId + 'GhostDelta').textContent = deltaStr;
       g.setAttribute('display', 'inline');
@@ -669,9 +760,9 @@
 
       // Caption + current equations + active button
       document.getElementById('faultCaption').innerHTML = s.caption;
-      document.getElementById('eqIB').innerHTML = s.ibEq;
-      document.getElementById('eqIC').innerHTML = s.icEq;
-      document.getElementById('eqIE').innerHTML = s.ieEq;
+      // Worked steps — a state without its own `steps` shows its hand-typed IB/IC/IE lines as steps
+      const steps = s.steps || [st('Base current', s.ibEq), st('Collector current', s.icEq), st('Emitter current', s.ieEq)];
+      document.getElementById('steps').innerHTML = steps.map(x => `<li><span class="step-title">${x.title}</span>${x.html}</li>`).join('');
       document.querySelectorAll('#faultSeg button').forEach(btn => btn.classList.remove('active'));
       const idx = Object.keys(STATES).indexOf(key);
       document.querySelectorAll('#faultSeg button')[idx].classList.add('active');
