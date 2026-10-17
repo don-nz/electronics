@@ -500,10 +500,28 @@
     const HL_PAD_LEFT = 0;
     const HL_PAD_RIGHT = -2;   // small trim: per-glyph extents already end at the last glyph's advance
     const HL_PAD_Y = -2;
+    // Only the VALUE is highlighted (not the label or the "=" / "≈"): the range of characters
+    // after the first equals sign up to the next one (e.g. "I C1 = 1.21mA = I C2" → "1.21mA").
+    // Indices follow the rendered text, so the source's whitespace is collapsed the same way
+    // the browser does; a text with no equals sign (a label on its own) gets no highlight.
+    function valueCharRange(t) {
+      const s = t.textContent.replace(/\s+/g, ' ').trim();
+      if (s.length !== t.getNumberOfChars()) return undefined;   // can't map reliably — leave whole text
+      let a = s.search(/[=≈]/);
+      if (a < 0) return null;
+      let b = s.slice(a + 1).search(/[=≈]/);
+      b = b < 0 ? s.length : a + 1 + b;
+      a++;
+      while (a < b && s[a] === ' ') a++;
+      while (b > a && s[b - 1] === ' ') b--;
+      return [a, b];
+    }
     function addRevealHighlight(el) {
       if (el.hasAttribute('data-hl-built')) return;
       const texts = el.tagName.toLowerCase() === 'text' ? [el] : el.querySelectorAll('text');
       texts.forEach(t => {
+        const range = valueCharRange(t);
+        if (range === null) return;
         // One rect per VISUAL line, from the glyph extents themselves, so each highlight
         // starts and ends where its own line does — left-aligned for text-anchor="start",
         // right-aligned for "end" — rather than one block sized to the widest line. A new
@@ -511,6 +529,7 @@
         const lines = [];
         let cur = null, prevX = -Infinity;
         for (let i = 0; i < t.getNumberOfChars(); i++) {
+          if (range && (i < range[0] || i >= range[1])) continue;
           const e = t.getExtentOfChar(i);
           if (!e.width && !e.height) continue;
           if (!cur || e.x < prevX - 0.5 || e.y >= cur.y1 - 1) {
@@ -580,6 +599,9 @@
     initQuizNav();
     setMode('example1');
     initQuizFromURL();
+    // The highlights are measured from glyph extents, which shift when the web font arrives;
+    // measure again once fonts are ready so each rect sits exactly behind its value.
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { clearRevealHighlights(); RENDER_EXTRA(); });
   </script>
 </body>
 
