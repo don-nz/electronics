@@ -1,0 +1,557 @@
+<!--
+  Negative feedback — deriving the settled output voltage, step by step.
+
+  The question this answers: "once the system settles down, what is Vout?" At that point nothing is
+  changing, so the output the amplifier produces from its error input is exactly the output that
+  created that error input. Writing that down is the whole derivation:
+
+    1. Vf   = β × Vout               the feedback network returns a fraction β of the output
+    2. Verr = Vin − Vf               negative feedback SUBTRACTS it at the summing network
+    3. Vout = A_OL × Verr            the amplifier multiplies the error by its open-loop gain
+       → Vout = A_OL × (Vin − β × Vout)
+    4. Vout + A_OL β Vout = A_OL Vin    collect the Vout terms
+       → Vout × (1 + A_OL β) = A_OL × Vin
+    5. A_CL = Vout / Vin = A_OL / (1 + A_OL β)   the closed-loop gain (the course equation-sheet form)
+    6–9. The same numbers worked through: loop gain A_OL β, A_CL, Vout, then the settled Vf and Verr.
+   10. Why bother: halve A_OL and A_CL barely moves.
+
+  It is the standard feedback equation (often called Black's formula after Harold Black, who
+  worked it out for telephone-line repeaters in 1927). It is the same algebra as the gain of a
+  non-inverting op-amp stage, where β is the resistor-divider ratio.
+
+  A_OL, β and Vin are the independent values (V); everything else is derived (D = recompute()).
+  Example 1/2/3 and Randomise as in the other walkthroughs; the diagram is the general feedback
+  model used in neg_feedback_knowledge_basics.html.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../../assets/theme-init.js"></script>
+  <script src="../../../../assets/quiz-engine.js"></script>
+  <title>Negative Feedback: The Settled Output Voltage</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../../assets/quiz-common.css">
+  <script src="../../../../assets/breadcrumb.js" defer></script>
+  <style>
+    .cr { color: var(--colour-ui-correct); }
+    .circuit-panel { cursor: default; }
+    .fb-block { fill: var(--colour-panel); stroke: var(--colour-ui-primary); stroke-width: 1.5px; }
+    .fb-block.focus { stroke: var(--colour-ui-correct); stroke-width: 3.5px; }
+    .fb-network-label { fill: var(--colour-ui-primary); font-size: 16px; font-weight: 700; text-anchor: start; }
+    .fb-path-line { stroke: var(--colour-series); stroke-width: 2px; fill: none; }
+    .fb-path-arrow { fill: var(--colour-series); }
+  </style>
+</head>
+
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <g id="arrow-shape">
+        <polygon points="0,-6 0,6 8,0" fill="var(--colour-series)" />
+      </g>
+    </defs>
+  </svg>
+
+  <div class="crumb" id="crumb" data-current="Settled Output Voltage"></div>
+  <header>
+    <h1>Negative Feedback: The Settled Output Voltage</h1>
+    <p><span style="text-transform:none">V<sub>f</sub> → V<sub>err</sub> → V<sub>out</sub> → A<sub>CL</sub> = A<sub>OL</sub> / (1 + A<sub>OL</sub>β)</span></p>
+  </header>
+
+  <div class="quiz-wrap" id="quizWrap">
+
+    <div class="mode-toggle">
+      <div class="mode-seg" id="modeSeg">
+        <button id="modeExample1" class="active" onclick="setMode('example1')">Example 1</button>
+        <button id="modeExample2" onclick="setMode('example2')">Example 2</button>
+        <button id="modeExample3" onclick="setMode('example3')">Example 3</button>
+        <button id="modeRandomise" onclick="setMode('randomise')">Randomise</button>
+      </div>
+    </div>
+
+    <div class="circuit-col">
+      <div class="circuit-panel" onclick="openModal()" title="Click to zoom">
+        <div class="panel-label">General negative-feedback model — settled (steady-state) values</div>
+        <div class="zoom-hint">
+          <svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.8" fill="none" />
+            <line x1="12.5" y1="12.5" x2="17" y2="17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            <line x1="6" y1="8" x2="10" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+            <line x1="8" y1="6" x2="8" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+          </svg>
+          Zoom
+        </div>
+        <svg id="circuitSvg" viewBox="-55 0 775 410" xmlns="http://www.w3.org/2000/svg"
+          font-family="'Share Tech Mono',monospace">
+
+          <!-- ════════════════════════════════════════════════════════════ -->
+          <!-- ── SIGNAL PATH AND FEEDBACK LINES ── -->
+          <!-- ════════════════════════════════════════════════════════════ -->
+          <line class="fb-path-line" x1="-45" y1="95" x2="10" y2="95" />
+          <line class="fb-path-line" x1="165" y1="95" x2="200" y2="95" />
+          <line class="fb-path-line" x1="355" y1="95" x2="390" y2="95" />
+          <line class="fb-path-line" x1="545" y1="95" x2="610" y2="95" />
+          <polyline class="fb-path-line" points="470,130 470,315 368,315" />
+          <polyline class="fb-path-line" points="220,315 90,315 90,138" />
+          <use href="#arrow-shape" transform="translate(10,95)" />
+          <use href="#arrow-shape" transform="translate(200,95)" />
+          <use href="#arrow-shape" transform="translate(390,95)" />
+          <use href="#arrow-shape" transform="translate(610,95)" />
+          <use href="#arrow-shape" transform="translate(370,315) scale(-1, 1)" />
+          <use href="#arrow-shape" transform="translate(90,138) rotate(270)" />
+
+          <!-- ════════════════════════════════════════════════════════════ -->
+          <!-- ── BLOCKS — summing network, amplifier, sampling network, feedback network ── -->
+          <!-- ════════════════════════════════════════════════════════════ -->
+          <g transform="translate(20,60)">  <!-- ══ Summing network ══ -->
+            <rect id="blkSum" class="fb-block" width="140" height="70" rx="4" />
+            <text class="fb-network-label" x="35" y="30">Summing</text>
+            <text class="fb-network-label" x="35" y="50">Network</text>
+          </g>
+          <g transform="translate(210,60)">  <!-- ══ Amplifier ══ -->
+            <polygon id="blkAmp" class="fb-block" points="0,-10 0,90 140,35" />
+            <text class="fb-network-label" x="14" y="40">Amplifier</text>
+          </g>
+          <g transform="translate(400,60)">  <!-- ══ Sampling network ══ -->
+            <rect class="fb-block" width="140" height="70" rx="4" />
+            <text class="fb-network-label" x="35" y="30">Sampling</text>
+            <text class="fb-network-label" x="35" y="50">Network</text>
+          </g>
+          <g transform="translate(220,280)">  <!-- ══ Feedback network ══ -->
+            <rect id="blkFb" class="fb-block" width="140" height="70" rx="4" />
+            <text class="fb-network-label" x="35" y="30">Feedback</text>
+            <text class="fb-network-label" x="35" y="50">Network</text>
+          </g>
+
+          <!-- ════════════════════════════════════════════════════════════ -->
+          <!-- ── GIVEN VALUES — always shown ── -->
+          <!-- ════════════════════════════════════════════════════════════ -->
+          <text x="-52" y="35" font-size="18" font-weight="bold"><tspan style="fill: var(--colour-voltage-label)">V<tspan baseline-shift="sub" font-size="14">in</tspan></tspan><tspan style="fill: var(--colour-text)"> = <tspan id="valVIN">0.500 V</tspan></tspan></text>
+          <text x="214" y="35" font-size="18" font-weight="bold"><tspan style="fill: var(--colour-gain)">A<tspan baseline-shift="sub" font-size="14">OL</tspan></tspan><tspan style="fill: var(--colour-text)"> = <tspan id="valAOL">1000</tspan><tspan id="valAOL2" visibility="hidden"> 500</tspan></tspan></text>
+          <text x="260" y="270" font-size="18" font-weight="bold"><tspan style="fill: var(--colour-bjt-labels)">β</tspan><tspan style="fill: var(--colour-text)"> = <tspan id="valBETA">0.1</tspan></tspan></text>
+
+          <!-- ════════════════════════════════════════════════════════════ -->
+          <!-- ── SETTLED VALUES — "label =" from the start; each question adds its result: the formula first -->
+          <!-- ── (Q1–Q5), then the numbers (Q6–Q9) on the same line. data-reveal = the question that shows it. ── -->
+          <!-- ════════════════════════════════════════════════════════════ -->
+          <text x="320" y="405" style="fill: var(--colour-label)" text-anchor="middle" font-size="14" font-style="italic">— settled values, revealed as you answer —</text>
+          <text x="100" y="235" font-size="18" font-weight="bold"><tspan style="fill: var(--colour-voltage-label)">V<tspan baseline-shift="sub" font-size="14">f</tspan></tspan><tspan style="fill: var(--colour-text)"> =</tspan><tspan data-reveal="0" visibility="hidden" style="fill: var(--colour-text)"> <tspan class="val">β × V<tspan baseline-shift="sub" font-size="14">out</tspan></tspan></tspan><tspan data-reveal="8" visibility="hidden" style="fill: var(--colour-text)"> = <tspan class="val" id="valVF">495 mV</tspan></tspan></text>
+          <text x="100" y="190" font-size="18" font-weight="bold"><tspan style="fill: var(--colour-voltage-label)">V<tspan baseline-shift="sub" font-size="14">err</tspan></tspan><tspan style="fill: var(--colour-text)"> =</tspan><tspan data-reveal="1" visibility="hidden" style="fill: var(--colour-text)"> <tspan class="val">V<tspan baseline-shift="sub" font-size="14">in</tspan> − V<tspan baseline-shift="sub" font-size="14">f</tspan></tspan></tspan><tspan data-reveal="8" visibility="hidden" style="fill: var(--colour-text)"> = <tspan class="val" id="valVERR">4.95 mV</tspan></tspan></text>
+          <text x="552" y="135" font-size="18" font-weight="bold"><tspan style="fill: var(--colour-voltage-label)">V<tspan baseline-shift="sub" font-size="14">out</tspan></tspan><tspan style="fill: var(--colour-text)"> =</tspan><tspan data-reveal="2" visibility="hidden" style="fill: var(--colour-text)"> <tspan class="val">A<tspan baseline-shift="sub" font-size="14">OL</tspan> × V<tspan baseline-shift="sub" font-size="14">err</tspan></tspan></tspan></text>
+          <text x="595" y="170" font-size="18" font-weight="bold"><tspan data-reveal="7" visibility="hidden" style="fill: var(--colour-text)">= <tspan class="val" id="valVOUT">4.95 V</tspan></tspan></text>
+          <text x="385" y="35" font-size="18" font-weight="bold"><tspan style="fill: var(--colour-gain)">A<tspan baseline-shift="sub" font-size="14">CL</tspan></tspan><tspan style="fill: var(--colour-text)"> =</tspan><tspan data-reveal="4" visibility="hidden" style="fill: var(--colour-text)"> <tspan class="val">A<tspan baseline-shift="sub" font-size="14">OL</tspan> / (1 + A<tspan baseline-shift="sub" font-size="14">OL</tspan>β)</tspan></tspan><tspan data-reveal="6" visibility="hidden" style="fill: var(--colour-text)"> = <tspan class="val" id="valACL">9.90</tspan></tspan></text>
+          <!-- Q10: the new closed-loop gain goes under the old one; the old value gets struck through (see RENDER_EXTRA) -->
+          <text x="597" y="55" font-size="18" font-weight="bold"><tspan data-reveal="9" visibility="hidden" style="fill: var(--colour-text)">= <tspan class="val" id="valACL2">9.8</tspan></tspan></text>
+          <text x="225" y="375" font-size="18" font-weight="bold"><tspan style="fill: var(--colour-gain)">A<tspan baseline-shift="sub" font-size="14">OL</tspan>β</tspan><tspan style="fill: var(--colour-text)"> =</tspan><tspan data-reveal="3" visibility="hidden" style="fill: var(--colour-text)"> <tspan class="val">A<tspan baseline-shift="sub" font-size="14">OL</tspan> × β</tspan></tspan><tspan data-reveal="5" visibility="hidden" style="fill: var(--colour-text)"> = <tspan class="val" id="valLG">100</tspan></tspan></text>
+
+          <g id="xyRuler" display="none"></g>
+        </svg>
+      </div>
+    </div>
+
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+          <div class="options" id="qOptions"></div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="diagram-modal" id="diagramModal" onclick="handleModalClick(event)">
+      <div class="modal-inner" id="modalInner">
+        <div class="modal-header">
+          <span class="modal-title" id="modalTitle">General negative-feedback model</span>
+          <button class="modal-close" onclick="closeModal()">✕ Close</button>
+        </div>
+        <svg id="modalSvg" viewBox="-55 0 775 380" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ══════════════════════════════════════════════════════════════════════
+    // VALUES — V: independent values; D: derived (recompute())
+    // ══════════════════════════════════════════════════════════════════════
+    const EXAMPLE_SETS = {
+      example1: { aol: 1000, beta: 0.1, vin: 0.5 },
+      example2: { aol: 200, beta: 0.05, vin: 0.2 },
+      example3: { aol: 10000, beta: 0.01, vin: 0.1 },
+    };
+    const AOL_POOL = [100, 200, 500, 1000, 2000, 5000, 10000, 50000];
+    const BETA_POOL = [0.01, 0.02, 0.05, 0.1, 0.2, 0.25, 0.5];
+    const VIN_POOL = [0.05, 0.1, 0.2, 0.5, 1.0];
+    function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
+
+    let V = {}, D = {}, quizMode = 'example1';
+
+    // Retries until the loop gain is comfortably large (so A_CL ≈ 1/β is a fair approximation)
+    // and the settled output stays within a believable ±12 V.
+    function randomValues() {
+      for (let attempt = 0; attempt < 100; attempt++) {
+        const v = { aol: pick(AOL_POOL), beta: pick(BETA_POOL), vin: pick(VIN_POOL) };
+        const lg = v.aol * v.beta, acl = v.aol / (1 + lg);
+        if (lg < 20) continue;
+        if (acl * v.vin > 12 || acl * v.vin < 0.2) continue;
+        return v;
+      }
+      return { ...EXAMPLE_SETS.example1 };
+    }
+
+    function recompute() {
+      D.LG = V.aol * V.beta;                  // loop gain
+      D.K = 1 + D.LG;
+      D.ACL = V.aol / D.K;
+      D.VOUT = D.ACL * V.vin;
+      D.VF = V.beta * D.VOUT;
+      D.VERR = V.vin - D.VF;
+      D.IDEAL = 1 / V.beta;                   // the large-loop-gain approximation
+      D.PCT = 100 / D.K;                      // how far below 1/β the exact A_CL sits
+      D.AOL2 = V.aol / 2;                     // open-loop gain drifts to half
+      D.ACL2 = D.AOL2 / (1 + D.AOL2 * V.beta);
+    }
+
+    // ── formatting ──
+    function sig3(x) { return parseFloat(Number(x).toPrecision(3)); }
+    function fmtG(x) { return x >= 1000 ? Math.round(x).toLocaleString('en-US') : String(sig3(x)); }
+    function fmtV(x) { const a = Math.abs(x); return a >= 1 ? sig3(x) + ' V' : a >= 0.001 ? sig3(x * 1000) + ' mV' : sig3(x * 1e6) + ' µV'; }
+    function fmtBeta(b) { return String(b); }
+    function distinct(correctLabel, wrongs, fmt) {
+      const used = new Set([correctLabel]);
+      return wrongs.map(w => {
+        let val = w, label = fmt(val), tries = 0;
+        while (used.has(label) && tries < 40) { val = w * (1 + 0.15 * (tries + 1)); label = fmt(val); tries++; }
+        used.add(label);
+        return { val, label };
+      });
+    }
+
+    function refreshLabels() {
+      document.getElementById('valVIN').textContent = fmtV(V.vin);
+      document.getElementById('valAOL').textContent = fmtG(V.aol);
+      document.getElementById('valBETA').textContent = fmtBeta(V.beta);
+    }
+
+    function setMode(mode) {
+      quizMode = mode;
+      V = (mode === 'randomise') ? randomValues() : { ...EXAMPLE_SETS[mode] };
+      recompute();
+      refreshLabels();
+      clearRevealHighlights();
+      ['example1', 'example2', 'example3', 'randomise'].forEach(m => {
+        const b = document.getElementById('mode' + m.charAt(0).toUpperCase() + m.slice(1));
+        if (b) b.classList.toggle('active', m === mode);
+      });
+      resetQuiz();
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS
+    // ══════════════════════════════════════════════════════════════════════
+    const cV = s => `<b class="colour-voltage">${s}</b>`;
+    const cG = s => `<b class="colour-gain">${s}</b>`;
+    const cB = s => `<b class="colour-bjt">${s}</b>`;
+    const VIN = cV('V<sub>in</sub>'), VOUT = cV('V<sub>out</sub>'), VF = cV('V<sub>f</sub>'), VERR = cV('V<sub>err</sub>');
+    const AOL = cG('A<sub>OL</sub>'), ACL = cG('A<sub>CL</sub>'), LG = cG('A<sub>OL</sub>β'), BETA = cB('β');
+
+    const QUESTIONS = [
+      // 1 ── Vf
+      {
+        text: () => `The system has settled, so nothing is changing any more. The feedback network samples ${VOUT} and returns a fraction ${BETA} of it. What is the feedback voltage ${VF}?`,
+        hint: () => `${BETA} is the fraction of the output that comes back.`,
+        options: () => shuffle([
+          { label: `${VF} = ${BETA} × ${VOUT}`, type: 'correct' },
+          { label: `${VF} = ${frac(VOUT, BETA)}`, type: 'wrong' },
+          { label: `${VF} = ${VIN} − ${VOUT}`, type: 'wrong' },
+          { label: `${VF} = ${AOL} × ${VOUT}`, type: 'wrong' },
+        ]),
+        correctExplain: () => `${VF} = ${BETA} × ${VOUT}`,
+        working: () => `
+    <div class="working-line">${BETA} is defined as the fraction of the output fed back: ${BETA} = ${frac(VF, VOUT)}. Rearranged:</div>
+    <div class="working-formula-row">${VF} = ${BETA} × ${VOUT}</div>
+    <div class="working-total">${VF} = <span class="cr">β × V<sub>out</sub></span> — always <i>smaller</i> than ${VOUT}, since β is a fraction (0 &lt; β &lt; 1) for a passive feedback network.</div>`
+      },
+      // 2 ── Verr
+      {
+        text: () => `At the summing network the input ${VIN} meets the feedback voltage ${VF}. The feedback is <i>negative</i>. What error voltage ${VERR} does the amplifier actually receive?`,
+        hint: () => `Negative feedback works against the input.`,
+        options: () => shuffle([
+          { label: `${VERR} = ${VIN} − ${VF}`, type: 'correct' },
+          { label: `${VERR} = ${VIN} + ${VF}`, type: 'wrong' },
+          { label: `${VERR} = ${VIN} × ${VF}`, type: 'wrong' },
+          { label: `${VERR} = ${VF} − ${VIN}`, type: 'wrong' },
+        ]),
+        correctExplain: () => `${VERR} = ${VIN} − ${VF}`,
+        working: () => `
+    <div class="working-line">The summing network <i>subtracts</i> the fed-back signal from the input — that is what makes the feedback negative:</div>
+    <div class="working-formula-row">${VERR} = ${VIN} − ${VF}</div>
+    <div class="working-total">Adding ${VF} instead would be <i>positive</i> feedback: the output would reinforce itself instead of being held in check. Reversing the order gives the right size but the wrong sign.</div>`
+      },
+      // 3 ── Vout = A(Vin − βVout)
+      {
+        text: () => `The amplifier multiplies its error input by ${AOL}. Write ${VOUT} using ${VERR} = ${VIN} − ${VF} and ${VF} = ${BETA} × ${VOUT}. (The settled output appears on both sides.)`,
+        hint: () => `Start from what the amplifier does to its input, then replace the error voltage using the two relationships above.`,
+        options: () => shuffle([
+          { label: `${VOUT} = ${AOL} × (${VIN} − ${BETA} × ${VOUT})`, type: 'correct' },
+          { label: `${VOUT} = ${AOL} × (${VIN} + ${BETA} × ${VOUT})`, type: 'wrong' },
+          { label: `${VOUT} = ${AOL} × ${VIN} − ${BETA} × ${VOUT}`, type: 'wrong' },
+          { label: `${VOUT} = ${frac(`${VIN} − ${BETA} × ${VOUT}`, AOL)}`, type: 'wrong' },
+        ]),
+        correctExplain: () => `${VOUT} = ${AOL} × (${VIN} − ${BETA} × ${VOUT})`,
+        working: () => `
+    <div class="working-formula-row">${VOUT} = ${AOL} × ${VERR} = ${AOL} × (${VIN} − ${VF}) = ${AOL} × (${VIN} − ${BETA} × ${VOUT})</div>
+    <div class="working-total">The settled ${VOUT} is the output the amplifier makes from the error that ${VOUT} itself helped create. The ${AOL} multiplies the <i>whole</i> bracket (not just ${VIN}) and multiplies — not divides.</div>`
+      },
+      // 4 ── collect terms
+      {
+        text: () => `Start from ${VOUT} = ${AOL}(${VIN} − ${BETA}${VOUT}). Multiply out and collect every ${VOUT} term on the left. What do you get?`,
+        hint: () => `Multiply out the bracket first, then gather the ${VOUT} terms on one side of the equals sign.`,
+        options: () => shuffle([
+          { label: `${VOUT} × (1 + ${LG}) = ${AOL} × ${VIN}`, type: 'correct' },
+          { label: `${VOUT} × (1 − ${LG}) = ${AOL} × ${VIN}`, type: 'wrong' },
+          { label: `${VOUT} × (${AOL} + ${BETA}) = ${VIN}`, type: 'wrong' },
+          { label: `${VOUT} = ${AOL} × ${VIN} × (1 + ${BETA})`, type: 'wrong' },
+        ]),
+        correctExplain: () => `${VOUT} × (1 + ${LG}) = ${AOL} × ${VIN}`,
+        working: () => `
+    <div class="working-formula-row">${VOUT} = ${AOL}${VIN} − ${AOL}${BETA}${VOUT}</div>
+    <div class="working-formula-row">${VOUT} + ${AOL}${BETA}${VOUT} = ${AOL}${VIN}</div>
+    <div class="working-formula-row">${VOUT} × (1 + ${LG}) = ${AOL} × ${VIN}</div>
+    <div class="working-total">Moving the term across changes its sign, so it <i>adds</i> to ${VOUT} on the left — a minus here would be a sign error. This ${LG} is the <b>loop gain</b>.</div>`
+      },
+      // 5 ── ACL formula
+      {
+        text: () => `Divide both sides by ${VIN} and by (1 + ${LG}). What is the closed-loop gain ${ACL} = ${VOUT} / ${VIN}?`,
+        hint: () => `This is the general feedback equation from the equation sheet.`,
+        options: () => shuffle([
+          { label: `${ACL} = ${frac(AOL, `1 + ${LG}`)}`, type: 'correct' },
+          { label: `${ACL} = ${frac(AOL, `1 − ${LG}`)}`, type: 'wrong' },
+          { label: `${ACL} = ${AOL} × (1 + ${LG})`, type: 'wrong' },
+          { label: `${ACL} = ${frac(LG, `1 + ${LG}`)}`, type: 'wrong' },
+        ]),
+        correctExplain: () => `${ACL} = ${AOL} / (1 + ${AOL}β)`,
+        working: () => `
+    <div class="working-formula-row">${ACL} = ${frac(VOUT, VIN)} = ${frac(AOL, `1 + ${LG}`)}</div>
+    <div class="working-total">${ACL} = <span class="cr">A<sub>OL</sub> / (1 + A<sub>OL</sub>β)</span> — this is the closed-loop gain equation from the exam sheet. Because the bottom is always bigger than 1, ${ACL} is always <i>smaller</i> than ${AOL}: feedback trades gain for stability.</div>`
+      },
+      // 6 ── loop gain
+      {
+        text: () => `Now the numbers: ${AOL} = ${fmtG(V.aol)} and ${BETA} = ${V.beta}. What is the loop gain ${LG}, and what is (1 + ${LG})?`,
+        hint: () => `Multiply ${AOL} by ${BETA}, then add 1.`,
+        options: () => {
+          const c = `${fmtG(D.LG)} and ${fmtG(D.K)}`;
+          const w = distinct(c, [D.LG + 1, V.aol / V.beta, V.aol + V.beta], x => fmtG(x));
+          return shuffle([
+            { label: `${LG} = ${fmtG(V.aol)} × ${V.beta} = ${fmtG(D.LG)}, so 1 + ${LG} = ${fmtG(D.K)}`, type: 'correct' },
+            { label: `${LG} = ${fmtG(V.aol)} × ${V.beta} = ${fmtG(D.LG)}, so 1 + ${LG} = ${fmtG(D.LG)} (the 1 is negligible)`, type: 'wrong' },
+            { label: `${LG} = ${fmtG(V.aol)} ÷ ${V.beta} = ${fmtG(V.aol / V.beta)}, so 1 + ${LG} = ${fmtG(V.aol / V.beta + 1)}`, type: 'wrong' },
+            { label: `${LG} = ${fmtG(V.aol)} + ${V.beta} = ${fmtG(V.aol + V.beta)}, so 1 + ${LG} = ${fmtG(V.aol + V.beta + 1)}`, type: 'wrong' },
+          ]);
+        },
+        correctExplain: () => `${LG} = ${fmtG(D.LG)}, 1 + ${LG} = ${fmtG(D.K)}`,
+        working: () => `
+    <div class="working-formula-row">${LG} = ${fmtG(V.aol)} × ${V.beta} = ${fmtG(D.LG)}</div>
+    <div class="working-total">1 + ${LG} = 1 + ${fmtG(D.LG)} = <span class="cr">${fmtG(D.K)}</span>. The loop gain is a <i>product</i>, and the "1" is only negligible when the loop gain is huge — here it still shifts the answer by about ${sig3(D.PCT)}%.</div>`
+      },
+      // 7 ── ACL numeric
+      {
+        text: () => `Calculate the closed-loop gain ${ACL}.`,
+        hint: () => `Use the equation you just derived, with the loop-gain figure from the last question.`,
+        options: () => {
+          const c = fmtG(D.ACL);
+          const w = distinct(c, [V.aol / D.LG, V.aol * D.K, D.LG / D.K], fmtG);
+          return shuffle([
+            { label: `${ACL} = ${frac(fmtG(V.aol), fmtG(D.K))} ≈ ${c}`, type: 'correct' },
+            { label: `${ACL} = ${frac(fmtG(V.aol), fmtG(D.LG))} ≈ ${w[0].label}`, type: 'wrong' },
+            { label: `${ACL} = ${fmtG(V.aol)} × ${fmtG(D.K)} ≈ ${w[1].label}`, type: 'wrong' },
+            { label: `${ACL} = ${frac(fmtG(D.LG), fmtG(D.K))} ≈ ${w[2].label}`, type: 'wrong' },
+          ]);
+        },
+        correctExplain: () => `${ACL} ≈ ${fmtG(D.ACL)}`,
+        working: () => `
+    <div class="working-formula-row">${ACL} = ${frac(AOL, `1 + ${LG}`)} = ${frac(fmtG(V.aol), fmtG(D.K))}</div>
+    <div class="working-total">${ACL} ≈ <span class="cr">${fmtG(D.ACL)}</span> — from an amplifier of gain ${fmtG(V.aol)}. Dividing by ${fmtG(D.LG)} (forgetting the 1) would give ${fmtG(V.aol / D.LG)}: close, but not exact.</div>`
+      },
+      // 8 ── Vout
+      {
+        text: () => `With ${VIN} = ${fmtV(V.vin)}, what is the settled output voltage ${VOUT}?`,
+        hint: () => `The closed-loop gain tells you how many times bigger the output is than the input.`,
+        options: () => {
+          const c = fmtV(D.VOUT);
+          const w = distinct(c, [V.aol * V.vin, V.vin / V.beta, V.vin * D.K], fmtV);
+          return shuffle([
+            { label: `${VOUT} = ${ACL} × ${VIN} = ${fmtG(D.ACL)} × ${fmtV(V.vin)} ≈ ${c}`, type: 'correct' },
+            { label: `${VOUT} = ${AOL} × ${VIN} = ${fmtG(V.aol)} × ${fmtV(V.vin)} ≈ ${w[0].label}`, type: 'wrong' },
+            { label: `${VOUT} = ${frac(VIN, BETA)} = ${frac(fmtV(V.vin), V.beta)} ≈ ${w[1].label}`, type: 'wrong' },
+            { label: `${VOUT} = ${VIN} × (1 + ${LG}) = ${fmtV(V.vin)} × ${fmtG(D.K)} ≈ ${w[2].label}`, type: 'wrong' },
+          ]);
+        },
+        correctExplain: () => `${VOUT} ≈ ${fmtV(D.VOUT)}`,
+        working: () => `
+    <div class="working-formula-row">${VOUT} = ${ACL} × ${VIN} = ${fmtG(D.ACL)} × ${fmtV(V.vin)}</div>
+    <div class="working-total">${VOUT} ≈ <span class="cr">${fmtV(D.VOUT)}</span>. Using ${AOL} directly would predict ${fmtV(V.aol * V.vin)} — a huge, impossible figure; feedback is what holds the output down. ${VIN}/${BETA} = ${fmtV(D.IDEAL * V.vin)} is the quick approximation, close but slightly high.</div>`
+      },
+      // 9 ── settled Vf and Verr
+      {
+        text: () => `Check it. With ${VOUT} = ${fmtV(D.VOUT)} settled, what are the feedback voltage ${VF} and the error voltage ${VERR}?`,
+        hint: () => `Work forwards from the settled output: first what the feedback network returns, then what is left at the summing network.`,
+        options: () => {
+          const c = `${fmtV(D.VF)} and ${fmtV(D.VERR)}`;
+          const swapped = `${fmtV(D.VERR)} and ${fmtV(D.VF)}`;
+          const w1 = `${fmtV(D.VF)} and ${fmtV(V.vin + D.VF)}`;
+          const w2 = `${fmtV(D.VOUT / V.beta)} and ${fmtV(V.vin - D.VOUT / V.beta)}`;
+          return shuffle([
+            { label: `${VF} = ${BETA} × ${VOUT} = ${V.beta} × ${fmtV(D.VOUT)} = ${fmtV(D.VF)}, then ${VERR} = ${fmtV(V.vin)} − ${fmtV(D.VF)} = ${fmtV(D.VERR)}`, type: 'correct' },
+            { label: `${VF} = ${fmtV(D.VERR)}, ${VERR} = ${fmtV(D.VF)} (the two swapped)`, type: 'wrong' },
+            { label: `${VF} = ${fmtV(D.VF)}, ${VERR} = ${VIN} + ${VF} = ${fmtV(V.vin + D.VF)} (added, not subtracted)`, type: 'wrong' },
+            { label: `${VF} = ${VOUT} / ${BETA} = ${fmtV(D.VOUT / V.beta)}, ${VERR} = ${fmtV(V.vin - D.VOUT / V.beta)} (divided by ${BETA})`, type: 'wrong' },
+          ]);
+        },
+        correctExplain: () => `${VF} = ${fmtV(D.VF)}, ${VERR} = ${fmtV(D.VERR)}`,
+        working: () => `
+    <div class="working-formula-row">${VF} = ${BETA} × ${VOUT} = ${V.beta} × ${fmtV(D.VOUT)} = <b>${fmtV(D.VF)}</b></div>
+    <div class="working-formula-row">${VERR} = ${VIN} − ${VF} = ${fmtV(V.vin)} − ${fmtV(D.VF)} = <b>${fmtV(D.VERR)}</b></div>
+    <div class="working-total">Check: ${AOL} × ${VERR} = ${fmtG(V.aol)} × ${fmtV(D.VERR)} = <span class="cr">${fmtV(V.aol * D.VERR)}</span> = ${VOUT} ✓. And notice the pattern: ${VF} ≈ ${VIN} — the feedback voltage has risen until it almost cancels the input, leaving only a tiny error. That is what "settled" means, and why ${ACL} ≈ 1/${BETA}.</div>`
+      },
+      // 10 ── A drifts
+      {
+        text: () => `The open-loop gain drifts down to half its value (${AOL} = ${fmtG(D.AOL2)}). What is the new closed-loop gain ${ACL}?`,
+        hint: () => `Use the same equation with the new ${AOL}. Does ${ACL} halve too?`,
+        options: () => {
+          const c = fmtG(D.ACL2);
+          const w = distinct(c, [D.ACL / 2, D.ACL, D.AOL2 / D.LG], fmtG);
+          return shuffle([
+            { label: `${ACL} = ${frac(fmtG(D.AOL2), `1 + ${fmtG(D.AOL2)} × ${V.beta}`)} = ${frac(fmtG(D.AOL2), fmtG(1 + D.AOL2 * V.beta))} ≈ ${c}`, type: 'correct' },
+            { label: `${ACL} = ${frac(fmtG(D.ACL), '2')} ≈ ${w[0].label} (it halves with ${AOL})`, type: 'wrong' },
+            { label: `${ACL} ≈ ${w[1].label} (unchanged, exactly)`, type: 'wrong' },
+            { label: `${ACL} = ${frac(fmtG(D.AOL2), fmtG(D.LG))} ≈ ${w[2].label}`, type: 'wrong' },
+          ]);
+        },
+        correctExplain: () => `${ACL} ≈ ${fmtG(D.ACL2)} (was ${fmtG(D.ACL)})`,
+        working: () => `
+    <div class="working-formula-row">${ACL} = ${frac(fmtG(D.AOL2), `1 + ${fmtG(D.AOL2)} × ${V.beta}`)} = ${frac(fmtG(D.AOL2), fmtG(1 + D.AOL2 * V.beta))}</div>
+    <div class="working-total">${ACL} ≈ <span class="cr">${fmtG(D.ACL2)}</span> — down from ${fmtG(D.ACL)}, a change of only ${sig3((D.ACL - D.ACL2) / D.ACL * 100)}% for a 50% fall in ${AOL}. That is the real benefit of negative feedback: the gain depends almost entirely on ${BETA} (a couple of resistors), not on the amplifier itself.</div>`
+      },
+    ];
+    QUESTIONS.forEach(q => { q.leftPanel = 'circuit'; });
+
+    // ── focus: the block each early question is about gets a green outline ──
+    const FOCUS = { 0: 'blkFb', 1: 'blkSum', 2: 'blkAmp' };
+
+    // ── reveal: every badge shows "label =" from the start; each question adds its result to the
+    // diagram — the formula first (Q1–Q5), then the numbers (Q6–Q9) on the same line. A tspan with
+    // data-reveal="n" appears when question n+1 is answered; the highlighter-marker rect goes behind
+    // its .val part only (measured from glyph extents, built once per mode, re-measured when fonts
+    // load; setMode() clears them). ──
+    const HL_PAD_Y = -2;
+    const HL_PAD_RIGHT = -2;
+    function buildHighlight(val) {
+      if (val._hl) return;
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (let i = 0; i < val.getNumberOfChars(); i++) {
+        const e = val.getExtentOfChar(i);
+        if (!e.width && !e.height) continue;
+        x0 = Math.min(x0, e.x); y0 = Math.min(y0, e.y);
+        x1 = Math.max(x1, e.x + e.width); y1 = Math.max(y1, e.y + e.height);
+      }
+      if (x0 === Infinity) return;
+      const w = x1 - x0;
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      rect.setAttribute('class', 'value-hl');
+      rect.setAttribute('x', x0);
+      rect.setAttribute('y', y0 - HL_PAD_Y);
+      rect.setAttribute('width', w - Math.min(-HL_PAD_RIGHT, w * 0.15));
+      rect.setAttribute('height', (y1 - y0) + HL_PAD_Y * 2);
+      rect.setAttribute('rx', 3);
+      rect.style.fill = 'var(--colour-highlight)';
+      const txt = val.closest('text');
+      txt.parentNode.insertBefore(rect, txt);   // rect can't live inside <text>; sit just behind it
+      val._hl = rect;
+    }
+    function showReveal(span, on) {
+      span.setAttribute('visibility', on ? 'visible' : 'hidden');
+      const val = span.querySelector('.val');
+      if (on) buildHighlight(val);
+      if (val._hl) val._hl.setAttribute('display', on ? 'inline' : 'none');
+    }
+    function clearRevealHighlights() {
+      document.querySelectorAll('#circuitSvg rect.value-hl').forEach(r => r.remove());
+      document.querySelectorAll('#circuitSvg .val').forEach(v => { v._hl = null; });
+    }
+
+    RENDER_EXTRA = () => {
+      const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+      // values first, so a highlight is measured against the final text
+      set('valLG', fmtG(D.LG)); set('valACL', fmtG(D.ACL)); set('valACL2', fmtG(D.ACL2)); set('valVOUT', fmtV(D.VOUT)); set('valVF', fmtV(D.VF)); set('valVERR', fmtV(D.VERR));
+      document.querySelectorAll('#circuitSvg [data-reveal]').forEach(sp => showReveal(sp, !!(Q[+sp.dataset.reveal] && Q[+sp.dataset.reveal].ans)));
+      // Q10 asked (not yet answered): the original A_OL is struck through and the drifted value sits after it
+      const onQ10 = cur === 9;
+      set('valAOL2', ' ' + fmtG(D.AOL2));
+      document.getElementById('valAOL').setAttribute('text-decoration', onQ10 ? 'line-through' : 'none');
+      document.getElementById('valAOL2').setAttribute('visibility', onQ10 ? 'visible' : 'hidden');
+      // Q10 answered: the old A_CL value is struck through, the new one sits below it
+      document.getElementById('valACL').setAttribute('text-decoration', Q[9] && Q[9].ans ? 'line-through' : 'none');
+      ['blkFb', 'blkSum', 'blkAmp'].forEach(id => document.getElementById(id).classList.toggle('focus', FOCUS[cur] === id));
+    };
+
+    // Highlights are measured from glyph extents, which shift when the web font arrives.
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { clearRevealHighlights(); RENDER_EXTRA(); });
+
+    // Summary: the values used, above the per-question review.
+    SUMMARY_CIRCUIT_REF = { id: '', label: '', viewBox: '' };
+    SUMMARY_EXTRA = () => {
+      const box = `<div style="border:1px solid var(--colour-border);border-radius:4px;padding:.9rem 1.2rem;margin-bottom:1.2rem;font-size:.82rem;line-height:2.2;">
+        ${AOL} = ${fmtG(V.aol)} &nbsp; ${BETA} = ${V.beta} &nbsp; ${VIN} = ${fmtV(V.vin)}<br>
+        ${LG} = ${fmtG(D.LG)} &nbsp; ${ACL} = ${fmtG(D.ACL)} &nbsp; ${VOUT} = ${fmtV(D.VOUT)} &nbsp; ${VF} = ${fmtV(D.VF)} &nbsp; ${VERR} = ${fmtV(D.VERR)}
+      </div>`;
+      document.getElementById('summaryContent').insertAdjacentHTML('afterbegin', box);
+    };
+
+    initQuizNav();
+    setMode('example1');
+    initQuizFromURL();
+    // Highlights are measured from glyph extents, which shift when the web font arrives.
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { clearRevealHighlights(); RENDER_EXTRA(); });
+  </script>
+</body>
+
+</html>
