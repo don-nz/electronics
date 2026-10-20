@@ -110,6 +110,22 @@
     bjt_knowledge_ac_params_formulas.html's own Zout question (one formula
     assigned to 3 circuits at once).
 
+  - `order: true` — "put the steps in order": a kind:'match' whose columns are
+    the numbered slots ("Step 1" ... "Step n") and whose chips are the steps.
+    Grading is FAIR rather than a single fixed sequence: each option carries a
+    `key` and `after: [keys]` (the steps it needs first), and an order is
+    correct when every step sits alone in a slot AND in a later slot than
+    everything it `after`-depends on — so two independent steps may swap.
+    `col` (the slot in one canonical valid order) is still given on each
+    option: it feeds the answer key and fast-forward, not the grading.
+    Optional `numbered: true` drops the slot boxes altogether: just the list of
+    steps, and clicking one gives it the next number (1, 2, 3 ...) shown beside
+    it; clicking a numbered step takes its number back and closes the gap. Same
+    state (`st.place` = slot index) and the same grading either way — add
+    `keepPicker: true` to keep the coloured numbered list after Check.
+    Optional `matchMaxCols` sets the column-grid width of the slot boxes
+    (default 4, 2 on phones). See orderChipOk(). First used by coupling_circuit_analysis.html Q1.
+
   Shape-based rendering (leftPanel:'shapeGrid' cells, match column titles,
   match:'shapeId' chips) uses two configurable globals, `SHAPE_VIEWBOX` and
   `MATCH_COL_TITLE_MAX_WIDTH` — override them in your own inline script
@@ -268,6 +284,18 @@ function isUnanswered(data, st) {
   return isMulti(data) ? st.sel.length === 0 : st.sel === null;
 }
 
+// kind:'match' + order:true — is step i placed alone in its slot, with every
+// step it depends on (opt.after = [keys]) sitting in an EARLIER slot?
+function orderChipOk(st, i) {
+  const p = st.place[i];
+  if (p === null) return false;
+  if (st.opts.filter((_, k) => st.place[k] === p).length !== 1) return false;
+  return (st.opts[i].after || []).every(key => {
+    const k = st.opts.findIndex(o => o.key === key);
+    return k !== -1 && st.place[k] !== null && st.place[k] < p;
+  });
+}
+
 function isAnswerCorrect(data, st) {
   if (isBits(data)) return st.clicks.every((row, r) => row.every((n, c) => bitFromClicks(n) === st.cor[r][c]));
   if (isTruth(data)) return st.clicks.every((n, r) => zFromClicks(n) === st.cor[r]);
@@ -281,6 +309,7 @@ function isAnswerCorrect(data, st) {
   if (isMatch(data)) {
     if (data.reusablePool) return st.assign.every((_, c) => isColumnCorrectReusable(st, c));
     if (data.matchByLabel) return st.corLabel.every((_, c) => matchColumnCorrect(st, c));
+    if (data.order) return st.opts.every((_, i) => orderChipOk(st, i));
     return st.place.every((p, i) => p === st.cor[i]);
   }
   if (!isMulti(data)) return st.sel === st.cor;
@@ -313,6 +342,7 @@ function selectedLabel(data, st) {
       const correctCount = st.corLabel.filter((_, c) => matchColumnCorrect(st, c)).length;
       return `${correctCount} / ${st.corLabel.length} correctly placed`;
     }
+    if (data.order) return `${st.opts.filter((_, i) => orderChipOk(st, i)).length} / ${st.opts.length} steps in a valid place`;
     const correctCount = st.place.filter((p, i) => p === st.cor[i]).length;
     return `${correctCount} / ${st.opts.length} correctly sorted`;
   }
@@ -438,8 +468,50 @@ function matchChipContent(opt, constrained, viewBox) {
   return `<svg viewBox="${viewBox || SHAPE_VIEWBOX}" style="${svgStyle}"><use href="#${opt.shapeId}"/></svg>`;
 }
 
+// kind:'match' + order:true + numbered:true — no slot boxes: click a step to
+// give it the next number, click a numbered step to take its number back (the
+// later numbers close up). st.place[i] is still the 0-based slot, so grading,
+// the answer key and fast-forward all work unchanged.
+function renderOrderList() {
+  const st = Q[cur], data = QUESTIONS[cur];
+  document.getElementById('matchColumns').style.display = 'none';
+  const nothingYet = st.place.every(p => p === null);
+  document.getElementById('matchPoolRow').classList.toggle('needs-pick', !st.ans && nothingYet);
+  const pool = document.getElementById('matchPool');
+  pool.classList.toggle('needs-pick', !st.ans && nothingYet);
+  pool.innerHTML = '';
+  st.opts.forEach((opt, i) => {
+    const chip = document.createElement('button');
+    const placed = st.place[i] !== null;
+    chip.className = 'match-chip order-chip' + (placed ? ' picked' : '');
+    chip.innerHTML = `<span class="order-num${placed ? ' set' : ''}">${placed ? st.place[i] + 1 : ''}</span>${opt.label}`;
+    if (st.ans) {
+      chip.disabled = true;
+      chip.classList.remove('picked');
+      chip.classList.add(orderChipOk(st, i) ? 'correct' : 'wrong');
+    } else {
+      chip.addEventListener('click', (e) => { e.stopPropagation(); orderToggle(i); });
+    }
+    pool.appendChild(chip);
+  });
+}
+
+function orderToggle(i) {
+  const st = Q[cur];
+  if (st.ans) return;
+  if (st.place[i] === null) {
+    st.place[i] = st.place.filter(p => p !== null).length;   // next number
+  } else {
+    const n = st.place[i];
+    st.place[i] = null;
+    st.place.forEach((p, k) => { if (p !== null && p > n) st.place[k] = p - 1; });   // close the gap
+  }
+  renderQuestion();
+}
+
 function renderMatch() {
   const st = Q[cur], data = QUESTIONS[cur];
+  if (data.order && data.numbered) return renderOrderList();
   const cols = data.columns();
 
   const picking = st.sel !== null;
@@ -469,7 +541,8 @@ function renderMatch() {
 
   const colsEl = document.getElementById('matchColumns');
   colsEl.innerHTML = '';
-  const maxCols = window.innerWidth < 500 ? 2 : 4;
+  colsEl.style.display = '';   // a numbered-order question may have hidden it
+  const maxCols = window.innerWidth < 500 ? 2 : (data.matchMaxCols || 4);
   colsEl.style.gridTemplateColumns = `repeat(${Math.min(cols.length, maxCols)}, 1fr)`;
   cols.forEach((col, colIdx) => {
     const colDiv = document.createElement('div');
@@ -488,7 +561,7 @@ function renderMatch() {
       chip.innerHTML = matchChipContent(opt, true, data.shapeViewBox);
       if (st.ans) {
         chip.disabled = true;
-        chip.classList.add(st.place[i] === st.cor[i] ? 'correct' : 'wrong');
+        chip.classList.add((data.order ? orderChipOk(st, i) : st.place[i] === st.cor[i]) ? 'correct' : 'wrong');
       } else {
         chip.disabled = picking;
         if (!chip.disabled) chip.addEventListener('click', (e) => { e.stopPropagation(); unassignItem(i); });
@@ -527,6 +600,7 @@ function selectPoolItem(i) {
 function assignToColumn(colIdx) {
   const st = Q[cur];
   if (st.ans || st.sel === null) return;
+  if (QUESTIONS[cur].order && st.place.includes(colIdx)) return;   // order mode: one step per slot — send the occupant back first
   st.place[st.sel] = colIdx;
   st.sel = null;
   renderQuestion();
@@ -946,7 +1020,7 @@ function answerKeyHtml(data, st) {
   let groups = '';
   let heading = '';
   if (isMatch(data)) {
-    heading = 'Where each one belongs';
+    heading = data.order ? 'One valid order' : 'Where each one belongs';
     const cols = data.columns();
     cols.forEach((c, ci) => {
       const here = st.opts.map((o, i) => ({ o, i })).filter(({ o }) => data.reusablePool ? (o.cols || []).includes(ci) : o.col === ci);
@@ -960,6 +1034,7 @@ function answerKeyHtml(data, st) {
           return matchColumnCorrect(st, ci) ? 'correct' : (placedHere === 0 ? 'missed' : 'wrong');
         }
         const placed = st.place[i];
+        if (data.order) return placed === null ? 'missed' : (orderChipOk(st, i) ? 'correct' : 'wrong');
         return placed === null ? 'missed' : (placed === ci ? 'correct' : 'wrong');
       };
       groups += list(colTitle(c), here.map(({ o, i }) => item(o, i, status(i))));
@@ -1379,6 +1454,11 @@ function printAnswerArea(data, st) {
       h += '<tr>' + row.inputs.map(v => `<td>${v}</td>`).join('') + '<td class="print-cell"></td>' + (row.trailing || []).map(v => `<td>${v === null ? '' : v}</td>`).join('') + '</tr>';
     });
     return h + '</tbody></table>';
+  }
+  if (isMatch(data) && data.order) {
+    // ordering question: 18+ slot columns would run off the page, so print the steps as a list,
+    // each with an empty box to write its step number in
+    return `<div class="print-slots">${st.opts.map(o => `<span class="print-slot"><span class="print-box" style="min-width:1.8em;height:1.4em"></span> ${o.label}</span>`).join('')}</div>`;
   }
   if (isMatch(data)) {
     const cols = data.columns();

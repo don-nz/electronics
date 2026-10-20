@@ -516,6 +516,14 @@
             </div>
           </div>
           <div class="options" id="qOptions"></div>
+          <!-- Q1 (ordering question) is a kind:'match' — the pool of step chips and the numbered slots live here -->
+          <div class="match-wrap" id="qMatch" style="display:none">
+            <div class="match-pool-row" id="matchPoolRow">
+              <div class="match-pool-arrow">▶</div>
+              <div class="match-pool" id="matchPool"></div>
+            </div>
+            <div class="match-columns" id="matchColumns"></div>
+          </div>
           <div class="selected-list" id="qSelectedList" style="display:none"></div>
           <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
           <div class="working-box" id="qWorking">
@@ -777,7 +785,57 @@
     // calls recompute() BEFORE resetQuiz(), never after.
     // ══════════════════════════════════════════════════════════════════════
 
+    // Every quantity the walkthrough finds, with the quantities it is BUILT FROM (its prerequisites).
+    // The ordering question below grades against these, so any order that finds each quantity after
+    // the ones it needs is accepted — e.g. RIN1 and ROUT1 can swap, or Stage 2 can come before Stage 1's
+    // gain. The ORDER of this list is one valid order (and what the answer key shows).
+    const ORDER_STEPS = [
+      ['VB1', 'V<sub>B1</sub>', 'colour-voltage', 'base voltage of Q1', []],
+      ['VE1', 'V<sub>E1</sub>', 'colour-voltage', 'emitter voltage of Q1', ['VB1']],
+      ['IC1', 'I<sub>C1</sub>', 'colour-current', 'collector current of Q1', ['VE1']],
+      ['VC1', 'V<sub>C1</sub>', 'colour-voltage', 'collector voltage of Q1', ['IC1']],
+      ['re1', 'r<sub>e1</sub>′', 'colour-bjt', 'internal emitter resistance of Q1', ['IC1']],
+      ['RIN1', 'R<sub>IN1</sub>', 'colour-impedance', 'Stage 1 input resistance', ['re1']],
+      ['ROUT1', 'R<sub>OUT1</sub>', 'colour-impedance', 'Stage 1 output resistance', []],
+      ['VB2', 'V<sub>B2</sub>', 'colour-voltage', 'base voltage of Q2', []],
+      ['VE2', 'V<sub>E2</sub>', 'colour-voltage', 'emitter voltage of Q2', ['VB2']],
+      ['IE2', 'I<sub>E2</sub>', 'colour-current', 'emitter current of Q2', ['VE2']],
+      ['re2', 'r<sub>e2</sub>′', 'colour-bjt', 'internal emitter resistance of Q2', ['IE2']],
+      ['RIN2', 'R<sub>IN2</sub>', 'colour-impedance', 'Stage 2 input resistance', ['re2']],
+      ['ROUT2', 'R<sub>OUT2</sub>', 'colour-impedance', 'Stage 2 output resistance', []],
+      ['AV1', 'A<sub>V1</sub>', 'colour-gain', 'Stage 1 loaded gain', ['re1', 'ROUT1', 'RIN2']],
+      ['AV2', 'A<sub>V2</sub>', 'colour-gain', 'Stage 2 loaded gain', ['re2', 'ROUT2']],
+      ['AVT', 'A<sub>VT</sub>', 'colour-gain', 'overall gain', ['AV1', 'AV2']],
+      ['RT', 'R<sub>T</sub>', 'colour-gain', 'total resistance C1 works against', ['ROUT1', 'RIN2']],
+      ['f1', 'f<sub>1</sub>', 'colour-cap', 'lower roll-off frequency', ['RT']]
+    ];
+
     const QUESTIONS = [
+      // ── Q1: put the walkthrough's steps in a workable order (no value to calculate) ──
+      {
+        kind: 'match',
+        order: true,            // fair grading: any order where each step comes after what it needs (see quiz-engine.js)
+        numbered: true,         // no slot boxes: click a quantity to give it the next number, click again to take it back
+        keepPicker: true,       // keep the coloured numbered list on screen after Check
+        leftPanel: 'circuit',
+        columns: () => ORDER_STEPS.map((_, i) => `Step ${i + 1}`),
+        text: () => `The next ${ORDER_STEPS.length} questions work out this amplifier one quantity at a time. Click the quantities in the order you could actually <b>calculate</b> them — a number appears beside each one, 1 to ${ORDER_STEPS.length}.`,
+        hint: () => `Start with what needs nothing else — each quantity can only be found after the ones it is built from. Click a numbered quantity again to take its number back.`,
+        options: () => shuffle(ORDER_STEPS.map(([key, sym, cls, desc, after], i) => ({
+          label: `<b class="${cls}">${sym}</b> <span style="opacity:.75">${desc}</span>`,
+          key, after, col: i,
+        }))),
+        correctExplain: (st) => {
+          const ok = st.opts.filter((o, i) => orderChipOk(st, i)).length;
+          return ok === st.opts.length ? `All ${st.opts.length} steps are in a valid order` : `${ok} of ${st.opts.length} steps in a valid place`;
+        },
+        working: () => `
+    <div class="working-line">Each quantity is built from earlier results, so the order has rules, not one fixed answer:</div>
+    <div class="working-line"><b>DC bias first:</b> V<sub>B</sub> → V<sub>E</sub> → I<sub>C</sub> (or I<sub>E</sub>) → V<sub>C</sub>. The AC resistance r<sub>e</sub>′ needs the emitter current, so it comes after I<sub>C</sub>/I<sub>E</sub>.</div>
+    <div class="working-line"><b>Then the resistances:</b> R<sub>IN</sub> needs r<sub>e</sub>′. R<sub>OUT</sub> only needs the collector resistor, so it can go almost anywhere.</div>
+    <div class="working-line"><b>Then the gains:</b> A<sub>V1</sub> is loaded by Stage 2's input, so it needs R<sub>IN2</sub> as well as r<sub>e1</sub>′. A<sub>VT</sub> needs both stage gains.</div>
+    <div class="working-total">R<sub>T</sub> = R<sub>OUT1</sub> + R<sub>IN2</sub> comes last-but-one, and f<sub>1</sub> needs R<sub>T</sub>. The solution order below is one of several valid ones.</div>`
+      },
       {
         leftPanel: 'circuit',
         text: () => `What is <b class="colour-voltage">V<sub>B1</sub></b>, the DC base voltage of <b class="colour-bjt">Q1</b>?`,
@@ -1143,6 +1201,11 @@
       // and guarantees the number's always right even right after a
       // setMode() switch clears the old rects/guards.
       const setVal = (valId, text) => { const v = document.getElementById(valId); if (v) v.textContent = text; };
+      // The walkthrough's own questions now start at Q2 (Q1 is the "put the steps in order" question),
+      // so qa(n) = "has walkthrough step n been answered" and `step` = the walkthrough step being viewed
+      // (-1 while on the ordering question). All the numbers below are still the original 0-based steps.
+      const qa = n => Q[n + 1].ans;
+      const step = cur - 1;
       const reveal = (id, ans, valId, text) => {
         const el = document.getElementById(id);
         if (!el) return;
@@ -1152,30 +1215,30 @@
           addRevealHighlight(el);
         }
       };
-      reveal('revealVB1', Q[0].ans, 'valVB1', fmtV2(D.VB1));
-      reveal('revealVE1', Q[1].ans, 'valVE1', fmtV2(D.VE1));
-      reveal('revealIC1', Q[2].ans, 'valIC1', fmtA2(D.IC1));
-      if (Q[2].ans) setVal('valIE1', fmtA2(D.IE1));
-      reveal('revealVC1', Q[3].ans, 'valVC1', fmtV2(D.VC1));
-      reveal('revealRe1', Q[4].ans, 'valRe1', fmtOhm1(D.re1));
-      reveal('revealRIN1', Q[5].ans, 'valRIN1', fmtR(D.RIN1));
-      reveal('revealROUT1', Q[6].ans, 'valROUT1', fmtR(D.ROUT1));
-      reveal('revealVB2', Q[7].ans, 'valVB2', fmtV2(D.VB2));
-      reveal('revealVE2', Q[8].ans, 'valVE2', fmtV2(D.VE2));
-      reveal('revealIE2', Q[9].ans, 'valIE2', fmtA2(D.IE2));
-      reveal('revealRe2', Q[10].ans, 'valRe2', fmtOhm1(D.re2));
-      reveal('revealRIN2', Q[11].ans, 'valRIN2', fmtR(D.RIN2));
-      reveal('revealROUT2', Q[12].ans, 'valROUT2', fmtR(D.ROUT2));
-      reveal('revealAV1', Q[13].ans, 'valAV1', fmtAV1(D.AV1));
-      reveal('revealAV2', Q[14].ans, 'valAV2', fmtAV2(D.AV2));
-      reveal('revealAVT', Q[15].ans, 'valAVT', fmtAVT(D.AVT));
-      reveal('revealRT', Q[16].ans, 'valRT', fmtR(D.RT));
-      reveal('revealF1', Q[17].ans, 'valF1', fmtHz(D.f1));
+      reveal('revealVB1', qa(0), 'valVB1', fmtV2(D.VB1));
+      reveal('revealVE1', qa(1), 'valVE1', fmtV2(D.VE1));
+      reveal('revealIC1', qa(2), 'valIC1', fmtA2(D.IC1));
+      if (qa(2)) setVal('valIE1', fmtA2(D.IE1));
+      reveal('revealVC1', qa(3), 'valVC1', fmtV2(D.VC1));
+      reveal('revealRe1', qa(4), 'valRe1', fmtOhm1(D.re1));
+      reveal('revealRIN1', qa(5), 'valRIN1', fmtR(D.RIN1));
+      reveal('revealROUT1', qa(6), 'valROUT1', fmtR(D.ROUT1));
+      reveal('revealVB2', qa(7), 'valVB2', fmtV2(D.VB2));
+      reveal('revealVE2', qa(8), 'valVE2', fmtV2(D.VE2));
+      reveal('revealIE2', qa(9), 'valIE2', fmtA2(D.IE2));
+      reveal('revealRe2', qa(10), 'valRe2', fmtOhm1(D.re2));
+      reveal('revealRIN2', qa(11), 'valRIN2', fmtR(D.RIN2));
+      reveal('revealROUT2', qa(12), 'valROUT2', fmtR(D.ROUT2));
+      reveal('revealAV1', qa(13), 'valAV1', fmtAV1(D.AV1));
+      reveal('revealAV2', qa(14), 'valAV2', fmtAV2(D.AV2));
+      reveal('revealAVT', qa(15), 'valAVT', fmtAVT(D.AVT));
+      reveal('revealRT', qa(16), 'valRT', fmtR(D.RT));
+      reveal('revealF1', qa(17), 'valF1', fmtHz(D.f1));
 
       // Stage 1's raw DC badges (VB1/VE1/IC1+IE1/VC1) are done feeding
       // re1' by the time RIN1 is even ASKED — RIN1 only needs re1'+R4, not
       // the raw values — so this one is keyed off `cur` (the CURRENTLY
-      // VIEWED question), not Q[5].ans, and hides as soon as you land on
+      // VIEWED question), not qa(5), and hides as soon as you land on
       // RIN1, even before answering it. That makes it non-sticky: navigate
       // back before RIN1 and the group reappears, same as it would for
       // any `cur`-based condition (unlike the .ans-based checks above,
@@ -1186,29 +1249,29 @@
       // get their own cur-based cutoff too, once they're no longer needed
       // for anything further downstream — see each cutoff's own comment.
       const stage1Raw = document.getElementById('stage1RawGroup');
-      if (stage1Raw) stage1Raw.style.display = cur >= 5 ? 'none' : '';
+      if (stage1Raw) stage1Raw.style.display = step >= 5 ? 'none' : '';
       const stage2Raw = document.getElementById('stage2RawGroup');
-      if (stage2Raw) stage2Raw.style.display = Q[11].ans ? 'none' : '';
+      if (stage2Raw) stage2Raw.style.display = qa(11) ? 'none' : '';
       // re1' is done being used once AV1 is answered (RIN1 and AV1 are its
       // only consumers) — hides from AV2 (index 14) onward.
       const re1 = document.getElementById('revealRe1');
-      if (re1) re1.style.display = cur >= 14 ? 'none' : '';
+      if (re1) re1.style.display = step >= 14 ? 'none' : '';
       // re2' is done once AV2 is answered — hides from AVT (index 15) onward.
       const re2 = document.getElementById('revealRe2');
-      if (re2) re2.style.display = cur >= 15 ? 'none' : '';
+      if (re2) re2.style.display = step >= 15 ? 'none' : '';
       // RIN1/RIN2/ROUT1/ROUT2 are all done being used once RT is answered
       // (RT is their last consumer) — hide together from f1 (index 17) onward.
       const rin1 = document.getElementById('revealRIN1');
-      if (rin1) rin1.style.display = cur >= 17 ? 'none' : '';
+      if (rin1) rin1.style.display = step >= 17 ? 'none' : '';
       const rin2 = document.getElementById('revealRIN2');
-      if (rin2) rin2.style.display = cur >= 17 ? 'none' : '';
+      if (rin2) rin2.style.display = step >= 17 ? 'none' : '';
       const rout1 = document.getElementById('revealROUT1');
-      if (rout1) rout1.style.display = cur >= 17 ? 'none' : '';
+      if (rout1) rout1.style.display = step >= 17 ? 'none' : '';
       const rout2 = document.getElementById('revealROUT2');
-      if (rout2) rout2.style.display = cur >= 17 ? 'none' : '';
+      if (rout2) rout2.style.display = step >= 17 ? 'none' : '';
       // AV1/AV2 are done feeding AVT — hide from RT (index 16) onward.
       const avGroup = document.getElementById('avGroup');
-      if (avGroup) avGroup.style.display = cur >= 16 ? 'none' : '';
+      if (avGroup) avGroup.style.display = step >= 16 ? 'none' : '';
     };
 
     initQuizNav();
