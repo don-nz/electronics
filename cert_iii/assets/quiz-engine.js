@@ -122,7 +122,9 @@
     steps, and clicking one gives it the next number (1, 2, 3 ...) shown beside
     it; clicking a numbered step takes its number back and closes the gap. Same
     state (`st.place` = slot index) and the same grading either way — add
-    `keepPicker: true` to keep the coloured numbered list after Check.
+    `keepPicker: true` to keep the coloured numbered list after Check, and
+    `orderCols` (default 3) for how many steps sit side by side — keep the
+    chip labels short (a symbol, no description) so they fit on a phone.
     Optional `matchMaxCols` sets the column-grid width of the slot boxes
     (default 4, 2 on phones). See orderChipOk(). First used by coupling_circuit_analysis.html Q1.
 
@@ -480,6 +482,9 @@ function renderOrderList() {
   const pool = document.getElementById('matchPool');
   pool.classList.toggle('needs-pick', !st.ans && nothingYet);
   pool.innerHTML = '';
+  // short chips sit in a fixed grid (default 3 across, `orderCols` to change) so the list stays compact, phones included
+  pool.style.display = 'grid';
+  pool.style.gridTemplateColumns = `repeat(${data.orderCols || 3}, 1fr)`;
   st.opts.forEach((opt, i) => {
     const chip = document.createElement('button');
     const placed = st.place[i] !== null;
@@ -525,6 +530,7 @@ function renderMatch() {
 
   const pool = document.getElementById('matchPool');
   pool.innerHTML = '';
+  pool.style.display = ''; pool.style.gridTemplateColumns = '';   // a numbered-order question may have made it a grid
   st.opts.forEach((opt, i) => {
     if (st.place[i] !== null) return;
     const chip = document.createElement('button');
@@ -1019,6 +1025,13 @@ function answerKeyHtml(data, st) {
   const colTitle = c => typeof c === 'string' ? c : `<svg viewBox="${vb}" style="width:72px;height:auto;vertical-align:middle"><use href="#${c.shapeId}"/></svg>`;
   let groups = '';
   let heading = '';
+  if (isMatch(data) && data.order && data.numbered) {
+    // numbered-order question: show one valid order in the same grid as the pool, number beside each step
+    const cells = st.opts.slice().sort((x, y) => x.col - y.col)
+      .map((o, n) => `<div class="match-chip order-chip"><span class="order-num set">${n + 1}</span>${o.label}</div>`).join('');
+    return `<div class="working-step answer-key-heading">One valid order:</div>` +
+      `<div class="order-key" style="display:grid;grid-template-columns:repeat(${data.orderCols || 3},1fr);gap:.5rem;margin-top:.4rem">${cells}</div>`;
+  }
   if (isMatch(data)) {
     heading = data.order ? 'One valid order' : 'Where each one belongs';
     const cols = data.columns();

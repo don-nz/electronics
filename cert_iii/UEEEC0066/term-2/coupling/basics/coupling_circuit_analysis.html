@@ -789,6 +789,10 @@
     // The ordering question below grades against these, so any order that finds each quantity after
     // the ones it needs is accepted — e.g. RIN1 and ROUT1 can swap, or Stage 2 can come before Stage 1's
     // gain. The ORDER of this list is one valid order (and what the answer key shows).
+    // STRICT_ORDER = true: Q1 only accepts the order the following questions work in (each step must come
+    // straight after the one before it in this list). Set it to false to go back to the "fair" grading,
+    // where any order that respects the prerequisites listed below is accepted.
+    const STRICT_ORDER = true;
     const ORDER_STEPS = [
       ['VB1', 'V<sub>B1</sub>', 'colour-voltage', 'base voltage of Q1', []],
       ['VE1', 'V<sub>E1</sub>', 'colour-voltage', 'emitter voltage of Q1', ['VB1']],
@@ -818,23 +822,24 @@
         numbered: true,         // no slot boxes: click a quantity to give it the next number, click again to take it back
         keepPicker: true,       // keep the coloured numbered list on screen after Check
         leftPanel: 'circuit',
-        columns: () => ORDER_STEPS.map((_, i) => `Step ${i + 1}`),
-        text: () => `The next ${ORDER_STEPS.length} questions work out this amplifier one quantity at a time. Click the quantities in the order you could actually <b>calculate</b> them — a number appears beside each one, 1 to ${ORDER_STEPS.length}.`,
-        hint: () => `Start with what needs nothing else — each quantity can only be found after the ones it is built from. Click a numbered quantity again to take its number back.`,
+        columns: () => ORDER_STEPS.map((_, i) => `${i + 1}`),
+        text: () => `The next ${ORDER_STEPS.length} questions work out this amplifier one quantity at a time, in a fixed sequence. Click the quantities in the order the next ${ORDER_STEPS.length} questions calculate them — a number appears beside each one, 1 to ${ORDER_STEPS.length}.`,
+        hint: () => `Think about which quantity comes first and what each one is built from — Stage 1, then Stage 2, then the gains and f<sub>1</sub>. Click a numbered quantity again to take its number back.`,
         options: () => shuffle(ORDER_STEPS.map(([key, sym, cls, desc, after], i) => ({
-          label: `<b class="${cls}">${sym}</b> <span style="opacity:.75">${desc}</span>`,
-          key, after, col: i,
+          label: `<b class="${cls}">${sym}</b>`,   // symbol only, so the chips fit 3 across (even on a phone)
+          key, col: i,
+          after: STRICT_ORDER ? (i ? [ORDER_STEPS[i - 1][0]] : []) : after,
         }))),
         correctExplain: (st) => {
           const ok = st.opts.filter((o, i) => orderChipOk(st, i)).length;
           return ok === st.opts.length ? `All ${st.opts.length} steps are in a valid order` : `${ok} of ${st.opts.length} steps in a valid place`;
         },
         working: () => `
-    <div class="working-line">Each quantity is built from earlier results, so the order has rules, not one fixed answer:</div>
-    <div class="working-line"><b>DC bias first:</b> V<sub>B</sub> → V<sub>E</sub> → I<sub>C</sub> (or I<sub>E</sub>) → V<sub>C</sub>. The AC resistance r<sub>e</sub>′ needs the emitter current, so it comes after I<sub>C</sub>/I<sub>E</sub>.</div>
-    <div class="working-line"><b>Then the resistances:</b> R<sub>IN</sub> needs r<sub>e</sub>′. R<sub>OUT</sub> only needs the collector resistor, so it can go almost anywhere.</div>
-    <div class="working-line"><b>Then the gains:</b> A<sub>V1</sub> is loaded by Stage 2's input, so it needs R<sub>IN2</sub> as well as r<sub>e1</sub>′. A<sub>VT</sub> needs both stage gains.</div>
-    <div class="working-total">R<sub>T</sub> = R<sub>OUT1</sub> + R<sub>IN2</sub> comes last-but-one, and f<sub>1</sub> needs R<sub>T</sub>. The solution order below is one of several valid ones.</div>`
+    <div class="working-line">The walkthrough follows the order you would work it by hand, each quantity built from earlier results:</div>
+    <div class="working-line"><b>Stage 1 DC bias:</b> V<sub>B1</sub> → V<sub>E1</sub> → I<sub>C1</sub> → V<sub>C1</sub>. Then r<sub>e1</sub>′, which needs the emitter current, then R<sub>IN1</sub> (needs r<sub>e1</sub>′) and R<sub>OUT1</sub>.</div>
+    <div class="working-line"><b>Stage 2 the same way:</b> V<sub>B2</sub> → V<sub>E2</sub> → I<sub>E2</sub> → r<sub>e2</sub>′ → R<sub>IN2</sub>, then R<sub>OUT2</sub>.</div>
+    <div class="working-line"><b>Then the gains:</b> A<sub>V1</sub> is loaded by Stage 2's input, so it needs R<sub>IN2</sub> as well as r<sub>e1</sub>′. A<sub>V2</sub> follows, then A<sub>VT</sub> from both.</div>
+    <div class="working-total">R<sub>T</sub> = R<sub>OUT1</sub> + R<sub>IN2</sub> comes next and f<sub>1</sub> needs R<sub>T</sub>. A few steps could swap in principle (R<sub>OUT1</sub> needs nothing else), but this is the order the questions take them in.</div>`
       },
       {
         leftPanel: 'circuit',
@@ -1205,6 +1210,15 @@
       // so qa(n) = "has walkthrough step n been answered" and `step` = the walkthrough step being viewed
       // (-1 while on the ordering question). All the numbers below are still the original 0-based steps.
       const qa = n => Q[n + 1].ans;
+      // The " ≈ " / " = " sitting just before each value: Q1 hides it (labels only), every other question shows it.
+      // The original text is remembered on the node so it can always be put back.
+      const setApprox = on => ['VB1', 'VE1', 'IC1', 'IE1', 'VC1', 'Re1', 'RIN1', 'ROUT1', 'VB2', 'VE2', 'IE2', 'Re2', 'RIN2', 'ROUT2', 'AV1', 'AV2', 'AVT', 'RT', 'F1'].forEach(k => {
+        const v = document.getElementById('val' + k), n = v && v.previousSibling;
+        if (!n || n.nodeType !== 3) return;
+        if (n._orig === undefined) n._orig = n.nodeValue;
+        n.nodeValue = on ? n._orig : '';
+      });
+      setApprox(true);   // restore first, so highlights below are measured against the full text
       const step = cur - 1;
       const reveal = (id, ans, valId, text) => {
         const el = document.getElementById(id);
@@ -1272,6 +1286,25 @@
       // AV1/AV2 are done feeding AVT — hide from RT (index 16) onward.
       const avGroup = document.getElementById('avGroup');
       if (avGroup) avGroup.style.display = step >= 16 ? 'none' : '';
+
+      // Q1 (the ordering question): show every badge's LABEL with its value left blank, so the diagram
+      // lists the quantities being put in order. No highlight rects here (they belong to answered values)
+      // and the values are cleared; each later question fills its own value in as before.
+      if (step === -1) {
+        document.querySelectorAll('#circuitSvg [data-hl-built]').forEach(el => {
+          el.removeAttribute('data-hl-built');
+          el.querySelectorAll('rect').forEach(r => r.remove());
+        });
+        ['VB1', 'VE1', 'IC1', 'VC1', 'Re1', 'RIN1', 'ROUT1', 'VB2', 'VE2', 'IE2', 'Re2', 'RIN2', 'ROUT2', 'AV1', 'AV2', 'AVT', 'RT', 'F1'].forEach(k => {
+          const g = document.getElementById('reveal' + k);
+          if (g) g.setAttribute('display', 'inline');
+          setVal('val' + k, '');
+        });
+        setVal('valIE1', '');
+        setApprox(false);
+        ['stage1RawGroup', 'stage2RawGroup', 'avGroup'].forEach(id => { const g = document.getElementById(id); if (g) g.style.display = ''; });
+        ['revealRe1', 'revealRe2', 'revealRIN1', 'revealRIN2', 'revealROUT1', 'revealROUT2'].forEach(id => { const g = document.getElementById(id); if (g) g.style.display = ''; });
+      }
     };
 
     initQuizNav();
