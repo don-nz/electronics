@@ -1,0 +1,315 @@
+<!--
+  Counter simulator — a Mod-8 up-counter built from a 74193 (4-bit up/down counter), after Figure 12 of
+  the counters notes: the QD (MSB) output is wired back to the C (clear) input.
+
+  Click CLK (or use Auto-clock) to send clock pulses. On each rising edge the count goes up by one after
+  a short propagation delay, and the changing digits blink just before they change. Counting 0 -> 7 is
+  uneventful; the interesting step is 7 -> 8 (1000):
+    1. QD goes HIGH.
+    2. That 1 travels along the feedback wire from QD to the C (clear) input.
+    3. C is now HIGH, so the counter clears itself to 0000 — asynchronously, no clock needed.
+    4. QD is 0 again; the 0 travels back along the same wire and releases the clear.
+  So the counter only ever settles on 0-7: Mod-8. The count 8 exists only for an instant.
+
+  Same event-driven approach as digital_sr_latch_simulator.html: gate delay, then a coloured sweep along
+  the wire showing the level travelling, wire colour = logic level (green = 1, grey = 0). A new clock pulse
+  is ignored while the circuit is still settling.
+
+  No shared quiz engine is used: the page is self-contained apart from the site chrome.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../../assets/theme-init.js"></script>
+  <title>Digital Electronics — Counter Simulator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../../assets/quiz-common.css">
+  <script src="../../../../assets/breadcrumb.js" defer></script>
+  <style>
+    .sim-intro { font-size: .85rem; line-height: 1.6; }
+    .sim-btn {
+      padding: .5rem 1.1rem; border: 1px solid var(--colour-border); border-radius: var(--radius-lg, 6px);
+      background: transparent; color: var(--colour-label); cursor: pointer; font-family: inherit;
+      font-size: .78rem; font-weight: 700; letter-spacing: .04em; transition: background .15s, color .15s, border-color .15s;
+    }
+    .sim-btn:hover:not(:disabled) { color: var(--colour-text); border-color: var(--colour-ui-primary); }
+    .sim-btn.active { border-color: var(--colour-ui-primary); color: var(--colour-ui-primary); background: rgba(var(--colour-ui-primary-rgb), .1); }
+    .sim-btn:disabled { opacity: .45; cursor: default; }
+    .sim-btn:focus-visible { outline: 2px solid var(--colour-ui-primary); outline-offset: 2px; }
+    #simSvg { width: 100%; max-width: 640px; display: block; margin: 0 auto; }
+    #simSvg .sw { cursor: pointer; }
+    #simSvg .sw:focus { outline: none; }
+    #simSvg .sw:focus-visible rect.sw-box, #simSvg .sw:hover rect.sw-box { stroke: var(--colour-ui-primary); stroke-width: 3; }
+    /* a value about to change: blink + enlarge (reduced-motion users just get the larger bold number) */
+    #simSvg .out-flash { animation: ctrBlink .18s linear infinite; }
+    #simSvg .fb-flash { font-size: 21px; animation: ctrBlink .18s linear infinite; }
+    @keyframes ctrBlink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: .08; } }
+    @media (prefers-reduced-motion: reduce) { #simSvg .out-flash, #simSvg .fb-flash { animation: none; } }
+    .sim-status { margin-top: .8rem; padding: .7rem .9rem; border: 1px solid var(--colour-border); border-radius: 6px; font-size: .85rem; line-height: 1.55; }
+    .sim-status b.st { text-transform: uppercase; letter-spacing: .05em; }
+    .sim-controls { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; margin-top: .8rem; font-size: .78rem; color: var(--colour-label); }
+    .sim-legend { display: flex; gap: 1.1rem; flex-wrap: wrap; justify-content: center; margin-top: .5rem; font-size: .75rem; color: var(--colour-label); }
+    .sim-legend i { display: inline-block; width: 1.2rem; height: 4px; border-radius: 2px; margin-right: .3rem; vertical-align: middle; }
+  </style>
+</head>
+
+<body>
+  <div class="crumb" id="crumb" data-current="Counter Simulator"></div>
+  <header>
+    <h1>Digital Electronics</h1>
+    <p>Mod-8 Up-Counter · 74193 · Simulator</p>
+  </header>
+
+  <div class="quiz-wrap single-col" id="quizWrap">
+    <div class="questions-col">
+    <div class="card sim-intro">
+      <div>A <b>74193</b> is a 4-bit up/down counter. Here it counts <b>up</b> on the clock input <b>CU</b>, and the
+        <b>QD</b> output (the most significant bit) is wired back to the <b>C</b> (clear) input. Click <b>CLK</b>
+        to send a clock pulse (or <b>AUTO CLK</b> to keep sending them) and watch the count climb. When it reaches <b>8 (1000)</b>, QD goes HIGH — see where
+        that 1 travels, and what it does when it gets there.</div>
+    </div>
+
+    <div class="card">
+      <svg id="simSvg" viewBox="50 0 580 420" xmlns="http://www.w3.org/2000/svg" font-family="'Share Tech Mono', monospace" role="img" aria-label="Mod-8 counter simulator"></svg>
+      <div class="sim-legend">
+        <span><i style="background:var(--colour-ui-correct)"></i>logic 1 (HIGH)</span>
+        <span><i style="background:var(--colour-label)"></i>logic 0 (LOW)</span>
+      </div>
+      <div class="sim-status" id="simStatus" aria-live="polite"></div>
+      <div class="sim-controls">
+        <button type="button" class="sim-btn" onclick="resetSim()">↺ Reset to 0</button>
+        <span>Speed:</span>
+        <button type="button" class="sim-btn active" id="spd-normal" onclick="setSpeed('normal')">Normal</button>
+        <button type="button" class="sim-btn" id="spd-fast" onclick="setSpeed('fast')">Fast</button>
+      </div>
+    </div>
+
+    </div>
+  </div>
+
+  <footer>Electronics // Cert III // UEEEC0069</footer>
+
+  <script>
+    // ── Mod-8 up-counter simulator ─────────────────────────────────────────────
+    // State: cnt (0-15, the 4-bit count Q_D Q_C Q_B Q_A) and cIn (the level at the C / clear input).
+    // QD (bit 3) feeds back to C along one wire. A small discrete-event engine models the propagation
+    // delay (outputs change a moment after the clock edge) and the wire travel time (so the level is
+    // seen to travel from QD to C).
+    const SPEEDS = { normal: { gate: 780, wire: 1920, clear: 780 }, fast: { gate: 380, wire: 950, clear: 380 } };
+    let speed = 'normal';
+    let cnt = 0, cIn = 0, clk = 0, pendingCnt = null, flightFb = null, events = [], seq = 0, loopOn = false;
+    let phase = 'idle', note = '', auto = false, autoTimer = null;
+
+    const HIGH = 'var(--colour-ui-correct)', LOW = 'var(--colour-label)';
+    const col = (v) => v ? HIGH : LOW;
+    const bit = (n, b) => (n >> b) & 1;
+
+    // geometry (viewBox starts at x=50)
+    const CX0 = 140, CX1 = 470, CY0 = 170, CY1 = 330;     // the chip
+    const PINX = [365, 310, 255, 200];                      // output / data pin x for bit 0 (QA) .. bit 3 (QD)
+    const FB = 'M 200,130 L 80,130 L 80,372 L 420,372 L 420,330';    // QD junction -> left -> down -> along the bottom -> up into C
+
+    function names(b) { return 'ABCD'[b]; }
+
+    function buildSvg() {
+      let s = '';
+      // 5V rail: feeds LD-bar and Vcc, then drops down the right side to CD (count-down clock held HIGH = unused)
+      s += `<g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="3" style="stroke: var(--colour-ui-correct)">
+              <path d="M 420,170 L 420,120 L 500,120 L 500,260 L 470,260" />
+              <path d="M 455,170 L 455,120" />
+            </g>
+            <circle cx="420" cy="120" r="4" style="fill: var(--colour-ui-correct)" /><circle cx="455" cy="120" r="4" style="fill: var(--colour-ui-correct)" />
+            <text x="510" y="126" font-size="16" font-weight="bold" style="fill: var(--colour-ui-correct)">5V</text>`;
+      // chip
+      s += `<rect x="${CX0}" y="${CY0}" width="${CX1 - CX0}" height="${CY1 - CY0}" rx="4" style="fill: var(--colour-panel); stroke: var(--colour-border)" stroke-width="3" />`;
+      // unused stubs (CO-bar, BO-bar on the left; data inputs along the bottom) and GND
+      s += `<g fill="none" stroke-width="3" style="stroke: var(--colour-label)">
+              <path d="M 105,205 L ${CX0},205" /><path d="M 105,265 L ${CX0},265" />
+              ${PINX.map(x => `<path d="M ${x},${CY1} L ${x},350" />`).join('')}
+              <path d="M 455,${CY1} L 455,385" />
+              <path d="M 440,385 L 470,385" /><path d="M 446,392 L 464,392" /><path d="M 451,399 L 459,399" />
+            </g>`;
+      // pin names
+      const lab = (x, y, t, anchor) => `<text x="${x}" y="${y}" text-anchor="${anchor || 'middle'}" font-size="13" style="fill: var(--colour-label)">${t}</text>`;
+      s += [3, 2, 1, 0].map(b => lab(PINX[b], 192, `Q<tspan baseline-shift="sub" font-size="9">${names(b)}</tspan>`)).join('');
+      s += [3, 2, 1, 0].map(b => lab(PINX[b], 322, `D<tspan baseline-shift="sub" font-size="9">${names(b)}</tspan>`)).join('');
+      s += lab(CX0 + 8, 209, '<tspan style="text-decoration:overline">CO</tspan>', 'start') + lab(CX0 + 8, 269, '<tspan style="text-decoration:overline">BO</tspan>', 'start');
+      s += lab(420, 192, '<tspan style="text-decoration:overline">LD</tspan>') + lab(455, 192, 'Vcc');
+      s += lab(CX1 - 24, 219, 'CU', 'end') + lab(CX1 - 24, 264, 'CD', 'end') + lab(420, 322, 'C') + lab(455, 322, 'GND');
+      // active-edge notch on the clock input
+      s += `<path d="M ${CX1},207 L ${CX1 - 10},215 L ${CX1},223" fill="none" stroke-width="2" style="stroke: var(--colour-label)" />`;
+      // CU clock wire + the CLK switch (crosses the CD wire without joining it)
+      s += `<path id="w-clk" d="M ${CX1},215 L 520,215" fill="none" stroke-width="3" />`;
+      s += `<g class="sw" id="swClk" tabindex="0" role="button" aria-label="Send a clock pulse">
+              <rect class="sw-box" x="520" y="193" width="100" height="44" rx="6" style="fill: var(--colour-panel); stroke: var(--colour-border)" stroke-width="2" />
+              <text x="570" y="221" text-anchor="middle" font-size="18" font-weight="bold" id="clkTxt" style="fill: var(--colour-text)">CLK</text>
+            </g>`;
+      // AUTO CLK switch, the same size as CLK and directly under it: keeps sending clock pulses
+      s += `<g class="sw" id="swAuto" tabindex="0" role="button" aria-pressed="false" aria-label="Auto clock">
+              <rect class="sw-box" x="520" y="245" width="100" height="44" rx="6" style="fill: var(--colour-panel); stroke: var(--colour-border)" stroke-width="2" />
+              <text x="570" y="273" text-anchor="middle" font-size="16" font-weight="bold" id="autoTxt" style="fill: var(--colour-text)">AUTO CLK</text>
+            </g>`;
+      // output stubs + arrow heads
+      for (let b = 0; b < 4; b++) {
+        const x = PINX[b];
+        s += `<path id="w-q${b}" d="M ${x},${CY0} L ${x},108" fill="none" stroke-width="3" stroke-linecap="round" />
+              <polygon id="a-q${b}" points="${x - 7},110 ${x},96 ${x + 7},110" />
+              <text id="dig${b}" x="${x}" y="78" text-anchor="middle" font-size="30" font-weight="bold"></text>`;
+      }
+      s += `<text x="282" y="30" text-anchor="middle" font-size="14" style="fill: var(--colour-label)">Binary count output</text>`;
+      // feedback wire (+ the travelling sweep) from QD to C
+      s += `<g fill="none" stroke-linejoin="round" stroke-linecap="round">
+              <path id="w-fb" d="${FB}" stroke-width="3" />
+              <path id="o-fb" d="${FB}" stroke-width="4.5" />
+            </g>
+            <circle cx="200" cy="130" r="5" id="j-qd" />
+            <text id="fbTxt" x="412" y="400" text-anchor="end" font-size="20" font-weight="bold"></text>
+            <text x="108" y="150" font-size="12" style="fill: var(--colour-label)">feedback</text>`;
+      document.getElementById('simSvg').innerHTML = s;
+      const g = document.getElementById('swClk');
+      g.addEventListener('click', pulse);
+      g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pulse(); } });
+      const a = document.getElementById('swAuto');
+      a.addEventListener('click', toggleAuto);
+      a.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleAuto(); } });
+    }
+
+    // ── event engine (same shape as the SR latch simulator) ──
+    function sched(dt, fn) {
+      const e = { t: performance.now() + dt, fn, dead: false, id: ++seq };
+      events.push(e); startLoop(); return e;
+    }
+    function startLoop() { if (!loopOn) { loopOn = true; requestAnimationFrame(tick); } }
+    function tick() {
+      const now = performance.now();
+      events.sort((a, b) => a.t - b.t);
+      while (events.length && events[0].t <= now) {
+        const e = events.shift();
+        if (!e.dead) e.fn();
+      }
+      events = events.filter(e => !e.dead);
+      render(now);
+      if (events.length || flightFb) requestAnimationFrame(tick); else loopOn = false;
+    }
+    const busy = () => events.length > 0 || !!flightFb || !!pendingCnt;
+    const jitter = (ms) => ms * (0.9 + 0.2 * Math.random());
+
+    // A clock pulse: the rising edge adds 1 to the count after the propagation delay.
+    function pulse() {
+      if (busy()) return false;               // wait for the circuit to settle first
+      clk = 1; note = '';
+      phase = 'clocked';
+      sched(260, () => { clk = 0; });
+      const next = (cnt + 1) & 15;
+      pendingCnt = { val: next, ev: sched(jitter(SPEEDS[speed].gate), () => applyCount(next, 'count')) };
+      startLoop(); render(performance.now());
+      return true;
+    }
+    function applyCount(v, why) {
+      const oldQD = bit(cnt, 3);
+      cnt = v; pendingCnt = null;
+      const qd = bit(cnt, 3);
+      if (why === 'count') phase = qd ? 'eight' : 'counted';
+      else { phase = 'cleared'; }
+      if (qd !== oldQD) sendFb(qd);            // QD changed: the new level starts travelling to C
+      else if (!qd && why === 'count') { /* plain count step, nothing further */ }
+    }
+    function sendFb(val) {
+      const now = performance.now(), dur = SPEEDS[speed].wire, id = ++seq;
+      flightFb = { val, t0: now, t1: now + dur, id };
+      sched(dur, () => arriveC(val, id));
+    }
+    function arriveC(val, id) {
+      cIn = val;
+      if (flightFb && flightFb.id === id) flightFb = null;
+      if (cIn === 1 && cnt !== 0) {
+        phase = 'clearing';                    // C is HIGH: asynchronous clear, no clock needed
+        pendingCnt = { val: 0, ev: sched(jitter(SPEEDS[speed].clear), () => applyCount(0, 'clear')) };
+      } else if (cIn === 0) {
+        phase = 'released';
+        note = 'wrapped';
+      }
+    }
+
+    // ── drawing ──
+    function render(now) {
+      now = now || performance.now();
+      // output stubs, arrows, digits
+      for (let b = 0; b < 4; b++) {
+        const v = bit(cnt, b), c = col(v);
+        document.getElementById('w-q' + b).setAttribute('stroke', c);
+        document.getElementById('a-q' + b).style.fill = c;
+        const d = document.getElementById('dig' + b);
+        d.textContent = v; d.style.fill = c;
+        // this digit is about to change (the counter is still "thinking"): blink the old value
+        const changing = pendingCnt && bit(pendingCnt.val, b) !== v;
+        d.classList.toggle('out-flash', !!changing);
+      }
+      // feedback wire: colour = the level at C; the sweep shows a changed level travelling along it
+      document.getElementById('w-fb').setAttribute('stroke', col(cIn));
+      document.getElementById('j-qd').style.fill = col(bit(cnt, 3));
+      const ov = document.getElementById('o-fb'), f = flightFb;
+      if (f) {
+        const L = ov.getTotalLength(), p = Math.max(0, Math.min(1, (now - f.t0) / (f.t1 - f.t0)));
+        ov.setAttribute('stroke', col(f.val));
+        ov.setAttribute('stroke-dasharray', L);
+        ov.setAttribute('stroke-dashoffset', L * (1 - p));
+        ov.style.display = '';
+      } else ov.style.display = 'none';
+      const t = document.getElementById('fbTxt');
+      t.textContent = 'C = ' + cIn; t.style.fill = col(cIn);
+      // the value at C is about to change: while the sweep is in its final stretch, blink the (old) value
+      const flashing = f && (f.t1 - now) <= Math.min(800, SPEEDS[speed].wire * 0.6);
+      t.classList.toggle('fb-flash', !!flashing);
+      // clock
+      document.getElementById('w-clk').setAttribute('stroke', col(clk));
+      document.querySelector('#swClk rect').style.fill = clk ? 'rgba(var(--colour-ui-primary-rgb), .22)' : 'var(--colour-panel)';
+      document.querySelector('#swAuto rect').style.fill = auto ? 'rgba(var(--colour-ui-primary-rgb), .22)' : 'var(--colour-panel)';
+      renderStatus();
+    }
+
+    const bin = (n) => [3, 2, 1, 0].map(b => bit(n, b)).join('');
+    function renderStatus() {
+      const el = document.getElementById('simStatus');
+      let head = `Count = <b>${cnt}</b> (<b>${bin(cnt)}</b>)`, body = '';
+      const settling = busy();
+      switch (phase) {
+        case 'clocked': body = 'A <b>clock pulse</b> arrives. On its rising edge the counter adds 1 — but the outputs only change after a short <b>propagation delay</b> (the blinking digits are about to change).'; break;
+        case 'counted': body = cnt === 7 ? 'The count is now 7 (0111) — the highest number it can settle on. Send another pulse and watch what happens at <b>QD</b>.' : 'The count went up by one. Nothing else happens until the next clock pulse.'; break;
+        case 'eight': body = '<b>QD has gone HIGH</b> — the count is 8 (1000). That 1 now <b>travels along the feedback wire</b> from QD to the <b>C (clear)</b> input. Until it arrives the counter has no idea anything is wrong.'; break;
+        case 'clearing': body = 'The 1 has reached <b>C</b>. Clear is asserted, so the counter <b>resets to 0000</b> — straight away, without waiting for a clock pulse (the blinking digits are about to drop to 0).'; break;
+        case 'cleared': body = 'The counter is back at <b>0000</b>, so <b>QD is 0</b> again. That 0 now travels along the feedback wire to C…'; break;
+        case 'released': body = 'The 0 has reached <b>C</b>, releasing the clear. The counter is ready to count again from 0. Because 8 never lasts, it only ever settles on <b>0 – 7</b>: that is <b>Mod-8</b>.'; break;
+        default: body = cnt === 7
+          ? 'Count = 7 (0111), the highest number it can settle on. Send another pulse and watch what happens at <b>QD</b>.'
+          : 'Click <b>CLK</b> (or <b>AUTO CLK</b>) to add 1 to the count. On each rising edge of the clock the counter counts up by one.';
+      }
+      el.innerHTML = `<div>${head}${settling ? ' · <i>settling…</i>' : ''}</div><div style="margin-top:.35rem">${body}</div>`;
+    }
+    function resetSim() {
+      events.forEach(e => e.dead = true); events = [];
+      cnt = 0; cIn = 0; clk = 0; pendingCnt = null; flightFb = null; phase = 'idle'; note = '';
+      render();
+    }
+    function setSpeed(s) {
+      speed = s;
+      ['normal', 'fast'].forEach(k => document.getElementById('spd-' + k).classList.toggle('active', k === s));
+    }
+    function toggleAuto() {
+      auto = !auto;
+      document.getElementById('swAuto').setAttribute('aria-pressed', String(auto));
+      clearInterval(autoTimer);
+      if (auto) autoTimer = setInterval(() => { if (!busy()) pulse(); }, 900);
+      render();
+    }
+
+    buildSvg(); render();
+  </script>
+</body>
+
+</html>
