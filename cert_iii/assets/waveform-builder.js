@@ -87,8 +87,10 @@ function wbColumnPathD(colIndex, prevLevel, level, colWidth = WB_COL_WIDTH) {
 }
 
 // Full read-only track (e.g. S/R) as one continuous path string.
-function wbFullTrackPathD(levels, colWidth = WB_COL_WIDTH) {
-  let d = '', prev = 0;
+// `startLevel` (default 0) is the level the track is already at before column 0: with the default a track
+// that starts HIGH draws an entry riser at the left edge; pass the first column's level to draw no riser.
+function wbFullTrackPathD(levels, colWidth = WB_COL_WIDTH, startLevel = 0) {
+  let d = '', prev = startLevel;
   levels.forEach((lvl, i) => { d += wbColumnPathD(i, prev, lvl, colWidth) + ' '; prev = lvl; });
   return d.trim();
 }
@@ -120,7 +122,7 @@ function renderReadOnlyTrackSVG(svgEl, levels, opts = {}) {
   if (opts.progressCols > 0) {
     html += `<rect class="wb-progress-shade" x="0" y="0" width="${opts.progressCols * colWidth}" height="${wbSvgHeight()}" />`;
   }
-  html += `<path class="${cls}" d="${wbFullTrackPathD(levels, colWidth)}" />`;
+  html += `<path class="${cls}" d="${wbFullTrackPathD(levels, colWidth, opts.startLevel || 0)}" />`;
   svgEl.innerHTML = html;
 }
 
@@ -129,7 +131,7 @@ function renderReadOnlyTrackSVG(svgEl, levels, opts = {}) {
 // { col, prevLevel, level } — the basis for both rendering and checking.
 function wbBuiltColumnSegments(builder) {
   const segs = [];
-  let col = 0, level = 0;
+  let col = 0, level = builder.startLevel || 0;   // builder.startLevel (optional): the level before column 0
   builder.pieces.forEach(p => {
     if (p.type === 'flat') {
       for (let k = 0; k < p.width; k++) { segs.push({ col, prevLevel: level, level }); col++; }
@@ -144,7 +146,7 @@ function wbBuiltColumnSegments(builder) {
 
 function wbCursor(builder) {
   const segs = wbBuiltColumnSegments(builder);
-  if (!segs.length) return { col: 0, level: 0 };
+  if (!segs.length) return { col: 0, level: builder.startLevel || 0 };
   const last = segs[segs.length - 1];
   return { col: last.col + 1, level: last.level };
 }
@@ -212,7 +214,7 @@ function renderQTrackSVG(svgEl, builder, totalCols, opts = {}) {
       html += `<path class="wb-q-path ${cls}" d="${wbColumnPathD(s.col, s.prevLevel, s.level, colWidth)}" />`;
       return;
     }
-    const correctPrev = s.col === 0 ? 0 : opts.correctLevels[s.col - 1];
+    const correctPrev = s.col === 0 ? (builder.startLevel || 0) : opts.correctLevels[s.col - 1];
     if (!opts.results[s.col]) {
       html += `<path class="wb-q-path wb-col-wrong" d="${wbColumnPathD(s.col, s.prevLevel, s.level, colWidth)}" />`;
     } else if (s.prevLevel === correctPrev) {
@@ -222,7 +224,7 @@ function renderQTrackSVG(svgEl, builder, totalCols, opts = {}) {
     }
   });
   if (full) {
-    html += `<path class="wb-q-path wb-col-correct" d="${wbFullTrackPathD(opts.correctLevels, colWidth)}" />`;
+    html += `<path class="wb-q-path wb-col-correct" d="${wbFullTrackPathD(opts.correctLevels, colWidth, builder.startLevel || 0)}" />`;
   }
   svgEl.innerHTML = html;
 }
@@ -353,7 +355,7 @@ function buildPrintDiagram(config) {
 
   host.innerHTML = html;
   const solSvg = document.getElementById(solSvgId);
-  if (solSvg) renderReadOnlyTrackSVG(solSvg, st.levels, { colWidth, className: st.className || 'wb-track-path wb-q-solution' });
+  if (solSvg) renderReadOnlyTrackSVG(solSvg, st.levels, { colWidth, className: st.className || 'wb-track-path wb-q-solution', startLevel: st.startLevel });
 }
 window.buildPrintDiagram = buildPrintDiagram;
 

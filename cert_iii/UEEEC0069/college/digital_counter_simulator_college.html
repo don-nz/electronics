@@ -1,0 +1,612 @@
+<!--
+  Counter simulator — a 74193 (4-bit up/down counter) wired as a Mod-6, Mod-8 or Mod-16 counter, counting
+  UP or DOWN. Built after Figure 12 of the counters notes (Mod-8 up: QD fed back to the C clear input).
+
+  Choose Direction and Modulus above the circuit; the circuit is redrawn for that wiring:
+
+    UP    (clock on CU, CD held HIGH, LD-bar held HIGH)
+      Mod-8   QD is wired back to C. At 8 (1000) QD goes HIGH, the 1 travels to C, the counter clears to 0000
+              (asynchronously), QD falls, the 0 travels back and releases the clear.  Settles on 0-7.
+      Mod-6   QC and QB feed an AND gate whose output drives C. At 6 (0110) both are HIGH, the AND output goes
+              HIGH, the 1 travels to C and clears the counter.  Settles on 0-5.
+      Mod-16  No feedback (C tied LOW). Counts 0-15 and wraps. CO-bar (carry out) goes LOW at 15 while the
+              clock is LOW — the pulse that would clock the next counter in a cascade.
+    DOWN  (clock on CD, CU held HIGH, C tied LOW)
+      Mod-8 / Mod-6   BO-bar (borrow out) is wired to LD-bar and the D inputs are tied to N-1. At 0, once the
+              clock goes LOW, BO-bar goes LOW, travels to LD-bar and the counter LOADS D (0111 / 0101).
+              Counts 7..0 / 5..0.
+      Mod-16  No reload (LD-bar held HIGH). Counts 15..0 and wraps. BO-bar goes LOW at 0 while the clock is LOW.
+
+  Same event-driven approach as digital_sr_latch_simulator.html: a delay, then a coloured sweep along the wire
+  showing the level travelling; wire colour = logic level (green = 1, grey = 0). A new clock pulse is ignored
+  while the circuit is still settling. The clock is HIGH for a moment then LOW, because the carry/borrow outputs
+  only act while the clock is LOW.
+
+  No shared quiz engine is used: the page is self-contained apart from the site chrome.
+
+  College (teacher) copy: self-contained — same simulator as term-2/exercises/counters/digital_counter_simulator.html with
+  the college colours, its own theme toggle and an "All exercises" link. Keep the two in step.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Digital Electronics — Counter Simulator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,600;0,700;0,800;1,400;1,600&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      --colour-bg: #f8f9fa;
+      --colour-panel: #ffffff;
+      --colour-border: #d0d5dd;
+      --colour-text: #1d2939;
+      --colour-text-strong: #002664;
+      --colour-label: #475467;
+      --colour-label-rgb: 71, 84, 103;
+      --colour-grid: rgba(0, 38, 100, 0.04);
+
+      --colour-ui-primary: #002664;
+      --colour-ui-primary-rgb: 0, 38, 100;
+
+      --font-body: 'Public Sans', system-ui, -apple-system, sans-serif;
+      --font-display: 'Public Sans', system-ui, -apple-system, sans-serif;
+      --font-mono: 'Share Tech Mono', monospace, sans-serif;
+
+      --radius-lg: 6px;
+      --radius-sm: 4px;
+      --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.05);
+    }
+
+    body.dark-theme {
+      --colour-bg: #121824;
+      --colour-panel: #1a2232;
+      --colour-border: #2e3c54;
+      --colour-text: #e2e8f0;
+      --colour-text-strong: #ffffff;
+      --colour-label: #94a3b8;
+      --colour-label-rgb: 148, 163, 184;
+      --colour-grid: rgba(255, 255, 255, 0.03);
+
+      --colour-ui-primary: #38bdf8;
+      --colour-ui-primary-rgb: 56, 189, 248;
+
+      --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--colour-bg);
+      color: var(--colour-text);
+      font-family: var(--font-body);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+      background-image: linear-gradient(var(--colour-grid) 1px, transparent 1px), linear-gradient(90deg, var(--colour-grid) 1px, transparent 1px);
+      background-size: 40px 40px;
+      transition: background-color 0.25s ease, color 0.25s ease;
+    }
+
+    header {
+      margin-bottom: 1.5rem;
+      width: 100%;
+      max-width: 700px;
+    }
+
+    header h1 {
+      font-family: var(--font-display);
+      font-size: clamp(1.4rem, 4vw, 2.2rem);
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      color: var(--colour-ui-primary);
+    }
+
+    header p {
+      margin-top: .4rem;
+      color: var(--colour-label);
+      font-size: .82rem;
+      font-weight: 600;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+
+    .theme-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.35rem 0.75rem;
+      font-family: var(--font-body);
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--colour-text);
+      background: var(--colour-panel);
+      border: 1px solid var(--colour-border);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: var(--shadow-card);
+    }
+
+    .theme-toggle:hover {
+      border-color: var(--colour-ui-primary);
+    }
+
+    .main-wrap {
+      width: 100%;
+      max-width: 700px;
+      display: flex;
+      flex-direction: column;
+      gap: 1.2rem;
+    }
+
+    .card-top-bar {
+      display: flex;
+      justify-content: flex-end;
+      width: 100%;
+      margin-bottom: 0.5rem;
+    }
+
+    .card {
+      background: var(--colour-panel);
+      border: 1px solid var(--colour-border);
+      border-radius: var(--radius-lg);
+      padding: 1.5rem;
+      box-shadow: var(--shadow-card);
+      transition: background 0.25s ease, border-color 0.25s ease;
+    }
+
+ 
+    .back-link { font-size: .78rem; font-weight: 600; color: var(--colour-ui-primary); text-decoration: none; padding: .35rem .1rem; }
+    .back-link:hover { text-decoration: underline; }
+    .card-top-bar { justify-content: space-between; align-items: center; }
+    footer { margin-top: 2rem; font-size: .72rem; color: var(--colour-label); letter-spacing: .04em; }
+    :root { --colour-bjt: #b45309; --colour-ui-correct: #087443; --colour-ui-correct-rgb: 8, 116, 67; --colour-ui-wrong: #d92d20; }
+    body.dark-theme { --colour-bjt: #ffb454; --colour-ui-correct: #34d399; --colour-ui-correct-rgb: 52, 211, 153; --colour-ui-wrong: #f87171; }
+
+    .sim-intro { font-size: .85rem; line-height: 1.6; }
+    .sim-btn {
+      padding: .5rem 1.1rem; border: 1px solid var(--colour-border); border-radius: var(--radius-lg, 6px);
+      background: transparent; color: var(--colour-label); cursor: pointer; font-family: inherit;
+      font-size: .78rem; font-weight: 700; letter-spacing: .04em; transition: background .15s, color .15s, border-color .15s;
+    }
+    .sim-btn:hover:not(:disabled) { color: var(--colour-text); border-color: var(--colour-ui-primary); }
+    .sim-btn.active { border-color: var(--colour-ui-primary); color: var(--colour-ui-primary); background: rgba(var(--colour-ui-primary-rgb), .1); }
+    .sim-btn:disabled { opacity: .45; cursor: default; }
+    .sim-btn:focus-visible { outline: 2px solid var(--colour-ui-primary); outline-offset: 2px; }
+    .sim-options { display: flex; flex-direction: column; gap: .6rem; margin-top: .9rem; }
+    .sim-opt-row { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; font-size: .78rem; color: var(--colour-label); }
+    .sim-opt-row .lbl { min-width: 6.2rem; font-weight: 700; letter-spacing: .04em; }
+    #simSvg { width: 100%; max-width: 660px; display: block; margin: 0 auto; }
+    #simSvg .sw { cursor: pointer; }
+    #simSvg .sw:focus { outline: none; }
+    #simSvg .sw:focus-visible rect.sw-box, #simSvg .sw:hover rect.sw-box { stroke: var(--colour-ui-primary); stroke-width: 3; }
+    /* a value about to change: blink + enlarge (reduced-motion users just get the larger bold number) */
+    #simSvg .out-flash { animation: ctrBlink .18s linear infinite; }
+    #simSvg .fb-flash { font-size: 21px; animation: ctrBlink .18s linear infinite; }
+    @keyframes ctrBlink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: .08; } }
+    @media (prefers-reduced-motion: reduce) { #simSvg .out-flash, #simSvg .fb-flash { animation: none; } }
+    .sim-status { margin-top: .8rem; padding: .7rem .9rem; border: 1px solid var(--colour-border); border-radius: 6px; font-size: .85rem; line-height: 1.55; }
+    .sim-controls { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; margin-top: .8rem; font-size: .78rem; color: var(--colour-label); }
+    .sim-legend { display: flex; gap: 1.1rem; flex-wrap: wrap; justify-content: center; margin-top: .5rem; font-size: .75rem; color: var(--colour-label); }
+    .sim-legend i { display: inline-block; width: 1.2rem; height: 4px; border-radius: 2px; margin-right: .3rem; vertical-align: middle; }
+    .ov { text-decoration: overline; }
+    @media (max-width: 480px) {
+      .sim-btn { padding: .45rem .75rem; }
+      .sim-opt-row { gap: .4rem; }
+      .sim-opt-row .lbl { min-width: 4.6rem; }
+    }
+  
+    /* Copyright line (college copies are self-contained, so inline) */
+    .site-copyright {
+      margin: 3rem auto 1.5rem;
+      padding: 0 1rem;
+      text-align: center;
+      font-size: 0.7rem;
+      color: var(--colour-label);
+      opacity: 0.8;
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>Digital Electronics</h1>
+    <p id="subtitle">74193 · Simulator</p>
+  </header>
+
+  <div class="main-wrap">
+    <div class="card-top-bar">
+      <a class="back-link" href="./exercises.html">← All exercises</a>
+      <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle dark and light theme">
+        <span id="themeIcon">🌙</span> <span id="themeLabel">Dark Mode</span>
+      </button>
+    </div>
+    <div class="card sim-intro">
+      <div id="introText"></div>
+      <div class="sim-options">
+        <div class="sim-opt-row"><span class="lbl">Direction</span>
+          <button type="button" class="sim-btn active" id="dir-up" onclick="setConfig('up', mod)" aria-pressed="true">Up</button>
+          <button type="button" class="sim-btn" id="dir-down" onclick="setConfig('down', mod)" aria-pressed="false">Down</button>
+        </div>
+        <div class="sim-opt-row"><span class="lbl">Modulus</span>
+          <button type="button" class="sim-btn active" id="mod-16" onclick="setConfig(direction, 16)" aria-pressed="true">Mod-16</button>
+          <button type="button" class="sim-btn" id="mod-8" onclick="setConfig(direction, 8)" aria-pressed="false">Mod-8</button>
+          <button type="button" class="sim-btn" id="mod-6" onclick="setConfig(direction, 6)" aria-pressed="false">Mod-6</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <svg id="simSvg" viewBox="20 0 610 420" xmlns="http://www.w3.org/2000/svg" font-family="'Share Tech Mono', monospace" role="img" aria-label="74193 counter simulator"></svg>
+      <div class="sim-legend">
+        <span><i style="background:var(--colour-ui-correct)"></i>logic 1 (HIGH)</span>
+        <span><i style="background:var(--colour-label)"></i>logic 0 (LOW)</span>
+      </div>
+      <div class="sim-status" id="simStatus" aria-live="polite"></div>
+      <div class="sim-controls">
+        <button type="button" class="sim-btn" onclick="resetSim()" id="resetBtn">↺ Reset</button>
+        <span>Speed:</span>
+        <button type="button" class="sim-btn active" id="spd-normal" onclick="setSpeed('normal')">Normal</button>
+        <button type="button" class="sim-btn" id="spd-fast" onclick="setSpeed('fast')">Fast</button>
+      </div>
+    </div>
+  </div>
+
+  <footer>Electronics // Cert III // UEEEC0069</footer>
+
+  <script>
+    function toggleTheme() {
+      const isDark = document.body.classList.toggle('dark-theme');
+      try { localStorage.setItem('tafe-quiz-theme', isDark ? 'dark' : 'light'); } catch (e) { }
+      updateThemeToggleUI(isDark);
+    }
+    function updateThemeToggleUI(isDark) {
+      const icon = document.getElementById('themeIcon'), label = document.getElementById('themeLabel');
+      if (icon && label) { icon.textContent = isDark ? '☀️' : '🌙'; label.textContent = isDark ? 'Light Mode' : 'Dark Mode'; }
+    }
+    (function initTheme() {
+      let isDark = false;
+      try { isDark = localStorage.getItem('tafe-quiz-theme') === 'dark'; } catch (e) { }
+      document.body.classList.toggle('dark-theme', isDark);
+      updateThemeToggleUI(isDark);
+    })();
+  </script>
+  <script>
+    // ── 74193 counter simulator ────────────────────────────────────────────────
+    // State: cnt (0-15, the 4-bit count Q_D Q_C Q_B Q_A), clk (the clock level), and the levels at the control pins:
+    // cIn (C, clear — active HIGH), ldIn (LD-bar, load — active LOW), andIn/andOut (the AND gate of the Mod-6 up
+    // counter). Every wire that carries a changed level to a pin is a "net": the level is sent along it (a visible
+    // sweep) and only takes effect when it ARRIVES. A small discrete-event engine models propagation delay.
+    const SPEEDS = { normal: { gate: 780, wire: 1920, clear: 780 }, fast: { gate: 380, wire: 950, clear: 380 } };
+    let speed = 'normal';
+    let direction = 'up', mod = 16;   // (named 'direction', not 'dir': inline onclick handlers see the button's own .dir property first)
+    let cnt = 0, cIn = 0, ldIn = 1, clk = 0, andIn = [0, 0], andOut = 0, boSent = 1;
+    let pendingCnt = null, pendingAnd = null, flights = {}, events = [], seq = 0, loopOn = false;
+    let phase = 'idle', auto = false, autoTimer = null;
+
+    const HIGH = 'var(--colour-ui-correct)', LOW = 'var(--colour-label)';
+    const col = (v) => v ? HIGH : LOW;
+    const bit = (n, b) => (n >> b) & 1;
+    const bin = (n) => [3, 2, 1, 0].map(b => bit(n, b)).join('');
+    const names = (b) => 'ABCD'[b];
+    const loadVal = () => mod - 1;                           // down Mod-6/8: the value LOADed on underflow (D inputs)
+    const startCount = () => direction === 'up' ? 0 : (mod === 16 ? 15 : loadVal());
+    const hasClear = () => direction === 'up' && mod !== 16;       // C driven by the circuit (else tied LOW)
+    const hasLoad = () => direction === 'down' && mod !== 16;      // LD-bar driven by BO-bar (else held HIGH)
+    const boLevel = () => (direction === 'down' && cnt === 0 && clk === 0) ? 0 : 1;   // borrow out (active LOW): at 0 while the clock is LOW
+    const coLevel = () => (direction === 'up' && cnt === 15 && clk === 0) ? 0 : 1;    // carry out (active LOW): at 15 while the clock is LOW
+
+    // geometry (viewBox starts at x=20)
+    const CX0 = 140, CX1 = 470, CY0 = 170, CY1 = 330;     // the chip
+    const PINX = [365, 310, 255, 200];                      // output / data pin x for bit 0 (QA) .. bit 3 (QD)
+    const NETS = {                                          // wire paths
+      fb: 'M 200,130 L 80,130 L 80,372 L 420,372 L 420,330',                 // Mod-8 up: QD junction -> left -> along the bottom -> up into C
+      fbC: 'M 255,125 L 72,125 L 72,315 L 100,315',                           // Mod-6 up: QC -> AND lower input
+      fbB: 'M 310,145 L 90,145 L 90,297 L 100,297',                           // Mod-6 up: QB -> AND upper input
+      andC: 'M 134,306 L 134,372 L 420,372 L 420,330',                        // Mod-6 up: AND output -> C
+      bo: 'M 105,265 L 80,265 L 80,45 L 420,45 L 420,170',                    // down Mod-6/8: BO-bar -> LD-bar
+    };
+    const netsForConfig = () => hasClear() ? (mod === 8 ? ['fb'] : ['fbC', 'fbB', 'andC']) : hasLoad() ? ['bo'] : [];
+
+    const TEXT = {
+      'up-8': 'Here the <b>74193</b> counts <b>up</b> on the clock input <b>CU</b>, and the <b>QD</b> output (the most significant bit) is wired back to the <b>C</b> (clear) input. When the count reaches <b>8 (1000)</b>, QD goes HIGH — see where that 1 travels, and what it does when it gets there.',
+      'up-6': 'The <b>74193</b> counts <b>up</b> on <b>CU</b>. <b>QC</b> and <b>QB</b> feed an <b>AND gate</b> whose output drives the <b>C</b> (clear) input. At <b>6 (0110)</b> both are HIGH, so the AND gate goes HIGH — follow the 1s to see what clears the counter.',
+      'up-16': 'The <b>74193</b> counts <b>up</b> on <b>CU</b> with nothing wired back: <b>C</b> is tied LOW so it never clears. It counts <b>0 – 15</b> and wraps. Watch <b><span class="ov">CO</span></b> (carry out) at 15 — it goes LOW while the clock is LOW, the pulse that clocks the next counter in a cascade.',
+      'down-8': 'The <b>74193</b> counts <b>down</b> on <b>CD</b> (CU is held HIGH). The borrow output <b><span class="ov">BO</span></b> is wired to <b><span class="ov">LD</span></b> (load), and the data inputs are tied to <b>0111 (7)</b>. When the count reaches 0 and the clock goes LOW, BO goes LOW — see what happens next.',
+      'down-6': 'The <b>74193</b> counts <b>down</b> on <b>CD</b> (CU is held HIGH). The borrow output <b><span class="ov">BO</span></b> is wired to <b><span class="ov">LD</span></b> (load), and the data inputs are tied to <b>0101 (5)</b>. When the count reaches 0 and the clock goes LOW, BO goes LOW — see what happens next.',
+      'down-16': 'The <b>74193</b> counts <b>down</b> on <b>CD</b> (CU is held HIGH) with nothing reloaded: <b><span class="ov">LD</span></b> is held HIGH. It counts <b>15 – 0</b> and wraps. Watch <b><span class="ov">BO</span></b> (borrow out) at 0 — it goes LOW while the clock is LOW, the pulse that clocks the next counter in a cascade.',
+    };
+
+    function buildSvg() {
+      const up = direction === 'up', clkY = up ? 215 : 260;
+      let s = '';
+      // 5V: Vcc always; LD-bar when it is not driven by BO-bar; the unused clock input (CD for up, CU for down)
+      const ldOn5V = !hasLoad();
+      s += `<g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="3" style="stroke: var(--colour-ui-correct)">
+              <path d="M 455,170 L 455,120 L 500,120 L 500,${up ? 260 : 215} L 470,${up ? 260 : 215}" />
+              ${ldOn5V ? '<path d="M 420,170 L 420,120 L 455,120" />' : ''}
+            </g>
+            <circle cx="455" cy="120" r="4" style="fill: var(--colour-ui-correct)" />${ldOn5V ? '<circle cx="420" cy="120" r="4" style="fill: var(--colour-ui-correct)" />' : ''}
+            <text x="510" y="126" font-size="16" font-weight="bold" style="fill: var(--colour-ui-correct)">5V</text>`;
+      // chip
+      s += `<rect x="${CX0}" y="${CY0}" width="${CX1 - CX0}" height="${CY1 - CY0}" rx="4" style="fill: var(--colour-panel); stroke: var(--colour-border)" stroke-width="3" />`;
+      // GND, and C tied LOW when nothing drives it
+      s += `<g fill="none" stroke-width="3" style="stroke: var(--colour-label)">
+              <path d="M 455,${CY1} L 455,385" /><path d="M 440,385 L 470,385" /><path d="M 446,392 L 464,392" /><path d="M 451,399 L 459,399" />
+              ${hasClear() ? '' : '<path d="M 420,330 L 420,385 L 455,385" />'}
+            </g>${hasClear() ? '' : '<circle cx="455" cy="385" r="4" style="fill: var(--colour-label)" />'}`;
+      // carry / borrow stubs on the left (coloured when they are doing something)
+      s += `<path id="stub-co" d="M 105,205 L ${CX0},205" fill="none" stroke-width="3" />
+            <path id="stub-bo" d="M 105,265 L ${CX0},265" fill="none" stroke-width="3" />`;
+      if (up && mod === 16) s += `<text id="coTxt" x="100" y="211" text-anchor="end" font-size="16" font-weight="bold"></text>`;
+      if (!up && mod === 16) s += `<text id="boTxt" x="100" y="271" text-anchor="end" font-size="16" font-weight="bold"></text>`;
+      // data inputs (tied to the load value when LD-bar is used) and pin names
+      const dv = hasLoad() ? loadVal() : null;
+      for (let b = 0; b < 4; b++) {
+        const x = PINX[b], c = dv === null ? 'var(--colour-label)' : col(bit(dv, b));
+        s += `<path d="M ${x},${CY1} L ${x},350" fill="none" stroke-width="3" style="stroke: ${c}" />`;
+        if (dv !== null) s += `<text x="${x}" y="372" text-anchor="middle" font-size="20" font-weight="bold" style="fill: ${c}">${bit(dv, b)}</text>`;
+      }
+      if (dv !== null) s += `<text x="282" y="400" text-anchor="middle" font-size="13" style="fill: var(--colour-label)">D = ${bin(dv)} (${dv}) loaded when <tspan class="ov">LD</tspan> goes LOW</text>`;
+      const lab = (x, y, t, anchor) => `<text x="${x}" y="${y}" text-anchor="${anchor || 'middle'}" font-size="13" style="fill: var(--colour-label)">${t}</text>`;
+      s += [3, 2, 1, 0].map(b => lab(PINX[b], 192, `Q<tspan baseline-shift="sub" font-size="9">${names(b)}</tspan>`)).join('');
+      s += [3, 2, 1, 0].map(b => lab(PINX[b], 322, `D<tspan baseline-shift="sub" font-size="9">${names(b)}</tspan>`)).join('');
+      s += lab(CX0 + 8, 209, '<tspan style="text-decoration:overline">CO</tspan>', 'start') + lab(CX0 + 8, 269, '<tspan style="text-decoration:overline">BO</tspan>', 'start');
+      s += lab(420, 192, '<tspan style="text-decoration:overline">LD</tspan>') + lab(455, 192, 'Vcc');
+      s += lab(CX1 - 24, 219, 'CU', 'end') + lab(CX1 - 24, 264, 'CD', 'end') + lab(420, 322, 'C') + lab(455, 322, 'GND');
+      // active-edge notch on the clock input, the clock wire, and the CLK / AUTO CLK switches
+      s += `<path d="M ${CX1},${clkY - 8} L ${CX1 - 10},${clkY} L ${CX1},${clkY + 8}" fill="none" stroke-width="2" style="stroke: var(--colour-label)" />`;
+      s += `<path id="w-clk" d="M ${CX1},${clkY} L 520,${clkY}" fill="none" stroke-width="3" />`;
+      s += `<g class="sw" id="swClk" tabindex="0" role="button" aria-label="Send a clock pulse">
+              <rect class="sw-box" x="520" y="${clkY - 22}" width="100" height="44" rx="6" style="fill: var(--colour-panel); stroke: var(--colour-border)" stroke-width="2" />
+              <text x="570" y="${clkY + 6}" text-anchor="middle" font-size="18" font-weight="bold" style="fill: var(--colour-text)">CLK</text>
+            </g>
+            <g class="sw" id="swAuto" tabindex="0" role="button" aria-pressed="false" aria-label="Auto clock">
+              <rect class="sw-box" x="520" y="${clkY + 30}" width="100" height="44" rx="6" style="fill: var(--colour-panel); stroke: var(--colour-border)" stroke-width="2" />
+              <text x="570" y="${clkY + 58}" text-anchor="middle" font-size="16" font-weight="bold" style="fill: var(--colour-text)">AUTO CLK</text>
+            </g>`;
+      // output stubs + arrow heads + digits
+      for (let b = 0; b < 4; b++) {
+        const x = PINX[b];
+        s += `<path id="w-q${b}" d="M ${x},${CY0} L ${x},108" fill="none" stroke-width="3" stroke-linecap="round" />
+              <polygon id="a-q${b}" points="${x - 7},110 ${x},96 ${x + 7},110" />
+              <text id="dig${b}" x="${x}" y="78" text-anchor="middle" font-size="30" font-weight="bold"></text>`;
+      }
+      s += `<text x="282" y="30" text-anchor="middle" font-size="14" style="fill: var(--colour-label)">Binary count output</text>`;
+      // the AND gate of the Mod-6 up counter
+      if (up && mod === 6) {
+        s += `<path d="M 100,288 L 116,288 A 18,18 0 0 1 116,324 L 100,324 Z" style="fill: var(--colour-panel); stroke: var(--colour-border)" stroke-width="3" />
+              <text x="110" y="311" text-anchor="middle" font-size="14" style="fill: var(--colour-label)">&amp;</text>
+              <circle cx="255" cy="125" r="5" id="j-c" /><circle cx="310" cy="145" r="5" id="j-b" />`;
+      }
+      if (up && mod === 8) s += `<circle cx="200" cy="130" r="5" id="j-d" /><text x="88" y="150" font-size="12" style="fill: var(--colour-label)">feedback</text>`;
+      // the wires that carry a changed level to a pin, with a travelling sweep on top
+      const ids = netsForConfig();
+      s += `<g fill="none" stroke-linejoin="round" stroke-linecap="round">` +
+        ids.map(id => `<path id="w-${id}" d="${NETS[id]}" stroke-width="3" /><path id="o-${id}" d="${NETS[id]}" stroke-width="4.5" />`).join('') + `</g>`;
+      // the value at the pin being driven
+      if (hasClear()) s += `<text id="pinTxt" x="412" y="400" text-anchor="end" font-size="20" font-weight="bold"></text>`;
+      if (hasLoad()) s += `<text id="pinTxt" x="428" y="72" text-anchor="start" font-size="20" font-weight="bold"></text>`;
+      document.getElementById('simSvg').innerHTML = s;
+      const g = document.getElementById('swClk'), a = document.getElementById('swAuto');
+      g.addEventListener('click', pulse);
+      g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pulse(); } });
+      a.addEventListener('click', toggleAuto);
+      a.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleAuto(); } });
+    }
+
+    // ── event engine (same shape as the SR latch simulator) ──
+    function sched(dt, fn) {
+      const e = { t: performance.now() + dt, fn, dead: false, id: ++seq };
+      events.push(e); startLoop(); return e;
+    }
+    function startLoop() { if (!loopOn) { loopOn = true; requestAnimationFrame(tick); } }
+    function tick() {
+      const now = performance.now();
+      events.sort((a, b) => a.t - b.t);
+      while (events.length && events[0].t <= now) {
+        const e = events.shift();
+        if (!e.dead) e.fn();
+      }
+      events = events.filter(e => !e.dead);
+      render(now);
+      if (events.length || Object.keys(flights).length) requestAnimationFrame(tick); else loopOn = false;
+    }
+    const busy = () => events.length > 0 || Object.keys(flights).length > 0 || !!pendingCnt || !!pendingAnd;
+    const jitter = (ms) => ms * (0.9 + 0.2 * Math.random());
+
+    // A clock pulse: HIGH for a moment, then LOW. The rising edge counts (up or down) after the propagation delay;
+    // the carry / borrow outputs act while the clock is LOW.
+    function pulse() {
+      if (busy()) return false;               // wait for the circuit to settle first
+      clk = 1;
+      phase = 'clocked';
+      const gate = jitter(SPEEDS[speed].gate);
+      const next = direction === 'up' ? (cnt + 1) & 15 : (cnt - 1) & 15;
+      pendingCnt = { val: next, ev: sched(gate, () => applyCount(next, 'count')) };
+      sched(gate * 1.35, () => { clk = 0; onSignals(); });
+      startLoop(); render(performance.now());
+      return true;
+    }
+    function applyCount(v, why) {
+      const old = cnt;
+      cnt = v; pendingCnt = null;
+      phase = why === 'count' ? 'counted' : why;           // 'counted' | 'clear' | 'load'
+      if (why === 'count') {
+        if (hasClear() && mod === 8 && cnt === 8) phase = 'eight';
+        if (hasClear() && mod === 6 && cnt === 6) phase = 'six';
+        if (hasLoad() && cnt === 0) phase = 'zero';
+      }
+      if (why === 'clear') phase = 'cleared';
+      if (why === 'load') phase = 'loaded';
+      if (hasClear() && mod === 8 && bit(cnt, 3) !== bit(old, 3)) sendNet('fb', bit(cnt, 3));
+      if (hasClear() && mod === 6) {
+        if (bit(cnt, 2) !== bit(old, 2)) sendNet('fbC', bit(cnt, 2));
+        if (bit(cnt, 1) !== bit(old, 1)) sendNet('fbB', bit(cnt, 1));
+      }
+      onSignals();
+    }
+    // borrow out -> LD-bar: whenever BO-bar changes, send the new level along its wire
+    function onSignals() {
+      if (hasLoad()) {
+        const b = boLevel();
+        if (b !== boSent) { boSent = b; if (b === 0) phase = 'borrow'; sendNet('bo', b); }
+      }
+    }
+    function sendNet(id, val) {
+      const now = performance.now(), dur = SPEEDS[speed].wire, tok = ++seq;
+      flights[id] = { val, t0: now, t1: now + dur, tok };
+      sched(dur, () => arrive(id, val, tok));
+    }
+    function arrive(id, val, tok) {
+      if (flights[id] && flights[id].tok === tok) delete flights[id];
+      if (id === 'fb' || id === 'andC') { cIn = val; clearCheck(); }
+      else if (id === 'fbC') { andIn[0] = val; reevalAnd(); }
+      else if (id === 'fbB') { andIn[1] = val; reevalAnd(); }
+      else if (id === 'bo') { ldIn = val; loadCheck(); }
+    }
+    function reevalAnd() {
+      const target = andIn[0] && andIn[1] ? 1 : 0;
+      if (pendingAnd) { if (pendingAnd.val === target) return; pendingAnd.ev.dead = true; pendingAnd = null; }
+      if (target !== andOut) {
+        pendingAnd = { val: target, ev: sched(jitter(SPEEDS[speed].gate * 0.6), () => { andOut = target; pendingAnd = null; if (target === 1) phase = 'andHigh'; sendNet('andC', target); }) };
+      }
+    }
+    function clearCheck() {                    // C is active HIGH: an asynchronous clear
+      if (cIn === 1 && cnt !== 0) {
+        phase = 'clearing';
+        pendingCnt = { val: 0, ev: sched(jitter(SPEEDS[speed].clear), () => applyCount(0, 'clear')) };
+      } else if (cIn === 0) phase = 'released';
+    }
+    function loadCheck() {                     // LD-bar is active LOW: an asynchronous load of D
+      if (ldIn === 0 && cnt !== loadVal()) {
+        phase = 'loading';
+        pendingCnt = { val: loadVal(), ev: sched(jitter(SPEEDS[speed].clear), () => applyCount(loadVal(), 'load')) };
+      } else if (ldIn === 1) phase = 'released';
+    }
+
+    // ── drawing ──
+    function render(now) {
+      now = now || performance.now();
+      for (let b = 0; b < 4; b++) {
+        const v = bit(cnt, b), c = col(v);
+        document.getElementById('w-q' + b).setAttribute('stroke', c);
+        document.getElementById('a-q' + b).style.fill = c;
+        const d = document.getElementById('dig' + b);
+        d.textContent = v; d.style.fill = c;
+        // this digit is about to change (the counter is still "thinking"): blink the old value
+        d.classList.toggle('out-flash', !!(pendingCnt && bit(pendingCnt.val, b) !== v));
+      }
+      // carry / borrow stubs
+      const co = coLevel(), bo = boLevel();
+      document.getElementById('stub-co').setAttribute('stroke', direction === 'up' && mod === 16 ? col(co) : 'var(--colour-label)');
+      document.getElementById('stub-bo').setAttribute('stroke', direction === 'down' ? col(bo) : 'var(--colour-label)');
+      const coT = document.getElementById('coTxt'), boT = document.getElementById('boTxt');
+      if (coT) { coT.innerHTML = '<tspan class="ov">CO</tspan> = ' + co; coT.style.fill = col(co); }
+      if (boT) { boT.innerHTML = '<tspan class="ov">BO</tspan> = ' + bo; boT.style.fill = col(bo); }
+      // junction dots follow the output they are on
+      const jd = document.getElementById('j-d'); if (jd) jd.style.fill = col(bit(cnt, 3));
+      const jc = document.getElementById('j-c'); if (jc) jc.style.fill = col(bit(cnt, 2));
+      const jb = document.getElementById('j-b'); if (jb) jb.style.fill = col(bit(cnt, 1));
+      // wires: colour = the level at the pin they drive; the sweep shows a changed level travelling along them
+      const destLevel = { fb: cIn, andC: cIn, fbC: andIn[0], fbB: andIn[1], bo: ldIn };
+      netsForConfig().forEach(id => {
+        document.getElementById('w-' + id).setAttribute('stroke', col(destLevel[id]));
+        const ov = document.getElementById('o-' + id), f = flights[id];
+        if (f) {
+          const L = ov.getTotalLength(), p = Math.max(0, Math.min(1, (now - f.t0) / (f.t1 - f.t0)));
+          ov.setAttribute('stroke', col(f.val));
+          ov.setAttribute('stroke-dasharray', L);
+          ov.setAttribute('stroke-dashoffset', L * (1 - p));
+          ov.style.display = '';
+        } else ov.style.display = 'none';
+      });
+      const pt = document.getElementById('pinTxt');
+      if (pt) {
+        const lvl = hasClear() ? cIn : ldIn, f = hasClear() ? (flights.fb || flights.andC) : flights.bo;
+        pt.innerHTML = (hasClear() ? 'C' : '<tspan class="ov">LD</tspan>') + ' = ' + lvl; pt.style.fill = col(lvl);
+        // the value at the pin is about to change: in the final stretch of the sweep, blink the (old) value
+        pt.classList.toggle('fb-flash', !!(f && (f.t1 - now) <= Math.min(800, SPEEDS[speed].wire * 0.6)));
+      }
+      // clock + auto switches
+      document.getElementById('w-clk').setAttribute('stroke', col(clk));
+      document.querySelector('#swClk rect').style.fill = clk ? 'rgba(var(--colour-ui-primary-rgb), .22)' : 'var(--colour-panel)';
+      document.querySelector('#swAuto rect').style.fill = auto ? 'rgba(var(--colour-ui-primary-rgb), .22)' : 'var(--colour-panel)';
+      renderStatus();
+    }
+
+    function statusBody() {
+      const ov = (t) => `<span class="ov">${t}</span>`;
+      const dn = direction === 'down';
+      switch (phase) {
+        case 'clocked': return `A <b>clock pulse</b> arrives. On its rising edge the counter ${dn ? 'subtracts' : 'adds'} 1 — but the outputs only change after a short <b>propagation delay</b> (the blinking digits are about to change).`;
+        case 'counted': break;
+        case 'eight': return '<b>QD has gone HIGH</b> — the count is 8 (1000). That 1 now <b>travels along the feedback wire</b> from QD to the <b>C (clear)</b> input. Until it arrives the counter has no idea anything is wrong.';
+        case 'six': return '<b>QC and QB are both HIGH</b> — the count is 6 (0110). Their 1s now <b>travel along their wires</b> to the AND gate.';
+        case 'andHigh': return 'Both AND inputs are 1, so the <b>AND gate output goes HIGH</b>. That 1 now travels along the wire to the <b>C (clear)</b> input.';
+        case 'clearing': return 'The 1 has reached <b>C</b>. Clear is asserted, so the counter <b>resets to 0000</b> — straight away, without waiting for a clock pulse (the blinking digits are about to drop to 0).';
+        case 'cleared': return mod === 8
+          ? 'The counter is back at <b>0000</b>, so <b>QD is 0</b> again. That 0 now travels along the feedback wire to C…'
+          : 'The counter is back at <b>0000</b>, so <b>QC and QB are 0</b> again. Their 0s travel to the AND gate, then on to C…';
+        case 'released': return hasClear()
+          ? `The 0 has reached <b>C</b>, releasing the clear. The counter is ready to count again from 0. Because ${mod} never lasts, it only ever settles on <b>0 – ${mod - 1}</b>: that is <b>Mod-${mod}</b>.`
+          : `${ov('LD')} has gone HIGH again, so the load is released. The counter counts down again from <b>${loadVal()}</b>, so it only ever runs <b>${loadVal()} – 0</b>: that is <b>Mod-${mod}</b>.`;
+        case 'zero': return `The count has reached <b>0</b>. The clock is still HIGH, so ${ov('BO')} is still HIGH. Wait for the clock to go LOW…`;
+        case 'borrow': return `The count is 0 and the clock is LOW, so <b>${ov('BO')} (borrow out) goes LOW</b>. That 0 now <b>travels along the wire</b> from ${ov('BO')} to ${ov('LD')}.`;
+        case 'loading': return `The 0 has reached ${ov('LD')}. <b>Load is asserted</b>, so the counter copies the D inputs — <b>${bin(loadVal())} (${loadVal()})</b> — straight away, without waiting for a clock pulse (the blinking digits are about to change).`;
+        case 'loaded': return `The counter now holds <b>${bin(loadVal())}</b>, so ${ov('BO')} is HIGH again. That 1 travels back along the wire to ${ov('LD')} to release the load…`;
+      }
+      // idle / settled states
+      if (direction === 'up' && mod === 16 && cnt === 15 && clk === 0) return `The count is <b>15 (1111)</b> and the clock is LOW, so <b>${ov('CO')} (carry out) is LOW</b>. That is the pulse a next counter in a cascade would be clocked with. The next clock pulse takes the count round to 0.`;
+      if (direction === 'down' && mod === 16 && cnt === 0 && clk === 0) return `The count is <b>0 (0000)</b> and the clock is LOW, so <b>${ov('BO')} (borrow out) is LOW</b> — the pulse a next counter in a cascade would be clocked with. The next clock pulse takes the count round to 15.`;
+      if (!dn && hasClear() && cnt === mod - 1) return `The count is ${cnt} (${bin(cnt)}), the highest number it can settle on. Send another pulse and watch what happens.`;
+      return `Click <b>CLK</b> (or <b>AUTO CLK</b>) to ${dn ? 'subtract' : 'add'} 1 on each rising edge of the clock.`;
+    }
+    function renderStatus() {
+      const settling = busy();
+      document.getElementById('simStatus').innerHTML =
+        `<div>Count = <b>${cnt}</b> (<b>${bin(cnt)}</b>)${settling ? ' · <i>settling…</i>' : ''}</div><div style="margin-top:.35rem">${statusBody()}</div>`;
+    }
+
+    function setConfig(d, m) {
+      direction = d; mod = m;
+      ['up', 'down'].forEach(k => { const b = document.getElementById('dir-' + k); b.classList.toggle('active', k === direction); b.setAttribute('aria-pressed', String(k === direction)); });
+      [6, 8, 16].forEach(k => { const b = document.getElementById('mod-' + k); b.classList.toggle('active', k === mod); b.setAttribute('aria-pressed', String(k === mod)); });
+      document.getElementById('subtitle').textContent = `Mod-${mod} ${direction === 'up' ? 'Up' : 'Down'}-Counter · 74193 · Simulator`;
+      document.getElementById('introText').innerHTML = TEXT[direction + '-' + mod] + ' Click <b>CLK</b> to send a clock pulse (or <b>AUTO CLK</b> to keep sending them).';
+      document.getElementById('resetBtn').textContent = '↺ Reset to ' + startCount();
+      stopAuto();
+      initState(); buildSvg(); render();
+    }
+    function initState() {
+      events.forEach(e => e.dead = true); events = [];
+      cnt = startCount(); cIn = 0; ldIn = 1; clk = 0; andIn = [0, 0]; andOut = 0; boSent = 1;
+      pendingCnt = null; pendingAnd = null; flights = {}; phase = 'idle';
+    }
+    function resetSim() { initState(); render(); }
+    function setSpeed(s) {
+      speed = s;
+      ['normal', 'fast'].forEach(k => document.getElementById('spd-' + k).classList.toggle('active', k === s));
+    }
+    function stopAuto() { auto = false; clearInterval(autoTimer); }
+    function toggleAuto() {
+      if (auto) stopAuto();
+      else { auto = true; autoTimer = setInterval(() => { if (!busy()) pulse(); }, 900); }
+      const a = document.getElementById('swAuto'); if (a) a.setAttribute('aria-pressed', String(auto));
+      render();
+    }
+
+    setConfig('up', 16);      // opens on Up, Mod-16 (the plain free-running counter)
+  </script>
+  <p class="site-copyright">&copy; 2026 Anderson Home Technology. All rights reserved.</p>
+</body>
+
+</html>

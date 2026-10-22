@@ -86,8 +86,10 @@
     .wb-tracks-wrap { position: relative; }
     .wb-hint-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
     .wb-track-label { width: 2.4rem; }
-    .extra-row { display: none; }
-    .extra-row.shown { display: flex; }
+    /* the three output rows always sit in the order Q0, Q1, Q2; a row is shown when it is the one being built,
+       when it comes BEFORE it (given, already completed), or — after Check — when it comes after it */
+    .q-row { display: none; }
+    .q-row.shown { display: flex; }
   </style>
 </head>
 
@@ -114,6 +116,7 @@
         <div class="legend-row">
           <span><span class="legend-swatch" style="background:var(--colour-switch)"></span>CLK</span>
           <span><span class="legend-swatch" style="background:var(--colour-output-z)"></span><span id="legendOut">Q₀</span> (building)</span>
+          <span id="legendGivenWrap" style="display:none"><span class="legend-swatch" style="background:var(--colour-ui-correct)"></span><span id="legendGiven"></span> (already completed)</span>
         </div>
       </div>
 
@@ -160,17 +163,17 @@
             <div class="wb-track-label">CLK</div>
             <svg id="clkTrack"></svg>
           </div>
-          <div class="wb-track-row">
-            <div class="wb-track-label" id="qLabel">Q₀</div>
-            <svg id="qTrack"></svg>
+          <div class="wb-track-row q-row" id="qRow0">
+            <div class="wb-track-label">Q₀</div>
+            <svg id="qTrack0"></svg>
           </div>
-          <div class="wb-track-row extra-row" id="extraRow1">
-            <div class="wb-track-label" id="extraLabel1"></div>
-            <svg id="extraTrack1"></svg>
+          <div class="wb-track-row q-row" id="qRow1">
+            <div class="wb-track-label">Q₁</div>
+            <svg id="qTrack1"></svg>
           </div>
-          <div class="wb-track-row extra-row" id="extraRow2">
-            <div class="wb-track-label" id="extraLabel2"></div>
-            <svg id="extraTrack2"></svg>
+          <div class="wb-track-row q-row" id="qRow2">
+            <div class="wb-track-label">Q₂</div>
+            <svg id="qTrack2"></svg>
           </div>
         </div>
 
@@ -257,7 +260,11 @@
       document.getElementById('ruleDir').textContent = cfg.dirWord;
       document.getElementById('ruleEdgeWord').textContent = cfg.edgeWord;
       document.getElementById('ruleStart').textContent = `Q₂Q₁Q₀ = ${bin3(start)} (${start})`;
-      ['ruleOut', 'ruleOut2', 'legendOut', 'qLabel'].forEach(id => document.getElementById(id).textContent = name);
+      ['ruleOut', 'ruleOut2', 'legendOut'].forEach(id => document.getElementById(id).textContent = name);
+      // outputs below Q0 already have the lower bits completed above them
+      const givenNames = [0, 1, 2].filter(b => b < outSel).map(b => 'Q' + SUB[b]);
+      document.getElementById('legendGivenWrap').style.display = givenNames.length ? '' : 'none';
+      document.getElementById('legendGiven').textContent = givenNames.join(', ');
       const wrap = cfg.dir === 1 ? '111 → 000' : '000 → 111';
       const rules = [
         ['Active edge', `The count moves one step <b>${cfg.dirWord}</b> (wraps ${wrap})`],
@@ -335,17 +342,22 @@
     // ── page state ──
     let start, counts, isEdge, correctQ, builder, checked, lastResult;
 
+    // The track starts AT the bit's value before the first clock pulse (CLK idles LOW, so column 0 never has an
+    // edge): with startLevel set, a bit that starts HIGH is drawn flat from the left edge — no riser that would
+    // look like a count up on the first column.
+    const newBuilder = () => ({ pieces: [], startLevel: correctQ[0] });
+
     function doNewDiagram() {
       ({ start, counts, isEdge } = generateDiagram());
       correctQ = bitTrack(counts, outSel);
-      builder = { pieces: [] };
+      builder = newBuilder();
       checked = false;
       lastResult = null;
       render();
     }
 
     function doRestart() {
-      builder = { pieces: [] };
+      builder = newBuilder();
       checked = false;
       lastResult = null;
       render();
@@ -375,16 +387,15 @@
       renderRuleCard();
       const progressCols = wbCursor(builder).col;
       renderReadOnlyTrackSVG(document.getElementById('clkTrack'), CLK, { className: 'wb-track-path wb-track-clk', progressCols });
-      renderQTrackSVG(document.getElementById('qTrack'), builder, N, checked ? { results: lastResult.results, correctLevels: correctQ } : {});
-
-      // After Check, reveal the other two outputs so the whole count reads
-      // straight down any column.
-      const others = [2, 1, 0].filter(b => b !== outSel);
-      others.forEach((b, i) => {
-        const row = document.getElementById('extraRow' + (i + 1));
-        row.classList.toggle('shown', checked);
-        document.getElementById('extraLabel' + (i + 1)).textContent = 'Q' + SUB[b];
-        if (checked) renderReadOnlyTrackSVG(document.getElementById('extraTrack' + (i + 1)), bitTrack(counts, b), { className: 'wb-q-path wb-col-correct' });
+      // The outputs always read Q0, Q1, Q2 from the top. The one being built is the student's; the lower bits
+      // (before it) are shown already completed so the count can be read down any column; the higher bits
+      // (after it) appear once the answer is checked.
+      [0, 1, 2].forEach(b => {
+        const row = document.getElementById('qRow' + b), svg = document.getElementById('qTrack' + b);
+        const given = b < outSel, revealed = b > outSel && checked;
+        row.classList.toggle('shown', b === outSel || given || revealed);
+        if (b === outSel) renderQTrackSVG(svg, builder, N, checked ? { results: lastResult.results, correctLevels: correctQ } : {});
+        else if (given || revealed) { const bits = bitTrack(counts, b); renderReadOnlyTrackSVG(svg, bits, { className: 'wb-q-path wb-col-correct', startLevel: bits[0] }); }
       });
 
       renderPiecePalette(document.getElementById('palette'), {
@@ -401,8 +412,9 @@
       if (checked) {
         banner.className = 'result-banner ' + (lastResult.allCorrect ? 'correct' : 'wrong');
         document.getElementById('resultIcon').textContent = lastResult.allCorrect ? '✓' : '✗';
+        const later = [0, 1, 2].filter(b => b > outSel).length;
         document.getElementById('resultText').textContent = lastResult.allCorrect
-          ? `All ${lastResult.total} columns correct! The other two outputs are shown below — read any column straight down to get the count.`
+          ? `All ${lastResult.total} columns correct!` + (later ? ` The ${later === 1 ? 'other output is' : 'other outputs are'} shown below — read any column straight down to get the count.` : ' Read any column straight down to get the count.')
           : `${lastResult.correctCount} of ${lastResult.total} columns correct — red columns are wrong.`;
       } else {
         banner.className = 'result-banner';
@@ -419,8 +431,10 @@
         descriptionEl: document.querySelector('.rule-card'),
         givenTracks: [
           { label: 'CLK', svgEl: document.getElementById('clkTrack') },
+          // the lower bits are completed above the one being built, so they are printed as given too
+          ...[0, 1, 2].filter(b => b < outSel).map(b => ({ label: 'Q' + SUB[b], svgEl: document.getElementById('qTrack' + b) })),
         ],
-        solutionTrack: { label: 'Q' + SUB[outSel], levels: correctQ, totalCols: N, className: 'wb-q-path wb-col-correct' },
+        solutionTrack: { label: 'Q' + SUB[outSel], levels: correctQ, totalCols: N, className: 'wb-q-path wb-col-correct', startLevel: correctQ[0] },
       });
       wbTriggerPrint();
     }
@@ -446,8 +460,8 @@
     doNewDiagram = function () { answersShown = false; __doNewDiagram(); };
 
     function showAnswers() {
-      builder = { pieces: [] };
-      let lvl = 0, c = 0;
+      builder = newBuilder();
+      let lvl = builder.startLevel, c = 0;
       while (c < N) {
         const x = correctQ[c];
         if (x !== lvl) { wbPlace(builder, { type: x ? 'rise' : 'fall' }, N); lvl = x; c++; }
