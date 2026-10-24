@@ -1,0 +1,330 @@
+<!--
+  Differential amplifier modes explorer — drive the two inputs of a long-tail pair and watch what comes out.
+
+  A differential amplifier has TWO MODES of operation, and any pair of inputs is a mix of them:
+      differential input  Vd = V1 − V2           (the difference — the wanted signal)
+      common-mode input   Vc = (V1 + V2) / 2     (what both inputs share — unwanted interference)
+  Small-signal model used here (the same formulas as the quiz and the walkthrough):
+      Out 1 (Q1 collector) = −( AV(Diff) × Vd + AV(CM) × Vc )
+      Out 2 (Q2 collector) = +( AV(Diff) × Vd − AV(CM) × Vc )
+      tail node voltage     ≈ Vc            (the shared emitter node follows the common-mode part and stays
+                                             still for a purely differential signal)
+      AV(Diff) = RC / (2 re)      AV(CM) = RC / (2 × tail resistance)
+  The two tails use this project's own circuits: the resistor tail (RE = 8k2: re ≈ 29.6 Ω, AV(Diff) ≈ 94.6,
+  AV(CM) ≈ 0.341) and the constant-current-source tail (Z = 180 kΩ: re ≈ 34.3 Ω, AV(Diff) ≈ 81.6,
+  AV(CM) ≈ 0.0156) — the same figures as diff_amp_knowledge_basics.html.
+
+  Two sliders set the signed peak amplitude of each input (a negative value is the same sine wave flipped
+  upside down). The preset buttons set the three classic cases: differential, common mode, and one input
+  with the other grounded. The scope shows 2 cycles; a cursor sweeps along it with a dot on every trace.
+  The output scale is FIXED (±2 V) on purpose, so a common-mode signal visibly almost disappears; the
+  "Zoom outputs ×50" button magnifies the outputs so the small common-mode output can be seen.
+
+  No shared quiz engine is used: the page is self-contained apart from the site chrome.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../assets/theme-init.js"></script>
+  <script src="../../../assets/shapes.js"></script>
+  <title>Differential Amplifier Modes Explorer</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../assets/quiz-common.css">
+  <script src="../../../assets/breadcrumb.js" defer></script>
+  <style>
+    .sim-intro { font-size: .85rem; line-height: 1.6; }
+    .sim-btn {
+      padding: .5rem 1.1rem; border: 1px solid var(--colour-border); border-radius: var(--radius-lg, 6px);
+      background: transparent; color: var(--colour-label); cursor: pointer; font-family: inherit;
+      font-size: .78rem; font-weight: 700; letter-spacing: .04em; transition: background .15s, color .15s, border-color .15s;
+    }
+    .sim-btn:hover { color: var(--colour-text); border-color: var(--colour-ui-primary); }
+    .sim-btn.active { border-color: var(--colour-ui-primary); color: var(--colour-ui-primary); background: rgba(var(--colour-ui-primary-rgb), .1); }
+    .sim-btn:focus-visible { outline: 2px solid var(--colour-ui-primary); outline-offset: 2px; }
+    .opt-row { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; margin-top: .8rem; font-size: .78rem; color: var(--colour-label); }
+    .opt-row .lbl { min-width: 7.2rem; font-weight: 700; letter-spacing: .04em; }
+    .slider-row { display: grid; grid-template-columns: 7.2rem 1fr 6.4rem; gap: .6rem; align-items: center; margin-top: .8rem; font-size: .78rem; color: var(--colour-label); }
+    .slider-row .lbl { font-weight: 700; letter-spacing: .04em; }
+    .slider-row input[type=range] { width: 100%; accent-color: var(--colour-ui-primary); }
+    .slider-row .val { font-family: 'Share Tech Mono', monospace; font-size: .9rem; color: var(--colour-text); text-align: right; }
+    #scopeSvg { width: 100%; display: block; }
+    .grid-2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.2rem; align-items: start; }
+    @media (max-width: 700px) { .grid-2 { grid-template-columns: 1fr; } .slider-row { grid-template-columns: 5.4rem 1fr 5.2rem; } }
+    .readout { border-collapse: collapse; width: 100%; font-size: .84rem; }
+    .readout td { padding: .3rem .4rem; border-bottom: 1px solid var(--colour-border); }
+    .readout td.num { text-align: right; font-family: 'Share Tech Mono', monospace; color: var(--colour-text); }
+    .readout tr:last-child td { border-bottom: none; }
+    .sim-status { margin-top: .8rem; padding: .7rem .9rem; border: 1px solid var(--colour-border); border-radius: 6px; font-size: .85rem; line-height: 1.55; }
+    @media (max-width: 480px) { .sim-btn { padding: .45rem .75rem; } }
+  </style>
+</head>
+
+<body>
+  <script>Shapes.use('circuit-components', 'bjt-symbols');</script>
+  <div class="crumb" id="crumb" data-current="Modes Explorer"></div>
+  <header>
+    <h1>Differential Amplifier</h1>
+    <p>Differential Mode · Common Mode · Explorer</p>
+  </header>
+
+  <div class="quiz-wrap single-col" id="quizWrap">
+    <div class="questions-col">
+
+      <div class="card sim-intro">
+        <div class="progress-wrap" style="margin-bottom:.8rem;">
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+        <div>A differential amplifier has <b>two modes of operation</b>. In <b>differential mode</b> the two inputs carry equal but <i>opposite</i> signals
+          and the amplifier gives a big output. In <b>common mode</b> they carry the <i>identical</i> signal and it hardly responds at all.
+          Any real pair of inputs is a mix of the two. Use the sliders (or the presets) to drive <b>In 1</b> and <b>In 2</b> and watch the tail node and the outputs.
+          A negative amplitude is the same wave turned upside down.</div>
+
+        <div class="opt-row"><span class="lbl">Presets</span>
+          <button type="button" class="sim-btn" id="pre-diff" onclick="preset('diff')">Differential</button>
+          <button type="button" class="sim-btn" id="pre-comm" onclick="preset('comm')">Common mode</button>
+          <button type="button" class="sim-btn" id="pre-one" onclick="preset('one')">One input only</button>
+        </div>
+        <div class="slider-row"><span class="lbl" style="color:var(--colour-input-a)">In 1 peak</span>
+          <input type="range" id="a1" min="-10" max="10" step="0.5" value="5" oninput="setAmp(1, this.value)" aria-label="In 1 peak amplitude">
+          <span class="val" id="a1v"></span></div>
+        <div class="slider-row"><span class="lbl" style="color:var(--colour-input-b)">In 2 peak</span>
+          <input type="range" id="a2" min="-10" max="10" step="0.5" value="-5" oninput="setAmp(2, this.value)" aria-label="In 2 peak amplitude">
+          <span class="val" id="a2v"></span></div>
+        <div class="opt-row"><span class="lbl">Tail</span>
+          <button type="button" class="sim-btn active" id="tail-res" onclick="setTail('res')" aria-pressed="true">Resistor (RE = 8k2)</button>
+          <button type="button" class="sim-btn" id="tail-ccs" onclick="setTail('ccs')" aria-pressed="false">Constant current source (180 kΩ)</button>
+        </div>
+        <div class="opt-row"><span class="lbl">Display</span>
+          <button type="button" class="sim-btn" id="zoomBtn" onclick="toggleZoom()" aria-pressed="false">Zoom outputs ×50</button>
+          <button type="button" class="sim-btn" id="partsBtn" onclick="toggleParts()" aria-pressed="false">Show the two parts of Out 1</button>
+          <button type="button" class="sim-btn" id="runBtn" onclick="toggleRun()">❚❚ Pause</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <svg id="scopeSvg" viewBox="0 0 760 540" xmlns="http://www.w3.org/2000/svg" font-family="'Share Tech Mono', monospace" role="img" aria-label="Scope showing the inputs, the tail node and the outputs"></svg>
+        <div class="sim-status" id="simStatus" aria-live="polite"></div>
+      </div>
+
+      <div class="card">
+        <div class="grid-2">
+          <svg id="ckt" viewBox="0 0 330 300" xmlns="http://www.w3.org/2000/svg" font-family="'Share Tech Mono', monospace" role="img" aria-label="The differential amplifier"></svg>
+          <div>
+            <table class="readout" id="readout"></table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <footer>Electronics // UEEEC0066</footer>
+
+  <script>
+    // ── model ────────────────────────────────────────────────────────────────
+    const RC = 5600;
+    const TAILS = {
+      res: { name: 'resistor tail', Rt: 8200, re: 29.6, desc: 'RE = 8k2' },        // IT ≈ 1.756 mA → IC ≈ 0.878 mA → re ≈ 29.6 Ω
+      ccs: { name: 'constant-current-source tail', Rt: 180e3, re: 34.3, desc: 'Z = 180kΩ' },   // IT ≈ 1.515 mA → IC ≈ 0.758 mA → re ≈ 34.3 Ω
+    };
+    let tail = 'res', amp1 = 5, amp2 = -5, zoom = false, parts = false, running = true;
+    const gains = () => { const t = TAILS[tail]; return { Ad: RC / (2 * t.re), Acm: RC / (2 * t.Rt), re: t.re, Rt: t.Rt }; };
+
+    const SCOPE_W = 610, SCOPE_X0 = 130, CYCLES = 2, SWEEP_MS = 5000;
+    const IN_RANGE = 12;           // mV, ±
+    const OUT_FIXED = 2;           // V, ±
+    const ROWS = [
+      { id: 'in1', label: 'In 1', sub: 'mV', colour: 'var(--colour-input-a)', range: () => IN_RANGE, scale: 'mV' },
+      { id: 'in2', label: 'In 2', sub: 'mV', colour: 'var(--colour-input-b)', range: () => IN_RANGE, scale: 'mV' },
+      { id: 'tail', label: 'Tail node', sub: 'mV', colour: 'var(--colour-resistor-labels)', range: () => IN_RANGE, scale: 'mV' },
+      { id: 'out1', label: 'Out 1', sub: 'V', colour: 'var(--colour-output-z)', range: () => zoom ? OUT_FIXED / 50 : OUT_FIXED, scale: 'V' },
+      { id: 'out2', label: 'Out 2', sub: 'V', colour: 'var(--colour-ui-correct)', range: () => zoom ? OUT_FIXED / 50 : OUT_FIXED, scale: 'V' },
+    ];
+    const ROW_H = 86, ROW_GAP = 14, TOP = 18;
+    const rowY = (i) => TOP + i * (ROW_H + ROW_GAP);
+
+    // signals at time fraction u (0..CYCLES, in cycles) — mV for inputs / tail, V for outputs
+    function signals(u) {
+      const s = Math.sin(2 * Math.PI * u);
+      const v1 = amp1 * s, v2 = amp2 * s;
+      const vd = v1 - v2, vc = (v1 + v2) / 2;
+      const g = gains();
+      const out1 = -(g.Ad * vd + g.Acm * vc) / 1000, out2 = (g.Ad * vd - g.Acm * vc) / 1000;
+      const ve = vc * (2 * g.Rt) / (g.re + 2 * g.Rt);          // the shared emitter node follows the common-mode part
+      const o1d = -g.Ad * vd / 1000, o1c = -g.Acm * vc / 1000;   // Out 1's differential part and common part
+      return { in1: v1, in2: v2, tail: ve, out1, out2, vd, vc, o1d, o1c };
+    }
+
+    function buildScope() {
+      let s = '';
+      ROWS.forEach((r, i) => {
+        const y0 = rowY(i), yc = y0 + ROW_H / 2;
+        s += `<rect x="${SCOPE_X0}" y="${y0}" width="${SCOPE_W}" height="${ROW_H}" rx="4" style="fill: var(--colour-panel); stroke: var(--colour-border)" stroke-width="1.5" />`;
+        for (let k = 1; k < CYCLES * 4; k++) s += `<line x1="${SCOPE_X0 + k * SCOPE_W / (CYCLES * 4)}" y1="${y0}" x2="${SCOPE_X0 + k * SCOPE_W / (CYCLES * 4)}" y2="${y0 + ROW_H}" style="stroke: var(--colour-border)" stroke-width=".6" />`;
+        s += `<line x1="${SCOPE_X0}" y1="${yc}" x2="${SCOPE_X0 + SCOPE_W}" y2="${yc}" style="stroke: var(--colour-label)" stroke-width="1" stroke-dasharray="4 4" />`;
+        s += `<text x="${SCOPE_X0 - 12}" y="${yc - 4}" text-anchor="end" font-size="17" font-weight="bold" style="fill: ${r.colour}">${r.label}</text>`;
+        s += `<text id="rng${i}" x="${SCOPE_X0 - 12}" y="${yc + 14}" text-anchor="end" font-size="11" style="fill: var(--colour-label)"></text>`;
+        s += `<text id="top${i}" x="${SCOPE_X0 + 6}" y="${y0 + 13}" font-size="11" style="fill: var(--colour-label)"></text>`;
+        s += `<path id="tr${i}" fill="none" stroke-width="3" stroke-linejoin="round" style="stroke: ${r.colour}" />`;
+        if (r.id === 'out1') s += `<path id="pd" fill="none" stroke-width="2" stroke-dasharray="6 4" style="stroke: var(--colour-gain)" /><path id="pc" fill="none" stroke-width="2" stroke-dasharray="6 4" style="stroke: var(--colour-diode)" />`;
+        s += `<circle id="dot${i}" r="5" style="fill: ${r.colour}" />`;
+      });
+      s += `<line id="cursor" y1="${TOP}" y2="${rowY(ROWS.length - 1) + ROW_H}" style="stroke: var(--colour-ui-primary)" stroke-width="1.5" stroke-dasharray="3 3" />`;
+      s += `<text id="partsKey" x="${SCOPE_X0 + SCOPE_W - 6}" y="${rowY(3) + 13}" text-anchor="end" font-size="11" style="fill: var(--colour-label)"></text>`;
+      s += `<text x="${SCOPE_X0 + SCOPE_W / 2}" y="${rowY(ROWS.length - 1) + ROW_H + 18}" text-anchor="middle" font-size="12" style="fill: var(--colour-label)">time — 2 cycles of the input signal</text>`;
+      document.getElementById('scopeSvg').innerHTML = s;
+    }
+
+    function drawStatic() {
+      const N = 160;
+      ROWS.forEach((r, i) => {
+        const y0 = rowY(i), yc = y0 + ROW_H / 2, half = ROW_H / 2 - 6, rng = r.range();
+        const yOf = (v) => yc - Math.max(-1.15, Math.min(1.15, v / rng)) * half;
+        let d = '', dd = '', dc = '';
+        for (let k = 0; k <= N; k++) {
+          const u = CYCLES * k / N, x = SCOPE_X0 + SCOPE_W * k / N, sg = signals(u);
+          d += (k ? ' L ' : 'M ') + x.toFixed(1) + ',' + yOf(sg[r.id]).toFixed(1);
+          if (r.id === 'out1') { dd += (k ? ' L ' : 'M ') + x.toFixed(1) + ',' + yOf(sg.o1d).toFixed(1); dc += (k ? ' L ' : 'M ') + x.toFixed(1) + ',' + yOf(sg.o1c).toFixed(1); }
+        }
+        document.getElementById('tr' + i).setAttribute('d', d);
+        if (r.id === 'out1') {
+          document.getElementById('pd').setAttribute('d', parts ? dd : '');
+          document.getElementById('pc').setAttribute('d', parts ? dc : '');
+        }
+        document.getElementById('rng' + i).textContent = `±${r.scale === 'V' ? (rng < 1 ? (rng * 1000) + ' mV' : rng + ' V') : rng + ' mV'}`;
+        document.getElementById('top' + i).textContent = '';
+      });
+      document.getElementById('partsKey').innerHTML = parts ? `<tspan style="fill: var(--colour-gain)">— — differential part</tspan>   <tspan style="fill: var(--colour-diode)">— — common-mode part</tspan>` : '';
+    }
+
+    // moving cursor with a dot on every trace
+    let tStart = performance.now(), tPausedAt = null, tOffset = 0;
+    function frame(now) {
+      const t = running ? (now - tStart + tOffset) : tOffset;
+      const frac = ((t % SWEEP_MS) / SWEEP_MS), u = frac * CYCLES, x = SCOPE_X0 + SCOPE_W * frac;
+      const cur = document.getElementById('cursor');
+      if (cur) {
+        cur.setAttribute('x1', x); cur.setAttribute('x2', x);
+        const sg = signals(u);
+        ROWS.forEach((r, i) => {
+          const y0 = rowY(i), yc = y0 + ROW_H / 2, half = ROW_H / 2 - 6;
+          const dot = document.getElementById('dot' + i);
+          dot.setAttribute('cx', x); dot.setAttribute('cy', yc - Math.max(-1.15, Math.min(1.15, sg[r.id] / r.range())) * half);
+        });
+      }
+      requestAnimationFrame(frame);
+    }
+    function toggleRun() {
+      if (running) { tOffset = tOffset + (performance.now() - tStart); running = false; }
+      else { tStart = performance.now(); running = true; }
+      document.getElementById('runBtn').textContent = running ? '❚❚ Pause' : '▶ Run';
+    }
+
+    // ── controls ──
+    const fmtSigned = (v) => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(1) + ' mV';
+    function setAmp(n, v) { if (n === 1) amp1 = +v; else amp2 = +v; refresh(); }
+    function preset(p) {
+      if (p === 'diff') { amp1 = 5; amp2 = -5; }
+      else if (p === 'comm') { amp1 = 5; amp2 = 5; }
+      else { amp1 = 5; amp2 = 0; }
+      document.getElementById('a1').value = amp1; document.getElementById('a2').value = amp2;
+      refresh();
+    }
+    function setTail(t) {
+      tail = t;
+      ['res', 'ccs'].forEach(k => { const b = document.getElementById('tail-' + k); b.classList.toggle('active', k === t); b.setAttribute('aria-pressed', String(k === t)); });
+      refresh();
+    }
+    function toggleZoom() { zoom = !zoom; const b = document.getElementById('zoomBtn'); b.classList.toggle('active', zoom); b.setAttribute('aria-pressed', String(zoom)); refresh(); }
+    function toggleParts() { parts = !parts; const b = document.getElementById('partsBtn'); b.classList.toggle('active', parts); b.setAttribute('aria-pressed', String(parts)); refresh(); }
+
+    // ── readouts, explanation, little circuit ──
+    const sg3 = (v) => parseFloat(Number(v).toPrecision(3));
+    const fmtV = (v) => Math.abs(v) >= 1 ? sg3(Math.abs(v)) + ' V' : Math.abs(v) >= 0.001 ? sg3(Math.abs(v) * 1000) + ' mV' : sg3(Math.abs(v) * 1e6) + ' µV';
+    function readouts() {
+      const g = gains();
+      const vdPk = Math.abs(amp1 - amp2), vcPk = Math.abs(amp1 + amp2) / 2;
+      const o1 = g.Ad * vdPk / 1000, o1c = g.Acm * vcPk / 1000;                    // peak parts at Out 1
+      const out1Pk = (g.Ad * Math.abs(amp1 - amp2) + g.Acm * Math.abs(amp1 + amp2) / 2) / 1000;   // worst-case peak (parts in phase)
+      // exact peak of the sum (both parts are sinusoids in phase or antiphase with each other)
+      const sgn = Math.sign((amp1 - amp2) * (amp1 + amp2)) || 1;
+      const out1Peak = Math.abs(g.Ad * (amp1 - amp2) + g.Acm * (amp1 + amp2) / 2) / 1000;
+      const out2Peak = Math.abs(g.Ad * (amp1 - amp2) - g.Acm * (amp1 + amp2) / 2) / 1000;
+      const tailPk = vcPk * (2 * g.Rt) / (g.re + 2 * g.Rt);
+      return { g, vdPk, vcPk, o1, o1c, out1Peak, out2Peak, tailPk };
+    }
+    function explain(r) {
+      const { vdPk, vcPk } = r;
+      if (vdPk < 0.05 && vcPk < 0.05) return 'Both inputs are at zero — no signal, so nothing happens at the tail or the outputs. Move the sliders, or pick a preset.';
+      if (vcPk < 0.05) return `<b>Pure differential mode.</b> In 1 and In 2 are equal and opposite, so Q1 conducts more while Q2 conducts less. The two changes <b>cancel at the tail</b>: the tail node stays still, and each transistor works at full gain. Out 1 and Out 2 swing <b>large and in opposite directions</b>.`;
+      if (vdPk < 0.05) return `<b>Pure common mode.</b> In 1 and In 2 carry the <i>identical</i> signal, so both transistors try to conduct more together. The <b>tail node follows the input up and down</b>, and the voltage across the tail resistance cancels almost all of it. Out 1 and Out 2 barely move — the interference is <b>rejected</b>. Try <i>Zoom outputs ×50</i> to see what is left.`;
+      return `<b>A mix of both modes.</b> The differential part (${sg3(vdPk)} mV) is amplified by ${sg3(r.g.Ad)}; the common-mode part (${sg3(vcPk)} mV) only by ${sg3(r.g.Acm)}. Out 1's differential part is about <b>${sg3(r.o1 / Math.max(r.o1c, 1e-9))}×</b> bigger than its common-mode part, even though the two input parts are similar in size — that is what the CMRR measures.`;
+    }
+    function buildReadout(r) {
+      const row = (a, b) => `<tr><td>${a}</td><td class="num">${b}</td></tr>`;
+      const g = r.g;
+      document.getElementById('readout').innerHTML =
+        row('Differential input <b>V<sub>d</sub></b> = V₁ − V₂', sg3(r.vdPk) + ' mV pk') +
+        row('Common-mode input <b>V<sub>c</sub></b> = (V₁ + V₂) / 2', sg3(r.vcPk) + ' mV pk') +
+        row('<b>AV(Diff)</b> = RC / (2 × r<sub>e</sub>)', sg3(g.Ad)) +
+        row('<b>AV(CM)</b> = RC / (2 × tail)', sg3(g.Acm)) +
+        row('Out 1 peak', fmtV(r.out1Peak)) +
+        row('Out 2 peak', fmtV(r.out2Peak)) +
+        row('Tail node peak', sg3(r.tailPk) + ' mV') +
+        row('<b>CMRR</b> = 20 × Log(AV(Diff) / AV(CM))', (20 * Math.log10(g.Ad / g.Acm)).toFixed(1) + ' dB');
+    }
+    function buildCircuit(r) {
+      const S = 'style="stroke: var(--colour-series)" stroke-width="2"';
+      const g = r.g;
+      document.getElementById('ckt').innerHTML = `
+        <line x1="40" y1="14" x2="290" y2="14" ${S} /><line x1="40" y1="286" x2="290" y2="286" ${S} />
+        <text x="296" y="19" style="fill: var(--colour-voltage-label)" font-size="13" font-weight="bold">+V</text>
+        <text x="296" y="291" style="fill: var(--colour-voltage-label)" font-size="13" font-weight="bold">−V</text>
+        <line x1="96" y1="14" x2="96" y2="118" ${S} /><line x1="234" y1="14" x2="234" y2="118" ${S} />
+        <g transform="translate(96,30)"><use href="#resistor-vertical" transform="scale(.7)" /></g>
+        <g transform="translate(234,30)"><use href="#resistor-vertical" transform="scale(.7)" /></g>
+        <text x="76" y="62" text-anchor="end" fill="var(--colour-resistor-labels)" font-size="14" font-weight="bold">RC1</text>
+        <text x="254" y="62" fill="var(--colour-resistor-labels)" font-size="14" font-weight="bold">RC2</text>
+        <circle cx="96" cy="96" r="4" style="fill: var(--colour-series)" /><line x1="60" y1="96" x2="96" y2="96" ${S} />
+        <circle cx="234" cy="96" r="4" style="fill: var(--colour-series)" /><line x1="234" y1="96" x2="270" y2="96" ${S} />
+        <text x="56" y="92" text-anchor="end" style="fill: var(--colour-output-z)" font-size="13" font-weight="bold">Out 1</text>
+        <text x="274" y="92" style="fill: var(--colour-ui-correct)" font-size="13" font-weight="bold">Out 2</text>
+        <g transform="translate(86,150)"><use href="#bjt-npn-shape" transform="scale(.8)" /></g>
+        <g transform="translate(244,150) scale(-1,1)"><use href="#bjt-npn-shape" transform="scale(.8)" /></g>
+        <text x="62" y="128" text-anchor="end" fill="var(--colour-bjt-labels)" font-size="14" font-weight="bold">Q1</text>
+        <text x="268" y="128" fill="var(--colour-bjt-labels)" font-size="14" font-weight="bold">Q2</text>
+        <line x1="96" y1="177" x2="96" y2="198" ${S} /><line x1="234" y1="177" x2="234" y2="198" ${S} /><line x1="96" y1="198" x2="234" y2="198" ${S} />
+        <line x1="165" y1="198" x2="165" y2="286" ${S} /><circle cx="165" cy="198" r="4" style="fill: var(--colour-series)" /><circle cx="165" cy="286" r="4" style="fill: var(--colour-series)" />
+        <g transform="translate(165,214)"><use href="#resistor-vertical" transform="scale(.7)" /></g>
+        <text x="190" y="248" fill="var(--colour-resistor-labels)" font-size="14" font-weight="bold">${tail === 'res' ? 'RE' : 'CCS'}</text>
+        <line x1="14" y1="150" x2="70" y2="150" ${S} /><line x1="260" y1="150" x2="316" y2="150" ${S} />
+        <text x="14" y="140" style="fill: var(--colour-input-a)" font-size="14" font-weight="bold">In 1</text>
+        <text x="316" y="140" text-anchor="end" style="fill: var(--colour-input-b)" font-size="14" font-weight="bold">In 2</text>
+        <text x="14" y="172" style="fill: var(--colour-input-a)" font-size="13">${fmtSigned(amp1)}</text>
+        <text x="316" y="172" text-anchor="end" style="fill: var(--colour-input-b)" font-size="13">${fmtSigned(amp2)}</text>
+        <text x="172" y="194" style="fill: var(--colour-resistor-labels)" font-size="12">tail node</text>`;
+    }
+    function refresh() {
+      document.getElementById('a1v').textContent = fmtSigned(amp1);
+      document.getElementById('a2v').textContent = fmtSigned(amp2);
+      ['diff', 'comm', 'one'].forEach(k => document.getElementById('pre-' + k).classList.remove('active'));
+      if (amp2 === -amp1 && amp1 !== 0) document.getElementById('pre-diff').classList.add('active');
+      else if (amp2 === amp1 && amp1 !== 0) document.getElementById('pre-comm').classList.add('active');
+      else if (amp2 === 0 && amp1 !== 0) document.getElementById('pre-one').classList.add('active');
+      const r = readouts();
+      drawStatic(); buildReadout(r); buildCircuit(r);
+      document.getElementById('simStatus').innerHTML = explain(r);
+    }
+
+    if (history.length > 1) { document.getElementById('menuLink').style.display = ''; }
+    function goBack(e) { e.preventDefault(); history.back(); }
+    buildScope(); refresh(); requestAnimationFrame(frame);
+  </script>
+</body>
+
+</html>

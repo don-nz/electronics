@@ -1,0 +1,677 @@
+<!--
+  Differential amplifier — differential mode vs common mode, a step-by-step walkthrough in the same style
+  as diff_amp_dc_bias_analysis.html and diff_amp_ccs_analysis.html: one circuit, Example 1/2/3/Randomise, and a
+  small value badge appears on the diagram as each question is answered.
+
+  The idea: a differential amplifier has TWO MODES of operation, and ANY pair of inputs is a mix of them.
+      differential input   Vd = V1 − V2            (the difference — the wanted signal)
+      common-mode input    Vc = (V1 + V2) / 2      (what both inputs share — unwanted interference)
+  The amplifier treats them very differently:
+      AV(Diff) = RC / (2 × re)          big
+      AV(CM)   = RC / (2 × RE)          small
+  and the output at Q1's collector (Out 1; Q1 is the inverting side) is the sum of the two responses:
+      Vout = −( AV(Diff) × Vd + AV(CM) × Vc )
+
+  Method (the order of the questions):
+    1. Vd = V1 − V2
+    2. Vc = (V1 + V2) / 2
+    3. AV(Diff) = RC / (2 re)        re is given (it comes from the DC bias — see the DC bias walkthrough)
+    4. AV(CM)   = RC / (2 RE)
+    5. Vo(diff) = −AV(Diff) × Vd     the output due to the differential part alone
+    6. Vo(CM)   = −AV(CM) × Vc       the output due to the common-mode part alone
+    7. Vout = Vo(diff) + Vo(CM)
+    8. how many times bigger the differential part's output is than the common-mode part's
+    9. one input driven, the other grounded: what are Vd and Vc?
+
+  V holds the independent values; D holds everything derived (recompute()). options() is called once per
+  resetQuiz(), so setMode() always recomputes before resetQuiz(). The re value is derived here from the DC
+  bias (VE = −0.6 V, IT = (VEE − 0.6) / RE, IC = IT / 2, re = 26 mV / IC) but is GIVEN in the question.
+  The component values are this page's own. The simplified circuit drawing is this page's own too, built from
+  the shared shapes — bias resistors RB1/RB2 are shown but are not used in any calculation.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../assets/theme-init.js"></script>
+  <script src="../../../assets/shapes.js"></script>
+  <script src="../../../assets/quiz-engine.js"></script>
+  <title>Differential Amplifier Modes Analysis</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../assets/quiz-common.css">
+  <script src="../../../assets/breadcrumb.js" defer></script>
+  <style>
+    .cr { color: var(--colour-ui-correct); }
+  </style>
+</head>
+
+<body>
+  <script>Shapes.use('circuit-components', 'bjt-symbols');</script>
+  <div class="crumb" id="crumb" data-current="Differential and Common Mode"></div>
+  <header>
+    <h1>Differential Amplifier — Two Modes</h1>
+    <p>Vd → Vc → AV(Diff) → AV(CM) → The Output from Each Mode</p>
+  </header>
+
+  <div class="quiz-wrap" id="quizWrap">
+
+    <div class="mode-toggle">
+      <div class="mode-seg" id="modeSeg">
+        <button id="modeExample1" class="active" onclick="setMode('example1')">Example 1</button>
+        <button id="modeExample2" onclick="setMode('example2')">Example 2</button>
+        <button id="modeExample3" onclick="setMode('example3')">Example 3</button>
+        <button id="modeRandomise" onclick="setMode('randomise')">Randomise</button>
+      </div>
+    </div>
+
+    <div class="circuit-col">
+      <div class="circuit-panel" onclick="openModal()" title="Click to zoom">
+        <div class="panel-label">Differential amplifier — <span id="panelVoltLabel">±15 V</span> supplies</div>
+        <div class="zoom-hint">
+          <svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.8" fill="none" />
+            <line x1="12.5" y1="12.5" x2="17" y2="17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            <line x1="6" y1="8" x2="10" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+            <line x1="8" y1="6" x2="8" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+          </svg>
+          Zoom
+        </div>
+        <svg id="circuitSvg" viewBox="0 -20 640 600" xmlns="http://www.w3.org/2000/svg"
+          font-family="'Share Tech Mono',monospace" shape-rendering="crispEdges">
+
+          <!-- ════════════════════════════════════════════════════════════ -->
+          <!-- ── RAILS — full length, components sit on top ── -->
+          <!-- ════════════════════════════════════════════════════════════ -->
+          <line x1="50" y1="20" x2="535" y2="20" style="stroke: var(--colour-series)" stroke-width="2" />
+          <line x1="50" y1="535" x2="535" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+
+          <!-- ════════════════════════════════════════════════════════════ -->
+          <!-- ── COLLECTOR COLUMNS — rail down to each collector; RC1 and RC2 sit on them ── -->
+          <!-- ════════════════════════════════════════════════════════════ -->
+          <line x1="200" y1="20" x2="200" y2="255" style="stroke: var(--colour-series)" stroke-width="2" />
+          <circle cx="200" cy="20" r="5" style="fill: var(--colour-series)" />
+          <line x1="380" y1="20" x2="380" y2="255" style="stroke: var(--colour-series)" stroke-width="2" />
+          <circle cx="380" cy="20" r="5" style="fill: var(--colour-series)" />
+
+          <!-- ════════════════════════════════════════════════════════════ -->
+          <!-- ── OUTPUTS — Out 1 from Q1's collector, Out 2 from Q2's ── -->
+          <!-- ════════════════════════════════════════════════════════════ -->
+          <line x1="100" y1="190" x2="200" y2="190" style="stroke: var(--colour-series)" stroke-width="2" />
+          <circle cx="200" cy="190" r="5" style="fill: var(--colour-series)" />
+          <line x1="380" y1="190" x2="480" y2="190" style="stroke: var(--colour-series)" stroke-width="2" />
+          <circle cx="380" cy="190" r="5" style="fill: var(--colour-series)" />
+
+          <!-- ════════════════════════════════════════════════════════════ -->
+          <!-- ── INPUTS — Input 1 to Q1, Input 2 to Q2, each with its bias resistor down to ground ── -->
+          <!-- ════════════════════════════════════════════════════════════ -->
+          <line x1="50" y1="255" x2="200" y2="255" style="stroke: var(--colour-series)" stroke-width="2" />
+          <line x1="100" y1="255" x2="100" y2="415" style="stroke: var(--colour-series)" stroke-width="2" />
+          <circle cx="100" cy="255" r="5" style="fill: var(--colour-series)" />
+          <line x1="400" y1="255" x2="535" y2="255" style="stroke: var(--colour-series)" stroke-width="2" />
+          <line x1="485" y1="255" x2="485" y2="415" style="stroke: var(--colour-series)" stroke-width="2" />
+          <circle cx="485" cy="255" r="5" style="fill: var(--colour-series)" />
+
+          <!-- ════════════════════════════════════════════════════════════ -->
+          <!-- ── EMITTER JOIN AND TAIL — down to −VEE; RE sits on it ── -->
+          <!-- ════════════════════════════════════════════════════════════ -->
+          <line x1="200" y1="255" x2="200" y2="310" style="stroke: var(--colour-series)" stroke-width="2" />
+          <line x1="380" y1="255" x2="380" y2="310" style="stroke: var(--colour-series)" stroke-width="2" />
+          <line x1="200" y1="310" x2="380" y2="310" style="stroke: var(--colour-series)" stroke-width="2" />
+          <line x1="290" y1="310" x2="290" y2="535" style="stroke: var(--colour-series)" stroke-width="2" />
+          <circle cx="290" cy="310" r="5" style="fill: var(--colour-series)" />
+          <circle cx="290" cy="535" r="5" style="fill: var(--colour-series)" />
+
+          <!-- ════════════════════════════════════════════════════════════ -->
+          <!-- ── RAIL LABELS ── -->
+          <!-- ════════════════════════════════════════════════════════════ -->
+          <g transform="translate(535,-5)">
+            <text x="0" y="15" style="fill: var(--colour-voltage-label)" text-anchor="start" font-size="15" font-weight="bold">+V<tspan baseline-shift="sub" font-size="10">CC</tspan></text>
+            <text id="lblVCC" x="38" y="20" style="fill: var(--colour-text)" text-anchor="start" font-size="14" font-weight="bold">+15V</text>
+          </g>
+          <g transform="translate(535,520)">
+            <text x="0" y="15" style="fill: var(--colour-voltage-label)" text-anchor="start" font-size="15" font-weight="bold">−V<tspan baseline-shift="sub" font-size="10">EE</tspan></text>
+            <text id="lblVEE" x="38" y="20" style="fill: var(--colour-text)" text-anchor="start" font-size="14" font-weight="bold">−15V</text>
+          </g>
+
+          <!-- ════════════════════════════════════════════════════════════ -->
+          <!-- ── RESISTORS — shape and labels grouped, move each as one ── -->
+          <!-- ════════════════════════════════════════════════════════════ -->
+          <g transform="translate(200,60)">  <!-- ══ RC1 ══ -->
+            <use href="#resistor-vertical" />
+            <text x="-35" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R<tspan baseline-shift="sub" font-size="11">C1</tspan></text>
+            <text id="lblRC1" x="40" y="40" fill="var(--colour-text)" text-anchor="middle" font-size="14">5k6Ω</text>
+          </g>
+          <g transform="translate(380,60)">  <!-- ══ RC2 ══ -->
+            <use href="#resistor-vertical" />
+            <text x="-35" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R<tspan baseline-shift="sub" font-size="11">C2</tspan></text>
+            <text id="lblRC2" x="40" y="40" fill="var(--colour-text)" text-anchor="middle" font-size="14">5k6Ω</text>
+          </g>
+          <g transform="translate(100,300)">  <!-- ══ RB1 ══ -->
+            <use href="#resistor-vertical" />
+            <text x="-35" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R<tspan baseline-shift="sub" font-size="11">B1</tspan></text>
+          </g>
+          <g transform="translate(485,300)">  <!-- ══ RB2 ══ -->
+            <use href="#resistor-vertical" />
+            <text x="-35" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R<tspan baseline-shift="sub" font-size="11">B2</tspan></text>
+          </g>
+          <g transform="translate(290,370)">  <!-- ══ RE ══ -->
+            <use href="#resistor-vertical" />
+            <text x="-30" y="40" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="16" font-weight="bold">R<tspan baseline-shift="sub" font-size="11">E</tspan></text>
+            <text id="lblRE" x="40" y="40" fill="var(--colour-text)" text-anchor="middle" font-size="14">8k2Ω</text>
+          </g>
+
+          <!-- ════════════════════════════════════════════════════════════ -->
+          <!-- ── TRANSISTORS ── -->
+          <!-- ════════════════════════════════════════════════════════════ -->
+          <g transform="translate(186,255)">  <!-- ══ Q1 ══ -->
+            <use href="#bjt-npn-shape" />
+            <text x="-30" y="-20" fill="var(--colour-bjt-labels)" text-anchor="start" font-size="14" font-weight="bold">Q<tspan baseline-shift="sub" font-size="10">1</tspan></text>
+          </g>
+          <g transform="translate(394,255)">  <!-- ══ Q2 ══ -->
+            <g transform="scale(-1, 1)"><use href="#bjt-npn-shape" /></g>
+            <text x="30" y="-20" fill="var(--colour-bjt-labels)" text-anchor="end" font-size="14" font-weight="bold">Q<tspan baseline-shift="sub" font-size="10">2</tspan></text>
+          </g>
+
+          <!-- ════════════════════════════════════════════════════════════ -->
+          <!-- ── GROUND SYMBOLS ── -->
+          <!-- ════════════════════════════════════════════════════════════ -->
+          <use href="#ground-shape" transform="translate(100,415)" />
+          <use href="#ground-shape" transform="translate(485,415)" />
+
+          <!-- ════════════════════════════════════════════════════════════ -->
+          <!-- ── LABELS ── -->
+          <!-- ════════════════════════════════════════════════════════════ -->
+          <text x="100" y="175" style="fill: var(--colour-signal)" text-anchor="start" font-size="15" font-weight="bold">Out 1</text>
+          <text x="480" y="175" style="fill: var(--colour-signal)" text-anchor="end" font-size="15" font-weight="bold">Out 2</text>
+          <text x="50" y="240" style="fill: var(--colour-signal)" text-anchor="start" font-size="15" font-weight="bold">Input 1</text>
+          <text x="550" y="240" style="fill: var(--colour-signal)" text-anchor="end" font-size="15" font-weight="bold">Input 2</text>
+
+          <!-- ════════════════════ KNOWN VALUES — the two input signals, always shown ════════════════════ -->
+          <text x="50" y="222" font-size="18" font-weight="bold"><tspan style="fill: var(--colour-voltage-label)">v<tspan baseline-shift="sub" font-size="10">1</tspan></tspan><tspan style="fill: var(--colour-text)"> = <tspan id="valV1">+5mV</tspan></tspan></text>
+          <text x="550" y="222" text-anchor="end" font-size="18" font-weight="bold"><tspan style="fill: var(--colour-voltage-label)">v<tspan baseline-shift="sub" font-size="10">2</tspan></tspan><tspan style="fill: var(--colour-text)"> = <tspan id="valV2">+1mV</tspan></tspan></text>
+
+          <!-- ════════════════════ REVEALED — as each question is answered ════════════════════ -->
+          <text x="320" y="578" style="fill: var(--colour-label)" text-anchor="middle" font-size="16" font-style="italic">— values revealed as you answer —</text>
+
+          <g id="revealVD" display="none">
+            <text x="290" y="135" text-anchor="middle" font-size="18" font-weight="bold"><tspan style="fill: var(--colour-voltage-label)">v<tspan baseline-shift="sub" font-size="10">d</tspan></tspan><tspan style="fill: var(--colour-text)"> = <tspan id="valVD">4mV</tspan></tspan></text>
+          </g>
+          <g id="revealVC" display="none">
+            <text x="290" y="165" text-anchor="middle" font-size="18" font-weight="bold"><tspan style="fill: var(--colour-voltage-label)">v<tspan baseline-shift="sub" font-size="10">c</tspan></tspan><tspan style="fill: var(--colour-text)"> = <tspan id="valVC">3mV</tspan></tspan></text>
+          </g>
+          <g id="revealAD" display="none">
+            <text x="10" y="470" font-size="18" font-weight="bold"><tspan style="fill: var(--colour-gain)">A<tspan baseline-shift="sub" font-size="10">V(Diff)</tspan></tspan><tspan style="fill: var(--colour-text)"> = <tspan id="valAD">94.6</tspan></tspan></text>
+          </g>
+          <g id="revealAC" display="none">
+            <text x="10" y="500" font-size="18" font-weight="bold"><tspan style="fill: var(--colour-gain)">A<tspan baseline-shift="sub" font-size="10">V(CM)</tspan></tspan><tspan style="fill: var(--colour-text)"> = <tspan id="valAC">0.341</tspan></tspan></text>
+          </g>
+          <g id="revealOD" display="none">
+            <text x="350" y="455" font-size="18" font-weight="bold"><tspan style="fill: var(--colour-voltage-label)">v<tspan baseline-shift="sub" font-size="10">o(diff)</tspan></tspan><tspan style="fill: var(--colour-text)"> = <tspan id="valOD">−378mV</tspan></tspan></text>
+          </g>
+          <g id="revealOC" display="none">
+            <text x="350" y="485" font-size="18" font-weight="bold"><tspan style="fill: var(--colour-voltage-label)">v<tspan baseline-shift="sub" font-size="10">o(CM)</tspan></tspan><tspan style="fill: var(--colour-text)"> = <tspan id="valOC">−1.02mV</tspan></tspan></text>
+          </g>
+          <g id="revealOUT" display="none">
+            <text x="10" y="150" font-size="18" font-weight="bold"><tspan style="fill: var(--colour-voltage-label)">v<tspan baseline-shift="sub" font-size="10">out1</tspan></tspan><tspan style="fill: var(--colour-text)"> = <tspan id="valOUT">−379mV</tspan></tspan></text>
+          </g>
+
+          <g id="xyRuler" display="none"></g>
+        </svg>
+      </div>
+    </div>
+
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+          <div class="options" id="qOptions"></div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+        </div>
+
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="diagram-modal" id="diagramModal" onclick="handleModalClick(event)">
+      <div class="modal-inner" id="modalInner">
+        <div class="modal-header">
+          <span class="modal-title" id="modalTitle">Differential amplifier</span>
+          <button class="modal-close" onclick="closeModal()">✕ Close</button>
+        </div>
+        <svg id="modalSvg" viewBox="0 -20 640 600" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ══════════════════════════════════════════════════════════════════════
+    // VALUES — V: independent values; D: derived (recompute())
+    // ══════════════════════════════════════════════════════════════════════
+    // v1, v2 are the two input signals in mV (signed). rtail is the shared tail resistor RE. vs is the
+    // single-input test value used by the last question. vee is the MAGNITUDE of the negative rail.
+    const EXAMPLE_SETS = {
+      example1: { vcc: 15, vee: 15, rc: 5600, rtail: 8200, v1: 5, v2: 1, vs: 6, vbe: 0.6 },
+      example2: { vcc: 12, vee: 12, rc: 4700, rtail: 6800, v1: 2, v2: -6, vs: 4, vbe: 0.6 },
+      example3: { vcc: 15, vee: 15, rc: 3300, rtail: 4700, v1: 4, v2: -2, vs: 8, vbe: 0.6 },
+    };
+    const RAIL_POOL = [12, 15];
+    const RC_POOL = [2200, 3300, 4700, 5600];
+    const RTAIL_POOL = [3900, 4700, 5600, 6800, 8200, 10000];
+    const SIG_POOL = [-8, -6, -5, -4, -3, -2, 2, 3, 4, 5, 6, 8];
+    const VS_POOL = [3, 4, 5, 6, 8, 10];
+    function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
+
+    let V = {}, D = {}, quizMode = 'example1';
+
+    // Retries until: the tail current is sensible (1–3.5 mA), the differential part's output stays under 1 V,
+    // and the four wrong answers to question 1 and 2 cannot collide with the right ones.
+    function randomValues() {
+      for (let attempt = 0; attempt < 200; attempt++) {
+        const rail = pick(RAIL_POOL);
+        const v = { vcc: rail, vee: rail, rc: pick(RC_POOL), rtail: pick(RTAIL_POOL), v1: pick(SIG_POOL), v2: pick(SIG_POOL), vs: pick(VS_POOL), vbe: 0.6 };
+        const vd = v.v1 - v.v2, vc = (v.v1 + v.v2) / 2;
+        if (vd === 0 || vc === 0) continue;
+        if (v.v1 === 3 * v.v2 || v.v2 === 3 * v.v1) continue;
+        if (Math.abs(vd) > 14) continue;
+        const it = (v.vee - v.vbe) / v.rtail;
+        if (it < 0.001 || it > 0.0035) continue;
+        const re = 0.026 / (it / 2);
+        if (Math.abs(v.rc / (2 * re) * vd) > 900) continue;
+        return v;
+      }
+      return { ...EXAMPLE_SETS.example1 };
+    }
+
+    function recompute() {
+      D.Vd = V.v1 - V.v2;                       // differential-mode input
+      D.Vc = (V.v1 + V.v2) / 2;                 // common-mode input
+      D.IT = (V.vee - V.vbe) / V.rtail;         // tail current: the bases sit at 0 V, so VE = −VBE
+      D.IC = D.IT / 2;
+      D.re = 0.026 / D.IC;                      // each transistor's internal emitter resistance (given in the questions)
+      D.Ad = sig3(V.rc / (2 * D.re));           // the gains are rounded to 3 s.f. here so the outputs below agree with
+      D.Acm = sig3(V.rc / (2 * V.rtail));       // the figures a student sees (94.6 × 4 mV = 378.4 mV exactly)
+      D.Vod = -D.Ad * D.Vd;                     // output (mV) due to the differential part, at Out 1
+      D.Voc = -D.Acm * D.Vc;                    // output (mV) due to the common-mode part
+      D.Vout = D.Vod + D.Voc;
+      D.ratio = Math.abs(D.Vod / D.Voc);
+      D.CMRR = 20 * Math.log10(D.Ad / D.Acm);
+    }
+
+    // ── formatting ──
+    const MINUS = '−';
+    function sig3(v) { return parseFloat(Number(v).toPrecision(3)); }
+    function sig4(v) { return parseFloat(Number(v).toPrecision(4)); }
+    function fmtR(v) { return v >= 1000 ? sig3(v / 1000) + 'kΩ' : sig3(v) + 'Ω'; }
+    function fmtOhm(v) { return sig3(v) + ' Ω'; }
+    function fmtSM(v) { return (v > 0 ? '+' : v < 0 ? MINUS : '') + Math.abs(v) + ' mV'; }          // an input, in mV (with sign)
+    function fmtM(v) { return (v < 0 ? MINUS : '') + Math.abs(v) + ' mV'; }
+    function fmtOut(v, f = sig3) { const x = Math.abs(v), s = v < 0 ? MINUS : ''; return x >= 1000 ? s + f(x / 1000) + ' V' : s + f(x) + ' mV'; }   // an output given in mV
+    function fmtOut4(v) { return fmtOut(v, sig4); }
+    function fmtG(g) { return String(sig3(g)); }
+
+    // distinct wrong values: nudge any that collide with the correct label or each other
+    function distinct(correctLabel, wrongs, fmt) {
+      const used = new Set([correctLabel]);
+      return wrongs.map(w => {
+        let val = w, label = fmt(val), tries = 0;
+        while (used.has(label) && tries < 40) { val = w * (1 + 0.15 * (tries + 1)); label = fmt(val); tries++; }
+        used.add(label);
+        return { val, label };
+      });
+    }
+
+    function refreshLabels() {
+      const ge = id => document.getElementById(id);
+      ge('lblVCC').textContent = '+' + V.vcc + 'V';
+      ge('lblVEE').textContent = MINUS + V.vee + 'V';
+      ge('lblRC1').textContent = fmtR(V.rc);
+      ge('lblRC2').textContent = fmtR(V.rc);
+      ge('lblRE').textContent = fmtR(V.rtail);
+      ge('panelVoltLabel').textContent = V.vcc === V.vee ? `±${V.vcc} V` : `+${V.vcc} V / ${MINUS}${V.vee} V`;
+      ge('modalTitle').textContent = `Differential amplifier — ${ge('panelVoltLabel').textContent} supplies`;
+    }
+
+    function setMode(mode) {
+      quizMode = mode;
+      V = (mode === 'randomise') ? randomValues() : { ...EXAMPLE_SETS[mode] };
+      recompute();
+      refreshLabels();
+      clearRevealHighlights();
+      ['example1', 'example2', 'example3', 'randomise'].forEach(m => {
+        const b = document.getElementById('mode' + m.charAt(0).toUpperCase() + m.slice(1));
+        if (b) b.classList.toggle('active', m === mode);
+      });
+      resetQuiz();
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // QUESTIONS
+    // ══════════════════════════════════════════════════════════════════════
+    const cV = s => `<b class="colour-voltage">${s}</b>`;
+    const cR = s => `<b class="colour-resistor">${s}</b>`;
+    const cG = s => `<b class="colour-gain">${s}</b>`;
+    const cB = s => `<b class="colour-bjt">${s}</b>`;
+    const V1 = cV('v<sub>1</sub>'), V2 = cV('v<sub>2</sub>');
+    const VD = cV('v<sub>d</sub>'), VC = cV('v<sub>c</sub>');
+    const VOD = cV('v<sub>o(diff)</sub>'), VOC = cV('v<sub>o(CM)</sub>'), VOUT = cV('v<sub>out1</sub>');
+    const RCs = cR('R<sub>C</sub>'), REs = cR('R<sub>E</sub>');
+    const res = cB('r<sub>e</sub>');
+    const ADs = cG('A<sub>V(Diff)</sub>'), ACs = cG('A<sub>V(CM)</sub>');
+
+    const QUESTIONS = [
+      // 1 ── Vd
+      {
+        text: () => `The two inputs carry ${V1} = ${fmtSM(V.v1)} and ${V2} = ${fmtSM(V.v2)}. A differential amplifier responds separately to the <i>difference</i> between them. What is the <b>differential-mode</b> input ${VD}?`,
+        hint: () => `"Differential" means the difference between the two inputs: the first minus the second.`,
+        options: () => shuffle([
+          { label: `${VD} = ${V1} − ${V2} = ${V.v1} − (${V.v2}) = ${fmtSM(D.Vd)}`, type: 'correct' },
+          { label: `${VD} = ${V1} + ${V2} = ${V.v1} + (${V.v2}) = ${fmtSM(V.v1 + V.v2)}`, type: 'wrong' },
+          { label: `${VD} = ${frac(`${V1} + ${V2}`, '2')} = ${frac(`${V.v1} + (${V.v2})`, '2')} = ${fmtSM((V.v1 + V.v2) / 2)}`, type: 'wrong' },
+          { label: `${VD} = ${V2} − ${V1} = ${V.v2} − (${V.v1}) = ${fmtSM(-D.Vd)}`, type: 'wrong' },
+        ]),
+        correctExplain: () => `${VD} = ${V1} − ${V2} = ${fmtSM(D.Vd)}`,
+        working: () => `
+    <div class="working-line">Any pair of inputs can be split into two parts the amplifier treats completely differently. The first part is what <i>differs</i> between the inputs:</div>
+    <div class="working-formula-row">${VD} = ${V1} − ${V2} = ${V.v1} − (${V.v2})</div>
+    <div class="working-total">${VD} = <span class="cr">${fmtSM(D.Vd)}</span> — this is the <b>differential-mode</b> signal, the one the amplifier is built to amplify. The other way round (${V2} − ${V1}) gives the same size with the opposite sign.</div>`
+      },
+      // 2 ── Vc
+      {
+        text: () => `The other part of the input is what the two signals have <i>in common</i>. For ${V1} = ${fmtSM(V.v1)} and ${V2} = ${fmtSM(V.v2)}, what is the <b>common-mode</b> input ${VC}?`,
+        hint: () => `Common means shared — the level both inputs sit at on average.`,
+        options: () => shuffle([
+          { label: `${VC} = ${frac(`${V1} + ${V2}`, '2')} = ${frac(`${V.v1} + (${V.v2})`, '2')} = ${fmtSM(D.Vc)}`, type: 'correct' },
+          { label: `${VC} = ${V1} − ${V2} = ${V.v1} − (${V.v2}) = ${fmtSM(D.Vd)}`, type: 'wrong' },
+          { label: `${VC} = ${V1} + ${V2} = ${V.v1} + (${V.v2}) = ${fmtSM(V.v1 + V.v2)}`, type: 'wrong' },
+          { label: `${VC} = ${frac(`${V1} − ${V2}`, '2')} = ${frac(`${V.v1} − (${V.v2})`, '2')} = ${fmtSM(D.Vd / 2)}`, type: 'wrong' },
+        ]),
+        correctExplain: () => `${VC} = (${V1} + ${V2}) / 2 = ${fmtSM(D.Vc)}`,
+        working: () => `
+    <div class="working-formula-row">${VC} = ${frac(`${V1} + ${V2}`, '2')} = ${frac(`${V.v1} + (${V.v2})`, '2')}</div>
+    <div class="working-total">${VC} = <span class="cr">${fmtSM(D.Vc)}</span> — the average of the two inputs: the part that moves <i>both</i> inputs together. This is the <b>common-mode</b> signal. In practice it is unwanted interference — mains hum, noise — picked up equally on both input leads.</div>
+    <div class="working-line">Check: ${V1} = ${VC} + ${VD}/2 = ${fmtSM(D.Vc)} + ${fmtSM(D.Vd / 2)} = ${fmtSM(V.v1)} and ${V2} = ${VC} − ${VD}/2 = ${fmtSM(V.v2)}. The two parts rebuild both inputs exactly, so nothing is missing — every input pair is just <b>${VD}</b> and <b>${VC}</b>.</div>`
+      },
+      // 3 ── AV(Diff)
+      {
+        text: () => `From the DC bias, each transistor's internal emitter resistance is ${res} ≈ ${fmtOhm(D.re)}. With ${RCs} = ${fmtR(V.rc)}, calculate ${ADs}, the gain for the differential-mode input.`,
+        hint: () => `Think about which resistances the signal passes through: the collector resistor on the output side, and the emitter resistances of <i>both</i> transistors in the input loop.`,
+        options: () => {
+          const c = fmtG(D.Ad);
+          const w = distinct(c, [V.rc / D.re, V.rc / (4 * D.re), (2 * V.rc) / D.re], fmtG);
+          return shuffle([
+            { label: `${ADs} = ${frac(RCs, `2 × ${res}`)} = ${frac(fmtR(V.rc), `2 × ${fmtOhm(D.re)}`)} ≈ ${c}`, type: 'correct' },
+            { label: `${ADs} = ${frac(RCs, res)} = ${frac(fmtR(V.rc), fmtOhm(D.re))} ≈ ${w[0].label}`, type: 'wrong' },
+            { label: `${ADs} = ${frac(RCs, `4 × ${res}`)} = ${frac(fmtR(V.rc), `4 × ${fmtOhm(D.re)}`)} ≈ ${w[1].label}`, type: 'wrong' },
+            { label: `${ADs} = ${frac(`2 × ${RCs}`, res)} = ${frac(`2 × ${fmtR(V.rc)}`, fmtOhm(D.re))} ≈ ${w[2].label}`, type: 'wrong' },
+          ]);
+        },
+        correctExplain: () => `${ADs} = ${RCs} / (2 × ${res}) ≈ ${fmtG(D.Ad)}`,
+        working: () => `
+    <div class="working-line">In differential mode the inputs are equal and opposite: Q1 conducts more while Q2 conducts less. The two changes cancel at the shared tail node, so the tail node stays still and each transistor works at its full gain:</div>
+    <div class="working-formula-row">${ADs} = ${frac(RCs, `2 × ${res}`)} = ${frac(fmtR(V.rc), `2 × ${fmtOhm(D.re)}`)}</div>
+    <div class="working-total">${ADs} ≈ <span class="cr">${fmtG(D.Ad)}</span> — a large gain: this is the mode the amplifier is designed for.</div>
+    <div class="working-line">The 2 belongs with r<sub>e</sub>: the signal passes through <i>both</i> transistors' emitter resistances in the loop. Dropping it doubles the answer; a 4 halves it; and doubling ${RCs} instead puts the 2 on the wrong side.</div>`
+      },
+      // 4 ── AV(CM)
+      {
+        text: () => `For a common-mode signal the tail resistor ${REs} = ${fmtR(V.rtail)} is what limits the current. Calculate ${ACs}, the gain for the common-mode input.`,
+        hint: () => `Same shape as the differential gain — but the resistance in the emitter loop is now the tail resistor, not r<sub>e</sub>.`,
+        options: () => {
+          const c = fmtG(D.Acm);
+          const w = distinct(c, [V.rc / V.rtail, V.rtail / (2 * V.rc), D.Ad], fmtG);
+          return shuffle([
+            { label: `${ACs} = ${frac(RCs, `2 × ${REs}`)} = ${frac(fmtR(V.rc), `2 × ${fmtR(V.rtail)}`)} ≈ ${c}`, type: 'correct' },
+            { label: `${ACs} = ${frac(RCs, REs)} = ${frac(fmtR(V.rc), fmtR(V.rtail))} ≈ ${w[0].label}`, type: 'wrong' },
+            { label: `${ACs} = ${frac(REs, `2 × ${RCs}`)} = ${frac(fmtR(V.rtail), `2 × ${fmtR(V.rc)}`)} ≈ ${w[1].label}`, type: 'wrong' },
+            { label: `${ACs} = ${frac(RCs, `2 × ${res}`)} = ${frac(fmtR(V.rc), `2 × ${fmtOhm(D.re)}`)} ≈ ${w[2].label}`, type: 'wrong' },
+          ]);
+        },
+        correctExplain: () => `${ACs} = ${RCs} / (2 × ${REs}) ≈ ${fmtG(D.Acm)}`,
+        working: () => `
+    <div class="working-line">In common mode both inputs rise together, so both transistors try to conduct more. The tail node rises with them, and the extra voltage across ${REs} cancels most of the input — so the gain is small:</div>
+    <div class="working-formula-row">${ACs} = ${frac(RCs, `2 × ${REs}`)} = ${frac(fmtR(V.rc), `2 × ${fmtR(V.rtail)}`)}</div>
+    <div class="working-total">${ACs} ≈ <span class="cr">${fmtG(D.Acm)}</span> — less than 1: a signal common to both inputs is not amplified at all. Compare it with ${ADs} ≈ ${fmtG(D.Ad)}.</div>
+    <div class="working-line">Getting a large answer (${fmtG(D.Ad)}) means r<sub>e</sub> was used by mistake — that is the ${ADs} formula. The big tail resistor is what shrinks the common-mode gain; a constant current source makes it even bigger, which is why it improves CMRR.</div>`
+      },
+      // 5 ── Vo(diff)
+      {
+        text: () => `The differential part of the input, ${VD} = ${fmtSM(D.Vd)}, is amplified by ${ADs} ≈ ${fmtG(D.Ad)}. What output does it produce at Out 1 (Q1's collector)? Q1's base is Input 1, so the output is <i>inverted</i>.`,
+        hint: () => `Gain × the matching input part — and remember the inversion.`,
+        options: () => {
+          const c = fmtOut(D.Vod);
+          const w = distinct(c, [D.Ad * D.Vd, D.Ad * D.Vc, D.Acm * D.Vd], v => fmtOut(v));
+          return shuffle([
+            { label: `${VOD} = ${MINUS}${ADs} × ${VD} = ${MINUS}${fmtG(D.Ad)} × (${fmtSM(D.Vd)}) ≈ ${c}`, type: 'correct' },
+            { label: `${VOD} = +${ADs} × ${VD} = ${fmtG(D.Ad)} × (${fmtSM(D.Vd)}) ≈ ${fmtOut(D.Ad * D.Vd)}`, type: 'wrong' },
+            { label: `${VOD} = ${MINUS}${ADs} × ${VC} = ${MINUS}${fmtG(D.Ad)} × (${fmtSM(D.Vc)}) ≈ ${fmtOut(-D.Ad * D.Vc)}`, type: 'wrong' },
+            { label: `${VOD} = ${MINUS}${ACs} × ${VD} = ${MINUS}${fmtG(D.Acm)} × (${fmtSM(D.Vd)}) ≈ ${fmtOut(-D.Acm * D.Vd)}`, type: 'wrong' },
+          ]);
+        },
+        correctExplain: () => `${VOD} = ${MINUS}${ADs} × ${VD} ≈ ${fmtOut(D.Vod)}`,
+        working: () => `
+    <div class="working-formula-row">${VOD} = ${MINUS}${ADs} × ${VD} = ${MINUS}${fmtG(D.Ad)} × (${fmtSM(D.Vd)})</div>
+    <div class="working-total">${VOD} ≈ <span class="cr">${fmtOut(D.Vod)}</span> — the output caused by the differential part alone. It carries the sign of ${VD} flipped, because Out 1 is taken from the inverting side.</div>
+    <div class="working-line">Each part of the input must be multiplied by <i>its own</i> gain: ${ADs} with ${VD}, never with ${VC}, and never ${ACs} with ${VD}.</div>`
+      },
+      // 6 ── Vo(CM)
+      {
+        text: () => `The common-mode part, ${VC} = ${fmtSM(D.Vc)}, is amplified by ${ACs} ≈ ${fmtG(D.Acm)}. What output does <i>it</i> produce at Out 1?`,
+        hint: () => `The same step as before, with the common-mode gain and the common-mode input.`,
+        options: () => {
+          const c = fmtOut(D.Voc, sig3);
+          const w = distinct(c, [D.Acm * D.Vc, D.Acm * D.Vd, D.Ad * D.Vc], v => fmtOut(v));
+          return shuffle([
+            { label: `${VOC} = ${MINUS}${ACs} × ${VC} = ${MINUS}${fmtG(D.Acm)} × (${fmtSM(D.Vc)}) ≈ ${c}`, type: 'correct' },
+            { label: `${VOC} = +${ACs} × ${VC} = ${fmtG(D.Acm)} × (${fmtSM(D.Vc)}) ≈ ${fmtOut(D.Acm * D.Vc)}`, type: 'wrong' },
+            { label: `${VOC} = ${MINUS}${ACs} × ${VD} = ${MINUS}${fmtG(D.Acm)} × (${fmtSM(D.Vd)}) ≈ ${fmtOut(-D.Acm * D.Vd)}`, type: 'wrong' },
+            { label: `${VOC} = ${MINUS}${ADs} × ${VC} = ${MINUS}${fmtG(D.Ad)} × (${fmtSM(D.Vc)}) ≈ ${fmtOut(-D.Ad * D.Vc)}`, type: 'wrong' },
+          ]);
+        },
+        correctExplain: () => `${VOC} = ${MINUS}${ACs} × ${VC} ≈ ${fmtOut(D.Voc)}`,
+        working: () => `
+    <div class="working-formula-row">${VOC} = ${MINUS}${ACs} × ${VC} = ${MINUS}${fmtG(D.Acm)} × (${fmtSM(D.Vc)})</div>
+    <div class="working-total">${VOC} ≈ <span class="cr">${fmtOut(D.Voc)}</span> — tiny. The common-mode part is almost completely rejected.</div>
+    <div class="working-line">Compare ${fmtSM(D.Vc)} going in with ${fmtOut(D.Voc)} coming out: the amplifier hardly responds to what both inputs share.</div>`
+      },
+      // 7 ── Vout
+      {
+        text: () => `The amplifier responds to both parts at once. What is the total output ${VOUT} at Out 1? (Give it to 4 significant figures.)`,
+        hint: () => `Add the two responses — the output caused by the differential part and the output caused by the common-mode part.`,
+        options: () => {
+          const c = fmtOut4(D.Vout);
+          return shuffle([
+            { label: `${VOUT} = ${VOD} + ${VOC} = ${fmtOut4(D.Vod)} + (${fmtOut4(D.Voc)}) ≈ ${c}`, type: 'correct' },
+            { label: `${VOUT} = ${VOD} − ${VOC} = ${fmtOut4(D.Vod)} − (${fmtOut4(D.Voc)}) ≈ ${fmtOut4(D.Vod - D.Voc)}`, type: 'wrong' },
+            { label: `${VOUT} = ${VOD} only ≈ ${fmtOut4(D.Vod)}`, type: 'wrong' },
+            { label: `${VOUT} = ${MINUS}${ADs} × ${V1} = ${MINUS}${fmtG(D.Ad)} × (${fmtSM(V.v1)}) ≈ ${fmtOut4(-D.Ad * V.v1)}`, type: 'wrong' },
+          ]);
+        },
+        correctExplain: () => `${VOUT} = ${VOD} + ${VOC} ≈ ${fmtOut4(D.Vout)}`,
+        working: () => `
+    <div class="working-formula-row">${VOUT} = ${VOD} + ${VOC} = ${fmtOut4(D.Vod)} + (${fmtOut4(D.Voc)})</div>
+    <div class="working-total">${VOUT} ≈ <span class="cr">${fmtOut4(D.Vout)}</span></div>
+    <div class="working-line">The common-mode part barely changes the total — the output is almost entirely the differential response. Using ${ADs} with ${V1} alone gives a different answer, because it ignores what ${V2} is doing.</div>`
+      },
+      // 8 ── how many times bigger
+      {
+        text: () => `The input has a differential part ${VD} = ${fmtSM(D.Vd)} and a common-mode part ${VC} = ${fmtSM(D.Vc)}. How many times bigger is the <i>output</i> from the differential part than the output from the common-mode part?`,
+        hint: () => `Divide the size of ${VOD} by the size of ${VOC}.`,
+        options: () => {
+          const c = fmtG(D.ratio);
+          const w = distinct(c, [D.Ad / D.Acm, Math.abs(D.Vd / D.Vc), 1 / D.ratio], fmtG);
+          return shuffle([
+            { label: `${frac(`|${VOD}|`, `|${VOC}|`)} = ${frac(fmtOut(Math.abs(D.Vod)), fmtOut(Math.abs(D.Voc)))} ≈ ${c} times`, type: 'correct' },
+            { label: `${frac(ADs, ACs)} = ${frac(fmtG(D.Ad), fmtG(D.Acm))} ≈ ${w[0].label} times`, type: 'wrong' },
+            { label: `${frac(`|${VD}|`, `|${VC}|`)} = ${frac(fmtM(Math.abs(D.Vd)), fmtM(Math.abs(D.Vc)))} ≈ ${w[1].label} times`, type: 'wrong' },
+            { label: `${frac(`|${VOC}|`, `|${VOD}|`)} = ${frac(fmtOut(Math.abs(D.Voc)), fmtOut(Math.abs(D.Vod)))} ≈ ${w[2].label} times`, type: 'wrong' },
+          ]);
+        },
+        correctExplain: () => `|${VOD}| / |${VOC}| ≈ ${fmtG(D.ratio)} times`,
+        working: () => `
+    <div class="working-formula-row">${frac(`|${VOD}|`, `|${VOC}|`)} = ${frac(fmtOut(Math.abs(D.Vod)), fmtOut(Math.abs(D.Voc)))}</div>
+    <div class="working-total">≈ <span class="cr">${fmtG(D.ratio)} times</span> — the differential part wins by far more than it does at the input, where ${frac(`|${VD}|`, `|${VC}|`)} is only ${fmtG(Math.abs(D.Vd / D.Vc))}.</div>
+    <div class="working-line">That is the whole point of the amplifier. The gain ratio ${frac(ADs, ACs)} = ${fmtG(D.Ad / D.Acm)} is the <b>CMRR</b> (${D.CMRR.toFixed(1)} dB), and the output ratio is that ratio times ${frac(`|${VD}|`, `|${VC}|`)} = ${fmtG(Math.abs(D.Vd / D.Vc))}. The higher the CMRR, the more completely the amplifier ignores what both inputs share.</div>`
+      },
+      // 9 ── single input
+      {
+        text: () => `Now <b>Input 2 is grounded</b> (${V2} = 0) and only Input 1 is driven, with ${V1} = ${fmtSM(V.vs)}. What are the differential-mode and common-mode inputs now?`,
+        hint: () => `Use the same two formulas as the first two questions, with ${V2} = 0.`,
+        options: () => shuffle([
+          { label: `${VD} = ${fmtSM(V.vs)} and ${VC} = ${fmtSM(V.vs / 2)}`, type: 'correct' },
+          { label: `${VD} = ${fmtSM(V.vs / 2)} and ${VC} = ${fmtSM(V.vs / 2)}`, type: 'wrong' },
+          { label: `${VD} = ${fmtSM(V.vs)} and ${VC} = ${fmtSM(0)}`.replace('+0 mV', '0 mV'), type: 'wrong' },
+          { label: `${VD} = ${fmtSM(V.vs)} and ${VC} = ${fmtSM(V.vs)}`, type: 'wrong' },
+        ]),
+        correctExplain: () => `${VD} = ${fmtSM(V.vs)}, ${VC} = ${fmtSM(V.vs / 2)}`,
+        working: () => `
+    <div class="working-formula-row">${VD} = ${V1} − ${V2} = ${V.vs} − 0 = ${fmtSM(V.vs)}</div>
+    <div class="working-formula-row">${VC} = ${frac(`${V1} + ${V2}`, '2')} = ${frac(`${V.vs} + 0`, '2')} = ${fmtSM(V.vs / 2)}</div>
+    <div class="working-total">Driving just <i>one</i> input is a <b>mix of both modes</b>: all of ${fmtSM(V.vs)} counts as a differential signal, <i>and</i> half of it counts as common-mode. Because ${ACs} is so small, that common-mode half is hardly amplified — so the output is almost entirely the differential response.</div>
+    <div class="working-line">Not zero common-mode: grounding one input does not remove the common part, it just leaves it at half the size of the signal.</div>`
+      },
+    ];
+    QUESTIONS.forEach(q => { q.leftPanel = 'circuit'; });
+
+    // ── reveal: each badge appears once its question is answered, with a highlighter-
+    // marker rect behind each line of text (see diff_amp_dc_bias_analysis.html for the
+    // full explanation). Built once per mode; setMode() clears them because the numbers
+    // (and so the widths) change. ──
+    const HL_PAD_LEFT = 0;
+    const HL_PAD_RIGHT = -2;
+    const HL_PAD_Y = -2;
+    // Only the VALUE is highlighted (not the label or the "=" / "≈"): the range of characters
+    // after the first equals sign up to the next one (e.g. "I C1 = 1.21mA = I C2" → "1.21mA").
+    // Indices follow the rendered text, so the source's whitespace is collapsed the same way
+    // the browser does; a text with no equals sign (a label on its own) gets no highlight.
+    function valueCharRange(t) {
+      const s = t.textContent.replace(/\s+/g, ' ').trim();
+      if (s.length !== t.getNumberOfChars()) return undefined;   // can't map reliably — leave whole text
+      let a = s.search(/[=≈]/);
+      if (a < 0) return null;
+      let b = s.slice(a + 1).search(/[=≈]/);
+      b = b < 0 ? s.length : a + 1 + b;
+      a++;
+      while (a < b && s[a] === ' ') a++;
+      while (b > a && s[b - 1] === ' ') b--;
+      return [a, b];
+    }
+    function addRevealHighlight(el) {
+      if (el.hasAttribute('data-hl-built')) return;
+      const texts = el.tagName.toLowerCase() === 'text' ? [el] : el.querySelectorAll('text');
+      texts.forEach(t => {
+        const range = valueCharRange(t);
+        if (range === null) return;
+        const lines = [];
+        let cur = null, prevX = -Infinity;
+        for (let i = 0; i < t.getNumberOfChars(); i++) {
+          if (range && (i < range[0] || i >= range[1])) continue;
+          const e = t.getExtentOfChar(i);
+          if (!e.width && !e.height) continue;
+          if (!cur || e.x < prevX - 0.5 || e.y >= cur.y1 - 1) {
+            cur = { x0: e.x, y0: e.y, x1: e.x + e.width, y1: e.y + e.height };
+            lines.push(cur);
+          } else {
+            cur.x0 = Math.min(cur.x0, e.x); cur.y0 = Math.min(cur.y0, e.y);
+            cur.x1 = Math.max(cur.x1, e.x + e.width); cur.y1 = Math.max(cur.y1, e.y + e.height);
+          }
+          prevX = e.x;
+        }
+        lines.forEach(l => {
+          const w = l.x1 - l.x0;
+          const rightTrim = Math.min(-HL_PAD_RIGHT, w * 0.15);
+          const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          rect.setAttribute('x', l.x0 - HL_PAD_LEFT);
+          rect.setAttribute('y', l.y0 - HL_PAD_Y);
+          rect.setAttribute('width', w + HL_PAD_LEFT - rightTrim);
+          rect.setAttribute('height', (l.y1 - l.y0) + HL_PAD_Y * 2);
+          rect.setAttribute('rx', 3);
+          rect.style.fill = 'var(--colour-highlight)';
+          t.parentNode.insertBefore(rect, t);
+        });
+      });
+      el.setAttribute('data-hl-built', 'true');
+    }
+    function clearRevealHighlights() {
+      document.querySelectorAll('#circuitSvg [data-hl-built]').forEach(el => {
+        el.removeAttribute('data-hl-built');
+        el.querySelectorAll('rect').forEach(r => r.remove());
+      });
+    }
+
+    RENDER_EXTRA = () => {
+      const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+      const reveal = (id, on) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.setAttribute('display', on ? 'inline' : 'none');
+        if (on) addRevealHighlight(el);
+      };
+      // the two inputs are always shown (known values)
+      set('valV1', fmtSM(V.v1).replace(' ', '')); set('valV2', fmtSM(V.v2).replace(' ', ''));
+      // values first, so a highlight is measured against the final text
+      set('valVD', fmtM(D.Vd).replace(' ', '')); set('valVC', fmtM(D.Vc).replace(' ', ''));
+      set('valAD', fmtG(D.Ad)); set('valAC', fmtG(D.Acm));
+      set('valOD', fmtOut(D.Vod).replace(' ', '')); set('valOC', fmtOut(D.Voc).replace(' ', '')); set('valOUT', fmtOut(D.Vout, sig4).replace(' ', ''));
+      ['revealVD', 'revealVC', 'revealAD', 'revealAC', 'revealOD', 'revealOC', 'revealOUT']
+        .forEach((id, i) => reveal(id, Q[i].ans));
+    };
+
+    // Summary: the circuit values used, above the per-question review.
+    SUMMARY_CIRCUIT_REF = { id: '', label: '', viewBox: '' };
+    SUMMARY_EXTRA = () => {
+      const box = `<div style="border:1px solid var(--colour-border);border-radius:4px;padding:.9rem 1.2rem;margin-bottom:1.2rem;font-size:.82rem;line-height:2.2;">
+        <b class="colour-voltage">v<sub>1</sub></b> = ${fmtSM(V.v1)} &nbsp;
+        <b class="colour-voltage">v<sub>2</sub></b> = ${fmtSM(V.v2)} &nbsp;
+        <b class="colour-resistor">R<sub>C</sub></b> = ${fmtR(V.rc)} &nbsp;
+        <b class="colour-resistor">R<sub>E</sub></b> = ${fmtR(V.rtail)} &nbsp;
+        <b class="colour-bjt">r<sub>e</sub></b> ≈ ${fmtOhm(D.re)} &nbsp;
+        <b class="colour-supply">±V</b> = ${V.vcc} V
+      </div>`;
+      document.getElementById('summaryContent').insertAdjacentHTML('afterbegin', box);
+    };
+
+    initQuizNav();
+    setMode('example1');
+    initQuizFromURL();
+    // The highlights are measured from glyph extents, which shift when the web font arrives;
+    // measure again once fonts are ready so each rect sits exactly behind its value.
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { clearRevealHighlights(); RENDER_EXTRA(); });
+  </script>
+</body>
+
+</html>
