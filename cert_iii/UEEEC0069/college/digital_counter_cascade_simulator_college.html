@@ -1,0 +1,575 @@
+<!--
+  Cascaded counter simulator — two 74193 4-bit up-counters chained to make an 8-bit counter.
+
+  IC1 (right) counts the clock on its CU input: the LOW nibble, bits 3-0 (weights 8 4 2 1).
+  IC2 (left) is clocked by IC1's CO-bar (carry out) wired to IC2's CU: the HIGH nibble, bits 7-4 (weights 128 64 32 16).
+
+  How the carry works (the same behaviour as the single-counter simulator's Mod-16 up-counter):
+    - CO-bar is LOW only while IC1 holds 15 AND its clock is LOW.
+    - On the next rising clock edge IC1 wraps 15 -> 0 and CO-bar goes back HIGH. That RISING edge travels along the
+      cascade wire to IC2's CU, so IC2 counts up by one.
+  So IC2 counts once for every 16 clock pulses: 16 x 16 = 256 states (0 - 255), i.e. 2^8. (One 74193 alone gives 2^4 = 16.)
+
+  Count-to-N options (Modulus): one of IC2's outputs can be wired back to IC2's C (clear) input, exactly like the
+  single-counter Mod-8 simulator. The first time that output goes HIGH the count has reached its weight, so IC2 is
+  cleared (IC1 is already 0000 at that point): QB (weight 32) -> counts 0-31, QC (64) -> 0-63, QD (128) -> 0-127.
+  Free-running (256) has no feedback.
+
+  Same event-driven approach as digital_counter_simulator.html / digital_sr_latch_simulator.html: a delay, then a
+  coloured sweep along the wire showing the level travelling; wire colour = logic level (green = 1, grey = 0). The
+  digits that are about to change blink first. A new clock pulse is ignored while the circuit is still settling.
+  Counting all the way to 255 takes a while, so there are quick "Go to" buttons that jump to just before a carry,
+  and a Turbo speed for AUTO CLK.
+
+  No shared quiz engine is used: the page is self-contained apart from the site chrome.
+
+  College (teacher) copy: self-contained — same simulator as term-2/exercises/counters/digital_counter_cascade_simulator.html
+  with the college colours, its own theme toggle and an "All exercises" link. Keep the two in step.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Digital Electronics — Cascaded Counter Simulator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,600;0,700;0,800;1,400;1,600&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      --colour-bg: #f8f9fa;
+      --colour-panel: #ffffff;
+      --colour-border: #d0d5dd;
+      --colour-text: #1d2939;
+      --colour-text-strong: #002664;
+      --colour-label: #475467;
+      --colour-label-rgb: 71, 84, 103;
+      --colour-grid: rgba(0, 38, 100, 0.04);
+
+      --colour-ui-primary: #002664;
+      --colour-ui-primary-rgb: 0, 38, 100;
+
+      --font-body: 'Public Sans', system-ui, -apple-system, sans-serif;
+      --font-display: 'Public Sans', system-ui, -apple-system, sans-serif;
+      --font-mono: 'Share Tech Mono', monospace, sans-serif;
+
+      --radius-lg: 6px;
+      --radius-sm: 4px;
+      --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.05);
+    }
+
+    body.dark-theme {
+      --colour-bg: #121824;
+      --colour-panel: #1a2232;
+      --colour-border: #2e3c54;
+      --colour-text: #e2e8f0;
+      --colour-text-strong: #ffffff;
+      --colour-label: #94a3b8;
+      --colour-label-rgb: 148, 163, 184;
+      --colour-grid: rgba(255, 255, 255, 0.03);
+
+      --colour-ui-primary: #38bdf8;
+      --colour-ui-primary-rgb: 56, 189, 248;
+
+      --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--colour-bg);
+      color: var(--colour-text);
+      font-family: var(--font-body);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+      background-image: linear-gradient(var(--colour-grid) 1px, transparent 1px), linear-gradient(90deg, var(--colour-grid) 1px, transparent 1px);
+      background-size: 40px 40px;
+      transition: background-color 0.25s ease, color 0.25s ease;
+    }
+
+    header {
+      margin-bottom: 1.5rem;
+      width: 100%;
+      max-width: 700px;
+    }
+
+    header h1 {
+      font-family: var(--font-display);
+      font-size: clamp(1.4rem, 4vw, 2.2rem);
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      color: var(--colour-ui-primary);
+    }
+
+    header p {
+      margin-top: .4rem;
+      color: var(--colour-label);
+      font-size: .82rem;
+      font-weight: 600;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+
+    .theme-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.35rem 0.75rem;
+      font-family: var(--font-body);
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--colour-text);
+      background: var(--colour-panel);
+      border: 1px solid var(--colour-border);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: var(--shadow-card);
+    }
+
+    .theme-toggle:hover {
+      border-color: var(--colour-ui-primary);
+    }
+
+    .main-wrap {
+      width: 100%;
+      max-width: 700px;
+      display: flex;
+      flex-direction: column;
+      gap: 1.2rem;
+    }
+
+    .card-top-bar {
+      display: flex;
+      justify-content: flex-end;
+      width: 100%;
+      margin-bottom: 0.5rem;
+    }
+
+    .card {
+      background: var(--colour-panel);
+      border: 1px solid var(--colour-border);
+      border-radius: var(--radius-lg);
+      padding: 1.5rem;
+      box-shadow: var(--shadow-card);
+      transition: background 0.25s ease, border-color 0.25s ease;
+    }
+
+ 
+    .back-link { font-size: .78rem; font-weight: 600; color: var(--colour-ui-primary); text-decoration: none; padding: .35rem .1rem; }
+    .back-link:hover { text-decoration: underline; }
+    .card-top-bar { justify-content: space-between; align-items: center; }
+    footer { margin-top: 2rem; font-size: .72rem; color: var(--colour-label); letter-spacing: .04em; }
+    :root { --colour-bjt: #b45309; --colour-ui-correct: #087443; --colour-ui-correct-rgb: 8, 116, 67; --colour-ui-wrong: #d92d20; }
+    body.dark-theme { --colour-bjt: #ffb454; --colour-ui-correct: #34d399; --colour-ui-correct-rgb: 52, 211, 153; --colour-ui-wrong: #f87171; }
+
+    .sim-intro { font-size: .85rem; line-height: 1.6; }
+    .sim-btn {
+      padding: .5rem 1.1rem; border: 1px solid var(--colour-border); border-radius: var(--radius-lg, 6px);
+      background: transparent; color: var(--colour-label); cursor: pointer; font-family: inherit;
+      font-size: .78rem; font-weight: 700; letter-spacing: .04em; transition: background .15s, color .15s, border-color .15s;
+    }
+    .sim-btn:hover:not(:disabled) { color: var(--colour-text); border-color: var(--colour-ui-primary); }
+    .sim-btn.active { border-color: var(--colour-ui-primary); color: var(--colour-ui-primary); background: rgba(var(--colour-ui-primary-rgb), .1); }
+    .sim-btn:focus-visible { outline: 2px solid var(--colour-ui-primary); outline-offset: 2px; }
+    #simSvg { width: 100%; max-width: 820px; display: block; margin: 0 auto; }
+    #simSvg .sw { cursor: pointer; }
+    #simSvg .sw:focus { outline: none; }
+    #simSvg .sw:focus-visible rect.sw-box, #simSvg .sw:hover rect.sw-box { stroke: var(--colour-ui-primary); stroke-width: 3; }
+    /* a value about to change: blink (reduced-motion users just get the plain number) */
+    #simSvg .out-flash { animation: ctrBlink .18s linear infinite; }
+    #simSvg .fb-flash { font-size: 21px; animation: ctrBlink .18s linear infinite; }
+    @keyframes ctrBlink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: .08; } }
+    @media (prefers-reduced-motion: reduce) { #simSvg .out-flash, #simSvg .fb-flash { animation: none; } }
+    .sim-status { margin-top: .8rem; padding: .7rem .9rem; border: 1px solid var(--colour-border); border-radius: 6px; font-size: .85rem; line-height: 1.55; }
+    .sim-status .big { font-family: 'Share Tech Mono', monospace; font-size: 1.05rem; letter-spacing: .04em; }
+    .sim-controls { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; margin-top: .8rem; font-size: .78rem; color: var(--colour-label); }
+    .sim-legend { display: flex; gap: 1.1rem; flex-wrap: wrap; justify-content: center; margin-top: .5rem; font-size: .75rem; color: var(--colour-label); }
+    .sim-legend i { display: inline-block; width: 1.2rem; height: 4px; border-radius: 2px; margin-right: .3rem; vertical-align: middle; }
+    .ov { text-decoration: overline; }
+    @media (max-width: 480px) { .sim-btn { padding: .45rem .75rem; } .sim-controls { gap: .4rem; } }
+  
+    /* Copyright line (college copies are self-contained, so inline) */
+    .site-copyright {
+      margin: 3rem auto 1.5rem;
+      padding: 0 1rem;
+      text-align: center;
+      font-size: 0.7rem;
+      color: var(--colour-label);
+      opacity: 0.8;
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>Digital Electronics</h1>
+    <p>Two 74193 Counters Chained · 8-Bit · Simulator</p>
+  </header>
+
+  <div class="main-wrap">
+    <div class="card-top-bar">
+      <a class="back-link" href="./exercises.html">← All exercises</a>
+      <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle dark and light theme">
+        <span id="themeIcon">🌙</span> <span id="themeLabel">Dark Mode</span>
+      </button>
+    </div>
+    <div class="card sim-intro">
+      <div>A single <b>74193</b> counts 0 – 15 (4 bits, 2<sup>4</sup> = 16 states). To count higher, <b>chain two</b>: <b>IC1</b> counts the clock
+        (the low 4 bits) and its <b><span class="ov">CO</span></b> (carry out) is wired to <b>IC2</b>'s <b>CU</b> clock input, so IC2 counts once for every 16 pulses.
+        Together they make an <b>8-bit</b> counter: 4 + 4 = 8 bits, so 2<sup>8</sup> = <b>256</b> states (0 – 255).
+        Click <b>CLK</b> to send pulses, or use <b>Go to 14</b> to jump to just before the first carry and watch what happens at 15 → 0.</div>
+      <div id="modText" style="margin-top:.6rem"></div>
+      <div class="sim-opt-row" style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;margin-top:.9rem;font-size:.78rem;color:var(--colour-label)"><span style="min-width:6.2rem;font-weight:700;letter-spacing:.04em">Count to</span>
+        <button type="button" class="sim-btn active" id="mod-256" onclick="setMod(256)" aria-pressed="true">256 (free-run)</button>
+        <button type="button" class="sim-btn" id="mod-128" onclick="setMod(128)" aria-pressed="false">128</button>
+        <button type="button" class="sim-btn" id="mod-64" onclick="setMod(64)" aria-pressed="false">64</button>
+        <button type="button" class="sim-btn" id="mod-32" onclick="setMod(32)" aria-pressed="false">32</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <svg id="simSvg" viewBox="0 0 800 430" xmlns="http://www.w3.org/2000/svg" font-family="'Share Tech Mono', monospace" role="img" aria-label="Two chained 74193 counters"></svg>
+      <div class="sim-legend">
+        <span><i style="background:var(--colour-ui-correct)"></i>logic 1 (HIGH)</span>
+        <span><i style="background:var(--colour-label)"></i>logic 0 (LOW)</span>
+      </div>
+      <div class="sim-status" id="simStatus" aria-live="polite"></div>
+      <div class="sim-controls">
+        <button type="button" class="sim-btn" onclick="resetSim(0)">↺ Reset to 0</button>
+        <button type="button" class="sim-btn" onclick="resetSim(14)">Go to 14</button>
+        <button type="button" class="sim-btn" id="goLastBtn" onclick="resetSim(modSel - 2)">Go to 254</button>
+        <span>Speed:</span>
+        <button type="button" class="sim-btn active" id="spd-normal" onclick="setSpeed('normal')">Normal</button>
+        <button type="button" class="sim-btn" id="spd-fast" onclick="setSpeed('fast')">Fast</button>
+        <button type="button" class="sim-btn" id="spd-turbo" onclick="setSpeed('turbo')">Turbo</button>
+      </div>
+    </div>
+  </div>
+
+  <footer>Electronics // Cert III // UEEEC0069</footer>
+
+  <script>
+    function toggleTheme() {
+      const isDark = document.body.classList.toggle('dark-theme');
+      try { localStorage.setItem('tafe-quiz-theme', isDark ? 'dark' : 'light'); } catch (e) { }
+      updateThemeToggleUI(isDark);
+    }
+    function updateThemeToggleUI(isDark) {
+      const icon = document.getElementById('themeIcon'), label = document.getElementById('themeLabel');
+      if (icon && label) { icon.textContent = isDark ? '☀️' : '🌙'; label.textContent = isDark ? 'Light Mode' : 'Dark Mode'; }
+    }
+    (function initTheme() {
+      let isDark = false;
+      try { isDark = localStorage.getItem('tafe-quiz-theme') === 'dark'; } catch (e) { }
+      document.body.classList.toggle('dark-theme', isDark);
+      updateThemeToggleUI(isDark);
+    })();
+  </script>
+  <script>
+    // ── two chained 74193s ─────────────────────────────────────────────────────
+    // State: cnt1 / cnt2 (each 0-15), clk, cu2In (the level at IC2's CU input) and coSent (the last CO-bar level
+    // put on the cascade wire). A changed CO-bar level is SENT along the wire (a visible sweep) and only takes
+    // effect when it ARRIVES; a rising edge arriving at IC2's CU makes IC2 count.
+    const SPEEDS = { normal: { gate: 780, wire: 1920, auto: 900 }, fast: { gate: 380, wire: 950, auto: 700 }, turbo: { gate: 140, wire: 340, auto: 120 } };
+    let speed = 'normal';
+    let cnt1 = 0, cnt2 = 0, clk = 0, cu2In = 1, coSent = 1;
+    let pend1 = null, pend2 = null, flights = {}, events = [], seq = 0, loopOn = false;
+    let phase = 'idle', auto = false, autoTimer = null;
+    let modSel = 256, cIn2 = 0;                                   // modSel: 256 = free-run, else count to 128 / 64 / 32; cIn2 = level at IC2's C pin
+    const CLEAR_BIT = { 256: null, 128: 3, 64: 2, 32: 1 };         // which IC2 output (bit 3 = QD ... bit 1 = QB) is wired back to IC2's C
+    const clearBit = () => CLEAR_BIT[modSel];
+    const hasFb = () => clearBit() !== null;
+
+    const HIGH = 'var(--colour-ui-correct)', LOW = 'var(--colour-label)';
+    const col = (v) => v ? HIGH : LOW;
+    const bit = (n, b) => (n >> b) & 1;
+    const bin4 = (n) => [3, 2, 1, 0].map(b => bit(n, b)).join('');
+    const total = () => cnt2 * 16 + cnt1;
+    const co1Level = () => (cnt1 === 15 && clk === 0) ? 0 : 1;      // IC1's carry out (active LOW): at 15 while the clock is LOW
+
+    // geometry
+    const CY0 = 170, CY1 = 330;
+    const CHIPS = { 2: { x0: 40, x1: 250 }, 1: { x0: 430, x1: 640 } };      // IC2 (high nibble) left, IC1 (low nibble) right
+    const pinX = (ic, b) => CHIPS[ic].x0 + 25 + (3 - b) * 40;              // bit 3 (QD) leftmost ... bit 0 (QA)
+    const CAS = 'M 430,215 L 250,215';
+    // feedback wire: IC2's chosen output (junction above the chip) -> left -> down -> along the bottom -> up into IC2's C
+    const FB_Y = 125, FB_X = 14, FB_BOTTOM = 372, C2_X = CHIPS[2].x1 - 25;
+    const fbPath = () => `M ${pinX(2, clearBit())},${FB_Y} L ${FB_X},${FB_Y} L ${FB_X},${FB_BOTTOM} L ${C2_X},${FB_BOTTOM} L ${C2_X},${CY1}`;                                       // IC1 CO-bar -> IC2 CU
+
+    function buildSvg() {
+      let s = '';
+      const lab = (x, y, t, anchor, size, fill) => `<text x="${x}" y="${y}" text-anchor="${anchor || 'middle'}" font-size="${size || 12}" style="fill: ${fill || 'var(--colour-label)'}">${t}</text>`;
+      [2, 1].forEach(ic => {
+        const { x0, x1 } = CHIPS[ic];
+        s += `<rect x="${x0}" y="${CY0}" width="${x1 - x0}" height="${CY1 - CY0}" rx="4" style="fill: var(--colour-panel); stroke: var(--colour-border)" stroke-width="3" />`;
+        s += lab((x0 + x1) / 2, 258, `IC${ic}`, 'middle', 24, 'var(--colour-text)') + lab((x0 + x1) / 2, 280, ic === 2 ? 'high nibble · ×16' : 'low nibble · ×1', 'middle', 12);
+        s += lab((x0 + x1) / 2, 20, `IC${ic} — 74193`, 'middle', 14);
+        // outputs: stub, arrow, digit, weight
+        for (let b = 3; b >= 0; b--) {
+          const x = pinX(ic, b), weight = (1 << b) * (ic === 2 ? 16 : 1);
+          s += `<path id="w-q${ic}${b}" d="M ${x},${CY0} L ${x},108" fill="none" stroke-width="3" stroke-linecap="round" />
+                <polygon id="a-q${ic}${b}" points="${x - 7},110 ${x},96 ${x + 7},110" />
+                <text id="dig${ic}${b}" x="${x}" y="78" text-anchor="middle" font-size="30" font-weight="bold"></text>`;
+          s += lab(x, 42, weight, 'middle', 11);
+          s += lab(x, 192, `Q<tspan baseline-shift="sub" font-size="9">${'ABCD'[b]}</tspan>`, 'middle', 13);
+          s += `<path d="M ${x},${CY1} L ${x},350" fill="none" stroke-width="3" style="stroke: var(--colour-label)" />`;   // data inputs: unused
+        }
+        // tied pins: LD-bar HIGH (top), C LOW (bottom), CD HIGH (right) — their level shown at the tie
+        const lx = x1 - 25;
+        s += `<path d="M ${lx},${CY0} L ${lx},140" fill="none" stroke-width="3" style="stroke: var(--colour-ui-correct)" />` + lab(lx, 132, '1', 'middle', 16, 'var(--colour-ui-correct)') + lab(lx, 192, '<tspan style="text-decoration:overline">LD</tspan>', 'middle', 13);
+        if (ic === 2 && hasFb()) s += lab(lx, 322, 'C', 'middle', 13);        // IC2's C is driven by the feedback wire instead of tied LOW
+        else s += `<path d="M ${lx},${CY1} L ${lx},350" fill="none" stroke-width="3" style="stroke: var(--colour-label)" />` + lab(lx, 368, '0', 'middle', 16) + lab(lx, 322, 'C', 'middle', 13);
+        s += `<path d="M ${x1},265 L ${x1 + 30},265" fill="none" stroke-width="3" style="stroke: var(--colour-ui-correct)" />` + lab(x1 + 38, 270, '1', 'start', 16, 'var(--colour-ui-correct)') + lab(x1 - 10, 269, 'CD', 'end', 13);
+        s += lab(x0 + 8, 219, ic === 1 ? '<tspan style="text-decoration:overline">CO</tspan>' : '<tspan style="text-decoration:overline">CO</tspan>', 'start', 13);
+        s += lab(x0 + 8, 269, '<tspan style="text-decoration:overline">BO</tspan>', 'start', 13);
+        s += lab(x1 - 10, 219, 'CU', 'end', 13);
+        for (let b = 3; b >= 0; b--) s += lab(pinX(ic, b), 322, `D<tspan baseline-shift="sub" font-size="9">${'ABCD'[b]}</tspan>`, 'middle', 13);
+        // clock-edge notch on CU
+        s += `<path d="M ${x1},207 L ${x1 - 10},215 L ${x1},223" fill="none" stroke-width="2" style="stroke: var(--colour-label)" />`;
+      });
+      // unused left-hand stubs: IC2's CO-bar and both BO-bars
+      s += `<path d="M 28,215 L ${CHIPS[2].x0},215" fill="none" stroke-width="3" style="stroke: var(--colour-label)" />
+            <path d="M 28,265 L ${CHIPS[2].x0},265" fill="none" stroke-width="3" style="stroke: var(--colour-label)" />
+            <path d="M 400,265 L ${CHIPS[1].x0},265" fill="none" stroke-width="3" style="stroke: var(--colour-label)" />`;
+      // IC1's CO-bar stub (coloured by its level) and the cascade wire to IC2's CU with its travelling sweep
+      s += `<path id="stub-co1" d="M 400,215 L 430,215" fill="none" stroke-width="3" />
+            <path id="w-cas" d="${CAS}" fill="none" stroke-width="3" stroke-linecap="round" />
+            <path id="o-cas" d="${CAS}" fill="none" stroke-width="4.5" stroke-linecap="round" />
+            <text id="casTxt" x="340" y="198" text-anchor="middle" font-size="18" font-weight="bold"></text>
+            <text x="340" y="240" text-anchor="middle" font-size="12" style="fill: var(--colour-label)">carry wire: IC1 <tspan class="ov">CO</tspan> → IC2 CU</text>`;
+      // clock into IC1's CU, with the CLK / AUTO CLK switches
+      s += `<path id="w-clk" d="M ${CHIPS[1].x1},215 L 690,215" fill="none" stroke-width="3" />
+            <g class="sw" id="swClk" tabindex="0" role="button" aria-label="Send a clock pulse">
+              <rect class="sw-box" x="690" y="193" width="100" height="44" rx="6" style="fill: var(--colour-panel); stroke: var(--colour-border)" stroke-width="2" />
+              <text x="740" y="221" text-anchor="middle" font-size="18" font-weight="bold" style="fill: var(--colour-text)">CLK</text>
+            </g>
+            <g class="sw" id="swAuto" tabindex="0" role="button" aria-pressed="false" aria-label="Auto clock">
+              <rect class="sw-box" x="690" y="245" width="100" height="44" rx="6" style="fill: var(--colour-panel); stroke: var(--colour-border)" stroke-width="2" />
+              <text x="740" y="273" text-anchor="middle" font-size="16" font-weight="bold" style="fill: var(--colour-text)">AUTO CLK</text>
+            </g>`;
+      if (hasFb()) {
+        const q = 'ABCD'[clearBit()];
+        s += `<g fill="none" stroke-linejoin="round" stroke-linecap="round">
+                <path id="w-fb" d="${fbPath()}" stroke-width="3" /><path id="o-fb" d="${fbPath()}" stroke-width="4.5" />
+              </g>
+              <circle cx="${pinX(2, clearBit())}" cy="${FB_Y}" r="5" id="j-fb" />
+              <text id="fbTxt" x="${C2_X - 12}" y="400" text-anchor="end" font-size="20" font-weight="bold"></text>
+              <text x="${FB_X + 10}" y="${FB_BOTTOM + 22}" font-size="12" style="fill: var(--colour-label)">Q<tspan baseline-shift="sub" font-size="9">${q}</tspan> of IC2 → C of IC2</text>`;
+      }
+      s += lab(400, 410, '(Vcc and GND not shown)', 'middle', 11);
+      document.getElementById('simSvg').innerHTML = s;
+      const g = document.getElementById('swClk'), a = document.getElementById('swAuto');
+      g.addEventListener('click', pulse);
+      g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pulse(); } });
+      a.addEventListener('click', toggleAuto);
+      a.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleAuto(); } });
+    }
+
+    // ── event engine (same shape as the other simulators) ──
+    function sched(dt, fn) {
+      const e = { t: performance.now() + dt, fn, dead: false, id: ++seq };
+      events.push(e); startLoop(); return e;
+    }
+    function startLoop() { if (!loopOn) { loopOn = true; requestAnimationFrame(tick); } }
+    function tick() {
+      const now = performance.now();
+      events.sort((a, b) => a.t - b.t);
+      while (events.length && events[0].t <= now) {
+        const e = events.shift();
+        if (!e.dead) e.fn();
+      }
+      events = events.filter(e => !e.dead);
+      render(now);
+      if (events.length || Object.keys(flights).length) requestAnimationFrame(tick); else loopOn = false;
+    }
+    const busy = () => events.length > 0 || Object.keys(flights).length > 0 || !!pend1 || !!pend2;
+    const jitter = (ms) => ms * (0.9 + 0.2 * Math.random());
+
+    // A clock pulse: HIGH for a moment, then LOW. IC1 counts on the rising edge (after its propagation delay).
+    // If IC1 was at 15, its CO-bar rises with the clock, and that rising edge is what clocks IC2.
+    function pulse() {
+      if (busy()) return false;               // wait for the circuit to settle first
+      clk = 1;
+      phase = cnt1 === 15 ? 'wrap' : 'clocked';
+      const gate = jitter(SPEEDS[speed].gate);
+      const next = (cnt1 + 1) & 15;
+      pend1 = { val: next, ev: sched(gate, () => apply1(next)) };
+      sched(gate * 1.35, () => { clk = 0; onSignals(); });
+      onSignals();                            // CO-bar may rise now (clock HIGH while IC1 is still at 15)
+      startLoop(); render(performance.now());
+      return true;
+    }
+    function apply1(v) {
+      cnt1 = v; pend1 = null;
+      if (phase === 'wrap') phase = 'carryRise';          // IC1 has wrapped to 0: its CO-bar rise is on its way to IC2
+      else if (phase === 'clocked') phase = 'counted';
+      onSignals();
+    }
+    function apply2(v, why) {
+      const old = cnt2;
+      cnt2 = v; pend2 = null;
+      phase = why === 'clear' ? 'cleared' : 'ic2counted';
+      if (hasFb() && bit(cnt2, clearBit()) !== bit(old, clearBit())) {
+        if (why !== 'clear') phase = 'fbHigh';
+        sendNet('fb', bit(cnt2, clearBit()));       // IC2's chosen output changed: the new level starts travelling to C
+      }
+      onSignals();
+    }
+    // IC1's CO-bar: when its level changes, send the new level along the cascade wire
+    function onSignals() {
+      const co = co1Level();
+      if (co !== coSent) {
+        coSent = co;
+        if (co === 0) phase = 'carryLow';
+        sendNet('cas', co);
+      }
+    }
+    function sendNet(id, val) {
+      const now = performance.now(), dur = SPEEDS[speed].wire, tok = ++seq;
+      flights[id] = { val, t0: now, t1: now + dur, tok };
+      sched(dur, () => arrive(id, val, tok));
+    }
+    function arrive(id, val, tok) {
+      if (flights[id] && flights[id].tok === tok) delete flights[id];
+      if (id === 'cas') {
+        const rising = cu2In === 0 && val === 1;
+        cu2In = val;
+        if (rising) {                          // a rising edge on IC2's CU: IC2 counts
+          phase = 'ic2arrive';
+          const next = (cnt2 + 1) & 15;
+          pend2 = { val: next, ev: sched(jitter(SPEEDS[speed].gate), () => apply2(next)) };
+        } else if (val === 0) phase = 'carryArrivedLow';
+      } else if (id === 'fb') {
+        cIn2 = val;                            // C is active HIGH: an asynchronous clear of IC2
+        if (cIn2 === 1 && cnt2 !== 0) {
+          phase = 'clearing';
+          pend2 = { val: 0, ev: sched(jitter(SPEEDS[speed].gate), () => apply2(0, 'clear')) };
+        } else if (cIn2 === 0) phase = 'released';
+      }
+    }
+
+    // ── drawing ──
+    function render(now) {
+      now = now || performance.now();
+      [1, 2].forEach(ic => {
+        const n = ic === 1 ? cnt1 : cnt2, pend = ic === 1 ? pend1 : pend2;
+        for (let b = 0; b < 4; b++) {
+          const v = bit(n, b), c = col(v);
+          document.getElementById(`w-q${ic}${b}`).setAttribute('stroke', c);
+          document.getElementById(`a-q${ic}${b}`).style.fill = c;
+          const d = document.getElementById(`dig${ic}${b}`);
+          d.textContent = v; d.style.fill = c;
+          d.classList.toggle('out-flash', !!(pend && bit(pend.val, b) !== v));   // about to change: blink the old value
+        }
+      });
+      // IC1's CO-bar stub follows the level it is outputting; the wire follows the level at IC2's CU
+      document.getElementById('stub-co1').setAttribute('stroke', col(co1Level()));
+      document.getElementById('w-cas').setAttribute('stroke', col(cu2In));
+      const ov = document.getElementById('o-cas'), f = flights.cas;
+      if (f) {
+        const L = ov.getTotalLength(), p = Math.max(0, Math.min(1, (now - f.t0) / (f.t1 - f.t0)));
+        ov.setAttribute('stroke', col(f.val));
+        ov.setAttribute('stroke-dasharray', L);
+        ov.setAttribute('stroke-dashoffset', L * (1 - p));
+        ov.style.display = '';
+      } else ov.style.display = 'none';
+      const t = document.getElementById('casTxt');
+      t.textContent = 'CU = ' + cu2In; t.style.fill = col(cu2In);
+      // the level at IC2's CU is about to change: in the last stretch of the sweep, blink the (old) value
+      t.classList.toggle('fb-flash', !!(f && (f.t1 - now) <= Math.min(800, SPEEDS[speed].wire * 0.6)));
+      if (hasFb()) {
+        document.getElementById('w-fb').setAttribute('stroke', col(cIn2));
+        document.getElementById('j-fb').style.fill = col(bit(cnt2, clearBit()));
+        const fo = document.getElementById('o-fb'), ff = flights.fb;
+        if (ff) {
+          const L = fo.getTotalLength(), p = Math.max(0, Math.min(1, (now - ff.t0) / (ff.t1 - ff.t0)));
+          fo.setAttribute('stroke', col(ff.val));
+          fo.setAttribute('stroke-dasharray', L);
+          fo.setAttribute('stroke-dashoffset', L * (1 - p));
+          fo.style.display = '';
+        } else fo.style.display = 'none';
+        const ft = document.getElementById('fbTxt');
+        ft.textContent = 'C = ' + cIn2; ft.style.fill = col(cIn2);
+        ft.classList.toggle('fb-flash', !!(ff && (ff.t1 - now) <= Math.min(800, SPEEDS[speed].wire * 0.6)));
+      }
+      document.getElementById('w-clk').setAttribute('stroke', col(clk));
+      document.querySelector('#swClk rect').style.fill = clk ? 'rgba(var(--colour-ui-primary-rgb), .22)' : 'var(--colour-panel)';
+      document.querySelector('#swAuto rect').style.fill = auto ? 'rgba(var(--colour-ui-primary-rgb), .22)' : 'var(--colour-panel)';
+      renderStatus();
+    }
+
+    function statusBody() {
+      const ov = (t) => `<span class="ov">${t}</span>`;
+      switch (phase) {
+        case 'clocked': return 'A <b>clock pulse</b>: IC1 counts up on the rising edge, after a short propagation delay (the blinking digits are about to change). IC2 does not see the clock at all.';
+        case 'counted': break;
+        case 'carryLow': return `IC1 has reached <b>15 (1111)</b> and the clock is LOW, so IC1's <b>${ov('CO')} (carry out) goes LOW</b>. That 0 travels along the cascade wire to IC2's CU — nothing counts on a falling edge.`;
+        case 'carryArrivedLow': break;
+        case 'wrap': return `IC1 is at 15 and a clock pulse arrives. IC1 is about to <b>wrap to 0</b>, and as the clock goes HIGH its ${ov('CO')} goes <b>HIGH</b> again…`;
+        case 'carryRise': return `IC1 has wrapped to <b>0</b>, and ${ov('CO')} rising from LOW to HIGH is a <b>rising edge</b> — it travels along the cascade wire to IC2's CU.`;
+        case 'ic2arrive': return 'The <b>rising edge has reached IC2\'s CU</b>, so IC2 counts up by 1 (the blinking digits are about to change). IC2 only counts when IC1 wraps — once every 16 clock pulses.';
+        case 'fbHigh': return `IC2's <b>Q${'ABCD'[clearBit()]}</b> has gone HIGH — the count is <b>${modSel}</b>. That 1 now <b>travels along the feedback wire</b> to IC2's <b>C (clear)</b> input.`;
+        case 'clearing': return `The 1 has reached IC2's <b>C</b>. Clear is asserted, so IC2 <b>resets to 0000</b> straight away — IC1 is already 0000, so the whole 8-bit count is back at <b>0</b>.`;
+        case 'cleared': return `IC2 is back at <b>0000</b>, so its <b>Q${'ABCD'[clearBit()]}</b> is 0 again. That 0 now travels back along the feedback wire to release the clear…`;
+        case 'released': return `The 0 has reached IC2's <b>C</b>, releasing the clear. The counter only ever settles on <b>0 – ${modSel - 1}</b>, so it <b>counts to ${modSel}</b> (${modSel} is the instant it clears).`;
+        case 'ic2counted': return `IC2 counted up: the high nibble is now <b>${cnt2}</b> (${bin4(cnt2)}). Together: <b>${cnt2} × 16 + ${cnt1} = ${total()}</b>.`;
+      }
+      if (hasFb() && total() === modSel - 1) return `<b>${total()}</b> is the highest count this wiring settles on. The next pulse takes IC1 from 15 to 0, its carry takes IC2 up to ${bin4(cnt2 + 1)} — and IC2's Q${'ABCD'[clearBit()]} goes HIGH, which clears it.`;
+      if (total() === 255) return `<b>All 8 outputs are 1 — 255</b>, the highest count (2<sup>8</sup> − 1). The next pulse wraps IC1 to 0, its carry then wraps IC2 to 0 as well, and the whole 8-bit counter is back at 0.`;
+      if (cnt1 === 15) return `IC1 is at 15, so its ${ov('CO')} is LOW. The next clock pulse wraps IC1 to 0 <i>and</i> clocks IC2 up by one.`;
+      if (total() === 0) return 'Click <b>CLK</b> to count. IC1 (right) counts every pulse; IC2 (left) will only move when IC1 wraps from 15 to 0.';
+      return 'Each clock pulse adds 1 to IC1. IC2 stays put until IC1 wraps.';
+    }
+    function renderStatus() {
+      const n = total();
+      document.getElementById('simStatus').innerHTML =
+        `<div><span class="big">${bin4(cnt2)} ${bin4(cnt1)}</span> = <b>${n}</b> (hex <b>${n.toString(16).toUpperCase().padStart(2, '0')}</b>)${busy() ? ' · <i>settling…</i>' : ''}</div><div style="margin-top:.35rem">${statusBody()}</div>`;
+    }
+
+    const MOD_TEXT = {
+      256: '',
+      128: 'IC2\'s <b>Q<sub>D</sub></b> (weight 128) is wired back to IC2\'s <b>C</b> (clear): when the count reaches 128 it clears, so it counts <b>0 – 127</b>.',
+      64: 'IC2\'s <b>Q<sub>C</sub></b> (weight 64) is wired back to IC2\'s <b>C</b> (clear): when the count reaches 64 it clears, so it counts <b>0 – 63</b>.',
+      32: 'IC2\'s <b>Q<sub>B</sub></b> (weight 32) is wired back to IC2\'s <b>C</b> (clear): when the count reaches 32 it clears, so it counts <b>0 – 31</b>.',
+    };
+    function setMod(m) {
+      modSel = m;
+      [256, 128, 64, 32].forEach(k => { const b = document.getElementById('mod-' + k); b.classList.toggle('active', k === m); b.setAttribute('aria-pressed', String(k === m)); });
+      document.getElementById('modText').innerHTML = MOD_TEXT[m];
+      document.getElementById('goLastBtn').textContent = 'Go to ' + (m - 2);
+      buildSvg(); resetSim(0);
+    }
+    function resetSim(n) {
+      events.forEach(e => e.dead = true); events = [];
+      cIn2 = 0;
+      cnt2 = (n >> 4) & 15; cnt1 = n & 15; clk = 0; pend1 = null; pend2 = null; flights = {}; phase = 'idle';
+      coSent = co1Level(); cu2In = coSent;       // at rest (clock LOW) the carry wire already matches IC1's CO-bar
+      render();
+    }
+    function setSpeed(s) {
+      speed = s;
+      ['normal', 'fast', 'turbo'].forEach(k => document.getElementById('spd-' + k).classList.toggle('active', k === s));
+      if (auto) { clearInterval(autoTimer); autoTimer = setInterval(() => { if (!busy()) pulse(); }, SPEEDS[speed].auto); }
+    }
+    function toggleAuto() {
+      auto = !auto;
+      clearInterval(autoTimer);
+      if (auto) autoTimer = setInterval(() => { if (!busy()) pulse(); }, SPEEDS[speed].auto);
+      const a = document.getElementById('swAuto'); if (a) a.setAttribute('aria-pressed', String(auto));
+      render();
+    }
+
+    setMod(256);
+  </script>
+  <p class="site-copyright">&copy; 2026 Anderson Home Technology. All rights reserved.</p>
+</body>
+
+</html>
