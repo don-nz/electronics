@@ -2,10 +2,16 @@
   Rearranging formulas — practice, one algebra step per question.
 
   Each PROBLEM starts from a formula and asks for one variable to be made the
-  subject. Every step is its own question: the student sees the equation so far
-  and picks the correct next line from four (one correct, three invalid — each
-  invalid line is a real, common slip: wrong operation, operation applied to one
-  side only, or the right operation on the wrong terms).
+  subject. The picker offers two ways to work it:
+    Step by step   every step is its own question: the student sees the equation
+                   so far and picks the correct next line from four (one correct,
+                   three invalid — each a real, common slip: wrong operation,
+                   operation applied to one side only, or the right operation on
+                   the wrong terms).
+    Order the lines  one question per problem, laid out like the Negative Feedback
+                   Overview Q3: line 1 is given (locked) and the student clicks the
+                   lines that follow in order. The worked solution numbers each step
+                   with what was done and why. (Uses `goal` and `why`, not `wrong`.)
 
   The page opens on a picker (one card per base formula). Choosing a formula
   and pressing Next starts a run made of that formula's problems — each one
@@ -13,7 +19,8 @@
 
   To add a formula, append to FORMULAS below: { id, title, shown, blurb,
   problems: [...] }. A problem is:
-    { name, start, target, steps: [ { goal, line, wrong: [3 lines], why } ... ] }
+    { name, start, target, given?, steps: [ { goal, line, wrong: [3 lines], why } ... ] }
+  `given` is optional extra text shown under the question (e.g. a substitution).
   `start` and every `line`/`wrong` entry are HTML (use the helpers V, I, R, ...
   and frac()). Keep a formula's problems to three or fewer, and avoid two
   problems in one formula whose first step is the same line.
@@ -67,7 +74,8 @@
     .formula-title { font-weight: 700; font-size: .85rem; }
     .formula-eq { font-size: 1.05rem; }
     .formula-blurb { font-size: .72rem; color: var(--colour-label); }
-    .picker-actions { display: flex; justify-content: center; margin-top: 1.2rem; }
+    .mode-pick { display: flex; flex-wrap: wrap; justify-content: center; gap: .6rem 1.6rem; margin: 0 0 1.2rem; font-size: .85rem; color: var(--colour-label); }
+    .mode-pick label { cursor: pointer; }
     .eq-line { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .4rem .7rem; }
     .eq-arrow { color: var(--colour-label); }
     .eq-step:last-child { font-weight: 700; }
@@ -93,12 +101,13 @@
   </header>
 
   <section class="picker" id="picker">
-    <p class="picker-intro">Choose a formula, then work through the steps to make each variable the subject.</p>
-    <div class="formula-grid" id="formulaGrid" role="group" aria-label="Formulas"></div>
-    <div class="picker-actions">
-      <button class="btn btn-check" id="startBtn" onclick="startQuiz()" disabled>Next →</button>
+    <p class="picker-intro">Choose how to work, then click a formula to start.</p>
+    <div class="mode-pick" role="radiogroup" aria-label="How to work">
+      <label><input type="radio" name="mode" value="steps" checked> <b>Step by step</b> — pick each next line</label>
+      <label><input type="radio" name="mode" value="order"> <b>Order the lines</b> — click the whole working in order</label>
     </div>
-  </section>
+    <div class="formula-grid" id="formulaGrid" role="group" aria-label="Formulas"></div>
+</section>
 
   <div class="quiz-wrap single-col" id="quizWrap" style="display:none">
     <div class="questions-col">
@@ -119,6 +128,13 @@
           </div>
 
           <div class="options" id="qOptions"></div>
+          <div class="match-wrap" id="qMatch" style="display:none">
+            <div class="match-pool-row" id="matchPoolRow">
+              <div class="match-pool-arrow">▶</div>
+              <div class="match-pool" id="matchPool"></div>
+            </div>
+            <div class="match-columns" id="matchColumns"></div>
+          </div>
           <div class="selected-list" id="qSelectedList" style="display:none"></div>
           <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
           <div class="working-box" id="qWorking">
@@ -170,6 +186,9 @@
     const POW10 = pw('10', frac(APDB, '10'));                // 10^(AP(dB) / 10)
     const XL = '<b class="colour-cap">X<sub>L</sub></b>';
     const L = '<b class="colour-cap">L</b>';
+    const GA = '<b class="colour-gain">A</b>';
+    const BETA = '<b class="colour-bjt">β</b>';
+    const VA = '<b class="colour-voltage">V<sub>A</sub></b>';
     const X = ' × ', EQ = ' = ';
 
     const FORMULAS = [
@@ -578,6 +597,72 @@
       },
         ],
       },
+      {
+        id: 'fb',
+        title: 'Feedback equation',
+        shown: `${frac(VOUT, VIN)}${EQ}${frac(GA, `1 + (${GA}${X}${BETA})`)}`,
+        blurb: 'Derive the closed-loop gain',
+        problems: [
+      {
+        name: "derive V<sub>out</sub> / V<sub>in</sub>",
+        start: `${GA}${X}${VA}${EQ}${VOUT}`,
+        given: `The summing network delivers the signal ${VA} that the amplifier receives:<div style="margin:.5rem 0">${VA}${EQ}${VIN} − ${BETA}${X}${VOUT}</div>`,
+        target: `${frac(VOUT, VIN)}`,
+        steps: [
+          {
+            goal: `Substitute ${VA}${EQ}${VIN} − ${BETA}${X}${VOUT} into ${GA}${X}${VA}${EQ}${VOUT}.`,
+            line: `${GA}${X}(${VIN} − ${BETA}${X}${VOUT})${EQ}${VOUT}`,
+            wrong: [
+              `${GA}${X}${VIN} − ${BETA}${X}${VOUT}${EQ}${VOUT}`,
+              `${GA}${X}(${VIN} + ${BETA}${X}${VOUT})${EQ}${VOUT}`,
+              `${frac(`${VIN} − ${BETA}${X}${VOUT}`, GA)}${EQ}${VOUT}`,
+            ],
+            why: `${VA} is replaced by what the summing network delivers, in brackets so the whole of it is multiplied by ${GA}.`,
+          },
+          {
+            goal: `Multiply out the bracket.`,
+            line: `(${GA}${X}${VIN}) − (${GA}${X}${BETA}${X}${VOUT})${EQ}${VOUT}`,
+            wrong: [
+              `(${GA}${X}${VIN}) − ${BETA}${X}${VOUT}${EQ}${VOUT}`,
+              `(${GA}${X}${VIN}) + (${GA}${X}${BETA}${X}${VOUT})${EQ}${VOUT}`,
+              `(${GA}${X}${VIN}) × (${GA}${X}${BETA}${X}${VOUT})${EQ}${VOUT}`,
+            ],
+            why: `${GA} multiplies <b>both</b> terms inside the bracket.`,
+          },
+          {
+            goal: `Add (${GA}${X}${BETA}${X}${VOUT}) to both sides, so every ${VOUT} term is on one side.`,
+            line: `${GA}${X}${VIN}${EQ}${VOUT} + (${GA}${X}${BETA}${X}${VOUT})`,
+            wrong: [
+              `${GA}${X}${VIN}${EQ}${VOUT} − (${GA}${X}${BETA}${X}${VOUT})`,
+              `${GA}${X}${VIN} + (${GA}${X}${BETA}${X}${VOUT})${EQ}${VOUT}`,
+              `${GA}${X}${VIN}${EQ}${VOUT}${X}(${GA}${X}${BETA}${X}${VOUT})`,
+            ],
+            why: `Adding the same term to <b>both</b> sides moves it across and changes its sign.`,
+          },
+          {
+            goal: `Take ${VOUT} out as a common factor.`,
+            line: `${GA}${X}${VIN}${EQ}${VOUT}${X}(1 + (${GA}${X}${BETA}))`,
+            wrong: [
+              `${GA}${X}${VIN}${EQ}${VOUT}${X}(1 + (${GA}${X}${BETA}${X}${VOUT}))`,
+              `${GA}${X}${VIN}${EQ}${VOUT} + (1${X}(${GA}${X}${BETA}))`,
+              `${GA}${X}${VIN}${EQ}${VOUT}${X}(${GA}${X}${BETA})`,
+            ],
+            why: `${VOUT} appears in both terms on the right, so it can be taken outside a bracket: ${VOUT}${X}(1 + (${GA}${X}${BETA})).`,
+          },
+          {
+            goal: `Divide both sides by ${VIN} and by (1 + (${GA}${X}${BETA})).`,
+            line: `${frac(VOUT, VIN)}${EQ}${frac(GA, `1 + (${GA}${X}${BETA})`)}`,
+            wrong: [
+              `${frac(VOUT, VIN)}${EQ}${frac(`1 + (${GA}${X}${BETA})`, GA)}`,
+              `${frac(VOUT, VIN)}${EQ}${GA}${X}(1 + (${GA}${X}${BETA}))`,
+              `${frac(VIN, VOUT)}${EQ}${frac(GA, `1 + (${GA}${X}${BETA})`)}`,
+            ],
+            why: `Dividing <b>both</b> sides by ${VIN} and by the bracket leaves ${VOUT} over ${VIN} on the left and ${GA} over the bracket on the right. This is the closed-loop gain.`,
+          },
+        ],
+      },
+        ],
+      },
     ];
 
     // ══════════════════════════════════════════════════════════════════════
@@ -589,10 +674,18 @@
     const QUESTIONS = [];
     let currentFormula = null;
 
+    let currentMode = 'steps';   // 'steps' = pick each next line; 'order' = click the lines in order
+
     function buildRun() {
       QUESTIONS.length = 0;
       if (!currentFormula) return;
       const problems = shuffle(currentFormula.problems.slice());
+      (currentMode === 'order' ? buildOrderRun : buildStepRun)(problems);
+      buildProgressDots();
+    }
+
+    // step by step: the equation so far, pick the correct next line from four
+    function buildStepRun(problems) {
       problems.forEach((p, pi) => {
         p.steps.forEach((s, si) => {
           const history = [p.start, ...p.steps.slice(0, si).map(prev => prev.line)];
@@ -600,7 +693,7 @@
           const strip = `<div class="eq-strip"><span class="eq-label">Equation so far</span><span class="eq-line">${history.map(h => `<span class="eq-step">${h}</span>`).join('<span class="eq-arrow">→</span>')}</span></div>`;
           QUESTIONS.push({
             leftPanel: 'none',
-            text: () => `<b>${currentFormula.title}</b> — problem ${pi + 1} of ${problems.length}: ${p.name}.<br>Step ${si + 1} of ${p.steps.length}: which line comes next?${strip}`,
+            text: () => `<b>${currentFormula.title}</b> — problem ${pi + 1} of ${problems.length}: ${p.name}.<br>${si === 0 && p.given ? p.given : ''}Step ${si + 1} of ${p.steps.length}: which line comes next?${strip}`,
             hint: () => `<span class="eq-goal">${s.goal}</span>`,
             options: () => shuffle([
               { label: s.line, type: 'correct' },
@@ -614,7 +707,38 @@
           });
         });
       });
-      buildProgressDots();
+    }
+
+    // order the lines: one question per problem, as in the Negative Feedback Overview Q3
+    function buildOrderRun(problems) {
+      problems.forEach((p, pi) => {
+        const n = p.steps.length;
+        // one question per problem, as in the Negative Feedback Overview Q3: the starting line is given
+        // (locked, line 1) and the student clicks the lines that follow in the order the working goes
+        QUESTIONS.push({
+          kind: 'match',
+          order: true,
+          numbered: true,
+          keepPicker: true,
+          orderCols: 1,
+          prefilled: [p.start],
+          columns: () => p.steps.map((_, i) => `${i + 2}`),
+          text: () => `<b>${currentFormula.title}</b> — problem ${pi + 1} of ${problems.length}: ${p.name}.<br>Line 1 is given. ${p.given || ''}Click the next ${n} lines in the order the working goes — a number appears beside each one, 2 to ${n + 1}.`,
+          hint: () => `<span class="eq-goal">${p.steps[0].goal}</span>`,
+          options: () => shuffle(p.steps.map((s, i) => ({
+            label: `<span>${s.line}</span>`, key: `s${i}`, col: i,
+            after: i ? [`s${i - 1}`] : []
+          }))),
+          correctExplain: (st) => {
+            const ok = st.opts.filter((o, i) => orderChipOk(st, i)).length;
+            return ok === st.opts.length ? `All ${st.opts.length} lines are in the right order` : `${ok} of ${st.opts.length} lines in the right place`;
+          },
+          working: () => `
+    <div class="working-line"><b>1.</b> Start from ${p.start} (given).</div>
+    ${p.steps.map((s, i) => `<div class="working-line"><b>${i + 2}.</b> ${s.goal} ${s.why}</div>`).join('')}
+    <div class="working-total">Done: ${p.target} is now the subject — ${p.steps[n - 1].line}</div>`,
+        });
+      });
     }
     RESET_EXTRA = buildRun;
 
@@ -630,12 +754,12 @@
         </button>`).join('');
       grid.querySelectorAll('.formula-card').forEach(btn => btn.addEventListener('click', () => {
         chosenId = btn.dataset.id;
-        renderPicker();
+        startQuiz();
       }));
-      document.getElementById('startBtn').disabled = !chosenId;
     }
     function startQuiz() {
       currentFormula = FORMULAS.find(f => f.id === chosenId);
+      currentMode = document.querySelector('input[name="mode"]:checked').value;
       if (!currentFormula) return;
       document.getElementById('picker').style.display = 'none';
       document.getElementById('quizWrap').style.display = '';
