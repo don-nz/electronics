@@ -229,6 +229,10 @@ function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.fl
 // across every file that had its own copy of this; genuinely file-agnostic.
 function frac(num, den) { return `<span class="working-frac"><span class="num">${num}</span><span class="den">${den}</span></span>`; }
 
+// Square root with the bar drawn over everything inside it, like frac() does for the
+// fraction line: sqrt(`${a}² + ${b}²`). The radical sign is sized to the content.
+function sqrt(inner) { return `<span class="working-sqrt"><span class="sqrt-sign">√</span><span class="sqrt-body">${inner}</span></span>`; }
+
 // Formats a number to AT MOST `decimals` places, trimming trailing zeros
 // (and a trailing decimal point) — e.g. trimNum(1.750, 3) -> "1.75",
 // trimNum(0, 2) -> "0", trimNum(-2, 1) -> "-2". Same parseFloat(x.toFixed(n))

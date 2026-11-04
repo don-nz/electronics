@@ -402,11 +402,17 @@
       // Q13: f1 after making each of four things ten times bigger (labels use the page's
       // colour helpers, defined further down — recompute() only runs after they exist)
       const f = (fin, fout, fby) => combineF1(fin, fout, fby).f1;
+      const rl10 = 1 / (2 * Math.PI * (V.rc + 10 * V.rl) * V.cout);
+      // corners = the three corner frequencies after the change; change = the line that finds the one that moved
       D.opts13 = [
-        { label: `Make ${Cin} ten times larger`, f1: f(D.fin / 10, D.fout, D.fby) },
-        { label: `Make ${Cout} ten times larger`, f1: f(D.fin, D.fout / 10, D.fby) },
-        { label: `Make ${CE} ten times larger`, f1: f(D.fin, D.fout, D.fby / 10) },
-        { label: `Make ${RLs} ten times larger`, f1: f(D.fin, 1 / (2 * Math.PI * (V.rc + 10 * V.rl) * V.cout), D.fby) },
+        { label: `Make ${Cin} ten times larger`, f1: f(D.fin / 10, D.fout, D.fby), corners: [D.fin / 10, D.fout, D.fby], fc: FIN, what: `${FIN} by a factor of 10`,
+          change: `${FIN} = ${frac(fmtHz(D.fin), '10')} = ${fmtHz(D.fin / 10)}` },
+        { label: `Make ${Cout} ten times larger`, f1: f(D.fin, D.fout / 10, D.fby), corners: [D.fin, D.fout / 10, D.fby], fc: FOUT, what: `${FOUT} by a factor of 10`,
+          change: `${FOUT} = ${frac(fmtHz(D.fout), '10')} = ${fmtHz(D.fout / 10)}` },
+        { label: `Make ${CE} ten times larger`, f1: f(D.fin, D.fout, D.fby / 10), corners: [D.fin, D.fout, D.fby / 10], fc: FBY, what: `${FBY} by a factor of 10`,
+          change: `${FBY} = ${frac(fmtHz(D.fby), '10')} = ${fmtHz(D.fby / 10)}` },
+        { label: `Make ${RLs} ten times larger`, f1: f(D.fin, rl10, D.fby), corners: [D.fin, rl10, D.fby], fc: FOUT, what: `${FOUT}, because ${RLs} is in the resistance it works against`,
+          change: `${FOUT} = ${frac('1', `2π × (${fmtR(V.rc)} + (10 × ${fmtR(V.rl)})) × ${fmtCs(V.cout)}`)} = ${fmtHz(rl10)}` },
       ];
     }
 
@@ -712,7 +718,7 @@
       },
       // 12 ── f1
       {
-        text: () => `Combine them. What is the amplifier's overall lower cutoff frequency ${F1}? Use: if the highest corner is at least <b>twice</b> the next highest, it dominates and ${F1} ≈ that corner; otherwise use the root-sum-square ${F1} ≈ √(${FIN}² + ${FOUT}² + ${FBY}²).`,
+        text: () => `Combine them. What is the amplifier's overall lower cutoff frequency ${F1}? Use: if the highest corner is at least <b>twice</b> the next highest, it dominates and ${F1} ≈ that corner; otherwise use the root-sum-square ${F1} ≈ ${sqrt(`${FIN}² + ${FOUT}² + ${FBY}²`)}.`,
         hint: () => `Sort the three corners and look at the ratio between the top two.`,
         options: () => {
           const c = fmtHz(D.f1);
@@ -727,7 +733,7 @@
             : [`${F1} = the highest corner alone ≈ ${fmtHz(wr[0])}`, `${F1} = ${FIN} + ${FOUT} + ${FBY} ≈ ${fmtHz(wr[1])}`, `${F1} = the lowest corner ≈ ${fmtHz(wr[2])}`];
           const right = D.dominant
             ? `${F1} ≈ highest corner = ${NAMES[D.sorted[0][0]][1]} ≈ ${c}`
-            : `${F1} = √(${FIN}² + ${FOUT}² + ${FBY}²) = √(${sig3(D.fin)}² + ${sig3(D.fout)}² + ${sig3(D.fby)}²) ≈ ${c}`;
+            : `${F1} = ${sqrt(`${FIN}² + ${FOUT}² + ${FBY}²`)} = ${sqrt(`${sig3(D.fin)}² + ${sig3(D.fout)}² + ${sig3(D.fby)}²`)} ≈ ${c}`;
           return shuffle([
             { label: right, type: 'correct' },
             ...wl.map(l => ({ label: l, type: 'wrong' })),
@@ -742,7 +748,7 @@
     <div class="working-total">${F1} ≈ <span class="cr">${fmtHz(D.f1)}</span></div>
     <div class="working-line">(The root-sum-square gives ${fmtHz(rss)} — within ${sig3(Math.abs(rss - f) / f * 100)}% of the same figure, so the shortcut is safe whenever one corner is far above the others.)</div>` : `
     <div class="working-line">Highest corner: ${NAMES[k][1]} ≈ ${fmtHz(f)}. Next highest ≈ ${fmtHz(f2)}. The ratio is only ${sig3(f / f2)} — less than 2, so no single network dominates: each one's −3 dB drop adds to the others'.</div>
-    <div class="working-formula-row">${F1} ≈ √(${FIN}² + ${FOUT}² + ${FBY}²) = √(${sig3(D.fin)}² + ${sig3(D.fout)}² + ${sig3(D.fby)}²)</div>
+    <div class="working-formula-row">${F1} ≈ ${sqrt(`${FIN}² + ${FOUT}² + ${FBY}²`)} = ${sqrt(`${sig3(D.fin)}² + ${sig3(D.fout)}² + ${sig3(D.fby)}²`)}</div>
     <div class="working-total">${F1} ≈ <span class="cr">${fmtHz(D.f1)}</span> — higher than the highest corner alone (${fmtHz(f)}), because the second network also contributes loss around that frequency.</div>`;
         }
       },
@@ -758,9 +764,30 @@
         correctExplain: () => { const o = D.opts13; const b = o.reduce((a, x) => x.f1 < a.f1 ? x : a); return `${b.label} → ${F1} ≈ ${fmtHz(b.f1)}`; },
         working: () => {
           const o = D.opts13, b = o.reduce((a, x) => x.f1 < a.f1 ? x : a);
+          // the new f1 for one option: the equation with the changed corner, then the result
+          const calc = x => {
+            const [fi, fo, fb] = x.corners, s3 = [['in', fi], ['out', fo], ['bypass', fb]].sort((p, q) => q[1] - p[1]);
+            const rss = Math.sqrt(fi * fi + fo * fo + fb * fb), ratio = s3[0][1] / s3[1][1];
+            const lead = Math.abs(x.f1 - D.f1) < 1e-9 ? `Applying the new ${x.fc} to the formula leaves ${F1} unchanged:` : `Applying the new ${x.fc} to the formula gives the new ${F1}:`;
+            const row = `<div class="working-formula-row"><span>${F1} = ${sqrt(`${sig3(fi)}² + ${sig3(fo)}² + ${sig3(fb)}²`)} = ${fmtHz(rss)}</span></div>`;
+            return ratio >= 2
+              ? `<div class="working-line">${lead}</div>
+    ${row}
+    <div class="working-line">${NAMES[s3[0][0]][1]} ≈ ${fmtHz(s3[0][1])} is ${sig3(ratio)} times the next highest (${fmtHz(s3[1][1])}), at least 2, so it dominates and the smaller corners hardly affect the result. ${fmtHz(rss) !== fmtHz(x.f1) ? `The root-sum-square gives ${fmtHz(rss)}, but the dominant corner alone is ${fmtHz(x.f1)}, so ` : ''}${F1} ≈ ${fmtHz(x.f1)}${Math.abs(x.f1 - D.f1) < 1e-9 ? ' — the same as before' : ''}.</div>`
+              : `<div class="working-line">${lead}</div>
+    ${row}
+    <div class="working-line">The top two corners are only ${sig3(ratio)} times apart, so no single network dominates: ${F1} ≈ ${fmtHz(x.f1)}.</div>`;
+          };
           return `
-    <div class="working-line">Recomputing ${F1} for each change with the same rule (a ten-times larger capacitor divides that network's corner by 10):</div>
-    ${o.map(x => `<div class="working-line">${x.label}: ${F1} ≈ ${fmtHz(x.f1)}</div>`).join('')}
+    <div class="working-line">${F1} is found from the three corner frequencies. If the highest corner is at least <b>twice</b> the next highest, it dominates:</div>
+    <div class="working-formula-row"><span>${F1} ≈ highest corner</span></div>
+    <div class="working-line">Otherwise use the root-sum-square:</div>
+    <div class="working-formula-row"><span>${F1} = ${sqrt(`${FIN}² + ${FOUT}² + ${FBY}²`)}</span></div>
+    <div class="working-line">Starting corners: ${FIN} ≈ ${fmtHz(D.fin)}, ${FOUT} ≈ ${fmtHz(D.fout)}, ${FBY} ≈ ${fmtHz(D.fby)}, so ${F1} ≈ ${fmtHz(D.f1)}.</div>
+    ${o.map(x => `<div class="working-line" style="margin-top:.7rem"><b>${x.label}</b></div>
+    <div class="working-line">This will reduce ${x.what}:</div>
+    <div class="working-formula-row">${x.change}</div>
+    ${calc(x)}`).join('')}
     <div class="working-total"><span class="cr">${b.label}</span> wins — it shrinks the corner that was <i>highest</i>. Enlarging a capacitor whose corner is already low changes ${F1} very little, because ${F1} is set by the networks near the top.</div>`;
         }
       },
