@@ -123,6 +123,9 @@
     it; clicking a numbered step takes its number back and closes the gap. Same
     state (`st.place` = slot index) and the same grading either way — add
     `keepPicker: true` to keep the coloured numbered list after Check, and
+    `prefilled: [html, ...]` shows already-given steps as locked, numbered
+    chips at the top of the list (1, 2, ...), and the steps to click are then
+    numbered after them — for a derivation whose first line is handed over;
     `orderCols` (default 3) for how many steps sit side by side — keep the
     chip labels short (a symbol, no description) so they fit on a phone.
     Optional `matchMaxCols` sets the column-grid width of the slot boxes
@@ -485,11 +488,20 @@ function renderOrderList() {
   // short chips sit in a fixed grid (default 3 across, `orderCols` to change) so the list stays compact, phones included
   pool.style.display = 'grid';
   pool.style.gridTemplateColumns = `repeat(${data.orderCols || 3}, 1fr)`;
+  // `prefilled` steps are given: locked chips numbered 1..k above the list, so clickable steps are numbered from k + 1
+  const given = data.prefilled || [];
+  given.forEach((label, n) => {
+    const chip = document.createElement('div');
+    chip.className = 'match-chip order-chip picked';
+    chip.style.cursor = 'default';
+    chip.innerHTML = `<span class="order-num set">${n + 1}</span><span>${label}</span>`;   // span keeps the spaces (the chip is a flex row)
+    pool.appendChild(chip);
+  });
   st.opts.forEach((opt, i) => {
     const chip = document.createElement('button');
     const placed = st.place[i] !== null;
     chip.className = 'match-chip order-chip' + (placed ? ' picked' : '');
-    chip.innerHTML = `<span class="order-num${placed ? ' set' : ''}">${placed ? st.place[i] + 1 : ''}</span>${opt.label}`;
+    chip.innerHTML = `<span class="order-num${placed ? ' set' : ''}">${placed ? st.place[i] + 1 + given.length : ''}</span>${opt.label}`;
     if (st.ans) {
       chip.disabled = true;
       chip.classList.remove('picked');
@@ -1027,8 +1039,10 @@ function answerKeyHtml(data, st) {
   let heading = '';
   if (isMatch(data) && data.order && data.numbered) {
     // numbered-order question: show one valid order in the same grid as the pool, number beside each step
-    const cells = st.opts.slice().sort((x, y) => x.col - y.col)
-      .map((o, n) => `<div class="match-chip order-chip"><span class="order-num set">${n + 1}</span>${o.label}</div>`).join('');
+    const given = data.prefilled || [];
+    const cells = given.map((label, n) => `<div class="match-chip order-chip"><span class="order-num set">${n + 1}</span><span>${label}</span></div>`).join('') +
+      st.opts.slice().sort((x, y) => x.col - y.col)
+      .map((o, n) => `<div class="match-chip order-chip"><span class="order-num set">${n + 1 + given.length}</span>${o.label}</div>`).join('');
     return `<div class="working-step answer-key-heading">One valid order:</div>` +
       `<div class="order-key" style="display:grid;grid-template-columns:repeat(${data.orderCols || 3},1fr);gap:.5rem;margin-top:.4rem">${cells}</div>`;
   }
@@ -1471,7 +1485,8 @@ function printAnswerArea(data, st) {
   if (isMatch(data) && data.order) {
     // ordering question: 18+ slot columns would run off the page, so print the steps as a list,
     // each with an empty box to write its step number in
-    return `<div class="print-slots">${st.opts.map(o => `<span class="print-slot"><span class="print-box" style="min-width:1.8em;height:1.4em"></span> ${o.label}</span>`).join('')}</div>`;
+    const given = (data.prefilled || []).map((label, n) => `<span class="print-slot"><span class="print-box" style="min-width:1.8em;height:1.4em">${n + 1}</span> ${label}</span>`).join('');
+    return `<div class="print-slots">${given}${st.opts.map(o => `<span class="print-slot"><span class="print-box" style="min-width:1.8em;height:1.4em"></span> ${o.label}</span>`).join('')}</div>`;
   }
   if (isMatch(data)) {
     const cols = data.columns();
