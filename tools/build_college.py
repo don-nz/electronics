@@ -97,8 +97,13 @@ def build_college(path, out_dir):
     page = read(path)
     base = os.path.dirname(os.path.abspath(path))
     asset = lambda name: read(os.path.join(ROOT, 'cert_iii', 'assets', name))
-    # exercise pages go back to the exercises list; the resources (reference sheets) go back to the menu
-    back = ('./index.html', '← Menu') if '/resources/' in os.path.abspath(path) else ('./exercises.html', '← All exercises')
+    # exercise pages go back to the exercises list, simulators to the simulators list, resources to the menu
+    if '/resources/' in os.path.abspath(path):
+        back = ('./index.html', '← Menu')
+    elif 'simulator' in os.path.basename(path):
+        back = ('./simulators.html', '← All simulators')
+    else:
+        back = ('./exercises.html', '← All exercises')
 
     title = re.search(r'<title>.*?</title>', page, re.S).group(0)
     page_css = '\n'.join(re.findall(r'<style>(.*?)</style>', page, re.S))
