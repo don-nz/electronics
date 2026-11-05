@@ -42,13 +42,16 @@ SKIP = {'breadcrumb.js'}
 
 COLLEGE_FONTS = ('<link href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,600;0,700;0,800;1,400;1,600'
                  '&family=Share+Tech+Mono&display=swap" rel="stylesheet">')
-TOP_BAR = '''<div class="card-top-bar">
-      <a class="back-link" href="./index.html">← All exercises</a>
+def top_bar(href, label):
+    return f'''<div class="card-top-bar">
+      <a class="back-link" href="{href}">{label}</a>
       <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle dark and light theme">
         <span id="themeIcon">🌙</span> <span id="themeLabel">Dark Mode</span>
       </button>
     </div>
 '''
+
+
 COPYRIGHT = '<p class="site-copyright">&copy; 2026 Anderson Home Technology. All rights reserved.</p>'
 
 
@@ -71,6 +74,11 @@ def trim_shapes(js, page):
     return head + 'var SETS = {\n' + '\n'.join(keep) + '\n  };' + tail
 
 
+def uses(page, name):
+    """True if the page loads assets/<name> with a real <script src> — not merely mentions it in a comment."""
+    return re.search(r'<script[^>]*\bsrc="[^"]*' + re.escape(name) + '"', page) is not None
+
+
 def inline_js(js):
     return '<script>\n' + js.replace('</script', '<\\/script') + '\n</script>'
 
@@ -88,26 +96,40 @@ def build_college(path, out_dir):
     """Convert a waveform-builder student page into a standalone college page."""
     page = read(path)
     base = os.path.dirname(os.path.abspath(path))
-    asset = lambda name: read(os.path.normpath(os.path.join(base, '../../../../assets', name)))
+    asset = lambda name: read(os.path.join(ROOT, 'cert_iii', 'assets', name))
+    # exercise pages go back to the exercises list; the resources (reference sheets) go back to the menu
+    back = ('./index.html', '← Menu') if '/resources/' in os.path.abspath(path) else ('./exercises.html', '← All exercises')
 
     title = re.search(r'<title>.*?</title>', page, re.S).group(0)
     page_css = '\n'.join(re.findall(r'<style>(.*?)</style>', page, re.S))
     theme_css = read(os.path.join(HERE, 'college', 'theme.css'))
     theme_js = read(os.path.join(HERE, 'college', 'theme-toggle.js'))
-    shapes = trim_shapes(asset('shapes.js'), page) if 'shapes.js' in page else ''
-    engine = 'quiz-engine.js' in page
-    # a quiz-engine page draws with the engine's own classes (options, progress dots, summary, working box…):
-    # quiz-common.css goes first as the base layer, so anything the TAFE theme does not restyle still works
-    base_css = asset('quiz-common.css') if engine else ''
+    shapes = trim_shapes(asset('shapes.js'), page) if uses(page, 'shapes.js') else ''
+    # a quiz-engine page draws with the engine's own classes (options, progress dots, summary, working box…),
+    # and a page with the shared zoom modal uses its classes too: quiz-common.css goes first as the base layer,
+    # so anything the TAFE theme does not restyle still works
+    base_css = asset('quiz-common.css') if (uses(page, 'quiz-engine.js') or 'class="diagram-modal"' in page) else ''
+    # the student pages are dark-first (:root) with a light override under :root[data-theme="light"]; the college
+    # pages are light-first with body.dark-theme, so a page that uses that pattern is flipped to match
+    if ':root[data-theme="light"]' in page_css:
+        page_css = re.sub(r':root\s*\{', 'body.dark-theme {', page_css)
+        page_css = page_css.replace(':root[data-theme="light"]', ':root')
 
-    body = page[page.index('<body'):page.rindex('</body>')]
+    body_at = re.search(r'</head>\s*<body', page).end() - len('<body')   # the real tag, not text in a comment or a style
+    body = page[body_at:page.rindex('</body>')]
     body = re.sub(r'<div class="crumb"[^>]*></div>\s*', '', body)
     body = re.sub(r'<footer>.*?</footer>\s*', '', body, flags=re.S)
     body = re.sub(r'<a id="menuLink"[^>]*>.*?</a>\s*', '', body, flags=re.S)                 # the student-only "← Back" link
     body = re.sub(r'<div class="progress-wrap"[^>]*>\s*</div>\s*', '', body, count=1)        # a progress bar left empty (builders, simulators)
-    body = sub_once(r'<div class="quiz-wrap single-col" id="quizWrap">\s*<div class="questions-col">\s*',
-                    '<div class="main-wrap">\n    ' + TOP_BAR + '\n    ', body, 'the .quiz-wrap / .questions-col wrapper', path=path)
-    body = sub_once(r'\s*</div>\s*</div>(?=(?:\s*<!--.*?-->)*\s*(?:<div id="printWorksheet"|<script))', '\n  </div>', body, 'the end of the wrapper (before #printWorksheet or the page script)', path=path)
+    if 'quiz-wrap single-col' in body:
+        body = sub_once(r'<div class="quiz-wrap single-col" id="quizWrap">\s*<div class="questions-col">\s*',
+                        '<div class="main-wrap">\n    ' + top_bar(*back) + '\n    ', body, 'the .quiz-wrap / .questions-col wrapper', path=path)
+        body = sub_once(r'\s*</div>\s*</div>(?=(?:\s*<!--.*?-->)*\s*(?:<div id="printWorksheet"|<script))', '\n  </div>', body, 'the end of the wrapper (before #printWorksheet or the page script)', path=path)
+    else:
+        # a heading followed by free-form content (a gallery): the heading and everything after it, up to the
+        # first script, go inside a wide .main-wrap, with the top bar under the heading
+        body = sub_once(r'(<header>.*?</header>)', lambda m: '<div class="main-wrap wide">\n  ' + m.group(1) + '\n\n  ' + top_bar(*back), body, 'the <header>', path=path)
+        body = sub_once(r'(?=\s*<script)', '\n  </div>\n', body, 'the first script (end of the page content)', path=path)
     body = re.sub(r'btn btn-(?:shuffle|summary)', 'btn btn-secondary', body)
     body = body.replace('class="btn" id="printBtn"', 'class="btn btn-secondary" id="printBtn"')
 
@@ -125,7 +147,7 @@ def build_college(path, out_dir):
     if shapes:
         head += '  ' + inline_js(shapes) + '\n'
     for lib in ('quiz-engine.js', 'waveform-builder.js'):
-        if lib in page:
+        if uses(page, lib):
             head += '  ' + inline_js(asset(lib)) + '\n'
     head += '</head>\n\n'
     out_html = head + body.rstrip() + '\n  ' + COPYRIGHT + '\n</body>\n\n</html>\n'
@@ -172,9 +194,11 @@ def bundle(path, out_dir):
 
 def converts(page):
     """Pages with the standard student skeleton (.quiz-wrap single-col) — the waveform builders, the
-    simulators and the single-column quiz-engine pages — are converted. Pages with their own layout
-    (e.g. the rotary encoder explorer) or a two-column circuit panel are bundled."""
-    return 'waveform-builder.js' in page or 'quiz-wrap single-col' in page
+    simulators and the single-column quiz-engine pages — are converted, as are gallery pages (a heading and
+    free-form content, e.g. the IC reference). Pages with their own layout (e.g. the rotary encoder explorer)
+    or a two-column circuit panel are bundled."""
+    return (uses(page, 'waveform-builder.js') or 'quiz-wrap single-col' in page
+            or ('class="crumb"' in page and '<header>' in page and 'main-wrap' not in page))
 
 
 def build(path, out_dir):
