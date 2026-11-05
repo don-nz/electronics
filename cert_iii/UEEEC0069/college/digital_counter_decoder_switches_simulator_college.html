@@ -1,0 +1,1023 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Digital Electronics — Counter with Decoder and LEDs — Switch-Selected Direction</title>
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,600;0,700;0,800;1,400;1,600&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <style>
+
+
+    .sim-intro { font-size: .85rem; line-height: 1.6; }
+    .sim-btn {
+      padding: .5rem 1.1rem; border: 1px solid var(--colour-border); border-radius: var(--radius-lg, 6px);
+      background: transparent; color: var(--colour-label); cursor: pointer; font-family: inherit;
+      font-size: .78rem; font-weight: 700; letter-spacing: .04em; transition: background .15s, color .15s, border-color .15s;
+    }
+    .sim-btn:hover:not(:disabled) { color: var(--colour-text); border-color: var(--colour-ui-primary); }
+    .sim-btn.active { border-color: var(--colour-ui-primary); color: var(--colour-ui-primary); background: rgba(var(--colour-ui-primary-rgb), .1); }
+    .sim-btn:disabled { opacity: .45; cursor: default; }
+    .sim-btn:focus-visible { outline: 2px solid var(--colour-ui-primary); outline-offset: 2px; }
+    #simSvg { width: 100%; max-width: 700px; display: block; margin: 0 auto; }
+    #simSvg .sw { cursor: pointer; }
+    #simSvg .sw:focus { outline: none; }
+    #simSvg .sw:focus-visible rect.sw-box, #simSvg .sw:hover rect.sw-box { stroke: var(--colour-ui-primary); stroke-width: 3; }
+    /* a value about to change: blink (reduced-motion users just get the plain number) */
+    #simSvg .out-flash { animation: ctrBlink .18s linear infinite; }
+    @keyframes ctrBlink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: .08; } }
+    /* a 0 / 1 badge popping up at a pin as the signal reaches it (a little larger on phone-width screens) */
+    #simSvg .pin-pop { transform-box: fill-box; transform-origin: center; animation: pinPop .4s ease-out; }
+    @keyframes pinPop { 0% { transform: scale(.3); opacity: 0; } 55% { transform: scale(1.3); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+    @media (max-width: 520px) { #simSvg .pin-inner { transform-box: fill-box; transform-origin: center; scale: 1.25; } }
+    @media (prefers-reduced-motion: reduce) { #simSvg .out-flash, #simSvg .pin-pop { animation: none; } }
+    .sim-status { margin-top: .8rem; padding: .7rem .9rem; border: 1px solid var(--colour-border); border-radius: 6px; font-size: .85rem; line-height: 1.55; }
+    .sim-controls { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; margin-top: .8rem; font-size: .78rem; color: var(--colour-label); }
+    .sim-legend { display: flex; gap: 1.1rem; flex-wrap: wrap; justify-content: center; margin-top: .5rem; font-size: .75rem; color: var(--colour-label); }
+    .sim-legend i { display: inline-block; width: 1.2rem; height: 4px; border-radius: 2px; margin-right: .3rem; vertical-align: middle; }
+    .ov { text-decoration: overline; }
+    @media (max-width: 480px) { .sim-btn { padding: .45rem .75rem; } }
+  
+/*
+  NSW TAFE college theme — the single source for the self-contained teacher pages
+  (cert_iii/UEEEC0069/college/*_college.html). tools/build_college.py inlines this into
+  each generated page, so a college page is the student page's own markup and script
+  with this stylesheet instead of assets/quiz-common.css.
+
+  It was lifted from the hand-made college pages (TAFE colour palette, Public Sans,
+  .main-wrap / .card-top-bar layout, light and dark themes, print rules) and then
+  extended with rules for the classes the shared engines draw with, so the college
+  pages no longer need a hand-made copy of the waveform code. To change how the
+  college pages look, edit this file and rebuild.
+*/
+
+:root {
+  --colour-bg: #f8f9fa;
+  --colour-panel: #ffffff;
+  --colour-border: #d0d5dd;
+  --colour-text: #1d2939;
+  --colour-text-strong: #002664;
+  --colour-label: #475467;
+  --colour-label-rgb: 71, 84, 103;
+  --colour-grid: rgba(0, 38, 100, 0.04);
+
+  --colour-ui-primary: #002664;
+  --colour-ui-primary-rgb: 0, 38, 100;
+  --colour-ui-correct: #087443;
+  --colour-ui-correct-rgb: 8, 116, 67;
+  --colour-ui-wrong: #d92d20;
+  --colour-ui-wrong-rgb: 217, 45, 32;
+
+  --colour-input-a: #4338ca;
+  --colour-input-b: #0f766e;
+  --colour-output-z: #0284c7;
+
+  --colour-dff: #0d80c3;
+  --colour-jfet: #7e22ce;
+  --colour-bjt: #b45309;
+  --colour-switch: #0369a1;
+
+  --font-body: 'Public Sans', system-ui, -apple-system, sans-serif;
+  --font-display: 'Public Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Share Tech Mono', monospace, sans-serif;
+
+  --radius-lg: 6px;
+  --radius-sm: 4px;
+  --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+body.dark-theme {
+  --colour-bg: #121824;
+  --colour-panel: #1a2232;
+  --colour-border: #2e3c54;
+  --colour-text: #e2e8f0;
+  --colour-text-strong: #ffffff;
+  --colour-label: #94a3b8;
+  --colour-label-rgb: 148, 163, 184;
+  --colour-grid: rgba(255, 255, 255, 0.03);
+
+  --colour-ui-primary: #38bdf8;
+  --colour-ui-primary-rgb: 56, 189, 248;
+  --colour-ui-correct: #34d399;
+  --colour-ui-correct-rgb: 52, 211, 153;
+  --colour-ui-wrong: #f87171;
+  --colour-ui-wrong-rgb: 248, 113, 113;
+
+  --colour-input-a: #818cf8;
+  --colour-input-b: #2dd4bf;
+  --colour-output-z: #38bdf8;
+
+  --colour-dff: #54c0ff;
+  --colour-jfet: #c084fc;
+  --colour-bjt: #ffb454;
+  --colour-switch: #38bdf8;
+
+  --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--colour-bg);
+  color: var(--colour-text);
+  font-family: var(--font-body);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem 1rem;
+  background-image: linear-gradient(var(--colour-grid) 1px, transparent 1px), linear-gradient(90deg, var(--colour-grid) 1px, transparent 1px);
+  background-size: 40px 40px;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+header {
+  margin-bottom: 1.5rem;
+  width: 100%;
+  max-width: 700px;
+  text-align: left;   /* stated outright: quiz-engine pages carry quiz-common.css underneath, which centres it */
+}
+
+header h1 {
+  font-family: var(--font-display);
+  font-size: clamp(1.4rem, 4vw, 2.2rem);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--colour-ui-primary);
+  text-shadow: none;
+  text-transform: none;
+}
+
+header p {
+  margin-top: .4rem;
+  color: var(--colour-label);
+  font-size: .82rem;
+  font-weight: 600;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.75rem;
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--colour-text);
+  background: var(--colour-panel);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-card);
+}
+
+.theme-toggle:hover {
+  border-color: var(--colour-ui-primary);
+}
+
+.back-link {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--colour-ui-primary);
+  text-decoration: none;
+  padding: 0.35rem 0.1rem;
+}
+
+.back-link:hover {
+  text-decoration: underline;
+}
+
+.main-wrap.wide { max-width: 1000px; }   /* galleries, e.g. the IC reference */
+.main-wrap {
+  width: 100%;
+  max-width: 700px;
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+
+.card {
+  background: var(--colour-panel);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-card);
+  transition: background 0.25s ease, border-color 0.25s ease;
+}
+
+.card-top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  margin-bottom: 0.5rem;
+}
+
+.rule-card {
+  font-size: .85rem;
+  line-height: 1.6;
+}
+
+.rule-card .rule-row {
+  display: flex;
+  gap: .5rem;
+  margin: .35rem 0;
+}
+
+.rule-card .rule-cond {
+  flex: none;
+  width: 8.5rem;
+  font-family: var(--font-mono);
+  font-weight: bold;
+}
+
+.legend-row {
+  display: flex;
+  gap: 1rem;
+  row-gap: .4rem;
+  flex-wrap: wrap;
+  margin-top: .8rem;
+  font-size: .78rem;
+  font-weight: 600;
+  color: var(--colour-label);
+}
+
+.legend-swatch {
+  display: inline-block;
+  width: 1.1rem;
+  height: 3px;
+  margin-right: .3rem;
+  vertical-align: middle;
+  border-radius: 2px;
+}
+
+.gate-toggle-card {
+  font-size: .85rem;
+}
+
+.gate-toggle-label {
+  color: var(--colour-label);
+  margin-bottom: .6rem;
+  font-weight: 600;
+}
+
+.gate-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  gap: .8rem;
+  justify-content: center;
+}
+
+.gate-toggle-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .3rem;
+  padding: .6rem 1.1rem;
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-lg);
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: .7rem;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--colour-label);
+  text-align: center;
+  transition: background .15s, color .15s, border-color .15s;
+}
+
+.gate-toggle-btn svg {
+  width: 9rem;
+  height: auto;
+  display: block;
+}
+
+.gate-toggle-btn.active {
+  border-color: var(--colour-ui-primary);
+  background: rgba(var(--colour-ui-primary-rgb), .12);
+  color: var(--colour-ui-primary);
+}
+
+.gate-toggle-btn:not(.active):hover {
+  background: rgba(var(--colour-ui-primary-rgb), .06);
+  color: var(--colour-text);
+}
+
+.hint-toggle-card { font-size: .85rem; }
+.hint-toggle-label { color: var(--colour-label); margin-bottom: .6rem; font-weight: 600; }
+.hint-toggle { display: flex; gap: .6rem; flex-wrap: wrap; justify-content: center; }
+.hint-toggle-btn {
+  padding: .5rem 1.1rem;
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-lg);
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: .7rem;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--colour-label);
+  transition: background .15s, color .15s, border-color .15s;
+}
+.hint-toggle-btn:not(.active):hover { background: rgba(var(--colour-ui-primary-rgb), .06); color: var(--colour-text); }
+.hint-toggle-btn[data-hint="edges"].active { border-color: var(--colour-switch); color: var(--colour-switch); background: color-mix(in srgb, var(--colour-switch) 14%, transparent); }
+.out-toggle-card { font-size: .82rem; margin-bottom: 1.2rem; }
+.out-toggle-btn { min-width: 3.6rem; }
+.out-toggle-btn.active { border-color: var(--colour-output-z); color: var(--colour-output-z); background: color-mix(in srgb, var(--colour-output-z) 14%, transparent); }
+
+.wb-tracks-wrap { position: relative; }
+.wb-hint-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+
+.wb-track-row {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin-bottom: 0.6rem;
+}
+
+.wb-track-label {
+  font-family: var(--font-mono);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--colour-text-strong);
+  width: 20px;
+  text-align: center;
+}
+
+.wb-track-row svg {
+  flex: 1;
+  height: 48px;
+  background: rgba(var(--colour-label-rgb), 0.05);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-sm);
+}
+
+.wb-track-path {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.wb-grid-line {
+  stroke: var(--colour-border);
+  stroke-width: 1;
+  stroke-dasharray: 2, 2;
+  opacity: 0.6;
+}
+
+.wb-track-p { stroke: var(--colour-jfet); }
+.wb-track-c { stroke: var(--colour-bjt); }
+.wb-track-clk { stroke: var(--colour-switch); }
+.wb-track-d { stroke: var(--colour-input-a); }
+.wb-track-q { stroke: var(--colour-output-z); }
+
+.wb-palette {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  margin: 1.2rem 0;
+  flex-wrap: wrap;
+}
+
+.wb-piece-btn {
+  background: var(--colour-panel);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.6rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.wb-piece-btn:hover:not(:disabled) {
+  border-color: var(--colour-ui-primary);
+  background: rgba(var(--colour-ui-primary-rgb), 0.08);
+}
+
+.wb-piece-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.wb-piece-btn svg {
+  width: 42px;
+  height: 28px;
+}
+
+.wb-piece-label {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--colour-label);
+}
+
+.result-banner {
+  display: none;
+  padding: .65rem 1rem;
+  border-radius: var(--radius-sm);
+  font-size: .82rem;
+  font-family: var(--font-body);
+  font-weight: 600;
+  align-items: center;
+  gap: .6rem;
+  margin-bottom: 1rem;
+}
+
+.result-banner.correct {
+  display: flex;
+  background: rgba(var(--colour-ui-correct-rgb), .12);
+  border: 1px solid rgba(var(--colour-ui-correct-rgb), .4);
+  color: var(--colour-ui-correct);
+}
+
+.result-banner.wrong {
+  display: flex;
+  background: rgba(var(--colour-ui-wrong-rgb), .12);
+  border: 1px solid rgba(var(--colour-ui-wrong-rgb), .4);
+  color: var(--colour-ui-wrong);
+}
+
+.btn-row {
+  display: flex;
+  gap: .6rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+  width: 100%;
+}
+
+.btn {
+  padding: .6rem 0;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: .78rem;
+  font-weight: 700;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all .15s;
+  border: 1px solid;
+  flex: 1;
+  min-width: 105px;
+  text-align: center;
+}
+
+.btn-prev {
+  background: rgba(var(--colour-label-rgb), .1);
+  border-color: rgba(var(--colour-label-rgb), .4);
+  color: var(--colour-label);
+}
+
+.btn-prev:hover:not(:disabled) {
+  background: rgba(var(--colour-label-rgb), .2);
+}
+
+.btn-prev:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.btn-check {
+  background: rgba(var(--colour-ui-correct-rgb), .15);
+  border-color: rgba(var(--colour-ui-correct-rgb), .5);
+  color: var(--colour-ui-correct);
+}
+
+.btn-check:hover:not(:disabled) {
+  background: rgba(var(--colour-ui-correct-rgb), .25);
+}
+
+.btn-check:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: rgba(var(--colour-ui-primary-rgb), .12);
+  border-color: rgba(var(--colour-ui-primary-rgb), .4);
+  color: var(--colour-ui-primary);
+}
+
+.btn-secondary:hover {
+  background: rgba(var(--colour-ui-primary-rgb), .22);
+}
+
+/* Print Worksheet — .print-only is invisible on screen, shown only via
+   @media print below. #printWorksheet (a direct child of <body>, NOT
+   nested inside .main-wrap) is built fresh by printDiagramNow() right
+   before window.print(): page title/description, the current Trigger/Q
+   diagram with Q left as a blank grid, then a page-break and the same
+   diagram again with the correct Q filled in as the solution. */
+.print-only { display: none; }
+
+@media print {
+  /* Force light regardless of whichever theme is active on screen —
+     body.dark-theme has higher specificity than a bare :root rule, so
+     it's redefined here too (same values), not just :root, or dark
+     mode would still win. */
+  :root, body.dark-theme {
+    --colour-bg: #ffffff;
+    --colour-panel: #ffffff;
+    --colour-text: #000000;
+    --colour-text-strong: #000000;
+    --colour-border: #999999;
+    --colour-label: #444444;
+  }
+  body > *:not(#printWorksheet) { display: none !important; }
+  body { background: #fff; background-image: none; padding: 0; display: block; }
+  #printWorksheet {
+    display: block !important;
+    color: #000;
+    font-family: var(--font-body);
+    max-width: 700px;
+    margin: 2rem auto;
+  }
+  #printWorksheet h1 { font-size: 1.3rem; margin: 0 0 .3rem; font-family: var(--font-display); }
+  #printWorksheet .print-subtitle { font-size: .8rem; color: #444; margin-bottom: 1rem; text-transform: uppercase; letter-spacing: .05em; }
+  #printWorksheet .print-description { margin-bottom: 1.2rem; }
+  #printWorksheet .print-diagram-section { page-break-inside: avoid; }
+  /* Solution starts on its own fresh page when printed double-sided or handed out separately. */
+  #printWorksheet .print-solution { page-break-before: always; }
+  #printWorksheet .print-solution h2 { font-size: 1.1rem; margin-bottom: .8rem; }
+  #printWorksheet .wb-track-row svg { width: 100%; height: auto; background: none; border: 1px solid #999; }
+  #printWorksheet .wb-track-label { color: #000; }
+  #printWorksheet .wb-grid-line { stroke: #999; stroke-dasharray: none; opacity: 1; }
+}
+
+/* Copyright line (college copies are self-contained, so inline) */
+.site-copyright {
+  margin: 3rem auto 1.5rem;
+  padding: 0 1rem;
+  text-align: center;
+  font-size: 0.7rem;
+  color: var(--colour-label);
+  opacity: 0.8;
+}
+
+/* ── page-structure rules shared by the waveform-builder pages ── */
+.wb-track-label { width: 2.6rem; }
+.extra-row { display: none; }
+.extra-row.shown { display: flex; }
+/* the student pages space their cards with margin-bottom; .main-wrap already spaces them with a gap */
+.main-wrap > .card { margin-bottom: 0; }
+.rule-card > div:first-of-type { margin-bottom: 0.4rem; }
+.rule-card > div:nth-last-of-type(2) { margin-top: 0.4rem; }
+
+/* ── classes assets/waveform-builder.js draws with (the student theme styles these from quiz-common.css) ── */
+.wb-grid-baseline { stroke: rgba(var(--colour-label-rgb), .4); }
+.wb-track-path.wb-track-s { stroke: var(--colour-input-a); }
+.wb-track-path.wb-track-r { stroke: var(--colour-input-b); }
+.wb-track-path.wb-track-p { stroke: var(--colour-jfet); }
+.wb-track-path.wb-track-c { stroke: var(--colour-bjt); }
+.wb-track-path.wb-track-clk { stroke: var(--colour-switch); }
+.wb-track-path.wb-track-d { stroke: var(--colour-input-a); }
+.wb-progress-shade { fill: var(--colour-ui-primary); opacity: .1; }
+.wb-q-path { fill: none; stroke-width: 2; stroke-linejoin: round; }
+.wb-q-path.wb-col-building { stroke: var(--colour-output-z); }
+.wb-q-path.wb-col-correct { stroke: var(--colour-ui-correct); }
+.wb-q-path.wb-col-wrong { stroke: var(--colour-ui-wrong); }
+.wb-piece-icon { width: 40px; height: 28px; overflow: visible; }
+.wb-piece-icon line, .wb-piece-icon polyline {
+  fill: none; stroke: var(--colour-output-z); stroke-width: 2.5;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+@media (max-width: 480px) {
+  .wb-track-label { width: 1.6rem; font-size: .8rem; }
+  .wb-piece-icon { width: 32px; height: 24px; }
+}
+@media print {
+  #printWorksheet .print-wave-row svg { width: 100%; height: auto; background: none; border: 1px solid #999; }
+}
+
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>Digital Electronics</h1>
+    <p id="subtitle">74193 + 74139 · Switch Selects Up or Down · Simulator</p>
+  </header>
+
+  <div class="main-wrap">
+    <div class="card-top-bar">
+      <a class="back-link" href="./simulators.html">← All simulators</a>
+      <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle dark and light theme">
+        <span id="themeIcon">🌙</span> <span id="themeLabel">Dark Mode</span>
+      </button>
+    </div>
+
+    <div class="card sim-intro">
+      <div id="introText"></div>
+    </div>
+
+    <div class="card">
+      <svg id="simSvg" viewBox="0 0 700 580" xmlns="http://www.w3.org/2000/svg" font-family="'Share Tech Mono', monospace" role="img" aria-label="74193 counter with two NAND gates and two switches choosing count up or count down, driving a 74139 decoder and four LEDs"></svg>
+      <div class="sim-legend">
+        <span><i style="background:var(--colour-ui-correct)"></i>logic 1 (HIGH)</span>
+        <span><i style="background:var(--colour-label)"></i>logic 0 (LOW)</span>
+      </div>
+      <div class="sim-status" id="simStatus" aria-live="polite"></div>
+      <div class="sim-controls">
+        <button type="button" class="sim-btn" onclick="resetSim()" id="resetBtn">↺ Reset to 0</button>
+        <span>Speed:</span>
+        <button type="button" class="sim-btn active" id="spd-normal" onclick="setSpeed('normal')">Normal</button>
+        <button type="button" class="sim-btn" id="spd-fast" onclick="setSpeed('fast')">Fast</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // "← Back" link (same pattern as the timing diagram builders): only shown when there is a page to go back to
+  </script>
+  <script>
+// Dark/light toggle for the college pages (the student pages use assets/theme-init.js instead).
+// The preference is the same localStorage key the hand-made college pages used.
+function toggleTheme() {
+  const isDark = document.body.classList.toggle('dark-theme');
+  localStorage.setItem('tafe-quiz-theme', isDark ? 'dark' : 'light');
+  updateThemeToggleUI(isDark);
+}
+
+function updateThemeToggleUI(isDark) {
+  const icon = document.getElementById('themeIcon');
+  const label = document.getElementById('themeLabel');
+  if (icon && label) {
+    icon.textContent = isDark ? '☀️' : '🌙';
+    label.textContent = isDark ? 'Light Mode' : 'Dark Mode';
+  }
+}
+
+(function initTheme() {
+  const isDark = localStorage.getItem('tafe-quiz-theme') === 'dark';
+  document.body.classList.toggle('dark-theme', isDark);
+  updateThemeToggleUI(isDark);
+})();
+
+</script>
+  <script>
+    // ── shared engine: a small discrete-event model of propagation delay (same shape as the counter simulators) ──
+    const SPEEDS = { normal: { gate: 780, wire: 1920, hold: 1100, step: 520 }, fast: { gate: 380, wire: 950, hold: 540, step: 260 } };
+    let speed = 'normal';
+    let cnt = 0, clk = 0, pendingCnt = null, flights = {}, events = [], seq = 0, loopOn = false;
+    let phase = 'idle', auto = false, autoTimer = null;
+
+    const HIGH = 'var(--colour-ui-correct)', LOW = 'var(--colour-label)';
+    const col = (v) => v ? HIGH : LOW;
+    const bit = (n, b) => (n >> b) & 1;
+    const bin = (n) => [3, 2, 1, 0].map(b => bit(n, b)).join('');
+    const jitter = (ms) => ms * (0.9 + 0.2 * Math.random());
+    const ov = (t) => `<span class="ov">${t}</span>`;
+    let yShown = (i) => yLevel(i);                         // which decoder level the LEDs show (a page stages it)
+    const stepMs = () => SPEEDS[speed].step;               // one stage of the ripple
+    const yLevel = (i) => ((cnt & 3) === i ? 0 : 1);      // the 74139's outputs are active LOW: 1Yi is LOW when the two bits it sees equal i
+    const ledName = (i) => 'LED-' + (3 - i);               // 1Y0 -> LED-3 ... 1Y3 -> LED-0
+
+    function sched(dt, fn) {
+      const e = { t: performance.now() + dt, fn, dead: false, id: ++seq };
+      events.push(e); startLoop(); return e;
+    }
+    function startLoop() { if (!loopOn) { loopOn = true; requestAnimationFrame(tick); } }
+    function tick() {
+      const now = performance.now();
+      events.sort((a, b) => a.t - b.t);
+      while (events.length && events[0].t <= now) {
+        const e = events.shift();
+        if (!e.dead) e.fn();
+      }
+      events = events.filter(e => !e.dead);
+      render(now);
+      if (events.length || Object.keys(flights).length) requestAnimationFrame(tick); else loopOn = false;
+    }
+    const busy = () => events.length > 0 || Object.keys(flights).length > 0 || !!pendingCnt || extraBusy();
+
+    function applyCount(v, why) {
+      cnt = v; pendingCnt = null;
+      phase = why || 'counted';
+      afterCount();
+    }
+    // ── wire sweeps: a changed level travels along its wire (green = 1, grey = 0) and takes effect when it arrives ──
+    let SWEEPS = {};                                         // id -> wire path, drawn source -> destination (registered by buildSvg)
+    const SP = (id, d) => { SWEEPS[id] = d; return ''; };
+    // each wire gets a sweep line and a dot that rides at its leading edge
+    const sweepLayer = () => '<g fill="none" stroke-linecap="round" stroke-linejoin="round">' + Object.keys(SWEEPS).map(id =>
+      `<path id="o-${id}" d="${SWEEPS[id]}" stroke-width="4.5" style="display:none" /><circle id="d-${id}" r="7" stroke-width="2.5" style="display:none; stroke: var(--colour-panel)" />`).join('') + '</g>';
+    const ARRIVE_PAUSE = 150;                                // the dot has gone and the line is complete for a moment before the badge pops up
+    function hop(id, val, then) {
+      const o = document.getElementById('o-' + id), dur = Math.max(300, o.getTotalLength() * (speed === 'fast' ? 1.2 : 2.4));
+      const now = performance.now(), tok = ++seq;
+      flights[id] = { val, t0: now, t1: now + dur, tok };
+      sched(dur + ARRIVE_PAUSE, () => { if (flights[id] && flights[id].tok === tok) delete flights[id]; if (then) then(); });
+    }
+    function hopAll(list, then) {                            // several wires at once; `then` runs when the last one arrives
+      if (!list.length) { if (then) then(); return; }
+      let n = list.length;
+      list.forEach(([id, val]) => hop(id, val, () => { if (--n === 0 && then) then(); }));
+    }
+    function renderSweeps(now) {
+      Object.keys(SWEEPS).forEach(id => {
+        const o = document.getElementById('o-' + id), dot = document.getElementById('d-' + id), f = flights[id];
+        if (f) {
+          const L = o.getTotalLength(), p = Math.max(0, Math.min(1, (now - f.t0) / (f.t1 - f.t0)));
+          o.setAttribute('stroke', col(f.val)); o.setAttribute('stroke-dasharray', L); o.setAttribute('stroke-dashoffset', L * (1 - p));
+          o.style.display = '';
+          if (p < 1) {                                       // the dot leads the line; it vanishes on reaching the pin
+            const pt = o.getPointAtLength(L * p);
+            dot.setAttribute('cx', pt.x); dot.setAttribute('cy', pt.y); dot.style.fill = col(f.val); dot.style.display = '';
+          } else dot.style.display = 'none';
+        } else { o.style.display = 'none'; dot.style.display = 'none'; }
+      });
+    }
+    const chain = (steps) => { let i = 0; const go = () => { if (i < steps.length) steps[i++](go); }; go(); };   // run stages in order; each calls next() when done
+    const beat = (next) => sched(stepMs(), next);            // hold for one beat (the badges show)
+
+    // ── shared drawing kit ──
+    const P = (d, attrs) => `<path d="${d}" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" ${attrs || ''} />`;
+    const NET = (net, d) => P(d, `data-net="${net}"`);
+    const DOT = (net, x, y) => `<circle data-net="${net}" cx="${x}" cy="${y}" r="4.5" />`;
+    const GREY = 'style="stroke: var(--colour-label)"';
+    const T = (x, y, t, o) => { o = o || {}; return `<text x="${x}" y="${y}" text-anchor="${o.a || 'middle'}" font-size="${o.s || 17}"${o.b ? ' font-weight="bold"' : ''}${o.id ? ` id="${o.id}"` : ''} style="fill: ${o.c || 'var(--colour-label)'}">${t}</text>`; };
+    const NUM = (x, y, t, a) => T(x, y, t, { s: 13, a: a || 'start' });                       // pin numbers
+    const sub = (b, s) => `${b}<tspan baseline-shift="sub" font-size="12">${s}</tspan>`;
+    const box = (x, y, w, h) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="4" style="fill: var(--colour-panel); stroke: var(--colour-border)" stroke-width="3" />`;
+    // a NAND drawn the way the lab sheet draws it: inputs on the right, the output bubble on the left
+    const nandAt = (cx, cy) =>
+      `<path d="M ${cx + 25},${cy - 18} L ${cx},${cy - 18} A 18,18 0 0 0 ${cx},${cy + 18} L ${cx + 25},${cy + 18} Z" style="fill: var(--colour-panel); stroke: var(--colour-border)" stroke-width="3" />
+       <circle cx="${cx - 23}" cy="${cy}" r="5" style="fill: var(--colour-panel); stroke: var(--colour-border)" stroke-width="2.5" />`;
+
+    // The 74193 counter, the 74139 decoder (only 1A, 1B, 1G and 1Y0-1Y3 are used) and the four LEDs: the same in all three circuits.
+    function baseSvg(direct) {
+      SWEEPS = {};
+      const railEnd = direct ? 440 : 320, G = 'style="stroke: var(--colour-ui-correct)"';
+      let s = `<defs><filter id="ledGlow" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="4" result="b" /><feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge></filter></defs>`;
+      // 5V rail: Vcc and LD-bar are tied HIGH
+      s += P(`M 235,270 L ${railEnd},270 M 235,270 L 235,320 M 262,270 L 262,320`, G);
+      s += `<circle cx="235" cy="270" r="4.5" style="fill: var(--colour-ui-correct)" /><circle cx="262" cy="270" r="4.5" style="fill: var(--colour-ui-correct)" />`;
+      s += T(railEnd + 8, 276, '5V', { a: 'start', b: 1, s: 18, c: 'var(--colour-ui-correct)' });
+      // the 74193
+      s += box(40, 320, 240, 140);
+      s += T(160, 402, '74LS193', { b: 1, s: 17, c: 'var(--colour-text)' });
+      [['D', 65], ['C', 110], ['B', 155], ['A', 200]].forEach(([n, x]) => {
+        s += T(x, 341, sub('Q', n)) + T(x, 449, sub('D', n));
+      });
+      s += T(235, 341, `<tspan class="ov">LD</tspan>`) + T(262, 341, 'Vcc') + T(235, 449, 'C') + T(262, 449, 'GND');
+      s += T(48, 384, `<tspan class="ov">CO</tspan>`, { a: 'start' }) + T(48, 434, `<tspan class="ov">BO</tspan>`, { a: 'start' });
+      s += T(262, 374, 'CU', { a: 'end' }) + T(262, 424, 'CD', { a: 'end' });
+      s += `<path d="M 280,362 L 270,370 L 280,378" fill="none" stroke-width="2" ${GREY} /><path d="M 280,412 L 270,420 L 280,428" fill="none" stroke-width="2" ${GREY} />`;
+      // unused pins
+      s += P('M 65,320 L 65,305 M 110,320 L 110,305 M 65,460 L 65,475 M 110,460 L 110,475 M 155,460 L 155,475 M 200,460 L 200,475 M 25,380 L 40,380 M 25,430 L 40,430', GREY);
+      // pin numbers (74LS193: DB 1, QB 2, QA 3, CD 4, CU 5, QC 6, QD 7, GND 8, DD 9, DC 10, LD 11, CO 12, BO 13, C 14, DA 15, Vcc 16)
+      s += NUM(72, 312, '7') + NUM(117, 312, '6') + NUM(162, 312, '2') + NUM(207, 312, '3') + NUM(242, 312, '11') + NUM(269, 312, '16');
+      s += NUM(72, 478, '9') + NUM(117, 478, '10') + NUM(162, 478, '1') + NUM(207, 478, '15') + NUM(242, 478, '14') + NUM(269, 478, '8');
+      s += NUM(30, 374, '12', 'middle') + NUM(30, 424, '13', 'middle') + NUM(300, 364, '5') + NUM(300, 414, '4');
+      // QA and QB are the only outputs used: they go up to the decoder's 1A and 1B
+      s += NET('qa', 'M 200,320 L 200,70 L 250,70') + NET('qb', 'M 155,320 L 155,100 L 250,100');
+      SP('qa', 'M 200,320 L 200,70 L 250,70'); SP('qb', 'M 155,320 L 155,100 L 250,100');
+      [['D', 65, 3], ['C', 110, 2], ['B', 155, 1], ['A', 200, 0]].forEach(([n, x, b]) => { s += T(x - 7, 300, '', { a: 'end', b: 1, s: 20, id: 'dig' + b }); });
+      // ground rail: C, GND and the decoder's enable (1G is tied LOW, so the decoder is always on)
+      s += P('M 20,150 L 20,495 L 262,495 M 235,460 L 235,495 M 262,460 L 262,495 M 262,495 L 262,505 M 248,505 L 276,505 M 254,512 L 270,512 M 259,519 L 265,519', GREY);
+      s += `<circle cx="235" cy="495" r="4.5" style="fill: var(--colour-label)" /><circle cx="262" cy="495" r="4.5" style="fill: var(--colour-label)" />`;
+      s += P('M 240,150 L 20,150', GREY);
+      // the 74139
+      s += box(250, 40, 90, 140);
+      s += T(256, 74, sub('1', 'A'), { a: 'start' }) + T(256, 104, sub('1', 'B'), { a: 'start' }) + T(256, 154, '1G', { a: 'start' });
+      s += `<circle cx="245" cy="150" r="5" style="fill: var(--colour-panel); stroke: var(--colour-border)" stroke-width="2.5" />`;
+      s += NUM(242, 64, '2', 'end') + NUM(242, 94, '3', 'end') + NUM(236, 144, '1', 'end');
+      [0, 1, 2, 3].forEach(i => {
+        const y = 60 + 30 * i;
+        s += T(334, y + 4, sub('1Y', i), { a: 'end' });
+        s += `<circle cx="345" cy="${y}" r="5" style="fill: var(--colour-panel); stroke: var(--colour-border)" stroke-width="2.5" />`;
+        s += NET('y' + i, `M 350,${y} L 447,${y}`); SP('y' + i, `M 350,${y} L 447,${y}`);
+        s += `<circle id="led${i}" cx="460" cy="${y}" r="11" stroke-width="2.5" />`;
+        s += T(481, y + 5, ledName(i), { a: 'start' });
+        s += NUM(352, y - 5, String(4 + i));
+      });
+      return s;
+    }
+
+    function applyNets(netLevel) {
+      document.querySelectorAll('#simSvg [data-net]').forEach(el => {
+        const lvl = netLevel(el.getAttribute('data-net'));
+        if (el.tagName === 'circle') el.style.fill = col(lvl); else el.setAttribute('stroke', col(lvl));
+      });
+    }
+    // ── pin badges: a small 0 / 1 that pops up at a pin as the signal reaches it, holds for a beat, then goes ──
+    const badge = (id, x, y) => `<g id="b-${id}" visibility="hidden" transform="translate(${x},${y})"><g class="pin-inner"><rect x="-11" y="-11" width="22" height="22" rx="5" style="stroke: var(--colour-panel)" stroke-width="2" /><text x="0" y="6" text-anchor="middle" font-size="16" font-weight="bold" style="fill: var(--colour-panel)"></text></g></g>`;
+    function flashPin(id, val, ms) {
+      const g = document.getElementById('b-' + id); if (!g) return;
+      const inner = g.firstChild;
+      inner.firstChild.style.fill = col(val); inner.lastChild.textContent = val;
+      g.setAttribute('visibility', 'visible');
+      inner.classList.remove('pin-pop'); void inner.getBoundingClientRect(); inner.classList.add('pin-pop');   // restart the pop
+      if (g._hide) g._hide.dead = true;
+      g._hide = sched(ms, () => g.setAttribute('visibility', 'hidden'));
+    }
+    const hideBadges = () => document.querySelectorAll('#simSvg [id^="b-"]').forEach(g => g.setAttribute('visibility', 'hidden'));
+    const decoderBadges = () => badge('a1', 222, 70) + badge('b1', 222, 100) + [0, 1, 2, 3].map(i => badge('y' + i, 376, 60 + 30 * i)).join('');
+    // The count changed: QA and QB travel to the decoder's inputs, the decoder picks its one LOW output, then the LED lights.
+    // (lv holds the levels as drawn; `then` runs once the LED has changed.)
+    function rippleToLeds(then) {
+      const u = stepMs(), ms = u * 0.9;
+      chain([
+        next => { phase = 'qTravel'; hopAll([['qa', bit(cnt, 0)], ['qb', bit(cnt, 1)]], () => { lv.qa = bit(cnt, 0); lv.qb = bit(cnt, 1); phase = 'qOut'; flashPin('a1', lv.qa, ms); flashPin('b1', lv.qb, ms); next(); }); },
+        next => beat(next),
+        next => { for (let i = 0; i < 4; i++) { lv.y[i] = yLevel(i); flashPin('y' + i, lv.y[i], ms); } phase = 'yOut'; next(); },
+        next => beat(next),
+        next => { phase = 'yTravel'; hopAll([0, 1, 2, 3].filter(i => lv.y[i] !== lv.led[i]).map(i => ['y' + i, lv.y[i]]), () => { lv.led = lv.y.slice(); phase = 'counted'; next(); }); },
+        next => { if (then) then(); },
+      ]);
+    }
+    const rippleStatus = () => ({
+      counted0: () => `The 74193 has counted: it now holds <b>${cnt}</b> (<b>${bin(cnt)}</b>).`,
+      qTravel: () => `The 74193 has counted and now holds <b>${cnt}</b> (<b>${bin(cnt)}</b>). Its outputs <b>QA = ${bit(cnt, 0)}</b> and <b>QB = ${bit(cnt, 1)}</b> travel along their wires to the decoder's inputs…`,
+      yTravel: () => `The decoder's outputs travel along their wires to the LEDs — the one LOW output is the one that will light its LED…`,
+      qOut: () => `The counter's <b>QA = ${lv.qa}</b> and <b>QB = ${lv.qb}</b> travel to the decoder's inputs <b>1A</b> and <b>1B</b>.`,
+      yOut: () => `The decoder turns the 2-bit input <b>${lv.qb}${lv.qa}</b> into <b>one LOW output</b>: <b>1Y<sub>${cnt & 3}</sub> = 0</b>, the other three are 1 (the outputs are active LOW). Next, the LED.`,
+    }[phase] || (() => null))();
+
+    function renderCommon() {
+      for (let b = 0; b < 4; b++) {
+        const v = bit(cnt, b), d = document.getElementById('dig' + b);
+        d.textContent = v; d.style.fill = col(v);
+        d.classList.toggle('out-flash', !!(pendingCnt && bit(pendingCnt.val, b) !== v));
+      }
+      for (let i = 0; i < 4; i++) {            // an LED lights when its (active-LOW) decoder output is LOW
+        const lit = yShown(i) === 0, e = document.getElementById('led' + i);
+        e.style.fill = lit ? '#f5b301' : 'var(--colour-panel)';
+        e.style.stroke = lit ? '#f5b301' : 'var(--colour-border)';
+        e.setAttribute('filter', lit ? 'url(#ledGlow)' : '');
+      }
+      document.querySelector('#swClk rect').style.fill = clk ? 'rgba(var(--colour-ui-primary-rgb), .22)' : 'var(--colour-panel)';
+      document.querySelector('#swAuto rect').style.fill = auto ? 'rgba(var(--colour-ui-primary-rgb), .22)' : 'var(--colour-panel)';
+    }
+    const swBox = (id, x, y, w, h, label, aria) =>
+      `<g class="sw" id="${id}" tabindex="0" role="button" aria-label="${aria}"><rect class="sw-box" x="${x}" y="${y}" width="${w}" height="${h}" rx="6" style="fill: var(--colour-panel); stroke: var(--colour-border)" stroke-width="2" />${label}</g>`;
+    function clkButtons(x, y, w, gap) {       // CLK (a pulse) and AUTO CLK (keeps pulsing) in the place of the push button
+      gap = gap || 52;
+      return swBox('swClk', x, y, w, 44, T(x + w / 2, y + 28, 'CLK', { b: 1, s: 18, c: 'var(--colour-text)' }), 'Send a clock pulse') +
+             swBox('swAuto', x, y + gap, w, 44, T(x + w / 2, y + gap + 28, 'AUTO CLK', { b: 1, s: 16, c: 'var(--colour-text)' }), 'Auto clock');
+    }
+    function hook(id, fn) {
+      const g = document.getElementById(id);
+      g.addEventListener('click', fn);
+      g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); } });
+    }
+    function setSpeed(s) {
+      speed = s;
+      ['normal', 'fast'].forEach(k => document.getElementById('spd-' + k).classList.toggle('active', k === s));
+    }
+    function stopAuto() { auto = false; clearInterval(autoTimer); }
+    function toggleAuto() {
+      if (auto) stopAuto();
+      else { auto = true; autoTimer = setInterval(() => { if (!busy()) pulse(); }, 900); }
+      const a = document.getElementById('swAuto'); if (a) a.setAttribute('aria-pressed', String(auto));
+      render();
+    }
+    function renderStatus() {
+      document.getElementById('simStatus').innerHTML =
+        `<div>Count = <b>${cnt}</b> (<b>${bin(cnt)}</b>)${busy() ? ' · <i>settling…</i>' : ''}</div><div style="margin-top:.35rem">${statusBody()}</div>`;
+    }
+    // what the decoder and LEDs are doing at the current count
+    const decodeNote = () => `The decoder only sees <b>QA</b> and <b>QB</b> (the count's two lowest bits, <b>${(cnt & 3).toString(2).padStart(2, '0')}</b>), so output <b>1Y<sub>${cnt & 3}</sub></b> is LOW and <b>${ledName(cnt & 3)}</b> is lit.`;
+
+    // ── simulator 2: Switch-0 and Switch-1 each enable one NAND gate, and the NAND outputs drive CU and CD ──
+    // The signal is shown RIPPLING through the circuit: each level travels along its wire (the green / grey sweep), and when it
+    // arrives the 0 or 1 flashes in a small badge at the pin and holds for a beat before the next part of the circuit reacts.
+    let sw0 = 1, sw1 = 0;                       // as set in the lab: Switch-0 = 1, Switch-1 = 0 (count up)
+    const extraBusy = () => false;
+    // the levels as DRAWN: they move on one stage at a time, as the signals arrive (the counter's own outputs are the count)
+    const lv = { clk: 0, cu: 1, cd: 1, qa: 0, qb: 0, y: [0, 1, 1, 1], led: [0, 1, 1, 1], en0: 1, en1: 0 };
+    yShown = (i) => lv.led[i];
+    const netLevel = (n) => ({ qa: lv.qa, qb: lv.qb, y0: lv.led[0], y1: lv.led[1], y2: lv.led[2], y3: lv.led[3], clk: lv.clk, en0: lv.en0, en1: lv.en1, cu: lv.cu, cd: lv.cd })[n];
+    const nandCU = () => (sw0 && lv.clk) ? 0 : 1;   // the NAND gate in front of CU
+    const nandCD = () => (sw1 && lv.clk) ? 0 : 1;   // the NAND gate in front of CD
+
+    function buildSvg() {
+      let s = baseSvg(false);
+      s += nandAt(355, 370) + nandAt(355, 420);
+      s += NET('cu', 'M 327,370 L 280,370') + NET('cd', 'M 327,420 L 280,420');
+      s += NET('en0', 'M 380,358 L 560,358') + NET('en1', 'M 380,432 L 560,432');
+      s += NET('clk', 'M 380,382 L 420,382 L 420,490 L 440,490 M 380,408 L 420,408') + DOT('clk', 420, 382) + DOT('clk', 420, 408);
+      SP('cu', 'M 327,370 L 280,370'); SP('cd', 'M 327,420 L 280,420');
+      SP('en0', 'M 560,358 L 380,358'); SP('en1', 'M 560,432 L 380,432');
+      SP('clkA', 'M 440,490 L 420,490 L 420,382 L 380,382'); SP('clkB', 'M 440,490 L 420,490 L 420,408 L 380,408');
+      s += NUM(322, 387, '11', 'end') + NUM(322, 437, '3', 'end') + NUM(384, 354, '13') + NUM(384, 378, '12') + NUM(384, 404, '1') + NUM(384, 428, '2');
+      s += swBox('swS0', 560, 336, 100, 44, T(610, 363, '', { id: 'tS0', b: 1, s: 14, c: 'var(--colour-text)' }), 'Switch-0') +
+           swBox('swS1', 560, 410, 100, 44, T(610, 437, '', { id: 'tS1', b: 1, s: 14, c: 'var(--colour-text)' }), 'Switch-1');
+      s += T(610, 326, 'click to toggle', { s: 13 });
+      s += clkButtons(440, 468, 100);
+      s += sweepLayer();
+      // the 0 / 1 badges: the four NAND inputs, the two NAND outputs, CU and CD, the decoder's 1A and 1B, and its four outputs
+      s += badge('g13', 404, 358) + badge('g12', 404, 382) + badge('g1', 404, 408) + badge('g2', 404, 432)
+         + badge('o11', 316, 370) + badge('o3', 316, 420) + badge('cu', 292, 370) + badge('cd', 292, 420) + decoderBadges();
+      document.getElementById('simSvg').innerHTML = s;
+      hook('swClk', pulse); hook('swAuto', toggleAuto);
+      hook('swS0', () => toggle(0)); hook('swS1', () => toggle(1));
+    }
+    function toggle(n) {
+      if (busy()) return;
+      if (n === 0) sw0 ^= 1; else sw1 ^= 1;
+      const v = n === 0 ? sw0 : sw1;
+      phase = 'switched';
+      hop(n === 0 ? 'en0' : 'en1', v, () => { lv['en' + n] = v; flashPin(n === 0 ? 'g13' : 'g2', v, stepMs() * 0.9); });
+      render();
+    }
+    // A pulse, one stage at a time: CLK rises (a 1 travels to the NAND inputs) -> the NAND outputs -> they travel to CU / CD;
+    // CLK falls (a 0 travels) -> the NAND outputs rise -> they travel to CU / CD, which sees the rising edge -> the counter counts
+    // (afterCount carries on to the decoder).
+    function pulse() {
+      if (busy()) return false;
+      const u = stepMs(), ms = u * 0.9, gate = SPEEDS[speed].gate;
+      const up = sw0 && !sw1, down = sw1 && !sw0;
+      const clkHop = (v, then) => hopAll([['clkA', v], ['clkB', v]], then);
+      let c = 1, d = 1;
+      clk = 1; phase = 'clkRise';
+      chain([
+        next => clkHop(1, () => { lv.clk = 1; phase = 'press'; flashPin('g13', sw0, ms); flashPin('g12', 1, ms); flashPin('g1', 1, ms); flashPin('g2', sw1, ms); next(); }),
+        next => beat(next),
+        next => { c = nandCU(); d = nandCD(); phase = 'nand1'; flashPin('o11', c, ms); flashPin('o3', d, ms); next(); },
+        next => beat(next),
+        next => { phase = 'outTravel'; hopAll([['cu', c], ['cd', d]], () => { lv.cu = c; lv.cd = d; phase = 'pins1'; flashPin('cu', c, ms); flashPin('cd', d, ms); next(); }); },
+        next => beat(next),
+        next => { clk = 0; phase = 'clkFall'; clkHop(0, () => { lv.clk = 0; phase = 'release'; flashPin('g12', 0, ms); flashPin('g1', 0, ms); next(); }); },
+        next => beat(next),
+        next => { c = nandCU(); d = nandCD(); phase = 'nand2'; flashPin('o11', c, ms); flashPin('o3', d, ms); next(); },
+        next => beat(next),
+        next => {
+          phase = 'outTravel';
+          hopAll([['cu', c], ['cd', d]], () => {
+            lv.cu = c; lv.cd = d; flashPin('cu', c, ms); flashPin('cd', d, ms);
+            if (up || down) {
+              const nxt = (cnt + (up ? 1 : -1)) & 15;
+              phase = up ? 'releaseUp' : 'releaseDown';
+              pendingCnt = { val: nxt, ev: sched(jitter(gate), () => applyCount(nxt, 'counted')) };
+            } else phase = sw0 && sw1 ? 'both' : 'none';
+          });
+        },
+      ]);
+      startLoop(); render(performance.now());
+      return true;
+    }
+    const afterCount = () => rippleToLeds();
+    const arrive = () => {};
+
+    function render(now) {
+      now = now || performance.now();
+      applyNets(netLevel); renderSweeps(now); renderCommon();
+      [[0, sw0], [1, sw1]].forEach(([n, v]) => {
+        const t = document.getElementById('tS' + n);
+        t.textContent = `Switch-${n} = ${v}`;
+        document.querySelector('#swS' + n + ' rect').style.fill = v ? 'rgba(var(--colour-ui-correct-rgb), .2)' : 'var(--colour-panel)';
+        document.querySelector('#swS' + n + ' rect').style.stroke = v ? 'var(--colour-ui-correct)' : 'var(--colour-border)';
+      });
+      renderStatus();
+    }
+    function statusBody() {
+      const r = rippleStatus(); if (r) return r;
+      switch (phase) {
+        case 'clkRise': return 'The clock goes HIGH: the <b>1 travels along the clock wire</b> to the two NAND gates…';
+        case 'press': return `The 1 has arrived. All four NAND inputs show their level: the two clock inputs (pins 12 and 1) are <b>1</b>, pin 13 is <b>Switch-0 = ${sw0}</b> and pin 2 is <b>Switch-1 = ${sw1}</b>.`;
+        case 'nand1': return `A NAND outputs <b>0 only when both its inputs are 1</b>. So pin 11 (the CU gate) is <b>${nandCU()}</b> and pin 3 (the CD gate) is <b>${nandCD()}</b>.`;
+        case 'outTravel': return 'The NAND outputs travel along their wires to the 74193\'s <b>CU</b> and <b>CD</b> inputs…';
+        case 'pins1': return `Those levels have reached <b>CU</b> (${lv.cu}) and <b>CD</b> (${lv.cd}). They have only fallen or stayed HIGH — there is no <b>rising</b> edge yet, so nothing counts.`;
+        case 'clkFall': return 'The clock goes LOW: a <b>0 travels along the clock wire</b> to the two NAND gates…';
+        case 'release': return 'The 0 has arrived: the clock inputs (pins 12 and 1) are both <b>0</b>.';
+        case 'nand2': return `With a 0 on an input a NAND outputs <b>1</b>: pin 11 is <b>${nandCU()}</b> and pin 3 is <b>${nandCD()}</b>${sw0 && !sw1 ? ' — the CU gate has just <b>risen</b> from 0 to 1.' : sw1 && !sw0 ? ' — the CD gate has just <b>risen</b> from 0 to 1.' : '.'}`;
+        case 'releaseUp': return 'The <b>rising edge</b> has reached <b>CU</b>, so the counter counts <b>up</b>: after its propagation delay the count goes up by 1 (the blinking digits).';
+        case 'releaseDown': return 'The <b>rising edge</b> has reached <b>CD</b>, so the counter counts <b>down</b>: after its propagation delay the count goes down by 1 (the blinking digits).';
+        case 'both': return 'Both switches are 1, so <b>CU</b> and <b>CD</b> pulse together. A 74193 cannot count up and down at the same moment — a real chip gives unpredictable results — so this simulator leaves the count unchanged. Avoid this combination.';
+        case 'none': return 'Both switches are 0, so both NAND gates are disabled: <b>CU</b> and <b>CD</b> stay HIGH, there is no rising edge, and the count <b>holds</b>.';
+        case 'counted': return decodeNote() + (cnt > 3 ? ' (<b>QC</b> and <b>QD</b> are not connected, so the count really runs 0–15 and the LEDs repeat every 4.)' : '');
+        case 'switched': break;
+      }
+      const mode = sw0 && !sw1 ? '<b>Switch-0 = 1, Switch-1 = 0</b>: only the CU gate is enabled, so each clock pulse counts <b>up</b>.'
+        : sw1 && !sw0 ? '<b>Switch-0 = 0, Switch-1 = 1</b>: only the CD gate is enabled, so each clock pulse counts <b>down</b>.'
+        : sw0 && sw1 ? '<b>Both switches 1</b>: CU and CD would both pulse — not allowed.'
+        : '<b>Both switches 0</b>: both gates are disabled, so the count holds.';
+      return mode + ' Click <b>CLK</b> to send a pulse, or click a switch to change it.';
+    }
+    function initState() {
+      events.forEach(e => e.dead = true); events = []; cnt = 0; clk = 0; pendingCnt = null; flights = {}; phase = 'idle';
+      Object.assign(lv, { clk: 0, cu: 1, cd: 1, qa: 0, qb: 0, y: [0, 1, 1, 1], led: [0, 1, 1, 1], en0: sw0, en1: sw1 });
+      hideBadges();
+    }
+    function resetSim() { sw0 = 1; sw1 = 0; initState(); render(); }
+    initState(); buildSvg(); render();
+    document.getElementById('introText').innerHTML = '<b>Circuit 2.</b> The clock now goes through two <b>NAND gates</b> (a 7400) before it reaches <b>CU</b> and <b>CD</b>. Each NAND has a <b>switch</b> on its other input: <b>Switch-0</b> enables the CU gate and <b>Switch-1</b> enables the CD gate. Set the switches, then click <b>CLK</b> and see which way it counts. Click a switch to flip it.';
+
+  </script>
+  <p class="site-copyright">&copy; 2026 Anderson Home Technology. All rights reserved.</p>
+</body>
+
+</html>
