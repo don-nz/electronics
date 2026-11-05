@@ -13,19 +13,19 @@ then copy it across yourself.
 Two kinds of page are handled:
 
   Waveform-builder pages (they load assets/waveform-builder.js — the timing-diagram
-  drills) are CONVERTED: the student page's own markup and script are kept, so the
+  drills) and the simulators (standard .quiz-wrap skeleton, no quiz-engine) are CONVERTED: the student page's own markup and script are kept, so the
   college copy always has the same behaviour, and are dressed in the TAFE theme:
     - tools/college/theme.css      replaces assets/quiz-common.css (palette, Public Sans,
                                    .main-wrap/.card-top-bar layout, light/dark, print)
     - tools/college/theme-toggle.js replaces assets/theme-init.js
     - the page skeleton is rewritten (breadcrumb, .quiz-wrap, progress bar and footer
       become the college top bar and copyright line; button classes are mapped)
-    - assets/waveform-builder.js and the trimmed assets/shapes.js are inlined as they are
+    - assets/waveform-builder.js (when the page uses it) and the trimmed assets/shapes.js are inlined as they are
     - the page's own <style> goes first so the TAFE theme wins any clash, and the page
       script has the student-only "← Back" breadcrumb code removed
   To change how the college pages look, edit tools/college/theme.css and rebuild.
 
-  Any other page is BUNDLED: every local <link rel=stylesheet> and <script src> is
+  Any other page (quiz-engine pages, pages with their own layout) is BUNDLED: every local <link rel=stylesheet> and <script src> is
   inlined as it is, assets/shapes.js trimmed to the sets the page asks for, and the
   breadcrumb script dropped. That keeps the site's own styling, so it is not a
   college look.
@@ -95,30 +95,39 @@ def build_college(path, out_dir):
     theme_css = read(os.path.join(HERE, 'college', 'theme.css'))
     theme_js = read(os.path.join(HERE, 'college', 'theme-toggle.js'))
     shapes = trim_shapes(asset('shapes.js'), page) if 'shapes.js' in page else ''
+    engine = 'quiz-engine.js' in page
+    # a quiz-engine page draws with the engine's own classes (options, progress dots, summary, working box…):
+    # quiz-common.css goes first as the base layer, so anything the TAFE theme does not restyle still works
+    base_css = asset('quiz-common.css') if engine else ''
 
     body = page[page.index('<body'):page.rindex('</body>')]
     body = re.sub(r'<div class="crumb"[^>]*></div>\s*', '', body)
     body = re.sub(r'<footer>.*?</footer>\s*', '', body, flags=re.S)
-    body = sub_once(r'<div class="progress-wrap"[^>]*>.*?</div>\s*', '', body, 'the progress bar / "← Back" link', path=path)
+    body = re.sub(r'<a id="menuLink"[^>]*>.*?</a>\s*', '', body, flags=re.S)                 # the student-only "← Back" link
+    body = re.sub(r'<div class="progress-wrap"[^>]*>\s*</div>\s*', '', body, count=1)        # a progress bar left empty (builders, simulators)
     body = sub_once(r'<div class="quiz-wrap single-col" id="quizWrap">\s*<div class="questions-col">\s*',
                     '<div class="main-wrap">\n    ' + TOP_BAR + '\n    ', body, 'the .quiz-wrap / .questions-col wrapper', path=path)
-    body = sub_once(r'\s*</div>\s*</div>((?:\s*<!--.*?-->)*\s*<div id="printWorksheet")', r'\n  </div>\1', body, 'the end of the wrapper before #printWorksheet', path=path)
+    body = sub_once(r'\s*</div>\s*</div>(?=(?:\s*<!--.*?-->)*\s*(?:<div id="printWorksheet"|<script))', '\n  </div>', body, 'the end of the wrapper (before #printWorksheet or the page script)', path=path)
     body = re.sub(r'btn btn-(?:shuffle|summary)', 'btn btn-secondary', body)
     body = body.replace('class="btn" id="printBtn"', 'class="btn btn-secondary" id="printBtn"')
 
-    # the page's own script (the last inline one): drop the student-only breadcrumb "← Back" code
-    scripts = list(re.finditer(r'<script>(.*?)</script>', body, re.S))
-    last = scripts[-1]
-    js = re.sub(r"\n\s*if \(history\.length > 1\) \{[^}]*menuLink[^}]*\}\s*\n\s*function goBack\(e\)[^\n]*\n", '\n', last.group(1))
-    body = body[:last.start()] + inline_js(theme_js) + '\n  <script>' + js + '</script>' + body[last.end():]
+    # drop the student-only breadcrumb "← Back" code from every inline script, and put the theme toggle
+    # (the college pages' dark/light switch) in front of the last one
+    back_code = r"\n\s*if \(history\.length > 1\) \{[^}]*menuLink[^}]*\}\s*\n\s*function goBack\(e\)[^\n]*\n"
+    body = re.sub(r'<script>(.*?)</script>', lambda m: '<script>' + re.sub(back_code, '\n', m.group(1)) + '</script>', body, flags=re.S)
+    last = list(re.finditer(r'<script>', body))[-1]   # after the page markup, so the toggle button exists when it first runs
+    body = body[:last.start()] + inline_js(theme_js) + '\n  ' + body[last.start():]
 
     head = ('<!DOCTYPE html>\n<html lang="en">\n\n<head>\n  <meta charset="UTF-8">\n'
             '  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n'
             f'  {title}\n  {COLLEGE_FONTS}\n  <link rel="icon" href="data:,">\n'
-            f'  <style>\n{page_css}\n{theme_css}\n  </style>\n')
+            f'  <style>\n{base_css}\n{page_css}\n{theme_css}\n  </style>\n')
     if shapes:
         head += '  ' + inline_js(shapes) + '\n'
-    head += '  ' + inline_js(asset('waveform-builder.js')) + '\n</head>\n\n'
+    for lib in ('quiz-engine.js', 'waveform-builder.js'):
+        if lib in page:
+            head += '  ' + inline_js(asset(lib)) + '\n'
+    head += '</head>\n\n'
     out_html = head + body.rstrip() + '\n  ' + COPYRIGHT + '\n</body>\n\n</html>\n'
 
     os.makedirs(out_dir, exist_ok=True)
@@ -161,8 +170,15 @@ def bundle(path, out_dir):
     return out
 
 
+def converts(page):
+    """Pages with the standard student skeleton (.quiz-wrap single-col) — the waveform builders, the
+    simulators and the single-column quiz-engine pages — are converted. Pages with their own layout
+    (e.g. the rotary encoder explorer) or a two-column circuit panel are bundled."""
+    return 'waveform-builder.js' in page or 'quiz-wrap single-col' in page
+
+
 def build(path, out_dir):
-    if 'waveform-builder.js' in read(path):
+    if converts(read(path)):
         return build_college(path, out_dir)
     return bundle(path, out_dir)
 

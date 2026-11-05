@@ -1,0 +1,1470 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Digital Electronics — SR Latch Waveform Builder</title>
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,600;0,700;0,800;1,400;1,600&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <style>
+
+    .rule-card { font-size: .82rem; line-height: 1.55; margin-bottom: 1.2rem; }
+    .rule-card .rule-row { display: flex; gap: .5rem; margin: .3rem 0; }
+    .rule-card .rule-cond { flex: none; width: 8.5rem; font-family: 'Share Tech Mono', monospace; }
+    .legend-row { display: flex; gap: 1.2rem; margin-top: .6rem; font-size: .72rem; color: var(--colour-label); }
+    .legend-swatch { display: inline-block; width: 1.1rem; height: 2px; margin-right: .3rem; vertical-align: middle; }
+
+    .gate-toggle-card { font-size: .82rem; margin-bottom: 1.2rem; }
+    .gate-toggle-label { color: var(--colour-label); margin-bottom: .6rem; }
+    .gate-toggle { display: flex; gap: .8rem; flex-wrap: wrap; }
+    .gate-toggle-btn {
+      display: flex; flex-direction: column; align-items: center; gap: .3rem;
+      padding: .6rem 1.1rem; border: 1px solid var(--colour-border); border-radius: var(--radius-lg);
+      background: transparent; cursor: pointer; font-family: 'Share Tech Mono', monospace;
+      font-size: .7rem; letter-spacing: .05em; text-transform: uppercase; color: var(--colour-label);
+      transition: background .15s, color .15s, border-color .15s;
+    }
+    .gate-toggle-btn svg { width: 10rem; height: auto; display: block; }
+    .gate-toggle-btn.active {
+      border-color: var(--colour-ui-primary);
+      background: rgba(var(--colour-ui-primary-rgb), .12);
+      color: var(--colour-ui-primary);
+    }
+    .gate-toggle-btn:not(.active):hover { background: rgba(var(--colour-ui-primary-rgb), .04); color: var(--colour-text); }
+      #qbarRow { display: none; }
+    #qbarRow.shown { display: flex; }
+  
+/*
+  NSW TAFE college theme — the single source for the self-contained teacher pages
+  (cert_iii/UEEEC0069/college/*_college.html). tools/build_college.py inlines this into
+  each generated page, so a college page is the student page's own markup and script
+  with this stylesheet instead of assets/quiz-common.css.
+
+  It was lifted from the hand-made college pages (TAFE colour palette, Public Sans,
+  .main-wrap / .card-top-bar layout, light and dark themes, print rules) and then
+  extended with rules for the classes the shared engines draw with, so the college
+  pages no longer need a hand-made copy of the waveform code. To change how the
+  college pages look, edit this file and rebuild.
+*/
+
+:root {
+  --colour-bg: #f8f9fa;
+  --colour-panel: #ffffff;
+  --colour-border: #d0d5dd;
+  --colour-text: #1d2939;
+  --colour-text-strong: #002664;
+  --colour-label: #475467;
+  --colour-label-rgb: 71, 84, 103;
+  --colour-grid: rgba(0, 38, 100, 0.04);
+
+  --colour-ui-primary: #002664;
+  --colour-ui-primary-rgb: 0, 38, 100;
+  --colour-ui-correct: #087443;
+  --colour-ui-correct-rgb: 8, 116, 67;
+  --colour-ui-wrong: #d92d20;
+  --colour-ui-wrong-rgb: 217, 45, 32;
+
+  --colour-input-a: #4338ca;
+  --colour-input-b: #0f766e;
+  --colour-output-z: #0284c7;
+
+  --colour-dff: #0d80c3;
+  --colour-jfet: #7e22ce;
+  --colour-bjt: #b45309;
+  --colour-switch: #0369a1;
+
+  --font-body: 'Public Sans', system-ui, -apple-system, sans-serif;
+  --font-display: 'Public Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Share Tech Mono', monospace, sans-serif;
+
+  --radius-lg: 6px;
+  --radius-sm: 4px;
+  --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+body.dark-theme {
+  --colour-bg: #121824;
+  --colour-panel: #1a2232;
+  --colour-border: #2e3c54;
+  --colour-text: #e2e8f0;
+  --colour-text-strong: #ffffff;
+  --colour-label: #94a3b8;
+  --colour-label-rgb: 148, 163, 184;
+  --colour-grid: rgba(255, 255, 255, 0.03);
+
+  --colour-ui-primary: #38bdf8;
+  --colour-ui-primary-rgb: 56, 189, 248;
+  --colour-ui-correct: #34d399;
+  --colour-ui-correct-rgb: 52, 211, 153;
+  --colour-ui-wrong: #f87171;
+  --colour-ui-wrong-rgb: 248, 113, 113;
+
+  --colour-input-a: #818cf8;
+  --colour-input-b: #2dd4bf;
+  --colour-output-z: #38bdf8;
+
+  --colour-dff: #54c0ff;
+  --colour-jfet: #c084fc;
+  --colour-bjt: #ffb454;
+  --colour-switch: #38bdf8;
+
+  --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--colour-bg);
+  color: var(--colour-text);
+  font-family: var(--font-body);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem 1rem;
+  background-image: linear-gradient(var(--colour-grid) 1px, transparent 1px), linear-gradient(90deg, var(--colour-grid) 1px, transparent 1px);
+  background-size: 40px 40px;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+header {
+  margin-bottom: 1.5rem;
+  width: 100%;
+  max-width: 700px;
+}
+
+header h1 {
+  font-family: var(--font-display);
+  font-size: clamp(1.4rem, 4vw, 2.2rem);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--colour-ui-primary);
+}
+
+header p {
+  margin-top: .4rem;
+  color: var(--colour-label);
+  font-size: .82rem;
+  font-weight: 600;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.75rem;
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--colour-text);
+  background: var(--colour-panel);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-card);
+}
+
+.theme-toggle:hover {
+  border-color: var(--colour-ui-primary);
+}
+
+.back-link {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--colour-ui-primary);
+  text-decoration: none;
+  padding: 0.35rem 0.1rem;
+}
+
+.back-link:hover {
+  text-decoration: underline;
+}
+
+.main-wrap {
+  width: 100%;
+  max-width: 700px;
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+
+.card {
+  background: var(--colour-panel);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-card);
+  transition: background 0.25s ease, border-color 0.25s ease;
+}
+
+.card-top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  margin-bottom: 0.5rem;
+}
+
+.rule-card {
+  font-size: .85rem;
+  line-height: 1.6;
+}
+
+.rule-card .rule-row {
+  display: flex;
+  gap: .5rem;
+  margin: .35rem 0;
+}
+
+.rule-card .rule-cond {
+  flex: none;
+  width: 8.5rem;
+  font-family: var(--font-mono);
+  font-weight: bold;
+}
+
+.legend-row {
+  display: flex;
+  gap: 1rem;
+  row-gap: .4rem;
+  flex-wrap: wrap;
+  margin-top: .8rem;
+  font-size: .78rem;
+  font-weight: 600;
+  color: var(--colour-label);
+}
+
+.legend-swatch {
+  display: inline-block;
+  width: 1.1rem;
+  height: 3px;
+  margin-right: .3rem;
+  vertical-align: middle;
+  border-radius: 2px;
+}
+
+.gate-toggle-card {
+  font-size: .85rem;
+}
+
+.gate-toggle-label {
+  color: var(--colour-label);
+  margin-bottom: .6rem;
+  font-weight: 600;
+}
+
+.gate-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  gap: .8rem;
+  justify-content: center;
+}
+
+.gate-toggle-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .3rem;
+  padding: .6rem 1.1rem;
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-lg);
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: .7rem;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--colour-label);
+  text-align: center;
+  transition: background .15s, color .15s, border-color .15s;
+}
+
+.gate-toggle-btn svg {
+  width: 9rem;
+  height: auto;
+  display: block;
+}
+
+.gate-toggle-btn.active {
+  border-color: var(--colour-ui-primary);
+  background: rgba(var(--colour-ui-primary-rgb), .12);
+  color: var(--colour-ui-primary);
+}
+
+.gate-toggle-btn:not(.active):hover {
+  background: rgba(var(--colour-ui-primary-rgb), .06);
+  color: var(--colour-text);
+}
+
+.hint-toggle-card { font-size: .85rem; }
+.hint-toggle-label { color: var(--colour-label); margin-bottom: .6rem; font-weight: 600; }
+.hint-toggle { display: flex; gap: .6rem; flex-wrap: wrap; justify-content: center; }
+.hint-toggle-btn {
+  padding: .5rem 1.1rem;
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-lg);
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: .7rem;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--colour-label);
+  transition: background .15s, color .15s, border-color .15s;
+}
+.hint-toggle-btn:not(.active):hover { background: rgba(var(--colour-ui-primary-rgb), .06); color: var(--colour-text); }
+.hint-toggle-btn[data-hint="edges"].active { border-color: var(--colour-switch); color: var(--colour-switch); background: color-mix(in srgb, var(--colour-switch) 14%, transparent); }
+.out-toggle-card { font-size: .82rem; margin-bottom: 1.2rem; }
+.out-toggle-btn { min-width: 3.6rem; }
+.out-toggle-btn.active { border-color: var(--colour-output-z); color: var(--colour-output-z); background: color-mix(in srgb, var(--colour-output-z) 14%, transparent); }
+
+.wb-tracks-wrap { position: relative; }
+.wb-hint-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+
+.wb-track-row {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin-bottom: 0.6rem;
+}
+
+.wb-track-label {
+  font-family: var(--font-mono);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--colour-text-strong);
+  width: 20px;
+  text-align: center;
+}
+
+.wb-track-row svg {
+  flex: 1;
+  height: 48px;
+  background: rgba(var(--colour-label-rgb), 0.05);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-sm);
+}
+
+.wb-track-path {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.wb-grid-line {
+  stroke: var(--colour-border);
+  stroke-width: 1;
+  stroke-dasharray: 2, 2;
+  opacity: 0.6;
+}
+
+.wb-track-p { stroke: var(--colour-jfet); }
+.wb-track-c { stroke: var(--colour-bjt); }
+.wb-track-clk { stroke: var(--colour-switch); }
+.wb-track-d { stroke: var(--colour-input-a); }
+.wb-track-q { stroke: var(--colour-output-z); }
+
+.wb-palette {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  margin: 1.2rem 0;
+  flex-wrap: wrap;
+}
+
+.wb-piece-btn {
+  background: var(--colour-panel);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.6rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.wb-piece-btn:hover:not(:disabled) {
+  border-color: var(--colour-ui-primary);
+  background: rgba(var(--colour-ui-primary-rgb), 0.08);
+}
+
+.wb-piece-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.wb-piece-btn svg {
+  width: 42px;
+  height: 28px;
+}
+
+.wb-piece-label {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--colour-label);
+}
+
+.result-banner {
+  display: none;
+  padding: .65rem 1rem;
+  border-radius: var(--radius-sm);
+  font-size: .82rem;
+  font-family: var(--font-body);
+  font-weight: 600;
+  align-items: center;
+  gap: .6rem;
+  margin-bottom: 1rem;
+}
+
+.result-banner.correct {
+  display: flex;
+  background: rgba(var(--colour-ui-correct-rgb), .12);
+  border: 1px solid rgba(var(--colour-ui-correct-rgb), .4);
+  color: var(--colour-ui-correct);
+}
+
+.result-banner.wrong {
+  display: flex;
+  background: rgba(var(--colour-ui-wrong-rgb), .12);
+  border: 1px solid rgba(var(--colour-ui-wrong-rgb), .4);
+  color: var(--colour-ui-wrong);
+}
+
+.btn-row {
+  display: flex;
+  gap: .6rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+  width: 100%;
+}
+
+.btn {
+  padding: .6rem 0;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: .78rem;
+  font-weight: 700;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all .15s;
+  border: 1px solid;
+  flex: 1;
+  min-width: 105px;
+  text-align: center;
+}
+
+.btn-prev {
+  background: rgba(var(--colour-label-rgb), .1);
+  border-color: rgba(var(--colour-label-rgb), .4);
+  color: var(--colour-label);
+}
+
+.btn-prev:hover:not(:disabled) {
+  background: rgba(var(--colour-label-rgb), .2);
+}
+
+.btn-prev:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.btn-check {
+  background: rgba(var(--colour-ui-correct-rgb), .15);
+  border-color: rgba(var(--colour-ui-correct-rgb), .5);
+  color: var(--colour-ui-correct);
+}
+
+.btn-check:hover:not(:disabled) {
+  background: rgba(var(--colour-ui-correct-rgb), .25);
+}
+
+.btn-check:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: rgba(var(--colour-ui-primary-rgb), .12);
+  border-color: rgba(var(--colour-ui-primary-rgb), .4);
+  color: var(--colour-ui-primary);
+}
+
+.btn-secondary:hover {
+  background: rgba(var(--colour-ui-primary-rgb), .22);
+}
+
+/* Print Worksheet — .print-only is invisible on screen, shown only via
+   @media print below. #printWorksheet (a direct child of <body>, NOT
+   nested inside .main-wrap) is built fresh by printDiagramNow() right
+   before window.print(): page title/description, the current Trigger/Q
+   diagram with Q left as a blank grid, then a page-break and the same
+   diagram again with the correct Q filled in as the solution. */
+.print-only { display: none; }
+
+@media print {
+  /* Force light regardless of whichever theme is active on screen —
+     body.dark-theme has higher specificity than a bare :root rule, so
+     it's redefined here too (same values), not just :root, or dark
+     mode would still win. */
+  :root, body.dark-theme {
+    --colour-bg: #ffffff;
+    --colour-panel: #ffffff;
+    --colour-text: #000000;
+    --colour-text-strong: #000000;
+    --colour-border: #999999;
+    --colour-label: #444444;
+  }
+  body > *:not(#printWorksheet) { display: none !important; }
+  body { background: #fff; background-image: none; padding: 0; display: block; }
+  #printWorksheet {
+    display: block !important;
+    color: #000;
+    font-family: var(--font-body);
+    max-width: 700px;
+    margin: 2rem auto;
+  }
+  #printWorksheet h1 { font-size: 1.3rem; margin: 0 0 .3rem; font-family: var(--font-display); }
+  #printWorksheet .print-subtitle { font-size: .8rem; color: #444; margin-bottom: 1rem; text-transform: uppercase; letter-spacing: .05em; }
+  #printWorksheet .print-description { margin-bottom: 1.2rem; }
+  #printWorksheet .print-diagram-section { page-break-inside: avoid; }
+  /* Solution starts on its own fresh page when printed double-sided or handed out separately. */
+  #printWorksheet .print-solution { page-break-before: always; }
+  #printWorksheet .print-solution h2 { font-size: 1.1rem; margin-bottom: .8rem; }
+  #printWorksheet .wb-track-row svg { width: 100%; height: auto; background: none; border: 1px solid #999; }
+  #printWorksheet .wb-track-label { color: #000; }
+  #printWorksheet .wb-grid-line { stroke: #999; stroke-dasharray: none; opacity: 1; }
+}
+
+/* Copyright line (college copies are self-contained, so inline) */
+.site-copyright {
+  margin: 3rem auto 1.5rem;
+  padding: 0 1rem;
+  text-align: center;
+  font-size: 0.7rem;
+  color: var(--colour-label);
+  opacity: 0.8;
+}
+
+/* ── page-structure rules shared by the waveform-builder pages ── */
+.wb-track-label { width: 2.6rem; }
+.extra-row { display: none; }
+.extra-row.shown { display: flex; }
+/* the student pages space their cards with margin-bottom; .main-wrap already spaces them with a gap */
+.main-wrap > .card { margin-bottom: 0; }
+.rule-card > div:first-of-type { margin-bottom: 0.4rem; }
+.rule-card > div:nth-last-of-type(2) { margin-top: 0.4rem; }
+
+/* ── classes assets/waveform-builder.js draws with (the student theme styles these from quiz-common.css) ── */
+.wb-grid-baseline { stroke: rgba(var(--colour-label-rgb), .4); }
+.wb-track-path.wb-track-s { stroke: var(--colour-input-a); }
+.wb-track-path.wb-track-r { stroke: var(--colour-input-b); }
+.wb-track-path.wb-track-p { stroke: var(--colour-jfet); }
+.wb-track-path.wb-track-c { stroke: var(--colour-bjt); }
+.wb-track-path.wb-track-clk { stroke: var(--colour-switch); }
+.wb-track-path.wb-track-d { stroke: var(--colour-input-a); }
+.wb-progress-shade { fill: var(--colour-ui-primary); opacity: .1; }
+.wb-q-path { fill: none; stroke-width: 2; stroke-linejoin: round; }
+.wb-q-path.wb-col-building { stroke: var(--colour-output-z); }
+.wb-q-path.wb-col-correct { stroke: var(--colour-ui-correct); }
+.wb-q-path.wb-col-wrong { stroke: var(--colour-ui-wrong); }
+.wb-piece-icon { width: 40px; height: 28px; overflow: visible; }
+.wb-piece-icon line, .wb-piece-icon polyline {
+  fill: none; stroke: var(--colour-output-z); stroke-width: 2.5;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+@media (max-width: 480px) {
+  .wb-track-label { width: 1.6rem; font-size: .8rem; }
+  .wb-piece-icon { width: 32px; height: 24px; }
+}
+@media print {
+  #printWorksheet .print-wave-row svg { width: 100%; height: auto; background: none; border: 1px solid #999; }
+}
+
+  </style>
+  <script>
+/* GENERATED by tools/build_shapes.py from assets/shapes/*.html — do not edit by hand.
+
+   Shared SVG shape library. Cross-file <use> and fetch() are blocked on
+   file://, so shapes are carried as strings here and injected into a hidden
+   <svg> on the page itself — after that, <use href="#gate-nor-trad"> etc.
+   work exactly as if the defs had been pasted into the page.
+
+   Usage (plain script, same load pattern as theme-init.js):
+     <script src="…/assets/shapes.js"><\/script>
+     <script>Shapes.use("logic-gates", "flip-flops");<\/script>
+
+   Per-page scaling — the masters are drawn at 1:1; a page that wants them
+   bigger passes a trailing options object (id globs -> SVG transform):
+     Shapes.use("logic-gates", { transform: { "*-trad": "scale(1.5)", "*-iec": "scale(1.3)" } });
+   Only top-level shapes without a transform of their own are touched.
+
+   Shapes.sets()       -> array of set names
+   Shapes.ids(name)    -> ids a set defines
+   Ids already present in the document (e.g. a page's own pasted copy) are
+   skipped, so pages can migrate one at a time. Edit the masters in
+   assets/shapes/, then run:  python3 tools/build_shapes.py
+*/
+(function () {
+  var SETS = {
+    "flip-flops": "<filter id=\"glow\" x=\"-50%\" y=\"-50%\" width=\"200%\" height=\"200%\">\n      <feGaussianBlur stdDeviation=\"2\" result=\"b\" />\n      <feMerge><feMergeNode in=\"b\" /><feMergeNode in=\"SourceGraphic\" /></feMerge>\n    </filter>\n    <g id=\"nor-sr-latch-trad\">\n     <g transform=\"translate(140,110)\">\n      <path d=\"M -35 -50 C -15 -50 5 -65 25 -80 C -5 -95 -15 -110 -35 -110 C -22 -90 -22 -70 -35 -50 Z\"\n        fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n      <circle cx=\"31\" cy=\"-80\" r=\"6\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n      <path d=\"M -35 50 C -15 50 5 65 25 80 C -5 95 -15 110 -35 110 C -22 90 -22 70 -35 50 Z\"\n        fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n      <circle cx=\"31\" cy=\"80\" r=\"6\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n      <line x1=\"-120\" y1=\"-95\" x2=\"-28\" y2=\"-95\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"-128\" y=\"-90\" text-anchor=\"end\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\">R</text>\n      <line x1=\"-120\" y1=\"95\" x2=\"-28\" y2=\"95\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"-128\" y=\"100\" text-anchor=\"end\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\">S</text>\n      <path d=\"M 37 -80 L 80 -80 L 80 -10 L -60 40 L -60 65 L -28 65\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <circle cx=\"80\" cy=\"-80\" r=\"3\" style=\"fill: var(--colour-dff)\" />\n      <path d=\"M 37 80 L 90 80 L 90 10 L -70 -40 L -70 -65 L -28 -65\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <circle cx=\"90\" cy=\"80\" r=\"3\" style=\"fill: var(--colour-dff)\" />\n      <line x1=\"80\" y1=\"-80\" x2=\"130\" y2=\"-80\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"138\" y=\"-75\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\">Q</text>\n      <line x1=\"90\" y1=\"80\" x2=\"130\" y2=\"80\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"138\" y=\"85\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\"><tspan style=\"text-decoration: overline\">Q</tspan></text>\n     </g>\n    </g>\n    <g id=\"nand-sr-latch-trad\">\n     <g transform=\"translate(140,110)\">\n      <path d=\"M -35 -110 L 5 -110 A 30 30 0 0 1 5 -50 L -35 -50 Z\"\n        fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n      <circle cx=\"41\" cy=\"-80\" r=\"6\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n      <path d=\"M -35 50 L 5 50 A 30 30 0 0 1 5 110 L -35 110 Z\"\n        fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n      <circle cx=\"41\" cy=\"80\" r=\"6\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n      <line x1=\"-120\" y1=\"-95\" x2=\"-35\" y2=\"-95\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"-128\" y=\"-90\" text-anchor=\"end\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\"><tspan style=\"text-decoration: overline\">S</tspan></text>\n      <line x1=\"-120\" y1=\"95\" x2=\"-35\" y2=\"95\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"-128\" y=\"100\" text-anchor=\"end\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\"><tspan style=\"text-decoration: overline\">R</tspan></text>\n      <path d=\"M 47 -80 L 80 -80 L 80 -10 L -60 40 L -60 65 L -35 65\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <circle cx=\"80\" cy=\"-80\" r=\"3\" style=\"fill: var(--colour-dff)\" />\n      <path d=\"M 47 80 L 90 80 L 90 10 L -70 -40 L -70 -65 L -35 -65\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <circle cx=\"90\" cy=\"80\" r=\"3\" style=\"fill: var(--colour-dff)\" />\n      <line x1=\"80\" y1=\"-80\" x2=\"130\" y2=\"-80\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"138\" y=\"-75\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\">Q</text>\n      <line x1=\"90\" y1=\"80\" x2=\"130\" y2=\"80\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"138\" y=\"85\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\"><tspan style=\"text-decoration: overline\">Q</tspan></text>\n     </g>\n    </g>\n    <g id=\"nor-sr-latch-iec\">\n     <g transform=\"translate(135,90)\">\n      <rect x=\"-75\" y=\"-90\" width=\"150\" height=\"180\" rx=\"4\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n      <line x1=\"-135\" y1=\"-45\" x2=\"-75\" y2=\"-45\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"-60\" y=\"-34\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\">S</text>\n      <line x1=\"-135\" y1=\"45\" x2=\"-75\" y2=\"45\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"-60\" y=\"55\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\">R</text>\n      <line x1=\"75\" y1=\"-45\" x2=\"135\" y2=\"-45\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"60\" y=\"-34\" text-anchor=\"end\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\">Q</text>\n      <line x1=\"75\" y1=\"45\" x2=\"135\" y2=\"45\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"60\" y=\"55\" text-anchor=\"end\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\"><tspan style=\"text-decoration: overline\">Q</tspan></text>\n     </g>\n    </g>\n    <g id=\"nand-sr-latch-iec\">\n     <g transform=\"translate(135,90)\">\n      <rect x=\"-75\" y=\"-90\" width=\"150\" height=\"180\" rx=\"4\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n      <line x1=\"-135\" y1=\"-45\" x2=\"-75\" y2=\"-45\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"-60\" y=\"-34\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\"><tspan style=\"text-decoration: overline\">S</tspan></text>\n      <line x1=\"-135\" y1=\"45\" x2=\"-75\" y2=\"45\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"-60\" y=\"55\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\"><tspan style=\"text-decoration: overline\">R</tspan></text>\n      <line x1=\"75\" y1=\"-45\" x2=\"135\" y2=\"-45\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"60\" y=\"-34\" text-anchor=\"end\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\">Q</text>\n      <line x1=\"75\" y1=\"45\" x2=\"135\" y2=\"45\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"60\" y=\"55\" text-anchor=\"end\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\"><tspan style=\"text-decoration: overline\">Q</tspan></text>\n     </g>\n    </g>\n    <g id=\"dff-pos-edge-iec\">\n     <g transform=\"translate(135,90)\">\n      <rect x=\"-75\" y=\"-90\" width=\"150\" height=\"180\" rx=\"4\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n      <line x1=\"-135\" y1=\"-45\" x2=\"-75\" y2=\"-45\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"-60\" y=\"-34\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\">D</text>\n      <line x1=\"-135\" y1=\"45\" x2=\"-75\" y2=\"45\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <path d=\"M -75 30 L -55 45 L -75 60\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"-48\" y=\"52\" font-size=\"20\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\">CLK</text>\n      <line x1=\"75\" y1=\"-45\" x2=\"135\" y2=\"-45\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"60\" y=\"-34\" text-anchor=\"end\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\">Q</text>\n      <line x1=\"75\" y1=\"45\" x2=\"135\" y2=\"45\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"60\" y=\"55\" text-anchor=\"end\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\"><tspan style=\"text-decoration: overline\">Q</tspan></text>\n     </g>\n    </g>\n    <g id=\"dff-neg-edge-iec\">\n     <g transform=\"translate(135,90)\">\n      <rect x=\"-75\" y=\"-90\" width=\"150\" height=\"180\" rx=\"4\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n      <line x1=\"-135\" y1=\"-45\" x2=\"-75\" y2=\"-45\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"-60\" y=\"-34\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\">D</text>\n      <line x1=\"-135\" y1=\"45\" x2=\"-93\" y2=\"45\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <circle cx=\"-84\" cy=\"45\" r=\"8\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n      <path d=\"M -75 30 L -55 45 L -75 60\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"-48\" y=\"52\" font-size=\"20\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\">CLK</text>\n      <line x1=\"75\" y1=\"-45\" x2=\"135\" y2=\"-45\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"60\" y=\"-34\" text-anchor=\"end\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\">Q</text>\n      <line x1=\"75\" y1=\"45\" x2=\"135\" y2=\"45\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"60\" y=\"55\" text-anchor=\"end\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\"><tspan style=\"text-decoration: overline\">Q</tspan></text>\n     </g>\n    </g>\n    <g id=\"_nand2\">\n      <path d=\"M -35 -30 L 5 -30 A 30 30 0 0 1 5 30 L -35 30 Z\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n      <circle cx=\"41\" cy=\"0\" r=\"6\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n    </g>\n    <g id=\"_nand-d-latch-stage\">\n      <g transform=\"translate(-320,-95)\"><use href=\"#_nand2\" /></g>\n      <g transform=\"translate(-320,95)\"><use href=\"#_nand2\" /></g>\n      <line x1=\"-500\" y1=\"0\" x2=\"-420\" y2=\"0\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <circle cx=\"-420\" cy=\"0\" r=\"3\" style=\"fill: var(--colour-dff)\" />\n      <line x1=\"-420\" y1=\"-80\" x2=\"-420\" y2=\"80\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <line x1=\"-420\" y1=\"-80\" x2=\"-355\" y2=\"-80\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <line x1=\"-420\" y1=\"80\" x2=\"-355\" y2=\"80\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <line x1=\"-273\" y1=\"-95\" x2=\"-35\" y2=\"-95\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <circle cx=\"-250\" cy=\"-95\" r=\"3\" style=\"fill: var(--colour-dff)\" />\n      <line x1=\"-250\" y1=\"-95\" x2=\"-250\" y2=\"110\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <line x1=\"-250\" y1=\"110\" x2=\"-355\" y2=\"110\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <line x1=\"-273\" y1=\"95\" x2=\"-35\" y2=\"95\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <path d=\"M -35 -110 L 5 -110 A 30 30 0 0 1 5 -50 L -35 -50 Z\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n      <circle cx=\"41\" cy=\"-80\" r=\"6\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n      <path d=\"M -35 50 L 5 50 A 30 30 0 0 1 5 110 L -35 110 Z\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n      <circle cx=\"41\" cy=\"80\" r=\"6\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n      <path d=\"M 47 -80 L 80 -80 L 80 -10 L -60 40 L -60 65 L -35 65\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <circle cx=\"80\" cy=\"-80\" r=\"3\" style=\"fill: var(--colour-dff)\" />\n      <path d=\"M 47 80 L 90 80 L 90 10 L -70 -40 L -70 -65 L -35 -65\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <circle cx=\"90\" cy=\"80\" r=\"3\" style=\"fill: var(--colour-dff)\" />\n      <line x1=\"80\" y1=\"-80\" x2=\"130\" y2=\"-80\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <line x1=\"90\" y1=\"80\" x2=\"130\" y2=\"80\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n    </g>\n    <g id=\"dff-pos-edge-trad\">\n     <g transform=\"translate(840,125)\">\n      <g transform=\"translate(0,0)\"><use href=\"#_nand-d-latch-stage\" /></g>\n      <g transform=\"translate(750,0)\"><use href=\"#_nand-d-latch-stage\" /></g>\n      <line x1=\"-550\" y1=\"-110\" x2=\"-355\" y2=\"-110\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"-565\" y=\"-105\" text-anchor=\"end\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\">D</text>\n      <path d=\"M 130 -80 L 380 -80 L 380 -110 L 395 -110\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <line x1=\"-800\" y1=\"260\" x2=\"-750\" y2=\"260\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <path d=\"M -770 245 L -750 260 L -770 275\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"-810\" y=\"265\" text-anchor=\"end\" font-size=\"20\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\">CLK</text>\n      <circle cx=\"-750\" cy=\"260\" r=\"3\" style=\"fill: var(--colour-dff)\" />\n      <path d=\"M -750 260 L 250 260 L 250 0\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <line x1=\"-750\" y1=\"260\" x2=\"-750\" y2=\"335\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <circle cx=\"-750\" cy=\"305\" r=\"3\" style=\"fill: var(--colour-dff)\" />\n      <line x1=\"-750\" y1=\"305\" x2=\"-700\" y2=\"305\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <line x1=\"-750\" y1=\"335\" x2=\"-700\" y2=\"335\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <path d=\"M -700 290 L -660 290 A 30 30 0 0 1 -660 350 L -700 350 Z\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n      <circle cx=\"-624\" cy=\"320\" r=\"6\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n      <path d=\"M -618 320 L -500 320 L -500 0\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"888\" y=\"-75\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\">Q</text>\n      <text x=\"888\" y=\"85\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\"><tspan style=\"text-decoration: overline\">Q</tspan></text>\n     </g>\n    </g>\n    <g id=\"dff-neg-edge-trad\">\n     <g transform=\"translate(840,125)\">\n      <g transform=\"translate(0,0)\"><use href=\"#_nand-d-latch-stage\" /></g>\n      <g transform=\"translate(750,0)\"><use href=\"#_nand-d-latch-stage\" /></g>\n      <line x1=\"-550\" y1=\"-110\" x2=\"-355\" y2=\"-110\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"-565\" y=\"-105\" text-anchor=\"end\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\">D</text>\n      <path d=\"M 130 -80 L 380 -80 L 380 -110 L 395 -110\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <line x1=\"-800\" y1=\"260\" x2=\"-750\" y2=\"260\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <path d=\"M -770 245 L -750 260 L -770 275\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"-810\" y=\"265\" text-anchor=\"end\" font-size=\"20\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\">CLK</text>\n      <circle cx=\"-750\" cy=\"260\" r=\"3\" style=\"fill: var(--colour-dff)\" />\n      <path d=\"M -750 260 L -500 260 L -500 0\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <line x1=\"-750\" y1=\"260\" x2=\"-750\" y2=\"335\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <circle cx=\"-750\" cy=\"305\" r=\"3\" style=\"fill: var(--colour-dff)\" />\n      <line x1=\"-750\" y1=\"305\" x2=\"-700\" y2=\"305\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <line x1=\"-750\" y1=\"335\" x2=\"-700\" y2=\"335\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <path d=\"M -700 290 L -660 290 A 30 30 0 0 1 -660 350 L -700 350 Z\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n      <circle cx=\"-624\" cy=\"320\" r=\"6\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n      <path d=\"M -618 320 L 250 320 L 250 0\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"888\" y=\"-75\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\">Q</text>\n      <text x=\"888\" y=\"85\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\"><tspan style=\"text-decoration: overline\">Q</tspan></text>\n     </g>\n    </g>\n    <g id=\"dff-ah-pre-clr\">\n     <g transform=\"translate(135,90)\">\n      <line x1=\"0\" y1=\"-150\" x2=\"0\" y2=\"-90\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"0\" y=\"-60\" text-anchor=\"middle\" font-size=\"20\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\">PRE</text>\n      <line x1=\"0\" y1=\"90\" x2=\"0\" y2=\"150\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"0\" y=\"82\" text-anchor=\"middle\" font-size=\"20\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\">CLR</text>\n     </g>\n    </g>\n    <g id=\"dff-al-pre-clr\">\n     <g transform=\"translate(135,90)\">\n      <line x1=\"0\" y1=\"-150\" x2=\"0\" y2=\"-106\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <circle cx=\"0\" cy=\"-98\" r=\"8\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n      <text x=\"0\" y=\"-60\" text-anchor=\"middle\" font-size=\"20\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\"><tspan style=\"text-decoration: overline\">PRE</tspan></text>\n      <line x1=\"0\" y1=\"106\" x2=\"0\" y2=\"150\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <circle cx=\"0\" cy=\"98\" r=\"8\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n      <text x=\"0\" y=\"82\" text-anchor=\"middle\" font-size=\"20\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\"><tspan style=\"text-decoration: overline\">CLR</tspan></text>\n     </g>\n    </g>\n    <g id=\"dff-pos-ah-iec\"><g transform=\"translate(0,60)\"><use href=\"#dff-pos-edge-iec\" /><use href=\"#dff-ah-pre-clr\" /></g></g>\n    <g id=\"dff-neg-ah-iec\"><g transform=\"translate(0,60)\"><use href=\"#dff-neg-edge-iec\" /><use href=\"#dff-ah-pre-clr\" /></g></g>\n    <g id=\"dff-pos-al-iec\"><g transform=\"translate(0,60)\"><use href=\"#dff-pos-edge-iec\" /><use href=\"#dff-al-pre-clr\" /></g></g>\n    <g id=\"dff-neg-al-iec\"><g transform=\"translate(0,60)\"><use href=\"#dff-neg-edge-iec\" /><use href=\"#dff-al-pre-clr\" /></g></g>\n    <g id=\"jk-pos-edge-iec\">\n     <g transform=\"translate(135,90)\">\n      <rect x=\"-75\" y=\"-90\" width=\"150\" height=\"180\" rx=\"4\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n      <line x1=\"-135\" y1=\"-60\" x2=\"-75\" y2=\"-60\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"-60\" y=\"-49\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\">J</text>\n      <line x1=\"-135\" y1=\"0\" x2=\"-75\" y2=\"0\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <path d=\"M -75 -15 L -55 0 L -75 15\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"-48\" y=\"7\" font-size=\"20\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\">CLK</text>\n      <line x1=\"-135\" y1=\"60\" x2=\"-75\" y2=\"60\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"-60\" y=\"71\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\">K</text>\n      <line x1=\"75\" y1=\"-45\" x2=\"135\" y2=\"-45\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"60\" y=\"-34\" text-anchor=\"end\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\">Q</text>\n      <line x1=\"75\" y1=\"45\" x2=\"135\" y2=\"45\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"60\" y=\"55\" text-anchor=\"end\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\"><tspan style=\"text-decoration: overline\">Q</tspan></text>\n     </g>\n    </g>\n    <g id=\"jk-neg-edge-iec\">\n     <g transform=\"translate(135,90)\">\n      <rect x=\"-75\" y=\"-90\" width=\"150\" height=\"180\" rx=\"4\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n      <line x1=\"-135\" y1=\"-60\" x2=\"-75\" y2=\"-60\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"-60\" y=\"-49\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\">J</text>\n      <line x1=\"-135\" y1=\"0\" x2=\"-93\" y2=\"0\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <circle cx=\"-84\" cy=\"0\" r=\"8\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n      <path d=\"M -75 -15 L -55 0 L -75 15\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"-48\" y=\"7\" font-size=\"20\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\">CLK</text>\n      <line x1=\"-135\" y1=\"60\" x2=\"-75\" y2=\"60\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"-60\" y=\"71\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\">K</text>\n      <line x1=\"75\" y1=\"-45\" x2=\"135\" y2=\"-45\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"60\" y=\"-34\" text-anchor=\"end\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\">Q</text>\n      <line x1=\"75\" y1=\"45\" x2=\"135\" y2=\"45\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"60\" y=\"55\" text-anchor=\"end\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\"><tspan style=\"text-decoration: overline\">Q</tspan></text>\n     </g>\n    </g>\n    <g id=\"jk-pos-ah-iec\"><g transform=\"translate(0,60)\"><use href=\"#jk-pos-edge-iec\" /><use href=\"#dff-ah-pre-clr\" /></g></g>\n    <g id=\"jk-neg-ah-iec\"><g transform=\"translate(0,60)\"><use href=\"#jk-neg-edge-iec\" /><use href=\"#dff-ah-pre-clr\" /></g></g>\n    <g id=\"jk-pos-al-iec\"><g transform=\"translate(0,60)\"><use href=\"#jk-pos-edge-iec\" /><use href=\"#dff-al-pre-clr\" /></g></g>\n    <g id=\"jk-neg-al-iec\"><g transform=\"translate(0,60)\"><use href=\"#jk-neg-edge-iec\" /><use href=\"#dff-al-pre-clr\" /></g></g>\n    <g id=\"base-jk-shape\" >\n      <rect x=\"60\" y=\"0\" width=\"150\" height=\"180\" rx=\"4\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n      <line x1=\"0\" y1=\"30\" x2=\"60\" y2=\"30\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"75\" y=\"41\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\">J</text>\n      <line x1=\"0\" y1=\"90\" x2=\"60\" y2=\"90\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <path d=\"M 60 75 L 80 90 L 60 105\" fill=\"none\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"87\" y=\"97\" font-size=\"20\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\">CLK</text>\n      <line x1=\"0\" y1=\"150\" x2=\"60\" y2=\"150\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"75\" y=\"161\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\">K</text>\n      <line x1=\"210\" y1=\"45\" x2=\"270\" y2=\"45\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"195\" y=\"56\" text-anchor=\"end\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\">Q</text>\n      <line x1=\"210\" y1=\"135\" x2=\"270\" y2=\"135\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" />\n      <text x=\"195\" y=\"145\" text-anchor=\"end\" font-size=\"25\" font-weight=\"bold\" style=\"fill: var(--colour-dff)\"><tspan style=\"text-decoration: overline\">Q</tspan></text>     \n    </g>\n    <g id=\"not-dot\">\n      <circle cx=\"0\" cy=\"0\" r=\"8\" fill=\"var(--colour-panel)\" style=\"stroke: var(--colour-dff)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n    </g>\n    <g id=\"squarewave-tile\">\n      <polyline points=\"0,0 5,0 5,-10 10,-10 10,0 15\" fill=\"none\" style=\"stroke: var(--colour-signal)\" stroke-width=\"2\" />\n    </g>\n    <g id=\"jk-pos-edge-iec-jk-on\" transform=\"translate(30,60)\">\n      <use href=\"#base-jk-shape\" />\n      <text x=\"-30\" y=\"36\" font-size=\"15\" font-weight=\"bold\" style=\"fill: var(--colour-supply)\">+5V</text>\n      <text x=\"-30\" y=\"156\" font-size=\"15\" font-weight=\"bold\" style=\"fill: var(--colour-supply)\">+5V</text>\n    </g>\n    <g id=\"jk-pos-edge-iec-jk-on-1kHz\">\n      <use href=\"#jk-pos-edge-iec-jk-on\" />\n      <g transform=\"translate(35,142)\">\n        <use href=\"#squarewave-tile\" transform=\"translate(0,0)\" />\n        <use href=\"#squarewave-tile\" transform=\"translate(10,0)\" />\n        <use href=\"#squarewave-tile\" transform=\"translate(20,0)\" />\n        <use href=\"#squarewave-tile\" transform=\"translate(30,0)\" />\n      </g>\n      <text x=\"40\" y=\"165\" font-size=\"12\" font-weight=\"bold\" style=\"fill: var(--colour-signal)\">1kHz</text>\n      <g transform=\"translate(260,98)\">\n        <use href=\"#squarewave-tile\" transform=\"translate(0,0)\" />\n        <use href=\"#squarewave-tile\" transform=\"translate(10,0)\" />\n      </g>\n      <text x=\"255\" y=\"120\" font-size=\"12\" font-weight=\"bold\" style=\"fill: var(--colour-signal)\">500Hz</text>\n    </g>"
+  };
+
+  var HOST_ID = "shapes-js-defs";
+  var wanted = [];   // [{ name, transform }]
+
+  function globRe(g) {
+    return new RegExp("^" + g.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*") + "$");
+  }
+
+  function host() {
+    var h = document.getElementById(HOST_ID);
+    if (h) return h;
+    var NS = "http://www.w3.org/2000/svg";
+    var svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("id", HOST_ID);
+    svg.setAttribute("width", "0");
+    svg.setAttribute("height", "0");
+    svg.setAttribute("aria-hidden", "true");
+    // not display:none — that breaks filters/gradients referenced via url(#id)
+    svg.style.cssText = "position:absolute;width:0;height:0;overflow:hidden";
+    svg.appendChild(document.createElementNS(NS, "defs"));
+    document.body.insertBefore(svg, document.body.firstChild);
+    return svg;
+  }
+
+  function inject(job) {
+    var name = job.name;
+    var defs = host().querySelector("defs");
+    if (defs.getAttribute("data-" + name)) return;
+    defs.setAttribute("data-" + name, "1");
+    var tmp = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    tmp.innerHTML = SETS[name];
+    Array.prototype.slice.call(tmp.childNodes).forEach(function (n) {
+      if (n.nodeType === 1 && n.id && document.getElementById(n.id)) return; // already on the page
+      if (n.nodeType === 1 && n.id && job.transform && !n.hasAttribute("transform")) {
+        Object.keys(job.transform).some(function (g) {
+          if (globRe(g).test(n.id)) { n.setAttribute("transform", job.transform[g]); return true; }
+        });
+      }
+      defs.appendChild(n);
+    });
+  }
+
+  function flush() {
+    wanted.forEach(inject);
+    wanted = [];
+  }
+
+  window.Shapes = {
+    use: function () {
+      var names = Array.prototype.slice.call(arguments), opts = null;
+      if (names.length && typeof names[names.length - 1] === "object") opts = names.pop();
+      names.forEach(function (n) {
+        if (!SETS[n]) { console.error("Shapes.use: unknown set \"" + n + "\" (have: " + Object.keys(SETS).join(", ") + ")"); return; }
+        wanted.push({ name: n, transform: opts && opts.transform });
+      });
+      if (document.body) flush();
+      else document.addEventListener("DOMContentLoaded", flush);
+    },
+    sets: function () { return Object.keys(SETS); },
+    ids: function (name) {
+      var tmp = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      tmp.innerHTML = SETS[name] || "";
+      return Array.prototype.slice.call(tmp.querySelectorAll("[id]")).map(function (e) { return e.id; });
+    }
+  };
+})();
+
+</script>
+  <script>
+/*
+  Shared "build a step waveform" mechanic for cert_iii timing-diagram
+  exercises. First used by UEEEC0069/exercises/digital_flip_flop_diagram.html
+  (an SR-latch Q-output construction drill) — written as a shared file from
+  the start (rather than proven page-local first, quiz-engine.js's own usual
+  promotion path) because a second flip-flop/latch timing-diagram exercise
+  is a known near-term follow-up.
+
+  This is a GENUINE ALTERNATIVE to quiz-engine.js, not an addition to it:
+  quiz-engine.js's whole shape is a paginated QUESTIONS[]/`cur` sequence of
+  independent multi-choice-style questions. This mechanic is the opposite —
+  ONE continuous, persistent, sequentially-built diagram with no "next
+  question" concept at all. A page using this file has no reason to also
+  load quiz-engine.js.
+
+  What's SHARED here (generic, reusable by any future step-waveform
+  exercise) vs PAGE-LOCAL (specific to one exercise's own domain logic):
+  - Shared: random pulse-track generation, step-waveform SVG geometry/
+    rendering, the sequential append-only piece-placement state machine,
+    progress shading, per-column correctness checking, the piece palette UI.
+  - Page-local: what the tracks MEAN (e.g. digital_flip_flop_diagram.html's
+    own SR-latch mutual-exclusion constraint between S/R and its Set/Reset/
+    Hold derivation rule for Q) — exactly the same shared-mechanic/
+    page-local-content split as quiz-engine.js's `kind:'fill'` (generic
+    slot-placement) vs. each file's own circuitConfig/QUESTIONS content.
+
+  ── Geometry ──
+  All tracks share one column width/row height so multiple stacked <svg>
+  strips (S/R/Q) line up perfectly. A "level" is always 0 or 1 (this
+  mechanic is single-bit only — no multi-level waveforms).
+
+  ── Piece model ──
+  A piece is one of:
+    { type: 'flat', width: 1 | 2 | 3 }  — stays at the current level
+    { type: 'rise' }                     — steps up 1 level, 1 column wide
+    { type: 'fall' }                     — steps down 1 level, 1 column wide
+  A "builder" is just `{ pieces: [] }` — an ORDERED, append-only list.
+  Cursor position (which column/level comes next) is always DERIVED by
+  replaying `pieces` from column 0/level 0, never tracked separately, so
+  undo is a plain `pieces.pop()` with nothing else to reconcile.
+
+  ── Usage sketch ──
+    const builder = { pieces: [] };
+    wbPlace(builder, { type: 'rise' }, totalCols);
+    renderQTrackSVG(svgEl, builder, totalCols);
+    ...
+    const { results, allCorrect } = wbCheck(builder, correctLevels);
+    renderQTrackSVG(svgEl, builder, totalCols, { results });
+*/
+
+const WB_COL_WIDTH = 30;
+const WB_ROW_HEIGHT = 36;
+const WB_PAD_Y = 8;
+
+function wbLevelY(level) { return WB_PAD_Y + (1 - level) * WB_ROW_HEIGHT; }
+function wbSvgHeight() { return WB_PAD_Y * 2 + WB_ROW_HEIGHT; }
+function wbSvgWidth(cols, colWidth = WB_COL_WIDTH) { return cols * colWidth; }
+
+// ── random generation ──
+// Walks left to right emitting alternating random-width blocks of 0s and 1s.
+// Fully generic — knows nothing about what the track represents.
+function randomPulseTrack(n, opts = {}) {
+  const minPulse = opts.minPulse ?? 1, maxPulse = opts.maxPulse ?? 3;
+  const minGap = opts.minGap ?? 1, maxGap = opts.maxGap ?? 3;
+  const randInt = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
+  const levels = new Array(n).fill(0);
+  let i = randInt(minGap, maxGap);
+  while (i < n) {
+    const pulseW = randInt(minPulse, maxPulse);
+    for (let k = 0; k < pulseW && i < n; k++, i++) levels[i] = 1;
+    i += randInt(minGap, maxGap);
+  }
+  return levels;
+}
+
+// ── SVG path geometry ──
+// One column's path, including its entry riser if the level changed
+// stepping INTO this column from the previous one (standard timing-diagram
+// convention: an instant vertical edge at the column's left boundary, then
+// flat across the column at the new level).
+function wbColumnPathD(colIndex, prevLevel, level, colWidth = WB_COL_WIDTH) {
+  const x0 = colIndex * colWidth, x1 = x0 + colWidth;
+  const y1 = wbLevelY(level);
+  if (prevLevel === level) return `M ${x0},${y1} L ${x1},${y1}`;
+  const y0 = wbLevelY(prevLevel);
+  return `M ${x0},${y0} L ${x0},${y1} L ${x1},${y1}`;
+}
+
+// Full read-only track (e.g. S/R) as one continuous path string.
+// `startLevel` (default 0) is the level the track is already at before column 0: with the default a track
+// that starts HIGH draws an entry riser at the left edge; pass the first column's level to draw no riser.
+function wbFullTrackPathD(levels, colWidth = WB_COL_WIDTH, startLevel = 0) {
+  let d = '', prev = startLevel;
+  levels.forEach((lvl, i) => { d += wbColumnPathD(i, prev, lvl, colWidth) + ' '; prev = lvl; });
+  return d.trim();
+}
+
+// Graph-paper background shared by every track strip: a vertical line per
+// column boundary plus the two level baselines.
+function wbGridSVG(cols, colWidth = WB_COL_WIDTH) {
+  const h = wbSvgHeight();
+  let s = '';
+  for (let i = 0; i <= cols; i++) {
+    const x = i * colWidth;
+    s += `<line x1="${x}" y1="0" x2="${x}" y2="${h}" class="wb-grid-line" />`;
+  }
+  s += `<line x1="0" y1="${wbLevelY(0)}" x2="${cols * colWidth}" y2="${wbLevelY(0)}" class="wb-grid-line wb-grid-baseline" />`;
+  s += `<line x1="0" y1="${wbLevelY(1)}" x2="${cols * colWidth}" y2="${wbLevelY(1)}" class="wb-grid-line wb-grid-baseline" />`;
+  return s;
+}
+
+// `opts.progressCols` (optional) shades [0, progressCols) the same way
+// renderQTrackSVG shades the built portion of Q — used so S/R show the
+// same "how far along we are" indicator as the track the student is
+// actually building, even though S/R themselves are always fully drawn.
+function renderReadOnlyTrackSVG(svgEl, levels, opts = {}) {
+  const colWidth = opts.colWidth || WB_COL_WIDTH;
+  svgEl.setAttribute('viewBox', `0 0 ${wbSvgWidth(levels.length, colWidth)} ${wbSvgHeight()}`);
+  svgEl.setAttribute('preserveAspectRatio', 'none');
+  const cls = opts.className || 'wb-track-path';
+  let html = wbGridSVG(levels.length, colWidth);
+  if (opts.progressCols > 0) {
+    html += `<rect class="wb-progress-shade" x="0" y="0" width="${opts.progressCols * colWidth}" height="${wbSvgHeight()}" />`;
+  }
+  html += `<path class="${cls}" d="${wbFullTrackPathD(levels, colWidth, opts.startLevel || 0)}" />`;
+  svgEl.innerHTML = html;
+}
+
+// ── piece placement state ──
+// Replays `builder.pieces` into one entry per PLACED column:
+// { col, prevLevel, level } — the basis for both rendering and checking.
+function wbBuiltColumnSegments(builder) {
+  const segs = [];
+  let col = 0, level = builder.startLevel || 0;   // builder.startLevel (optional): the level before column 0
+  builder.pieces.forEach(p => {
+    if (p.type === 'flat') {
+      for (let k = 0; k < p.width; k++) { segs.push({ col, prevLevel: level, level }); col++; }
+    } else if (p.type === 'rise') {
+      segs.push({ col, prevLevel: level, level: 1 }); level = 1; col++;
+    } else if (p.type === 'fall') {
+      segs.push({ col, prevLevel: level, level: 0 }); level = 0; col++;
+    }
+  });
+  return segs;
+}
+
+function wbCursor(builder) {
+  const segs = wbBuiltColumnSegments(builder);
+  if (!segs.length) return { col: 0, level: builder.startLevel || 0 };
+  const last = segs[segs.length - 1];
+  return { col: last.col + 1, level: last.level };
+}
+
+// Structural guardrails only — NOT correctness. A flat piece can't overshoot
+// the fixed track length; rise/fall can't go past the single-bit rail.
+function wbCanPlace(builder, piece, totalCols) {
+  const { col, level } = wbCursor(builder);
+  const width = piece.type === 'flat' ? piece.width : 1;
+  if (col + width > totalCols) return false;
+  if (piece.type === 'rise' && level === 1) return false;
+  if (piece.type === 'fall' && level === 0) return false;
+  return true;
+}
+
+function wbPlace(builder, piece, totalCols) {
+  if (!wbCanPlace(builder, piece, totalCols)) return false;
+  builder.pieces.push(piece);
+  return true;
+}
+
+function wbUndo(builder) { builder.pieces.pop(); }
+function wbResetBuilder(builder) { builder.pieces.length = 0; }
+
+// Per-column correctness against a target level array (only ever called
+// once the builder is fully filled — this mechanic checks at the end).
+function wbCheck(builder, correctLevels) {
+  const segs = wbBuiltColumnSegments(builder);
+  const results = segs.map(s => s.level === correctLevels[s.col]);
+  return {
+    results,
+    allCorrect: results.length === correctLevels.length && results.every(Boolean),
+    correctCount: results.filter(Boolean).length,
+    total: correctLevels.length,
+  };
+}
+
+// ── rendering the buildable track ──
+// `opts.results` (from wbCheck) recolours each placed column correct/wrong
+// (and `opts.correctLevels` adds the correct level in green on wrong ones);
+// omitted, every placed column renders in the neutral "still building"
+// colour. Always draws the full-width grid so the student can see how much
+// track remains regardless of how much is placed so far.
+function renderQTrackSVG(svgEl, builder, totalCols, opts = {}) {
+  const colWidth = opts.colWidth || WB_COL_WIDTH;
+  const segs = wbBuiltColumnSegments(builder);
+  const cursorCol = segs.length;
+  svgEl.setAttribute('viewBox', `0 0 ${wbSvgWidth(totalCols, colWidth)} ${wbSvgHeight()}`);
+  svgEl.setAttribute('preserveAspectRatio', 'none');
+  let html = wbGridSVG(totalCols, colWidth);
+  if (cursorCol > 0) {
+    html += `<rect class="wb-progress-shade" x="0" y="0" width="${cursorCol * colWidth}" height="${wbSvgHeight()}" />`;
+  }
+  // With opts.correctLevels (and results) the student's own line is drawn
+  // first — wrong columns in red, right ones in green — then the FULL
+  // correct waveform is laid over it in green, risers included, so the
+  // green lines always trace the complete solution and anything red is
+  // the student's own departure from it. A riser in the student's line
+  // that is NOT part of the solution (it only exists because an earlier
+  // column was wrong) is drawn red on its own rather than green.
+  const full = opts.results && opts.correctLevels;
+  segs.forEach(s => {
+    if (!full) {
+      const cls = opts.results ? (opts.results[s.col] ? 'wb-col-correct' : 'wb-col-wrong') : 'wb-col-building';
+      html += `<path class="wb-q-path ${cls}" d="${wbColumnPathD(s.col, s.prevLevel, s.level, colWidth)}" />`;
+      return;
+    }
+    const correctPrev = s.col === 0 ? (builder.startLevel || 0) : opts.correctLevels[s.col - 1];
+    if (!opts.results[s.col]) {
+      html += `<path class="wb-q-path wb-col-wrong" d="${wbColumnPathD(s.col, s.prevLevel, s.level, colWidth)}" />`;
+    } else if (s.prevLevel === correctPrev) {
+      html += `<path class="wb-q-path wb-col-correct" d="${wbColumnPathD(s.col, s.prevLevel, s.level, colWidth)}" />`;
+    } else {
+      html += `<path class="wb-q-path wb-col-wrong" d="${wbColumnPathD(s.col, s.prevLevel, s.level, colWidth)}" />`;
+    }
+  });
+  if (full) {
+    html += `<path class="wb-q-path wb-col-correct" d="${wbFullTrackPathD(opts.correctLevels, colWidth, builder.startLevel || 0)}" />`;
+  }
+  svgEl.innerHTML = html;
+}
+
+// ── piece palette UI ──
+function wbPieceLabel(piece) {
+  if (piece.type === 'flat') return piece.width === 1 ? '1 col' : piece.width + ' cols';
+  if (piece.type === 'rise') return 'Rise';
+  if (piece.type === 'fall') return 'Fall';
+  return '';
+}
+
+function wbPieceIconSVG(piece) {
+  const iw = 40, ih = 28, pad = 5;
+  if (piece.type === 'flat') {
+    const w = pad + 8 + (iw - pad * 2 - 8) * (piece.width / 3);
+    const y = ih / 2;
+    return `<svg viewBox="0 0 ${iw} ${ih}" class="wb-piece-icon"><line x1="${pad}" y1="${y}" x2="${w}" y2="${y}" /></svg>`;
+  }
+  if (piece.type === 'rise') {
+    return `<svg viewBox="0 0 ${iw} ${ih}" class="wb-piece-icon"><polyline points="${pad},${ih - pad} ${pad},${pad} ${iw - pad},${pad}" /></svg>`;
+  }
+  if (piece.type === 'fall') {
+    return `<svg viewBox="0 0 ${iw} ${ih}" class="wb-piece-icon"><polyline points="${pad},${pad} ${pad},${ih - pad} ${iw - pad},${ih - pad}" /></svg>`;
+  }
+  return '';
+}
+
+// `pieces`: the fixed palette (order = display order). `onPick(piece)` fires
+// on click. `isDisabled(piece)` decides per-button disabled state — the
+// caller re-derives this from wbCanPlace() on every render.
+function renderPiecePalette(container, { pieces, onPick, isDisabled }) {
+  container.innerHTML = '';
+  pieces.forEach(piece => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'wb-piece-btn';
+    btn.innerHTML = wbPieceIconSVG(piece) + `<span class="wb-piece-label">${wbPieceLabel(piece)}</span>`;
+    const disabled = isDisabled(piece);
+    btn.disabled = disabled;
+    if (!disabled) btn.addEventListener('click', () => onPick(piece));
+    container.appendChild(btn);
+  });
+}
+
+// ── print worksheet ── shared across every waveform-builder page, opt-in
+// exactly like quiz-engine.js's own buildPrintWorksheet(): a page adds a
+// #printWorksheet div as a DIRECT CHILD of <body> (a sibling of its
+// header/.quiz-wrap, not nested inside either — see quiz-common.css's own
+// @media print rule, which hides every OTHER direct child of <body> and
+// shows only this one) plus a "Print Worksheet" button that calls this
+// then window.print(). Deliberately reuses quiz-common.css's EXISTING
+// #printWorksheet/.print-only/@media print machinery as-is (this file
+// loads quiz-common.css for .card/.btn/etc regardless) — only the
+// waveform-specific print styling (.print-diagram-section/.print-wave-row)
+// is new, added alongside quiz-engine.js's own print rules there.
+//
+// Prints the page's own description (whatever HTML the caller points at —
+// e.g. its .rule-card, already reflecting whichever gate/edge/polarity
+// config is currently selected), then the "given" read-only tracks (S/R,
+// or P/C/CLK/D — whatever this page's OWN domain has) exactly as they
+// currently stand on screen (cloned straight from their live <svg>, same
+// technique quiz-engine.js's openModal()/buildPrintWorksheet() use for
+// cloning a circuit) with the answer track left as a BLANK grid — no path
+// drawn — for the student to draw by hand, matching the coupling quiz's
+// own "blank lines, not answers" printed-worksheet choice. A second
+// "Solution" section (page-break-before, so it starts on a fresh printed
+// page — the same detachable-section pattern
+// quiz-engine.js's .print-answers uses) repeats the same given tracks with
+// the answer track this time rendered for real via renderReadOnlyTrackSVG().
+//
+// config: {
+//   descriptionEl: element whose innerHTML becomes the printed
+//     description block (e.g. document.querySelector('.rule-card')).
+//   givenTracks: [{ label, svgEl }] — existing read-only <svg> elements
+//     (already correctly rendered) to clone into BOTH sections as-is.
+//   solutionTrack: { label, levels, totalCols, className? } — the correct
+//     answer, blank in the worksheet section, rendered for real (via
+//     renderReadOnlyTrackSVG) in the solution section.
+//   colWidth: optional, defaults to WB_COL_WIDTH.
+// }
+function buildPrintDiagram(config) {
+  const host = document.getElementById('printWorksheet');
+  if (!host) return;
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const colWidth = config.colWidth || WB_COL_WIDTH;
+  let html = '';
+
+  const h1 = document.querySelector('header h1'), sub = document.querySelector('header p');
+  if (h1) html += `<h1>${esc(h1.textContent)}</h1>`;
+  if (sub) html += `<div class="print-subtitle">${esc(sub.textContent)}</div>`;
+
+  // Carries the description element's OWN class(es) along too (e.g.
+  // "rule-card"), not just "print-description" — that class's rule-row/
+  // legend-row layout is page-local CSS scoped to it, so cloning just the
+  // inner content without it would leave the printed description
+  // unstyled. Clones into a DETACHED node first (not the live element) so
+  // .menu-link (the "← Back" breadcrumb button most .rule-card-style
+  // headers carry) can be stripped without touching the actual on-screen
+  // page — it's page navigation chrome, not part of the description, and
+  // would otherwise print as-is whenever history.length>1 happened to
+  // have made it visible at print time.
+  if (config.descriptionEl) {
+    const clone = config.descriptionEl.cloneNode(true);
+    clone.querySelectorAll('.menu-link').forEach(el => el.remove());
+    html += `<div class="print-description ${esc(config.descriptionEl.className)}">${clone.innerHTML}</div>`;
+  }
+
+  const givenRowsHTML = (config.givenTracks || []).map(t =>
+    `<div class="wb-track-row print-wave-row"><div class="wb-track-label">${esc(t.label)}</div><svg viewBox="${t.svgEl.getAttribute('viewBox')}" preserveAspectRatio="none">${t.svgEl.innerHTML}</svg></div>`
+  ).join('');
+
+  const st = config.solutionTrack;
+  const blankSvg = `<svg viewBox="0 0 ${wbSvgWidth(st.totalCols, colWidth)} ${wbSvgHeight()}" preserveAspectRatio="none">${wbGridSVG(st.totalCols, colWidth)}</svg>`;
+  html += `<div class="print-diagram-section">
+    <div class="wb-tracks-wrap">${givenRowsHTML}
+      <div class="wb-track-row print-wave-row"><div class="wb-track-label">${esc(st.label)}</div>${blankSvg}</div>
+    </div>
+  </div>`;
+
+  const solSvgId = 'printSolutionTrack';
+  html += `<div class="print-diagram-section print-solution">
+    <h2>Solution</h2>
+    <div class="wb-tracks-wrap">${givenRowsHTML}
+      <div class="wb-track-row print-wave-row"><div class="wb-track-label">${esc(st.label)}</div><svg id="${solSvgId}"></svg></div>
+    </div>
+  </div>`;
+
+  host.innerHTML = html;
+  const solSvg = document.getElementById(solSvgId);
+  if (solSvg) renderReadOnlyTrackSVG(solSvg, st.levels, { colWidth, className: st.className || 'wb-track-path wb-q-solution', startLevel: st.startLevel });
+}
+window.buildPrintDiagram = buildPrintDiagram;
+
+// Call this INSTEAD of a bare window.print() after buildPrintDiagram() —
+// on Android's Chromium-based mobile browsers (confirmed by Don across
+// Chrome AND Arc Search, both silently doing nothing — a genuine platform
+// gap, not a bug in the print content itself), window.print() has no
+// reliable effect at all; iOS Safari opens its native print/share sheet
+// fine. There's no JS-observable way to tell whether window.print()
+// actually did anything, so rather than fail silently on the platforms
+// where it doesn't, this always shows a short toast alongside it —
+// redundant/harmless where print DID open, essential where it silently
+// didn't (the student can still use the browser's OWN Print/Share menu
+// manually — the worksheet content is already built and sitting in the
+// DOM either way, @media print will pick it up regardless of how the
+// print dialog itself got opened).
+function wbTriggerPrint() {
+  window.print();
+  const toast = document.createElement('div');
+  toast.textContent = "Worksheet ready. If a Print dialog didn't just open, use your browser's own menu (Share → Print, or ⋮ → Print).";
+  toast.style.cssText = 'position:fixed;left:50%;bottom:1.2rem;transform:translateX(-50%);max-width:90vw;background:#1e293b;color:#fff;padding:.7rem 1.1rem;border-radius:8px;font-size:.8rem;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.3);';
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 6000);
+}
+window.wbTriggerPrint = wbTriggerPrint;
+
+</script>
+</head>
+
+<body>
+  <script>Shapes.use('flip-flops');</script>
+  <!-- Hidden defs: NOR/NAND gate symbols for the latch-type toggle below.
+       Copied from the master reference ../../../../assets/shapes/logic-gates.html
+       (the canonical copy is in assets/shapes) — see that file's header
+       comment for why it can't just be <use>'d cross-file under file://. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      
+      <!-- ══════════════════ NOR SR LATCH — iec ══════════════════ -->
+      
+
+      <!-- ══════════════════ NAND SR LATCH — IEC ══════════════════  -->
+      
+    </defs>  
+  </svg>
+
+  <header>
+    <h1>Digital Electronics</h1>
+    <p>SR Latch — Build the Q Output</p>
+  </header>
+
+  <div class="main-wrap">
+    <div class="card-top-bar">
+      <a class="back-link" href="./index.html">← All exercises</a>
+      <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle dark and light theme">
+        <span id="themeIcon">🌙</span> <span id="themeLabel">Dark Mode</span>
+      </button>
+    </div>
+
+    <div class="card rule-card">
+        <div>An unclocked <b>SR latch</b> follows one rule at every instant<span id="ruleGateNote"></span>:</div>
+        <div id="ruleRows"></div>
+        <div>Use the pieces below to draw Q, column by column, then hit <b>Check</b>.</div>
+        <div class="legend-row">
+          <span><span class="legend-swatch" style="background:var(--colour-input-a)"></span><span id="legendS">S</span></span>
+          <span><span class="legend-swatch" style="background:var(--colour-input-b)"></span><span id="legendR">R</span></span>
+          <span><span class="legend-swatch" style="background:var(--colour-output-z)"></span>Q (building)</span>
+        </div>
+      </div>
+
+      <div class="card gate-toggle-card">
+        <div class="gate-toggle-label">Choose the type of latch to build:</div>
+        <div class="gate-toggle" id="gateToggle">
+          <button type="button" class="gate-toggle-btn active" id="gateBtnNor" onclick="pickGateType('nor')" aria-pressed="true">
+            <svg viewBox="-10 -10 310 240"><use href="#nor-sr-latch-iec" /></svg>
+            <span>NOR Latch</span>
+          </button>
+          <button type="button" class="gate-toggle-btn" id="gateBtnNand" onclick="pickGateType('nand')" aria-pressed="false">
+            <svg viewBox="-10 -10 310 240"><use href="#nand-sr-latch-iec" /></svg>
+            <span>NAND Latch</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="wb-track-row">
+          <div class="wb-track-label" id="sTrackLabel">S</div>
+          <svg id="sTrack"></svg>
+        </div>
+        <div class="wb-track-row">
+          <div class="wb-track-label" id="rTrackLabel">R</div>
+          <svg id="rTrack"></svg>
+        </div>
+        <div class="wb-track-row">
+          <div class="wb-track-label">Q</div>
+          <svg id="qTrack"></svg>
+        </div>
+        <div class="wb-track-row" id="qbarRow">
+          <div class="wb-track-label"><span style="text-decoration:overline">Q</span></div>
+          <svg id="qbarTrack"></svg>
+        </div>
+
+        <div class="wb-palette" id="palette"></div>
+
+        <div class="result-banner" id="resultBanner"><span id="resultIcon"></span>&nbsp;<span id="resultText"></span></div>
+
+        <div class="btn-row">
+          <button class="btn btn-prev" id="undoBtn" onclick="doUndo()">← Undo</button>
+          <button class="btn btn-check" id="checkBtn" onclick="doCheck()" disabled>Check</button>
+          <button class="btn btn-secondary" id="restartBtn" onclick="doRestart()">↺ Retry</button>
+          <button class="btn btn-secondary" id="newBtn" onclick="doNewDiagram()">🎲 New Diagram</button>
+          <button class="btn btn-secondary" id="printBtn" onclick="printDiagramNow()">🖨 Print Worksheet</button>
+        </div>
+      </div>
+  </div>
+
+  <!-- Print Worksheet — direct child of <body> (NOT nested inside
+       .quiz-wrap), populated by waveform-builder.js's own
+       buildPrintDiagram() (see its header comment). Invisible on screen
+       (.print-only), shown only via the browser's Print / Save-as-PDF. -->
+  <div id="printWorksheet" class="print-only"></div>
+
+  <script>
+// Dark/light toggle for the college pages (the student pages use assets/theme-init.js instead).
+// The preference is the same localStorage key the hand-made college pages used.
+function toggleTheme() {
+  const isDark = document.body.classList.toggle('dark-theme');
+  localStorage.setItem('tafe-quiz-theme', isDark ? 'dark' : 'light');
+  updateThemeToggleUI(isDark);
+}
+
+function updateThemeToggleUI(isDark) {
+  const icon = document.getElementById('themeIcon');
+  const label = document.getElementById('themeLabel');
+  if (icon && label) {
+    icon.textContent = isDark ? '☀️' : '🌙';
+    label.textContent = isDark ? 'Light Mode' : 'Dark Mode';
+  }
+}
+
+(function initTheme() {
+  const isDark = localStorage.getItem('tafe-quiz-theme') === 'dark';
+  document.body.classList.toggle('dark-theme', isDark);
+  updateThemeToggleUI(isDark);
+})();
+
+</script>
+  <script>
+    const N = 20;
+    const PIECES = [
+      { type: 'flat', width: 1 }, { type: 'flat', width: 2 }, { type: 'flat', width: 3 },
+      { type: 'rise' }, { type: 'fall' },
+    ];
+
+    // ── SR-latch domain logic (page-local — see this file's own header
+    // comment for why this stays out of the shared waveform-builder.js) ──
+    // A NOR-based latch is active-HIGH: S/R idle at 0, asserted at 1. A
+    // NAND-based latch is the mirror image — active-LOW: S'/R' idle at 1,
+    // asserted at 0 — with Hold/Invalid swapped accordingly (Hold is
+    // 1,1 instead of 0,0; Invalid is 0,0 instead of 1,1). Both are
+    // expressed below purely in terms of "assert"/"idle" levels (1/0 for
+    // NOR, 0/1 for NAND) so the SAME generator/derivation code drives
+    // either gate type — only GATE_CONFIG's assert/idle values differ.
+    const GATE_CONFIG = {
+      nor: {
+        assert: 1, idle: 0, sLabel: 'S', rLabel: 'R', latchName: 'NOR',
+        rules: [
+          ['S = 1, R = 0', '<b>Set</b> — Q goes (or stays) HIGH'],
+          ['S = 0, R = 1', '<b>Reset</b> — Q goes (or stays) LOW'],
+          ['S = 0, R = 0', '<b>Hold</b> — Q stays exactly where it was'],
+          ['S = 1, R = 1', 'Invalid — never shown here'],
+        ],
+      },
+      nand: {
+        assert: 0, idle: 1, sLabel: "S'", rLabel: "R'", latchName: 'NAND',
+        rules: [
+          ["S' = 0, R' = 1", '<b>Set</b> — Q goes (or stays) HIGH'],
+          ["S' = 1, R' = 0", '<b>Reset</b> — Q goes (or stays) LOW'],
+          ["S' = 1, R' = 1", '<b>Hold</b> — Q stays exactly where it was'],
+          ["S' = 0, R' = 0", 'Invalid — never shown here'],
+        ],
+      },
+    };
+    let gateType = 'nor';
+
+    // A "de-assert" (S or R moving back to idle) never changes Q — it just
+    // returns to the Hold state. Only an "assert" can move Q, and only when
+    // it's the OPPOSITE of Q's current value (asserting S while Q is
+    // already 1, or R while Q is already 0, is a redundant re-assertion
+    // that leaves Q flat). Left fully random, a run can spend most of its
+    // length on exactly that kind of redundant re-assertion churn — S/R
+    // stay busy while Q barely moves. MIN_Q_TRANSITIONS + the 75%-biased
+    // pick below fix that: whenever there's a free choice of which signal
+    // asserts next (both currently idle), bias toward the one that
+    // actually flips Q, and retry the whole draw if Q still ends up close
+    // to flat despite that bias.
+    const MIN_Q_TRANSITIONS = 4;
+    function generateSRPair(n, assert, idle) {
+      const randInt = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
+      let best = null, bestTransitions = -1;
+      for (let attempt = 0; attempt < 30; attempt++) {
+        const S = new Array(n).fill(idle), R = new Array(n).fill(idle);
+        let sLevel = idle, rLevel = idle, qLevel = 0, qTransitions = 0;
+        let col = randInt(1, 3); // leading gap before the first change
+        while (col < n) {
+          // De-asserting is always safe; asserting is only safe while the
+          // OTHER signal is idle — this is what keeps S/R mutually
+          // exclusive by construction, one single-signal event at a time.
+          const canToggleS = sLevel === assert || rLevel === idle;
+          const canToggleR = rLevel === assert || sLevel === idle;
+          let pick;
+          if (canToggleS && canToggleR) {
+            const preferred = qLevel === 0 ? 'S' : 'R';
+            pick = Math.random() < 0.75 ? preferred : (preferred === 'S' ? 'R' : 'S');
+          } else {
+            pick = canToggleS ? 'S' : 'R';
+          }
+          if (pick === 'S') sLevel = sLevel === assert ? idle : assert; else rLevel = rLevel === assert ? idle : assert;
+          const sAsserted = sLevel === assert, rAsserted = rLevel === assert;
+          const newQ = sAsserted ? 1 : (rAsserted ? 0 : qLevel);
+          if (newQ !== qLevel) qTransitions++;
+          qLevel = newQ;
+          for (let i = col; i < n; i++) { S[i] = sLevel; R[i] = rLevel; }
+          col += randInt(1, 3); // gap until the next single-signal change — kept short so the diagram stays busy
+        }
+        if (qTransitions >= MIN_Q_TRANSITIONS) return { S, R };
+        if (qTransitions > bestTransitions) { best = { S, R }; bestTransitions = qTransitions; }
+      }
+      return best; // astronomically unlikely fallback — the busiest of the 30 attempts tried
+    }
+
+    function deriveQ(S, R, assert) {
+      const Q = [];
+      let prev = 0;
+      for (let i = 0; i < S.length; i++) {
+        const sAsserted = S[i] === assert, rAsserted = R[i] === assert;
+        let q;
+        if (sAsserted && !rAsserted) q = 1;
+        else if (rAsserted && !sAsserted) q = 0;
+        else q = prev; // both idle → hold (both asserted/invalid never generated)
+        Q.push(q);
+        prev = q;
+      }
+      return Q;
+    }
+
+    function renderRuleCard() {
+      const cfg = GATE_CONFIG[gateType];
+      document.getElementById('ruleGateNote').textContent = ` (built from two cross-coupled ${cfg.latchName} gates)`;
+      document.getElementById('ruleRows').innerHTML = cfg.rules.map(([cond, desc]) =>
+        `<div class="rule-row"><span class="rule-cond">${cond}</span><span>${desc}</span></div>`
+      ).join('');
+      document.getElementById('legendS').textContent = cfg.sLabel;
+      document.getElementById('legendR').textContent = cfg.rLabel;
+      document.getElementById('sTrackLabel').textContent = cfg.sLabel;
+      document.getElementById('rTrackLabel').textContent = cfg.rLabel;
+    }
+
+    function pickGateType(type) {
+      if (type === gateType) return;
+      gateType = type;
+      document.getElementById('gateBtnNor').classList.toggle('active', type === 'nor');
+      document.getElementById('gateBtnNand').classList.toggle('active', type === 'nand');
+      document.getElementById('gateBtnNor').setAttribute('aria-pressed', String(type === 'nor'));
+      document.getElementById('gateBtnNand').setAttribute('aria-pressed', String(type === 'nand'));
+      renderRuleCard();
+      doNewDiagram();
+    }
+
+    // ── page state ──
+    let S, R, correctQ, builder, checked, lastResult;
+
+    function doNewDiagram() {
+      const cfg = GATE_CONFIG[gateType];
+      ({ S, R } = generateSRPair(N, cfg.assert, cfg.idle));
+      correctQ = deriveQ(S, R, cfg.assert);
+      builder = { pieces: [] };
+      checked = false;
+      lastResult = null;
+      render();
+    }
+
+    function doRestart() {
+      builder = { pieces: [] };
+      checked = false;
+      lastResult = null;
+      render();
+    }
+
+    function doUndo() {
+      if (checked) return;
+      wbUndo(builder);
+      render();
+    }
+
+    function pickPiece(piece) {
+      if (checked) return;
+      wbPlace(builder, piece, N);
+      render();
+    }
+
+    function doCheck() {
+      if (checked) return;
+      if (wbCursor(builder).col !== N) return;
+      lastResult = wbCheck(builder, correctQ);
+      checked = true;
+      render();
+    }
+
+    function render() {
+      const progressCols = wbCursor(builder).col;
+      renderReadOnlyTrackSVG(document.getElementById('sTrack'), S, { className: 'wb-track-path wb-track-s', progressCols });
+      renderReadOnlyTrackSVG(document.getElementById('rTrack'), R, { className: 'wb-track-path wb-track-r', progressCols });
+      renderQTrackSVG(document.getElementById('qTrack'), builder, N, checked ? { results: lastResult.results, correctLevels: correctQ } : {});
+
+      // Q-bar is revealed once Check has been pressed — it's just Q flipped.
+      const qbarRow = document.getElementById('qbarRow');
+      qbarRow.classList.toggle('shown', checked);
+      if (checked) {
+        renderReadOnlyTrackSVG(document.getElementById('qbarTrack'), correctQ.map(v => 1 - v), { className: 'wb-q-path wb-col-correct' });
+      }
+
+      renderPiecePalette(document.getElementById('palette'), {
+        pieces: PIECES,
+        onPick: pickPiece,
+        isDisabled: (p) => checked || !wbCanPlace(builder, p, N),
+      });
+
+      const cursor = wbCursor(builder);
+      document.getElementById('checkBtn').disabled = checked || cursor.col !== N;
+      document.getElementById('undoBtn').disabled = checked || builder.pieces.length === 0;
+
+      const banner = document.getElementById('resultBanner');
+      if (checked) {
+        banner.className = 'result-banner ' + (lastResult.allCorrect ? 'correct' : 'wrong');
+        document.getElementById('resultIcon').textContent = lastResult.allCorrect ? '✓' : '✗';
+        document.getElementById('resultText').textContent = lastResult.allCorrect
+          ? `All ${lastResult.total} columns correct! Q-bar (below) is simply Q flipped.`
+          : `${lastResult.correctCount} of ${lastResult.total} columns correct — red columns are wrong.`;
+      } else {
+        banner.className = 'result-banner';
+      }
+    }
+
+    // Builds the print worksheet fresh (current gate type's S/R labels and
+    // rule text, current S/R diagram, current correct Q) right before
+    // opening the print dialog — see waveform-builder.js's own
+    // buildPrintDiagram() for what actually gets built.
+    function printDiagramNow() {
+      const cfg = GATE_CONFIG[gateType];
+      buildPrintDiagram({
+        descriptionEl: document.querySelector('.rule-card'),
+        givenTracks: [
+          { label: cfg.sLabel, svgEl: document.getElementById('sTrack') },
+          { label: cfg.rLabel, svgEl: document.getElementById('rTrack') },
+        ],
+        solutionTrack: { label: 'Q', levels: correctQ, totalCols: N, className: 'wb-q-path wb-col-correct' },
+      });
+      wbTriggerPrint();
+    }
+
+    renderRuleCard();
+
+    // ── "Answers" mode ── Before the student has placed anything, the Check button
+    // reads "Answers" and shows the finished solution (no student-entered values).
+    // Once they start building, it becomes the normal Check button and the Print
+    // Worksheet button is hidden (a printed blank worksheet is only useful before
+    // the puzzle is attempted). Retry / New Diagram return to the starting state.
+    let answersShown = false;
+    const __render = render;
+    render = function () { __render(); applyAnswersUI(); };
+    const __doCheck = doCheck;
+    doCheck = function () {
+      if (checked) return;
+      if (builder.pieces.length === 0) { showAnswers(); return; }
+      __doCheck();
+    };
+    const __doRestart = doRestart;
+    doRestart = function () { answersShown = false; __doRestart(); };
+    const __doNewDiagram = doNewDiagram;
+    doNewDiagram = function () { answersShown = false; __doNewDiagram(); };
+
+    function showAnswers() {
+      builder = { pieces: [] };
+      let lvl = 0, c = 0;
+      while (c < N) {
+        const x = correctQ[c];
+        if (x !== lvl) { wbPlace(builder, { type: x ? 'rise' : 'fall' }, N); lvl = x; c++; }
+        else {
+          let w = 1;
+          while (w < 3 && c + w < N && correctQ[c + w] === lvl) w++;
+          wbPlace(builder, { type: 'flat', width: w }, N); c += w;
+        }
+      }
+      answersShown = true;
+      lastResult = wbCheck(builder, correctQ);
+      checked = true;
+      render();
+    }
+
+    function applyAnswersUI() {
+      const atStart = builder.pieces.length === 0 && !checked;
+      const cb = document.getElementById('checkBtn');
+      cb.textContent = atStart ? 'Answers' : 'Check';
+      if (atStart) cb.disabled = false;
+      const pb = document.getElementById('printBtn');
+      if (pb) pb.style.display = (builder.pieces.length > 0 && !answersShown) ? 'none' : '';
+      if (answersShown) {
+        document.getElementById('resultBanner').className = 'result-banner correct';
+        document.getElementById('resultIcon').textContent = '👁';
+        document.getElementById('resultText').textContent = 'Answers shown — press Retry to have a go yourself, or New Diagram for a fresh puzzle.';
+      }
+    }
+
+    doNewDiagram();
+  </script>
+  <p class="site-copyright">&copy; 2026 Anderson Home Technology. All rights reserved.</p>
+</body>
+
+</html>
