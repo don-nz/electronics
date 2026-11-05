@@ -639,6 +639,7 @@
         <span><span class="legend-swatch" style="background:var(--colour-switch)"></span>CLK</span>
         <span><span class="legend-swatch" style="background:var(--colour-switch);opacity:.55"></span>Data in</span>
         <span><span class="legend-swatch" style="background:var(--colour-output-z)"></span><span id="legendOut">Q₀</span> (building)</span>
+        <span id="legendGivenWrap" style="display:none"><span class="legend-swatch" style="background:var(--colour-ui-correct)"></span><span id="legendGiven"></span> (already completed)</span>
       </div>
     </div>
 
@@ -689,6 +690,18 @@
         <div class="wb-track-row">
           <div class="wb-track-label">Data in</div>
           <svg id="dinTrack"></svg>
+        </div>
+        <div class="wb-track-row extra-row" id="givenRow1">
+          <div class="wb-track-label" id="givenLabel1"></div>
+          <svg id="givenTrack1"></svg>
+        </div>
+        <div class="wb-track-row extra-row" id="givenRow2">
+          <div class="wb-track-label" id="givenLabel2"></div>
+          <svg id="givenTrack2"></svg>
+        </div>
+        <div class="wb-track-row extra-row" id="givenRow3">
+          <div class="wb-track-label" id="givenLabel3"></div>
+          <svg id="givenTrack3"></svg>
         </div>
         <div class="wb-track-row">
           <div class="wb-track-label" id="qLabel">Q₀</div>
@@ -1009,6 +1022,13 @@
     }
 
     const stageTrack = (regs, b) => regs.map(q => q[b]);
+
+    // The stages the data passes through BEFORE the chosen one, nearest Data in first:
+    // a right shift enters at Q0 (Q0, Q1, … up to the chosen stage); a left shift enters at Q3 (Q3, Q2, …).
+    function upstreamStages() {
+      const right = CONFIG[configKey].dir === 'right';
+      return [0, 1, 2, 3].filter(b => right ? b < outSel : b > outSel).sort((a, b) => right ? a - b : b - a);
+    }
     const changes = (arr) => arr.filter((v, i) => i > 0 && v !== arr[i - 1]).length;
 
     function generateDiagram() {
@@ -1034,6 +1054,9 @@
       document.getElementById('ruleEdgeWord').textContent = cfg.edgeWord;
       document.getElementById('ruleStart').textContent = `Q₀Q₁Q₂Q₃ = ${start.join('')}`;
       ['ruleOut', 'ruleOut2', 'legendOut', 'qLabel'].forEach(id => document.getElementById(id).textContent = name);
+      const givenNames = upstreamStages().map(b => 'Q' + SUB[b]);
+      document.getElementById('legendGivenWrap').style.display = givenNames.length ? '' : 'none';
+      document.getElementById('legendGiven').textContent = givenNames.join(', ');
       const first = cfg.dir === 'right' ? 'Q₀' : 'Q₃', last = cfg.dir === 'right' ? 'Q₃' : 'Q₀';
       const rules = [
         ['Active edge', `${first} takes <b>Data in</b>; each other stage takes what its neighbour held just before the edge; ${last}'s old value is lost`],
@@ -1153,14 +1176,23 @@
       renderReadOnlyTrackSVG(document.getElementById('dinTrack'), DIN, { className: 'wb-track-path wb-track-d' });
       renderQTrackSVG(document.getElementById('qTrack'), builder, N, checked ? { results: lastResult.results, correctLevels: correctQ } : {});
 
-      // After Check, reveal the other two outputs so the whole count reads
-      // straight down any column.
-      const others = [0, 1, 2, 3].filter(b => b !== outSel);
-      others.forEach((b, i) => {
-        const row = document.getElementById('extraRow' + (i + 1));
-        row.classList.toggle('shown', checked);
-        document.getElementById('extraLabel' + (i + 1)).textContent = 'Q' + SUB[b];
-        if (checked) renderReadOnlyTrackSVG(document.getElementById('extraTrack' + (i + 1)), stageTrack(regs, b), { className: 'wb-track-path wb-track-q' });
+      // Stages before the chosen one (in the data's path) are shown already completed, so the shifting
+      // can be read down any column; the stages after it appear once the answer is checked.
+      const upstream = upstreamStages();
+      [1, 2, 3].forEach(i => {
+        const b = upstream[i - 1], row = document.getElementById('givenRow' + i);
+        row.classList.toggle('shown', b !== undefined);
+        if (b === undefined) return;
+        document.getElementById('givenLabel' + i).textContent = 'Q' + SUB[b];
+        renderReadOnlyTrackSVG(document.getElementById('givenTrack' + i), stageTrack(regs, b), { className: 'wb-track-path wb-track-q' });
+      });
+      const others = [0, 1, 2, 3].filter(b => b !== outSel && !upstream.includes(b));
+      [1, 2, 3].forEach(i => {
+        const b = others[i - 1], row = document.getElementById('extraRow' + i);
+        row.classList.toggle('shown', checked && b !== undefined);
+        if (b === undefined) return;
+        document.getElementById('extraLabel' + i).textContent = 'Q' + SUB[b];
+        if (checked) renderReadOnlyTrackSVG(document.getElementById('extraTrack' + i), stageTrack(regs, b), { className: 'wb-track-path wb-track-q' });
       });
 
       renderPiecePalette(document.getElementById('palette'), {
@@ -1178,7 +1210,7 @@
         banner.className = 'result-banner ' + (lastResult.allCorrect ? 'correct' : 'wrong');
         document.getElementById('resultIcon').textContent = lastResult.allCorrect ? '✓' : '✗';
         document.getElementById('resultText').textContent = lastResult.allCorrect
-          ? `All ${lastResult.total} columns correct! The other three outputs are shown below — read any column straight down to see the register's contents.`
+          ? `All ${lastResult.total} columns correct!` + (others.length ? ` The ${others.length === 1 ? 'other output is' : 'other outputs are'} shown below — read any column straight down to see the register's contents.` : ' Read any column straight down to see the register\'s contents.')
           : `${lastResult.correctCount} of ${lastResult.total} columns correct — red columns are wrong.`;
       } else {
         banner.className = 'result-banner';
@@ -1216,6 +1248,8 @@
       const givenTracks = [
         { label: 'CLK', svgEl: document.getElementById('clkTrack') },
           { label: 'Data in', svgEl: document.getElementById('dinTrack') },
+        // the stages before the one being built are completed above it, so they are printed as given too
+        ...upstreamStages().map((b, i) => ({ label: 'Q' + SUB[b], svgEl: document.getElementById('givenTrack' + (i + 1)) })),
       ];
       const givenRowsHTML = givenTracks.map(t =>
         `<div class="wb-track-row"><div class="wb-track-label">${esc(t.label)}</div><svg viewBox="${t.svgEl.getAttribute('viewBox')}" preserveAspectRatio="none">${t.svgEl.innerHTML}</svg></div>`

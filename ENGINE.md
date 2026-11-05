@@ -62,7 +62,7 @@ Call it after `QUESTIONS` is defined. It installs `RENDER_EXTRA`, `SUMMARY_CIRCU
 | `python3 tools/shots.py …` | Capture and diff screenshots (seeded `Math.random`, `--quick`, `--crop`). Stored in `~/.cache/tafe-shots/<label>`. Use before/after any shared-asset change. |
 | `python3 tools/build_shapes.py` | Regenerate `shapes.js`. |
 | `python3 tools/migrate_shapes.py` | Find pages holding pasted copies of library shapes (`--list/--dry/--apply/--adopt`). |
-| `python3 tools/build_college.py PAGE…` | Make self-contained single-file copies (assets inlined, shapes trimmed) into `build/college/`. |
+| `python3 tools/build_college.py PAGE…` | Make self-contained teacher copies into `build/college/`. Waveform-builder pages are converted to the NSW TAFE look (`tools/college/theme.css`) from the student page itself, so behaviour can't drift; other pages are only bundled (assets inlined, site styling). Review, then copy across yourself. |
 
 ## Conventions
 
