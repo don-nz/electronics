@@ -147,7 +147,7 @@
       `<path id="o-${id}" d="${SWEEPS[id]}" stroke-width="4.5" style="display:none" /><circle id="d-${id}" r="7" stroke-width="2.5" style="display:none; stroke: var(--colour-panel)" />`).join('') + '</g>';
     const ARRIVE_PAUSE = 150;                                // the dot has gone and the line is complete for a moment before the badge pops up
     function hop(id, val, then) {
-      const o = document.getElementById('o-' + id), dur = Math.max(300, o.getTotalLength() * (speed === 'fast' ? 1.2 : 2.4));
+      const o = document.getElementById('o-' + id), dur = Math.max(360, o.getTotalLength() * (speed === 'fast' ? 1.44 : 2.88));   // ms per unit of wire (normal / fast)
       const now = performance.now(), tok = ++seq;
       flights[id] = { val, t0: now, t1: now + dur, tok };
       sched(dur + ARRIVE_PAUSE, () => { if (flights[id] && flights[id].tok === tok) delete flights[id]; if (then) then(); });
@@ -246,8 +246,13 @@
     }
     // ── pin badges: a small 0 / 1 that pops up at a pin as the signal reaches it, holds for a beat, then goes ──
     const badge = (id, x, y) => `<g id="b-${id}" visibility="hidden" transform="translate(${x},${y})"><g class="pin-inner"><rect x="-11" y="-11" width="22" height="22" rx="5" style="stroke: var(--colour-panel)" stroke-width="2" /><text x="0" y="6" text-anchor="middle" font-size="16" font-weight="bold" style="fill: var(--colour-panel)"></text></g></g>`;
+    // a pin's last known level: a badge only flashes when the level there CHANGES (the 74193's own output digits are always shown)
+    let pinLv = {};
+    const setPins = (levels) => { pinLv = Object.assign({}, levels); };
     function flashPin(id, val, ms) {
       const g = document.getElementById('b-' + id); if (!g) return;
+      if (pinLv[id] === val) return;
+      pinLv[id] = val;
       const inner = g.firstChild;
       inner.firstChild.style.fill = col(val); inner.lastChild.textContent = val;
       g.setAttribute('visibility', 'visible');
@@ -256,6 +261,7 @@
       g._hide = sched(ms, () => g.setAttribute('visibility', 'hidden'));
     }
     const hideBadges = () => document.querySelectorAll('#simSvg [id^="b-"]').forEach(g => g.setAttribute('visibility', 'hidden'));
+    const decoderPins = { a1: 0, b1: 0, y0: 0, y1: 1, y2: 1, y3: 1 };   // the decoder's pins at count 0
     const decoderBadges = () => badge('a1', 222, 70) + badge('b1', 222, 100) + [0, 1, 2, 3].map(i => badge('y' + i, 376, 60 + 30 * i)).join('');
     // The count changed: QA and QB travel to the decoder's inputs, the decoder picks its one LOW output, then the LED lights.
     // (lv holds the levels as drawn; `then` runs once the LED has changed.)
@@ -270,14 +276,6 @@
         next => { if (then) then(); },
       ]);
     }
-    const rippleStatus = () => ({
-      counted0: () => `The 74193 has counted: it now holds <b>${cnt}</b> (<b>${bin(cnt)}</b>).`,
-      qTravel: () => `The 74193 has counted and now holds <b>${cnt}</b> (<b>${bin(cnt)}</b>). Its outputs <b>QA = ${bit(cnt, 0)}</b> and <b>QB = ${bit(cnt, 1)}</b> travel along their wires to the decoder's inputs…`,
-      yTravel: () => `The decoder's outputs travel along their wires to the LEDs — the one LOW output is the one that will light its LED…`,
-      qOut: () => `The counter's <b>QA = ${lv.qa}</b> and <b>QB = ${lv.qb}</b> travel to the decoder's inputs <b>1A</b> and <b>1B</b>.`,
-      yOut: () => `The decoder turns the 2-bit input <b>${lv.qb}${lv.qa}</b> into <b>one LOW output</b>: <b>1Y<sub>${cnt & 3}</sub> = 0</b>, the other three are 1 (the outputs are active LOW). Next, the LED.`,
-    }[phase] || (() => null))();
-
     function renderCommon() {
       for (let b = 0; b < 4; b++) {
         const v = bit(cnt, b), d = document.getElementById('dig' + b);
@@ -316,9 +314,12 @@
       const a = document.getElementById('swAuto'); if (a) a.setAttribute('aria-pressed', String(auto));
       render();
     }
+    // While the signals are travelling the text stays still (it would change too fast to read); the explanation of the
+    // settled state appears when the click has finished.
     function renderStatus() {
+      const settling = busy();
       document.getElementById('simStatus').innerHTML =
-        `<div>Count = <b>${cnt}</b> (<b>${bin(cnt)}</b>)${busy() ? ' · <i>settling…</i>' : ''}</div><div style="margin-top:.35rem">${statusBody()}</div>`;
+        `<div>Count = <b>${cnt}</b> (<b>${bin(cnt)}</b>)${settling ? ' · <i>settling…</i>' : ''}</div><div style="margin-top:.35rem">${settling ? '<i>Watch the signals travel through the circuit…</i>' : statusBody()}</div>`;
     }
     // what the decoder and LEDs are doing at the current count
     const decodeNote = () => `The decoder only sees <b>QA</b> and <b>QB</b> (the count's two lowest bits, <b>${(cnt & 3).toString(2).padStart(2, '0')}</b>), so output <b>1Y<sub>${cnt & 3}</sub></b> is LOW and <b>${ledName(cnt & 3)}</b> is lit.`;
@@ -328,6 +329,7 @@
     // arrives the 0 or 1 flashes in a small badge at the pin and holds for a beat before the next part of the circuit reacts.
     let Q = 1, Qb = 0;                           // latch outputs (power-up: count 0, so 1Y0 is LOW and has set the latch)
     let sbarIn = 0, rbarIn = 1, sbarSent = 0, rbarSent = 1;
+    let flipNote = '';                           // 'set' / 'reset' if the latch was set or reset during this click
     const extraBusy = () => false;
     const lv = { clk: 0, cu: 1, cd: 1, qa: 0, qb: 0, y: [0, 1, 1, 1], led: [0, 1, 1, 1], q: 1, qbar: 0 };   // the levels as DRAWN (stage by stage)
     yShown = (i) => lv.led[i];
@@ -373,6 +375,7 @@
     function pulse() {
       if (busy()) return false;
       const u = stepMs(), ms = u * 0.9, gate = SPEEDS[speed].gate, d0 = dirOf();
+      flipNote = '';
       const clkHop = (v, then) => hopAll([['clkA', v], ['clkB', v]], then);
       let c = 1, d = 1;
       clk = 1; phase = 'clkRise';
@@ -411,8 +414,8 @@
     // a level has travelled along its wire and arrives at a latch input: that gate's two inputs flash, and the latch reacts, one gate at a time
     function arrive(id, val) {
       const u = stepMs(), ms = u * 0.9;
-      if (id === 's') { sbarIn = val; phase = val === 0 ? 'sArrive' : 'sRelArrive'; flashPin('p10', val, ms); flashPin('p9', Qb, ms); topGate(); }
-      else { rbarIn = val; phase = val === 0 ? 'rArrive' : 'rRelArrive'; flashPin('p5', val, ms); flashPin('p4', Q, ms); botGate(); }
+      if (id === 's') { sbarIn = val; if (val === 0) flipNote = 'set'; phase = val === 0 ? 'sArrive' : 'sRelArrive'; flashPin('p10', val, ms); flashPin('p9', Qb, ms); topGate(); }
+      else { rbarIn = val; if (val === 0) flipNote = 'reset'; phase = val === 0 ? 'rArrive' : 'rRelArrive'; flashPin('p5', val, ms); flashPin('p4', Q, ms); botGate(); }
     }
     // the upper latch NAND: Q = NAND(S-bar, Q-bar). If it changes, Q flashes at its output, travels to the enable NAND (pin 13) and the lower latch NAND (pin 4).
     function topGate() {
@@ -445,44 +448,21 @@
       now = now || performance.now();
       applyNets(netLevel); renderSweeps(now); renderCommon(); renderStatus();
     }
+    // only the settled states are shown (the text would change too fast to read while the signals travel)
     function statusBody() {
-      const r = rippleStatus(); if (r) return r;
-      const d = dirOf(), word = d === 'up' ? 'UP' : d === 'down' ? 'DOWN' : '?';
-      switch (phase) {
-        case 'clkRise': return 'The clock goes HIGH: the <b>1 travels along the clock wire</b> to the two enable NAND gates…';
-        case 'press': return `The 1 has arrived. All four enable-gate inputs show their level: the clock (pins 12 and 1) is <b>1</b>, pin 13 is <b>Q = ${Q}</b> and pin 2 is <b>${ov('Q')} = ${Qb}</b>.`;
-        case 'nand1': return `A NAND outputs <b>0 only when both its inputs are 1</b>. The latch has Q = ${Q}, so ${Q ? 'the <b>upper NAND</b> (pins 11, 12, 13) is enabled and its output <b>CU goes LOW</b>; the lower NAND is disabled, so CD stays HIGH.' : 'the <b>lower NAND</b> (pins 1, 2, 3) is enabled (its enable, ' + ov('Q') + ', is 1) and its output <b>CD goes LOW</b>; the upper NAND is disabled, so CU stays HIGH.'}`;
-        case 'outTravel': return 'The NAND outputs travel along their wires to the 74193\'s <b>CU</b> and <b>CD</b> inputs…';
-        case 'pins1': return `Those levels have reached <b>CU</b> (${lv.cu}) and <b>CD</b> (${lv.cd}). They have only fallen or stayed HIGH — there is no <b>rising</b> edge yet, so nothing counts.`;
-        case 'clkFall': return 'The clock goes LOW: a <b>0 travels along the clock wire</b> to the two enable NAND gates…';
-        case 'release': return 'The 0 has arrived: the clock inputs (pins 12 and 1) are both <b>0</b>.';
-        case 'nand2': return `With a 0 on an input a NAND outputs <b>1</b>: pin 11 is <b>${nandCU()}</b> and pin 3 is <b>${nandCD()}</b>${d === 'up' ? ' — the CU gate has just <b>risen</b> from 0 to 1.' : d === 'down' ? ' — the CD gate has just <b>risen</b> from 0 to 1.' : '.'}`;
-        case 'releaseUp': return 'The <b>rising edge</b> has reached <b>CU</b>, so the counter counts <b>up</b>: after its propagation delay the count goes up by 1.';
-        case 'releaseDown': return 'The <b>rising edge</b> has reached <b>CD</b>, so the counter counts <b>down</b>: after its propagation delay the count goes down by 1.';
-        case 'counted': return decodeNote() + ((cnt & 3) === 0 || (cnt & 3) === 3 ? ' Watch what the decoder output does next…' : '');
-        case 'sSent': return `The count is at 0 (<b>1Y<sub>0</sub> is LOW</b>). That LOW now <b>travels along the wire</b> from 1Y<sub>0</sub> to the latch's <b>${ov('S')}</b> (set) input, pin 10.`;
-        case 'rSent': return `The count is at 3 (<b>1Y<sub>3</sub> is LOW</b>). That LOW now <b>travels along the wire</b> from 1Y<sub>3</sub> to the latch's <b>${ov('R')}</b> (reset) input, pin 5.`;
-        case 'sRel': case 'rRel': return `The count has moved off ${phase === 'sRel' ? '0' : '3'}, so ${phase === 'sRel' ? '1Y<sub>0</sub>' : '1Y<sub>3</sub>'} is HIGH again. That HIGH travels to the latch — which simply <b>holds</b> its state (both inputs HIGH).`;
-        case 'sArrive': return `The LOW has reached <b>${ov('S')}</b> (pin 10). The upper latch NAND shows its two inputs, <b>${ov('S')} = ${sbarIn}</b> and ${ov('Q')} = ${Qb}: a NAND with a 0 on an input outputs <b>1</b>, so <b>Q</b> is about to go HIGH…`;
-        case 'rArrive': return `The LOW has reached <b>${ov('R')}</b> (pin 5). The lower latch NAND shows its two inputs, <b>${ov('R')} = ${rbarIn}</b> and Q = ${Q}: a NAND with a 0 on an input outputs <b>1</b>, so <b>${ov('Q')}</b> is about to go HIGH…`;
-        case 'qHigh': return 'Q has gone <b>HIGH</b> (pin 8). Its level now travels to two places: the <b>upper enable NAND</b> (pin 13) and the <b>lower latch NAND</b> (pin 4).';
-        case 'qLow': return 'Q has gone <b>LOW</b> (pin 8). Its level now travels to two places: the <b>upper enable NAND</b> (pin 13), which it disables, and the <b>lower latch NAND</b> (pin 4).';
-        case 'qOutTravel': return `Q (${Q}) travels along its wires to pin 13 and pin 4…`;
-        case 'qArrive': return `Q (${Q}) has arrived at the upper enable NAND (pin 13) and the lower latch NAND (pin 4). The lower latch gate now works out its output…`;
-        case 'qbHigh': return ov('Q') + ' has gone <b>HIGH</b> (pin 6). Its level now travels to the <b>lower enable NAND</b> (pin 2) — enabling the CD gate, so the counter will count <b>DOWN</b> — and to the <b>upper latch NAND</b> (pin 9).';
-        case 'qbLow': return ov('Q') + ' has gone <b>LOW</b> (pin 6). Its level now travels to the <b>lower enable NAND</b> (pin 2), which disables the CD gate, and to the <b>upper latch NAND</b> (pin 9). With Q HIGH the counter will count <b>UP</b>.';
-        case 'qbOutTravel': return ov('Q') + ` (${Qb}) travels along its wires to pin 2 and pin 9…`;
-        case 'qbArrive': return ov('Q') + ` (${Qb}) has arrived at the lower enable NAND (pin 2) and the upper latch NAND (pin 9). The latch is now steady.`;
-        case 'sRelArrive': case 'rRelArrive': return 'The HIGH has arrived. Both latch inputs are HIGH, so the latch <b>holds</b> its state.';
-        case 'none': return 'The latch has neither output enabled, so the count holds.';
-      }
-      return `The latch is holding <b>Q = ${Q}</b>, ${ov('Q')} = ${Qb}, so the counter is counting <b>${word}</b>. Click <b>CLK</b> (or <b>AUTO CLK</b>) — the lit LED walks from <b>LED-3</b> to <b>LED-0</b> and then back again.`;
+      const word = dirOf() === 'up' ? 'UP' : dirOf() === 'down' ? 'DOWN' : '?';
+      if (phase === 'idle') return `The latch is holding <b>Q = ${Q}</b>, ${ov('Q')} = ${Qb}, so the counter is counting <b>${word}</b>. Click <b>CLK</b> (or <b>AUTO CLK</b>) — the lit LED walks from <b>LED-3</b> to <b>LED-0</b> and then back again.`;
+      if (phase === 'none') return 'The latch has neither output enabled, so the count holds.';
+      return decodeNote() + ' ' + (flipNote === 'set' ? `The count reached 0, so 1Y<sub>0</sub> went LOW and <b>set</b> the latch (${ov('S')} = 0): <b>Q = 1</b>, so the next pulse counts <b>UP</b>.`
+        : flipNote === 'reset' ? `The count reached 3, so 1Y<sub>3</sub> went LOW and <b>reset</b> the latch (${ov('R')} = 0): <b>${ov('Q')} = 1</b>, so the next pulse counts <b>DOWN</b>.`
+        : `The latch is holding <b>Q = ${Q}</b>, ${ov('Q')} = ${Qb}, so the next pulse counts <b>${word}</b>.`);
     }
     function initState() {
       events.forEach(e => e.dead = true); events = [];
       cnt = 0; clk = 0; pendingCnt = null; flights = {}; phase = 'idle';
-      Q = 1; Qb = 0; sbarIn = 0; rbarIn = 1; sbarSent = 0; rbarSent = 1;
+      Q = 1; Qb = 0; sbarIn = 0; rbarIn = 1; sbarSent = 0; rbarSent = 1; flipNote = '';
       Object.assign(lv, { clk: 0, cu: 1, cd: 1, qa: 0, qb: 0, y: [0, 1, 1, 1], led: [0, 1, 1, 1], q: 1, qbar: 0 });
+      setPins(Object.assign({ g13: 1, g12: 0, g1: 0, g2: 0, o11: 1, o3: 1, cu: 1, cd: 1, p10: 0, p9: 0, p4: 1, p5: 1, p8: 1, p6: 0 }, decoderPins));
       hideBadges();
     }
     function resetSim() { initState(); render(); }

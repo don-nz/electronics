@@ -145,7 +145,7 @@
       `<path id="o-${id}" d="${SWEEPS[id]}" stroke-width="4.5" style="display:none" /><circle id="d-${id}" r="7" stroke-width="2.5" style="display:none; stroke: var(--colour-panel)" />`).join('') + '</g>';
     const ARRIVE_PAUSE = 150;                                // the dot has gone and the line is complete for a moment before the badge pops up
     function hop(id, val, then) {
-      const o = document.getElementById('o-' + id), dur = Math.max(300, o.getTotalLength() * (speed === 'fast' ? 1.2 : 2.4));
+      const o = document.getElementById('o-' + id), dur = Math.max(360, o.getTotalLength() * (speed === 'fast' ? 1.44 : 2.88));   // ms per unit of wire (normal / fast)
       const now = performance.now(), tok = ++seq;
       flights[id] = { val, t0: now, t1: now + dur, tok };
       sched(dur + ARRIVE_PAUSE, () => { if (flights[id] && flights[id].tok === tok) delete flights[id]; if (then) then(); });
@@ -244,8 +244,13 @@
     }
     // ── pin badges: a small 0 / 1 that pops up at a pin as the signal reaches it, holds for a beat, then goes ──
     const badge = (id, x, y) => `<g id="b-${id}" visibility="hidden" transform="translate(${x},${y})"><g class="pin-inner"><rect x="-11" y="-11" width="22" height="22" rx="5" style="stroke: var(--colour-panel)" stroke-width="2" /><text x="0" y="6" text-anchor="middle" font-size="16" font-weight="bold" style="fill: var(--colour-panel)"></text></g></g>`;
+    // a pin's last known level: a badge only flashes when the level there CHANGES (the 74193's own output digits are always shown)
+    let pinLv = {};
+    const setPins = (levels) => { pinLv = Object.assign({}, levels); };
     function flashPin(id, val, ms) {
       const g = document.getElementById('b-' + id); if (!g) return;
+      if (pinLv[id] === val) return;
+      pinLv[id] = val;
       const inner = g.firstChild;
       inner.firstChild.style.fill = col(val); inner.lastChild.textContent = val;
       g.setAttribute('visibility', 'visible');
@@ -254,6 +259,7 @@
       g._hide = sched(ms, () => g.setAttribute('visibility', 'hidden'));
     }
     const hideBadges = () => document.querySelectorAll('#simSvg [id^="b-"]').forEach(g => g.setAttribute('visibility', 'hidden'));
+    const decoderPins = { a1: 0, b1: 0, y0: 0, y1: 1, y2: 1, y3: 1 };   // the decoder's pins at count 0
     const decoderBadges = () => badge('a1', 222, 70) + badge('b1', 222, 100) + [0, 1, 2, 3].map(i => badge('y' + i, 376, 60 + 30 * i)).join('');
     // The count changed: QA and QB travel to the decoder's inputs, the decoder picks its one LOW output, then the LED lights.
     // (lv holds the levels as drawn; `then` runs once the LED has changed.)
@@ -268,14 +274,6 @@
         next => { if (then) then(); },
       ]);
     }
-    const rippleStatus = () => ({
-      counted0: () => `The 74193 has counted: it now holds <b>${cnt}</b> (<b>${bin(cnt)}</b>).`,
-      qTravel: () => `The 74193 has counted and now holds <b>${cnt}</b> (<b>${bin(cnt)}</b>). Its outputs <b>QA = ${bit(cnt, 0)}</b> and <b>QB = ${bit(cnt, 1)}</b> travel along their wires to the decoder's inputs…`,
-      yTravel: () => `The decoder's outputs travel along their wires to the LEDs — the one LOW output is the one that will light its LED…`,
-      qOut: () => `The counter's <b>QA = ${lv.qa}</b> and <b>QB = ${lv.qb}</b> travel to the decoder's inputs <b>1A</b> and <b>1B</b>.`,
-      yOut: () => `The decoder turns the 2-bit input <b>${lv.qb}${lv.qa}</b> into <b>one LOW output</b>: <b>1Y<sub>${cnt & 3}</sub> = 0</b>, the other three are 1 (the outputs are active LOW). Next, the LED.`,
-    }[phase] || (() => null))();
-
     function renderCommon() {
       for (let b = 0; b < 4; b++) {
         const v = bit(cnt, b), d = document.getElementById('dig' + b);
@@ -314,9 +312,12 @@
       const a = document.getElementById('swAuto'); if (a) a.setAttribute('aria-pressed', String(auto));
       render();
     }
+    // While the signals are travelling the text stays still (it would change too fast to read); the explanation of the
+    // settled state appears when the click has finished.
     function renderStatus() {
+      const settling = busy();
       document.getElementById('simStatus').innerHTML =
-        `<div>Count = <b>${cnt}</b> (<b>${bin(cnt)}</b>)${busy() ? ' · <i>settling…</i>' : ''}</div><div style="margin-top:.35rem">${statusBody()}</div>`;
+        `<div>Count = <b>${cnt}</b> (<b>${bin(cnt)}</b>)${settling ? ' · <i>settling…</i>' : ''}</div><div style="margin-top:.35rem">${settling ? '<i>Watch the signals travel through the circuit…</i>' : statusBody()}</div>`;
     }
     // what the decoder and LEDs are doing at the current count
     const decodeNote = () => `The decoder only sees <b>QA</b> and <b>QB</b> (the count's two lowest bits, <b>${(cnt & 3).toString(2).padStart(2, '0')}</b>), so output <b>1Y<sub>${cnt & 3}</sub></b> is LOW and <b>${ledName(cnt & 3)}</b> is lit.`;
@@ -361,18 +362,15 @@
       now = now || performance.now();
       applyNets(netLevel); renderSweeps(now); renderCommon(); renderStatus();
     }
+    // only the settled states are shown (the text would change too fast to read while the signals travel)
     function statusBody() {
-      const r = rippleStatus(); if (r) return r;
-      switch (phase) {
-        case 'cuTravel': return 'The clock goes HIGH: the <b>1 travels along the wire</b> to the counter\'s <b>CU</b> input…';
-        case 'clocked': return 'The 1 has arrived at <b>CU</b> (flashing at the pin): a <b>rising edge</b>, so after a short <b>propagation delay</b> the 74193 adds 1 (the blinking digits are about to change). CD is tied HIGH, so it can never count down.';
-        case 'counted': return decodeNote() + (cnt > 3 ? ' <b>QC</b> and <b>QD</b> are not connected to anything, so the counter really is counting on up to 15 — the LEDs just repeat every 4 counts.' : '');
-      }
+      if (phase === 'counted') return decodeNote() + (cnt > 3 ? ' <b>QC</b> and <b>QD</b> are not connected to anything, so the counter really is counting on up to 15 — the LEDs just repeat every 4 counts.' : '');
       return 'Click <b>CLK</b> (or <b>AUTO CLK</b>) to send a clock pulse. Each rising edge on <b>CU</b> adds 1, and the lit LED moves along: <b>LED-3</b>, <b>LED-2</b>, <b>LED-1</b>, <b>LED-0</b>, then back to <b>LED-3</b>.';
     }
     function initState() {
       events.forEach(e => e.dead = true); events = []; cnt = 0; clk = 0; pendingCnt = null; flights = {}; phase = 'idle';
       Object.assign(lv, { clk: 0, qa: 0, qb: 0, y: [0, 1, 1, 1], led: [0, 1, 1, 1] });
+      setPins(Object.assign({ cu: 0 }, decoderPins));
       hideBadges();
     }
     function resetSim() { initState(); render(); }

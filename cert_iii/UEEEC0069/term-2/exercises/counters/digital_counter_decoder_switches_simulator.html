@@ -150,7 +150,7 @@
       `<path id="o-${id}" d="${SWEEPS[id]}" stroke-width="4.5" style="display:none" /><circle id="d-${id}" r="7" stroke-width="2.5" style="display:none; stroke: var(--colour-panel)" />`).join('') + '</g>';
     const ARRIVE_PAUSE = 150;                                // the dot has gone and the line is complete for a moment before the badge pops up
     function hop(id, val, then) {
-      const o = document.getElementById('o-' + id), dur = Math.max(300, o.getTotalLength() * (speed === 'fast' ? 1.2 : 2.4));
+      const o = document.getElementById('o-' + id), dur = Math.max(360, o.getTotalLength() * (speed === 'fast' ? 1.44 : 2.88));   // ms per unit of wire (normal / fast)
       const now = performance.now(), tok = ++seq;
       flights[id] = { val, t0: now, t1: now + dur, tok };
       sched(dur + ARRIVE_PAUSE, () => { if (flights[id] && flights[id].tok === tok) delete flights[id]; if (then) then(); });
@@ -249,8 +249,13 @@
     }
     // ── pin badges: a small 0 / 1 that pops up at a pin as the signal reaches it, holds for a beat, then goes ──
     const badge = (id, x, y) => `<g id="b-${id}" visibility="hidden" transform="translate(${x},${y})"><g class="pin-inner"><rect x="-11" y="-11" width="22" height="22" rx="5" style="stroke: var(--colour-panel)" stroke-width="2" /><text x="0" y="6" text-anchor="middle" font-size="16" font-weight="bold" style="fill: var(--colour-panel)"></text></g></g>`;
+    // a pin's last known level: a badge only flashes when the level there CHANGES (the 74193's own output digits are always shown)
+    let pinLv = {};
+    const setPins = (levels) => { pinLv = Object.assign({}, levels); };
     function flashPin(id, val, ms) {
       const g = document.getElementById('b-' + id); if (!g) return;
+      if (pinLv[id] === val) return;
+      pinLv[id] = val;
       const inner = g.firstChild;
       inner.firstChild.style.fill = col(val); inner.lastChild.textContent = val;
       g.setAttribute('visibility', 'visible');
@@ -259,6 +264,7 @@
       g._hide = sched(ms, () => g.setAttribute('visibility', 'hidden'));
     }
     const hideBadges = () => document.querySelectorAll('#simSvg [id^="b-"]').forEach(g => g.setAttribute('visibility', 'hidden'));
+    const decoderPins = { a1: 0, b1: 0, y0: 0, y1: 1, y2: 1, y3: 1 };   // the decoder's pins at count 0
     const decoderBadges = () => badge('a1', 222, 70) + badge('b1', 222, 100) + [0, 1, 2, 3].map(i => badge('y' + i, 376, 60 + 30 * i)).join('');
     // The count changed: QA and QB travel to the decoder's inputs, the decoder picks its one LOW output, then the LED lights.
     // (lv holds the levels as drawn; `then` runs once the LED has changed.)
@@ -273,14 +279,6 @@
         next => { if (then) then(); },
       ]);
     }
-    const rippleStatus = () => ({
-      counted0: () => `The 74193 has counted: it now holds <b>${cnt}</b> (<b>${bin(cnt)}</b>).`,
-      qTravel: () => `The 74193 has counted and now holds <b>${cnt}</b> (<b>${bin(cnt)}</b>). Its outputs <b>QA = ${bit(cnt, 0)}</b> and <b>QB = ${bit(cnt, 1)}</b> travel along their wires to the decoder's inputs…`,
-      yTravel: () => `The decoder's outputs travel along their wires to the LEDs — the one LOW output is the one that will light its LED…`,
-      qOut: () => `The counter's <b>QA = ${lv.qa}</b> and <b>QB = ${lv.qb}</b> travel to the decoder's inputs <b>1A</b> and <b>1B</b>.`,
-      yOut: () => `The decoder turns the 2-bit input <b>${lv.qb}${lv.qa}</b> into <b>one LOW output</b>: <b>1Y<sub>${cnt & 3}</sub> = 0</b>, the other three are 1 (the outputs are active LOW). Next, the LED.`,
-    }[phase] || (() => null))();
-
     function renderCommon() {
       for (let b = 0; b < 4; b++) {
         const v = bit(cnt, b), d = document.getElementById('dig' + b);
@@ -319,9 +317,12 @@
       const a = document.getElementById('swAuto'); if (a) a.setAttribute('aria-pressed', String(auto));
       render();
     }
+    // While the signals are travelling the text stays still (it would change too fast to read); the explanation of the
+    // settled state appears when the click has finished.
     function renderStatus() {
+      const settling = busy();
       document.getElementById('simStatus').innerHTML =
-        `<div>Count = <b>${cnt}</b> (<b>${bin(cnt)}</b>)${busy() ? ' · <i>settling…</i>' : ''}</div><div style="margin-top:.35rem">${statusBody()}</div>`;
+        `<div>Count = <b>${cnt}</b> (<b>${bin(cnt)}</b>)${settling ? ' · <i>settling…</i>' : ''}</div><div style="margin-top:.35rem">${settling ? '<i>Watch the signals travel through the circuit…</i>' : statusBody()}</div>`;
     }
     // what the decoder and LEDs are doing at the current count
     const decodeNote = () => `The decoder only sees <b>QA</b> and <b>QB</b> (the count's two lowest bits, <b>${(cnt & 3).toString(2).padStart(2, '0')}</b>), so output <b>1Y<sub>${cnt & 3}</sub></b> is LOW and <b>${ledName(cnt & 3)}</b> is lit.`;
@@ -418,24 +419,11 @@
       });
       renderStatus();
     }
+    // only the settled states are shown (the text would change too fast to read while the signals travel)
     function statusBody() {
-      const r = rippleStatus(); if (r) return r;
-      switch (phase) {
-        case 'clkRise': return 'The clock goes HIGH: the <b>1 travels along the clock wire</b> to the two NAND gates…';
-        case 'press': return `The 1 has arrived. All four NAND inputs show their level: the two clock inputs (pins 12 and 1) are <b>1</b>, pin 13 is <b>Switch-0 = ${sw0}</b> and pin 2 is <b>Switch-1 = ${sw1}</b>.`;
-        case 'nand1': return `A NAND outputs <b>0 only when both its inputs are 1</b>. So pin 11 (the CU gate) is <b>${nandCU()}</b> and pin 3 (the CD gate) is <b>${nandCD()}</b>.`;
-        case 'outTravel': return 'The NAND outputs travel along their wires to the 74193\'s <b>CU</b> and <b>CD</b> inputs…';
-        case 'pins1': return `Those levels have reached <b>CU</b> (${lv.cu}) and <b>CD</b> (${lv.cd}). They have only fallen or stayed HIGH — there is no <b>rising</b> edge yet, so nothing counts.`;
-        case 'clkFall': return 'The clock goes LOW: a <b>0 travels along the clock wire</b> to the two NAND gates…';
-        case 'release': return 'The 0 has arrived: the clock inputs (pins 12 and 1) are both <b>0</b>.';
-        case 'nand2': return `With a 0 on an input a NAND outputs <b>1</b>: pin 11 is <b>${nandCU()}</b> and pin 3 is <b>${nandCD()}</b>${sw0 && !sw1 ? ' — the CU gate has just <b>risen</b> from 0 to 1.' : sw1 && !sw0 ? ' — the CD gate has just <b>risen</b> from 0 to 1.' : '.'}`;
-        case 'releaseUp': return 'The <b>rising edge</b> has reached <b>CU</b>, so the counter counts <b>up</b>: after its propagation delay the count goes up by 1 (the blinking digits).';
-        case 'releaseDown': return 'The <b>rising edge</b> has reached <b>CD</b>, so the counter counts <b>down</b>: after its propagation delay the count goes down by 1 (the blinking digits).';
-        case 'both': return 'Both switches are 1, so <b>CU</b> and <b>CD</b> pulse together. A 74193 cannot count up and down at the same moment — a real chip gives unpredictable results — so this simulator leaves the count unchanged. Avoid this combination.';
-        case 'none': return 'Both switches are 0, so both NAND gates are disabled: <b>CU</b> and <b>CD</b> stay HIGH, there is no rising edge, and the count <b>holds</b>.';
-        case 'counted': return decodeNote() + (cnt > 3 ? ' (<b>QC</b> and <b>QD</b> are not connected, so the count really runs 0–15 and the LEDs repeat every 4.)' : '');
-        case 'switched': break;
-      }
+      if (phase === 'counted') return decodeNote() + (cnt > 3 ? ' (<b>QC</b> and <b>QD</b> are not connected, so the count really runs 0–15 and the LEDs repeat every 4.)' : '');
+      if (phase === 'both') return 'Both switches are 1, so <b>CU</b> and <b>CD</b> pulse together. A 74193 cannot count up and down at the same moment — a real chip gives unpredictable results — so this simulator leaves the count unchanged. Avoid this combination.';
+      if (phase === 'none') return 'Both switches are 0, so both NAND gates are disabled: <b>CU</b> and <b>CD</b> stay HIGH, there is no rising edge, and the count <b>holds</b>.';
       const mode = sw0 && !sw1 ? '<b>Switch-0 = 1, Switch-1 = 0</b>: only the CU gate is enabled, so each clock pulse counts <b>up</b>.'
         : sw1 && !sw0 ? '<b>Switch-0 = 0, Switch-1 = 1</b>: only the CD gate is enabled, so each clock pulse counts <b>down</b>.'
         : sw0 && sw1 ? '<b>Both switches 1</b>: CU and CD would both pulse — not allowed.'
@@ -445,6 +433,7 @@
     function initState() {
       events.forEach(e => e.dead = true); events = []; cnt = 0; clk = 0; pendingCnt = null; flights = {}; phase = 'idle';
       Object.assign(lv, { clk: 0, cu: 1, cd: 1, qa: 0, qb: 0, y: [0, 1, 1, 1], led: [0, 1, 1, 1], en0: sw0, en1: sw1 });
+      setPins(Object.assign({ g13: sw0, g12: 0, g1: 0, g2: sw1, o11: 1, o3: 1, cu: 1, cd: 1 }, decoderPins));
       hideBadges();
     }
     function resetSim() { sw0 = 1; sw1 = 0; initState(); render(); }
