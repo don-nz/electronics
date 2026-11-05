@@ -60,6 +60,11 @@
     #simSvg .fb-flash { font-size: 21px; animation: ctrBlink .18s linear infinite; }
     @keyframes ctrBlink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: .08; } }
     @media (prefers-reduced-motion: reduce) { #simSvg .out-flash, #simSvg .fb-flash { animation: none; } }
+    /* a 0 / 1 badge popping up at a pin when the level there changes (a little larger on phone-width screens) */
+    #simSvg .pin-pop { transform-box: fill-box; transform-origin: center; animation: pinPop .4s ease-out; }
+    @keyframes pinPop { 0% { transform: scale(.3); opacity: 0; } 55% { transform: scale(1.3); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+    @media (max-width: 520px) { #simSvg .pin-inner { transform-box: fill-box; transform-origin: center; scale: 1.25; } }
+    @media (prefers-reduced-motion: reduce) { #simSvg .pin-pop { animation: none; } }
     .sim-status { margin-top: .8rem; padding: .7rem .9rem; border: 1px solid var(--colour-border); border-radius: 6px; font-size: .85rem; line-height: 1.55; }
     .sim-controls { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; margin-top: .8rem; font-size: .78rem; color: var(--colour-label); }
     .sim-legend { display: flex; gap: 1.1rem; flex-wrap: wrap; justify-content: center; margin-top: .5rem; font-size: .75rem; color: var(--colour-label); }
@@ -130,7 +135,7 @@
     // cIn (C, clear — active HIGH), ldIn (LD-bar, load — active LOW), andIn/andOut (the AND gate of the Mod-6 up
     // counter). Every wire that carries a changed level to a pin is a "net": the level is sent along it (a visible
     // sweep) and only takes effect when it ARRIVES. A small discrete-event engine models propagation delay.
-    const SPEEDS = { normal: { gate: 780, wire: 1920, clear: 780 }, fast: { gate: 380, wire: 950, clear: 380 } };
+    const SPEEDS = { normal: { gate: 780, wire: 2304, clear: 780 }, fast: { gate: 380, wire: 1140, clear: 380 } };   // wire: the time a level takes to travel the longest wire
     let speed = 'normal';
     let direction = 'up', mod = 16;   // (named 'direction', not 'dir': inline onclick handlers see the button's own .dir property first)
     let cnt = 0, cIn = 0, ldIn = 1, clk = 0, andIn = [0, 0], andOut = 0, boSent = 1;
@@ -139,6 +144,36 @@
 
     const HIGH = 'var(--colour-ui-correct)', LOW = 'var(--colour-label)';
     const col = (v) => v ? HIGH : LOW;
+
+    // ── pin badges: a small 0 / 1 pops up at a pin when the level there CHANGES, holds for a beat, then the next part reacts ──
+    const STEP = { normal: 520, fast: 260, turbo: 0 };      // turbo (where there is one) is for running the count up quickly: no badges, no beat
+    const stepMs = () => STEP[speed] || 0;
+    const ARRIVE_PAUSE = () => (stepMs() ? 150 : 0);        // the dot has gone and the line is complete for a moment before the badge pops up
+    let pinLv = {};                                         // each pin's last known level: a badge only shows when it changes
+    const badge = (id, x, y) => `<g id="b-${id}" visibility="hidden" transform="translate(${x},${y})"><g class="pin-inner"><rect x="-11" y="-11" width="22" height="22" rx="5" style="stroke: var(--colour-panel)" stroke-width="2" /><text x="0" y="6" text-anchor="middle" font-size="16" font-weight="bold" style="fill: var(--colour-panel)"></text></g></g>`;
+    function flashPin(id, val) {
+      const ms = stepMs() * 0.9, g = document.getElementById('b-' + id), changed = pinLv[id] !== val;
+      pinLv[id] = val;
+      if (!g || !ms || !changed) return;
+      const inner = g.firstChild;
+      inner.firstChild.style.fill = col(val); inner.lastChild.textContent = val;
+      g.setAttribute('visibility', 'visible');
+      inner.classList.remove('pin-pop'); void inner.getBoundingClientRect(); inner.classList.add('pin-pop');   // restart the pop
+      if (g._hide) g._hide.dead = true;
+      g._hide = sched(ms, () => g.setAttribute('visibility', 'hidden'));
+    }
+    const hideBadges = () => document.querySelectorAll('#simSvg [id^="b-"]').forEach(g => g.setAttribute('visibility', 'hidden'));
+    const beat = (fn) => { const u = stepMs(); if (u) sched(u, fn); else fn(); };   // hold for one beat (the badge shows), then carry on
+    // the dot riding at the leading edge of a travelling line; it vanishes on reaching the pin
+    const dotSvg = (id) => `<circle id="d-${id}" r="7" stroke-width="2.5" style="display:none; stroke: var(--colour-panel)" />`;
+    function sweepDot(id, ov, f, now) {
+      const dot = document.getElementById('d-' + id); if (!dot) return;
+      if (!f) { dot.style.display = 'none'; return; }
+      const L = ov.getTotalLength(), p = Math.max(0, Math.min(1, (now - f.t0) / (f.t1 - f.t0)));
+      if (p >= 1) { dot.style.display = 'none'; return; }
+      const pt = ov.getPointAtLength(L * p);
+      dot.setAttribute('cx', pt.x); dot.setAttribute('cy', pt.y); dot.style.fill = col(f.val); dot.style.display = '';
+    }
     const bit = (n, b) => (n >> b) & 1;
     const bin = (n) => [3, 2, 1, 0].map(b => bit(n, b)).join('');
     const names = (b) => 'ABCD'[b];
@@ -236,10 +271,12 @@
       // the wires that carry a changed level to a pin, with a travelling sweep on top
       const ids = netsForConfig();
       s += `<g fill="none" stroke-linejoin="round" stroke-linecap="round">` +
-        ids.map(id => `<path id="w-${id}" d="${NETS[id]}" stroke-width="3" /><path id="o-${id}" d="${NETS[id]}" stroke-width="4.5" />`).join('') + `</g>`;
+        ids.map(id => `<path id="w-${id}" d="${NETS[id]}" stroke-width="3" /><path id="o-${id}" d="${NETS[id]}" stroke-width="4.5" />${dotSvg(id)}`).join('') + `</g>`;
       // the value at the pin being driven
       if (hasClear()) s += `<text id="pinTxt" x="412" y="400" text-anchor="end" font-size="20" font-weight="bold"></text>`;
       if (hasLoad()) s += `<text id="pinTxt" x="428" y="72" text-anchor="start" font-size="20" font-weight="bold"></text>`;
+      // the 0 / 1 badges: the clock pin, C, LD-bar, the AND gate's pins and BO-bar
+      s += badge('ck', 495, clkY) + badge('c', 420, 352) + badge('ld', 420, 150) + badge('a1', 86, 315) + badge('a2', 86, 297) + badge('ao', 134, 336) + badge('bo', 122, 265);
       document.getElementById('simSvg').innerHTML = s;
       const g = document.getElementById('swClk'), a = document.getElementById('swAuto');
       g.addEventListener('click', pulse);
@@ -273,11 +310,12 @@
     function pulse() {
       if (busy()) return false;               // wait for the circuit to settle first
       clk = 1;
+      flashPin('ck', 1);
       phase = 'clocked';
       const gate = jitter(SPEEDS[speed].gate);
       const next = direction === 'up' ? (cnt + 1) & 15 : (cnt - 1) & 15;
       pendingCnt = { val: next, ev: sched(gate, () => applyCount(next, 'count')) };
-      sched(gate * 1.35, () => { clk = 0; onSignals(); });
+      sched(gate * 1.35, () => { clk = 0; flashPin('ck', 0); onSignals(); });
       startLoop(); render(performance.now());
       return true;
     }
@@ -303,26 +341,26 @@
     function onSignals() {
       if (hasLoad()) {
         const b = boLevel();
-        if (b !== boSent) { boSent = b; if (b === 0) phase = 'borrow'; sendNet('bo', b); }
+        if (b !== boSent) { boSent = b; if (b === 0) phase = 'borrow'; flashPin('bo', b); beat(() => sendNet('bo', b)); }
       }
     }
     function sendNet(id, val) {
       const now = performance.now(), dur = SPEEDS[speed].wire, tok = ++seq;
       flights[id] = { val, t0: now, t1: now + dur, tok };
-      sched(dur, () => arrive(id, val, tok));
+      sched(dur + ARRIVE_PAUSE(), () => arrive(id, val, tok));
     }
     function arrive(id, val, tok) {
       if (flights[id] && flights[id].tok === tok) delete flights[id];
-      if (id === 'fb' || id === 'andC') { cIn = val; clearCheck(); }
-      else if (id === 'fbC') { andIn[0] = val; reevalAnd(); }
-      else if (id === 'fbB') { andIn[1] = val; reevalAnd(); }
-      else if (id === 'bo') { ldIn = val; loadCheck(); }
+      if (id === 'fb' || id === 'andC') { cIn = val; flashPin('c', val); beat(clearCheck); }
+      else if (id === 'fbC') { andIn[0] = val; flashPin('a1', val); beat(reevalAnd); }
+      else if (id === 'fbB') { andIn[1] = val; flashPin('a2', val); beat(reevalAnd); }
+      else if (id === 'bo') { ldIn = val; flashPin('ld', val); beat(loadCheck); }
     }
     function reevalAnd() {
       const target = andIn[0] && andIn[1] ? 1 : 0;
       if (pendingAnd) { if (pendingAnd.val === target) return; pendingAnd.ev.dead = true; pendingAnd = null; }
       if (target !== andOut) {
-        pendingAnd = { val: target, ev: sched(jitter(SPEEDS[speed].gate * 0.6), () => { andOut = target; pendingAnd = null; if (target === 1) phase = 'andHigh'; sendNet('andC', target); }) };
+        pendingAnd = { val: target, ev: sched(jitter(SPEEDS[speed].gate * 0.6), () => { andOut = target; pendingAnd = null; if (target === 1) phase = 'andHigh'; flashPin('ao', target); beat(() => sendNet('andC', target)); }) };
       }
     }
     function clearCheck() {                    // C is active HIGH: an asynchronous clear
@@ -373,6 +411,7 @@
           ov.setAttribute('stroke-dashoffset', L * (1 - p));
           ov.style.display = '';
         } else ov.style.display = 'none';
+        sweepDot(id, ov, f, now);
       });
       const pt = document.getElementById('pinTxt');
       if (pt) {
@@ -415,10 +454,12 @@
       if (!dn && hasClear() && cnt === mod - 1) return `The count is ${cnt} (${bin(cnt)}), the highest number it can settle on. Send another pulse and watch what happens.`;
       return `Click <b>CLK</b> (or <b>AUTO CLK</b>) to ${dn ? 'subtract' : 'add'} 1 on each rising edge of the clock.`;
     }
+    // While the signals are travelling the text stays still (it would change too fast to read); the explanation of the
+    // settled state appears when the click has finished.
     function renderStatus() {
       const settling = busy();
       document.getElementById('simStatus').innerHTML =
-        `<div>Count = <b>${cnt}</b> (<b>${bin(cnt)}</b>)${settling ? ' · <i>settling…</i>' : ''}</div><div style="margin-top:.35rem">${statusBody()}</div>`;
+        `<div>Count = <b>${cnt}</b> (<b>${bin(cnt)}</b>)${settling ? ' · <i>settling…</i>' : ''}</div><div style="margin-top:.35rem">${settling ? '<i>Watch the signals travel through the circuit…</i>' : statusBody()}</div>`;
     }
 
     function setConfig(d, m) {
@@ -435,6 +476,8 @@
       events.forEach(e => e.dead = true); events = [];
       cnt = startCount(); cIn = 0; ldIn = 1; clk = 0; andIn = [0, 0]; andOut = 0; boSent = 1;
       pendingCnt = null; pendingAnd = null; flights = {}; phase = 'idle';
+      pinLv = { ck: 0, c: 0, ld: 1, a1: 0, a2: 0, ao: 0, bo: 1 };
+      hideBadges();
     }
     function resetSim() { initState(); render(); }
     function setSpeed(s) {

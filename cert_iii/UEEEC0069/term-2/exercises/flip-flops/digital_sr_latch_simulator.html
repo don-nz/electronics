@@ -55,6 +55,11 @@
     @keyframes fbBlink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: .08; } }
     #simSvg .out-flash { font-size: 27px; animation: fbBlink .18s linear infinite; }
     @media (prefers-reduced-motion: reduce) { #simSvg .fb-flash, #simSvg .out-flash { animation: none; } }
+    /* a 0 / 1 badge popping up at a pin when the level there changes (a little larger on phone-width screens) */
+    #simSvg .pin-pop { transform-box: fill-box; transform-origin: center; animation: pinPop .4s ease-out; }
+    @keyframes pinPop { 0% { transform: scale(.3); opacity: 0; } 55% { transform: scale(1.3); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+    @media (max-width: 520px) { #simSvg .pin-inner { transform-box: fill-box; transform-origin: center; scale: 1.25; } }
+    @media (prefers-reduced-motion: reduce) { #simSvg .pin-pop { animation: none; } }
     .sim-status { margin-top: .8rem; padding: .7rem .9rem; border: 1px solid var(--colour-border); border-radius: 6px; font-size: .85rem; line-height: 1.55; }
     .sim-status b.st { text-transform: uppercase; letter-spacing: .05em; }
     .sim-controls { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; margin-top: .8rem; font-size: .78rem; color: var(--colour-label); }
@@ -134,7 +139,7 @@
     // the lesson figures (NOR: R top, S bottom; NAND: S-bar top, R-bar bottom).
     // A small discrete-event engine models gate delay (an output changes a moment after
     // its inputs do) and wire travel time (so students can SEE the signal move).
-    const SPEEDS = { normal: { gate: 780, wire: 1920 }, fast: { gate: 380, wire: 950 } };
+    const SPEEDS = { normal: { gate: 780, wire: 2304 }, fast: { gate: 380, wire: 1140 } };   // wire: the time a level takes to travel the longest wire
     let speed = 'normal';
     let type = 'nor';
     let ext, out, inFb, flight, pendingOut, events = [], seq = 0, loopOn = false;
@@ -142,6 +147,36 @@
     const gateFn = (a, b) => type === 'nor' ? +!(a || b) : +!(a && b);
     const HIGH = 'var(--colour-ui-correct)', LOW = 'var(--colour-label)';
     const col = (v) => v ? HIGH : LOW;
+
+    // ── pin badges: a small 0 / 1 pops up at a pin when the level there CHANGES, holds for a beat, then the next part reacts ──
+    const STEP = { normal: 520, fast: 260, turbo: 0 };      // turbo (where there is one) is for running the count up quickly: no badges, no beat
+    const stepMs = () => STEP[speed] || 0;
+    const ARRIVE_PAUSE = () => (stepMs() ? 150 : 0);        // the dot has gone and the line is complete for a moment before the badge pops up
+    let pinLv = {};                                         // each pin's last known level: a badge only shows when it changes
+    const badge = (id, x, y) => `<g id="b-${id}" visibility="hidden" transform="translate(${x},${y})"><g class="pin-inner"><rect x="-11" y="-11" width="22" height="22" rx="5" style="stroke: var(--colour-panel)" stroke-width="2" /><text x="0" y="6" text-anchor="middle" font-size="16" font-weight="bold" style="fill: var(--colour-panel)"></text></g></g>`;
+    function flashPin(id, val) {
+      const ms = stepMs() * 0.9, g = document.getElementById('b-' + id), changed = pinLv[id] !== val;
+      pinLv[id] = val;
+      if (!g || !ms || !changed) return;
+      const inner = g.firstChild;
+      inner.firstChild.style.fill = col(val); inner.lastChild.textContent = val;
+      g.setAttribute('visibility', 'visible');
+      inner.classList.remove('pin-pop'); void inner.getBoundingClientRect(); inner.classList.add('pin-pop');   // restart the pop
+      if (g._hide) g._hide.dead = true;
+      g._hide = sched(ms, () => g.setAttribute('visibility', 'hidden'));
+    }
+    const hideBadges = () => document.querySelectorAll('#simSvg [id^="b-"]').forEach(g => g.setAttribute('visibility', 'hidden'));
+    const beat = (fn) => { const u = stepMs(); if (u) sched(u, fn); else fn(); };   // hold for one beat (the badge shows), then carry on
+    // the dot riding at the leading edge of a travelling line; it vanishes on reaching the pin
+    const dotSvg = (id) => `<circle id="d-${id}" r="7" stroke-width="2.5" style="display:none; stroke: var(--colour-panel)" />`;
+    function sweepDot(id, ov, f, now) {
+      const dot = document.getElementById('d-' + id); if (!dot) return;
+      if (!f) { dot.style.display = 'none'; return; }
+      const L = ov.getTotalLength(), p = Math.max(0, Math.min(1, (now - f.t0) / (f.t1 - f.t0)));
+      if (p >= 1) { dot.style.display = 'none'; return; }
+      const pt = ov.getPointAtLength(L * p);
+      dot.setAttribute('cx', pt.x); dot.setAttribute('cy', pt.y); dot.style.fill = col(f.val); dot.style.display = '';
+    }
 
     // geometry (matches the lesson-style latch figures)
     const S = 2.2, GX = 135, G1Y = 22, G2Y = 157.6, XJ = 385, XL = 108, XOUT_END = 455;
@@ -165,6 +200,8 @@
       flight = [null, null];
       pendingOut = [null, null];
       events.forEach(e => e.dead = true); events = [];
+      pinLv = { e0: ext[0], e1: ext[1], f0: inFb[0], f1: inFb[1], o0: out[0], o1: out[1] };
+      hideBadges();
     }
 
     function names() {
@@ -194,6 +231,7 @@
           <path id="w-fb1" d="${PATHS.fb1}" stroke-width="3" />
           <path id="o-fb0" d="${PATHS.fb0}" stroke-width="4.5" />
           <path id="o-fb1" d="${PATHS.fb1}" stroke-width="4.5" />
+          ${dotSvg('fb0')}${dotSvg('fb1')}
         </g>
         <circle cx="${XJ}" cy="${O1}" r="5" id="j0" />
         <circle cx="${XJ}" cy="${O2}" r="5" id="j1" />
@@ -201,10 +239,9 @@
         ${sw(1, B2, nm.bottomPlain)}
         <text x="${XOUT_END + 8}" y="${O1 + 7}" font-size="22" font-weight="bold" id="qTxt" style="fill: var(--colour-text)"></text>
         <text x="${XOUT_END + 8}" y="${O2 + 7}" font-size="22" font-weight="bold" id="qbTxt" style="fill: var(--colour-text)"></text>
-        <text x="${XL - 20}" y="${B1 + 20}" text-anchor="middle" font-size="20" font-weight="bold" id="fbTxt0"></text>
-        <text x="${XL - 20}" y="${T2 - 8}" text-anchor="middle" font-size="20" font-weight="bold" id="fbTxt1"></text>
         <text x="${GX + 78}" y="${G1Y - 4}" text-anchor="middle" font-size="12" style="fill: var(--colour-label)">${type === 'nor' ? 'NOR' : 'NAND'}</text>
-        <text x="${GX + 78}" y="${G2Y + 82}" text-anchor="middle" font-size="12" style="fill: var(--colour-label)">${type === 'nor' ? 'NOR' : 'NAND'}</text>`;
+        <text x="${GX + 78}" y="${G2Y + 82}" text-anchor="middle" font-size="12" style="fill: var(--colour-label)">${type === 'nor' ? 'NOR' : 'NAND'}</text>
+        ${badge('e0', GX - 20, T1)}${badge('e1', GX - 20, B2)}${badge('f0', GX - 20, B1)}${badge('f1', GX - 20, T2)}${badge('o0', XO + 24, O1)}${badge('o1', XO + 24, O2)}`;
       [0, 1].forEach(i => {
         const g = document.getElementById('sw' + i);
         g.addEventListener('click', () => toggleExt(i));
@@ -246,19 +283,24 @@
     function applyOut(g, val) {
       out[g] = val; pendingOut[g] = null;
       const dest = 1 - g;                    // the gate this output feeds back to
-      const now = performance.now(), dur = SPEEDS[speed].wire;
-      const id = ++seq;
-      flight[dest] = { val, t0: now, t1: now + dur, id };
-      sched(dur, () => arrive(dest, val, id));
+      flashPin('o' + g, val);                // the output changed: its new level shows at the pin, then travels along the wire
+      beat(() => {
+        const now = performance.now(), dur = SPEEDS[speed].wire;
+        const id = ++seq;
+        flight[dest] = { val, t0: now, t1: now + dur, id };
+        sched(dur + ARRIVE_PAUSE(), () => arrive(dest, val, id));
+      });
     }
     function arrive(dest, val, id) {
       inFb[dest] = val;
       if (flight[dest] && flight[dest].id === id) flight[dest] = null;
-      reeval(dest);
+      flashPin('f' + dest, val);             // the level has arrived at the gate's input: it shows at the pin, then the gate reacts
+      beat(() => reeval(dest));
     }
     function toggleExt(i) {
       ext[i] = 1 - ext[i];
-      reeval(i);          // an external input only ever feeds its own gate
+      flashPin('e' + i, ext[i]);
+      beat(() => reeval(i));          // an external input only ever feeds its own gate
       startLoop(); render(performance.now());
     }
 
@@ -286,12 +328,7 @@
           ov.setAttribute('stroke-dashoffset', L * (1 - p));
           ov.style.display = '';
         } else ov.style.display = 'none';
-        const t = document.getElementById('fbTxt' + d);
-        t.textContent = inFb[d]; t.style.fill = col(inFb[d]);
-        // Draw the eye to the number that is about to change: while the sweep is in its final
-        // stretch towards the gate input, the (still old) value blinks and grows.
-        const flashing = f && (f.t1 - now) <= Math.min(800, SPEEDS[speed].wire * 0.6);
-        t.classList.toggle('fb-flash', !!flashing);
+        sweepDot('fb' + d, ov, f, now);
       });
       document.getElementById('j0').style.fill = col(out[0]);
       document.getElementById('j1').style.fill = col(out[1]);

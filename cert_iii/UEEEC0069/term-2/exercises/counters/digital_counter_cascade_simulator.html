@@ -55,6 +55,11 @@
     #simSvg .fb-flash { font-size: 21px; animation: ctrBlink .18s linear infinite; }
     @keyframes ctrBlink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: .08; } }
     @media (prefers-reduced-motion: reduce) { #simSvg .out-flash, #simSvg .fb-flash { animation: none; } }
+    /* a 0 / 1 badge popping up at a pin when the level there changes (a little larger on phone-width screens) */
+    #simSvg .pin-pop { transform-box: fill-box; transform-origin: center; animation: pinPop .4s ease-out; }
+    @keyframes pinPop { 0% { transform: scale(.3); opacity: 0; } 55% { transform: scale(1.3); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+    @media (max-width: 520px) { #simSvg .pin-inner { transform-box: fill-box; transform-origin: center; scale: 1.25; } }
+    @media (prefers-reduced-motion: reduce) { #simSvg .pin-pop { animation: none; } }
     .sim-status { margin-top: .8rem; padding: .7rem .9rem; border: 1px solid var(--colour-border); border-radius: 6px; font-size: .85rem; line-height: 1.55; }
     .sim-status .big { font-family: 'Share Tech Mono', monospace; font-size: 1.05rem; letter-spacing: .04em; }
     .sim-controls { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; margin-top: .8rem; font-size: .78rem; color: var(--colour-label); }
@@ -123,7 +128,7 @@
     // State: cnt1 / cnt2 (each 0-15), clk, cu2In (the level at IC2's CU input) and coSent (the last CO-bar level
     // put on the cascade wire). A changed CO-bar level is SENT along the wire (a visible sweep) and only takes
     // effect when it ARRIVES; a rising edge arriving at IC2's CU makes IC2 count.
-    const SPEEDS = { normal: { gate: 780, wire: 1920, auto: 900 }, fast: { gate: 380, wire: 950, auto: 700 }, turbo: { gate: 140, wire: 340, auto: 120 } };
+    const SPEEDS = { normal: { gate: 780, wire: 2304, auto: 900 }, fast: { gate: 380, wire: 1140, auto: 700 }, turbo: { gate: 140, wire: 340, auto: 120 } };   // wire: the time a level takes to travel the longest wire
     let speed = 'normal';
     let cnt1 = 0, cnt2 = 0, clk = 0, cu2In = 1, coSent = 1;
     let pend1 = null, pend2 = null, flights = {}, events = [], seq = 0, loopOn = false;
@@ -135,6 +140,36 @@
 
     const HIGH = 'var(--colour-ui-correct)', LOW = 'var(--colour-label)';
     const col = (v) => v ? HIGH : LOW;
+
+    // ── pin badges: a small 0 / 1 pops up at a pin when the level there CHANGES, holds for a beat, then the next part reacts ──
+    const STEP = { normal: 520, fast: 260, turbo: 0 };      // turbo (where there is one) is for running the count up quickly: no badges, no beat
+    const stepMs = () => STEP[speed] || 0;
+    const ARRIVE_PAUSE = () => (stepMs() ? 150 : 0);        // the dot has gone and the line is complete for a moment before the badge pops up
+    let pinLv = {};                                         // each pin's last known level: a badge only shows when it changes
+    const badge = (id, x, y) => `<g id="b-${id}" visibility="hidden" transform="translate(${x},${y})"><g class="pin-inner"><rect x="-11" y="-11" width="22" height="22" rx="5" style="stroke: var(--colour-panel)" stroke-width="2" /><text x="0" y="6" text-anchor="middle" font-size="16" font-weight="bold" style="fill: var(--colour-panel)"></text></g></g>`;
+    function flashPin(id, val) {
+      const ms = stepMs() * 0.9, g = document.getElementById('b-' + id), changed = pinLv[id] !== val;
+      pinLv[id] = val;
+      if (!g || !ms || !changed) return;
+      const inner = g.firstChild;
+      inner.firstChild.style.fill = col(val); inner.lastChild.textContent = val;
+      g.setAttribute('visibility', 'visible');
+      inner.classList.remove('pin-pop'); void inner.getBoundingClientRect(); inner.classList.add('pin-pop');   // restart the pop
+      if (g._hide) g._hide.dead = true;
+      g._hide = sched(ms, () => g.setAttribute('visibility', 'hidden'));
+    }
+    const hideBadges = () => document.querySelectorAll('#simSvg [id^="b-"]').forEach(g => g.setAttribute('visibility', 'hidden'));
+    const beat = (fn) => { const u = stepMs(); if (u) sched(u, fn); else fn(); };   // hold for one beat (the badge shows), then carry on
+    // the dot riding at the leading edge of a travelling line; it vanishes on reaching the pin
+    const dotSvg = (id) => `<circle id="d-${id}" r="7" stroke-width="2.5" style="display:none; stroke: var(--colour-panel)" />`;
+    function sweepDot(id, ov, f, now) {
+      const dot = document.getElementById('d-' + id); if (!dot) return;
+      if (!f) { dot.style.display = 'none'; return; }
+      const L = ov.getTotalLength(), p = Math.max(0, Math.min(1, (now - f.t0) / (f.t1 - f.t0)));
+      if (p >= 1) { dot.style.display = 'none'; return; }
+      const pt = ov.getPointAtLength(L * p);
+      dot.setAttribute('cx', pt.x); dot.setAttribute('cy', pt.y); dot.style.fill = col(f.val); dot.style.display = '';
+    }
     const bit = (n, b) => (n >> b) & 1;
     const bin4 = (n) => [3, 2, 1, 0].map(b => bit(n, b)).join('');
     const total = () => cnt2 * 16 + cnt1;
@@ -188,6 +223,7 @@
       s += `<path id="stub-co1" d="M 400,215 L 430,215" fill="none" stroke-width="3" />
             <path id="w-cas" d="${CAS}" fill="none" stroke-width="3" stroke-linecap="round" />
             <path id="o-cas" d="${CAS}" fill="none" stroke-width="4.5" stroke-linecap="round" />
+            ${dotSvg('cas')}
             <text id="casTxt" x="340" y="198" text-anchor="middle" font-size="18" font-weight="bold"></text>
             <text x="340" y="240" text-anchor="middle" font-size="12" style="fill: var(--colour-label)">carry wire: IC1 <tspan class="ov">CO</tspan> → IC2 CU</text>`;
       // clock into IC1's CU, with the CLK / AUTO CLK switches
@@ -203,13 +239,15 @@
       if (hasFb()) {
         const q = 'ABCD'[clearBit()];
         s += `<g fill="none" stroke-linejoin="round" stroke-linecap="round">
-                <path id="w-fb" d="${fbPath()}" stroke-width="3" /><path id="o-fb" d="${fbPath()}" stroke-width="4.5" />
+                <path id="w-fb" d="${fbPath()}" stroke-width="3" /><path id="o-fb" d="${fbPath()}" stroke-width="4.5" />${dotSvg('fb')}
               </g>
               <circle cx="${pinX(2, clearBit())}" cy="${FB_Y}" r="5" id="j-fb" />
               <text id="fbTxt" x="${C2_X - 12}" y="400" text-anchor="end" font-size="20" font-weight="bold"></text>
               <text x="${FB_X + 10}" y="${FB_BOTTOM + 22}" font-size="12" style="fill: var(--colour-label)">Q<tspan baseline-shift="sub" font-size="9">${q}</tspan> of IC2 → C of IC2</text>`;
       }
       s += lab(400, 410, '(Vcc and GND not shown)', 'middle', 11);
+      // the 0 / 1 badges: the clock pin, IC1's CO-bar, IC2's CU and (when wired) IC2's C
+      s += badge('ck', 665, 215) + badge('co1', 415, 215) + badge('cu2', 270, 215) + badge('c2', C2_X, 352);
       document.getElementById('simSvg').innerHTML = s;
       const g = document.getElementById('swClk'), a = document.getElementById('swAuto');
       g.addEventListener('click', pulse);
@@ -243,11 +281,12 @@
     function pulse() {
       if (busy()) return false;               // wait for the circuit to settle first
       clk = 1;
+      flashPin('ck', 1);
       phase = cnt1 === 15 ? 'wrap' : 'clocked';
       const gate = jitter(SPEEDS[speed].gate);
       const next = (cnt1 + 1) & 15;
       pend1 = { val: next, ev: sched(gate, () => apply1(next)) };
-      sched(gate * 1.35, () => { clk = 0; onSignals(); });
+      sched(gate * 1.35, () => { clk = 0; flashPin('ck', 0); onSignals(); });
       onSignals();                            // CO-bar may rise now (clock HIGH while IC1 is still at 15)
       startLoop(); render(performance.now());
       return true;
@@ -274,30 +313,37 @@
       if (co !== coSent) {
         coSent = co;
         if (co === 0) phase = 'carryLow';
-        sendNet('cas', co);
+        flashPin('co1', co);
+        beat(() => sendNet('cas', co));
       }
     }
     function sendNet(id, val) {
       const now = performance.now(), dur = SPEEDS[speed].wire, tok = ++seq;
       flights[id] = { val, t0: now, t1: now + dur, tok };
-      sched(dur, () => arrive(id, val, tok));
+      sched(dur + ARRIVE_PAUSE(), () => arrive(id, val, tok));
     }
     function arrive(id, val, tok) {
       if (flights[id] && flights[id].tok === tok) delete flights[id];
       if (id === 'cas') {
         const rising = cu2In === 0 && val === 1;
         cu2In = val;
-        if (rising) {                          // a rising edge on IC2's CU: IC2 counts
-          phase = 'ic2arrive';
-          const next = (cnt2 + 1) & 15;
-          pend2 = { val: next, ev: sched(jitter(SPEEDS[speed].gate), () => apply2(next)) };
-        } else if (val === 0) phase = 'carryArrivedLow';
+        flashPin('cu2', val);                  // the level has arrived at IC2's CU: it shows at the pin, then IC2 reacts
+        beat(() => {
+          if (rising) {                        // a rising edge on IC2's CU: IC2 counts
+            phase = 'ic2arrive';
+            const next = (cnt2 + 1) & 15;
+            pend2 = { val: next, ev: sched(jitter(SPEEDS[speed].gate), () => apply2(next)) };
+          } else if (val === 0) phase = 'carryArrivedLow';
+        });
       } else if (id === 'fb') {
         cIn2 = val;                            // C is active HIGH: an asynchronous clear of IC2
-        if (cIn2 === 1 && cnt2 !== 0) {
-          phase = 'clearing';
-          pend2 = { val: 0, ev: sched(jitter(SPEEDS[speed].gate), () => apply2(0, 'clear')) };
-        } else if (cIn2 === 0) phase = 'released';
+        flashPin('c2', val);
+        beat(() => {
+          if (cIn2 === 1 && cnt2 !== 0) {
+            phase = 'clearing';
+            pend2 = { val: 0, ev: sched(jitter(SPEEDS[speed].gate), () => apply2(0, 'clear')) };
+          } else if (cIn2 === 0) phase = 'released';
+        });
       }
     }
 
@@ -326,6 +372,7 @@
         ov.setAttribute('stroke-dashoffset', L * (1 - p));
         ov.style.display = '';
       } else ov.style.display = 'none';
+      sweepDot('cas', ov, f, now);
       const t = document.getElementById('casTxt');
       t.textContent = 'CU = ' + cu2In; t.style.fill = col(cu2In);
       // the level at IC2's CU is about to change: in the last stretch of the sweep, blink the (old) value
@@ -341,6 +388,7 @@
           fo.setAttribute('stroke-dashoffset', L * (1 - p));
           fo.style.display = '';
         } else fo.style.display = 'none';
+        sweepDot('fb', fo, ff, now);
         const ft = document.getElementById('fbTxt');
         ft.textContent = 'C = ' + cIn2; ft.style.fill = col(cIn2);
         ft.classList.toggle('fb-flash', !!(ff && (ff.t1 - now) <= Math.min(800, SPEEDS[speed].wire * 0.6)));
@@ -373,10 +421,12 @@
       if (total() === 0) return 'Click <b>CLK</b> to count. IC1 (right) counts every pulse; IC2 (left) will only move when IC1 wraps from 15 to 0.';
       return 'Each clock pulse adds 1 to IC1. IC2 stays put until IC1 wraps.';
     }
+    // While the signals are travelling the text stays still (it would change too fast to read); the explanation of the
+    // settled state appears when the click has finished.
     function renderStatus() {
-      const n = total();
+      const n = total(), settling = busy();
       document.getElementById('simStatus').innerHTML =
-        `<div><span class="big">${bin4(cnt2)} ${bin4(cnt1)}</span> = <b>${n}</b> (hex <b>${n.toString(16).toUpperCase().padStart(2, '0')}</b>)${busy() ? ' · <i>settling…</i>' : ''}</div><div style="margin-top:.35rem">${statusBody()}</div>`;
+        `<div><span class="big">${bin4(cnt2)} ${bin4(cnt1)}</span> = <b>${n}</b> (hex <b>${n.toString(16).toUpperCase().padStart(2, '0')}</b>)${settling ? ' · <i>settling…</i>' : ''}</div><div style="margin-top:.35rem">${settling ? '<i>Watch the signals travel through the circuit…</i>' : statusBody()}</div>`;
     }
 
     const MOD_TEXT = {
@@ -397,6 +447,8 @@
       cIn2 = 0;
       cnt2 = (n >> 4) & 15; cnt1 = n & 15; clk = 0; pend1 = null; pend2 = null; flights = {}; phase = 'idle';
       coSent = co1Level(); cu2In = coSent;       // at rest (clock LOW) the carry wire already matches IC1's CO-bar
+      pinLv = { ck: 0, co1: coSent, cu2: cu2In, c2: 0 };
+      hideBadges();
       render();
     }
     function setSpeed(s) {

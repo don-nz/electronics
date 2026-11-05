@@ -1,32 +1,3 @@
-<!--
-  Counter simulator — a 74193 (4-bit up/down counter) wired as a Mod-6, Mod-8 or Mod-16 counter, counting
-  UP or DOWN. Built after Figure 12 of the counters notes (Mod-8 up: QD fed back to the C clear input).
-
-  Choose Direction and Modulus above the circuit; the circuit is redrawn for that wiring:
-
-    UP    (clock on CU, CD held HIGH, LD-bar held HIGH)
-      Mod-8   QD is wired back to C. At 8 (1000) QD goes HIGH, the 1 travels to C, the counter clears to 0000
-              (asynchronously), QD falls, the 0 travels back and releases the clear.  Settles on 0-7.
-      Mod-6   QC and QB feed an AND gate whose output drives C. At 6 (0110) both are HIGH, the AND output goes
-              HIGH, the 1 travels to C and clears the counter.  Settles on 0-5.
-      Mod-16  No feedback (C tied LOW). Counts 0-15 and wraps. CO-bar (carry out) goes LOW at 15 while the
-              clock is LOW — the pulse that would clock the next counter in a cascade.
-    DOWN  (clock on CD, CU held HIGH, C tied LOW)
-      Mod-8 / Mod-6   BO-bar (borrow out) is wired to LD-bar and the D inputs are tied to N-1. At 0, once the
-              clock goes LOW, BO-bar goes LOW, travels to LD-bar and the counter LOADS D (0111 / 0101).
-              Counts 7..0 / 5..0.
-      Mod-16  No reload (LD-bar held HIGH). Counts 15..0 and wraps. BO-bar goes LOW at 0 while the clock is LOW.
-
-  Same event-driven approach as digital_sr_latch_simulator.html: a delay, then a coloured sweep along the wire
-  showing the level travelling; wire colour = logic level (green = 1, grey = 0). A new clock pulse is ignored
-  while the circuit is still settling. The clock is HIGH for a moment then LOW, because the carry/borrow outputs
-  only act while the clock is LOW.
-
-  No shared quiz engine is used: the page is self-contained apart from the site chrome.
-
-  College (teacher) copy: self-contained — same simulator as term-2/exercises/counters/digital_counter_simulator.html with
-  the college colours, its own theme toggle and an "All exercises" link. Keep the two in step.
--->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -37,139 +8,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,600;0,700;0,800;1,400;1,600&family=Share+Tech+Mono&display=swap" rel="stylesheet">
   <link rel="icon" href="data:,">
   <style>
-    :root {
-      --colour-bg: #f8f9fa;
-      --colour-panel: #ffffff;
-      --colour-border: #d0d5dd;
-      --colour-text: #1d2939;
-      --colour-text-strong: #002664;
-      --colour-label: #475467;
-      --colour-label-rgb: 71, 84, 103;
-      --colour-grid: rgba(0, 38, 100, 0.04);
 
-      --colour-ui-primary: #002664;
-      --colour-ui-primary-rgb: 0, 38, 100;
-
-      --font-body: 'Public Sans', system-ui, -apple-system, sans-serif;
-      --font-display: 'Public Sans', system-ui, -apple-system, sans-serif;
-      --font-mono: 'Share Tech Mono', monospace, sans-serif;
-
-      --radius-lg: 6px;
-      --radius-sm: 4px;
-      --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.05);
-    }
-
-    body.dark-theme {
-      --colour-bg: #121824;
-      --colour-panel: #1a2232;
-      --colour-border: #2e3c54;
-      --colour-text: #e2e8f0;
-      --colour-text-strong: #ffffff;
-      --colour-label: #94a3b8;
-      --colour-label-rgb: 148, 163, 184;
-      --colour-grid: rgba(255, 255, 255, 0.03);
-
-      --colour-ui-primary: #38bdf8;
-      --colour-ui-primary-rgb: 56, 189, 248;
-
-      --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.3);
-    }
-
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
-    body {
-      background: var(--colour-bg);
-      color: var(--colour-text);
-      font-family: var(--font-body);
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 2rem 1rem;
-      background-image: linear-gradient(var(--colour-grid) 1px, transparent 1px), linear-gradient(90deg, var(--colour-grid) 1px, transparent 1px);
-      background-size: 40px 40px;
-      transition: background-color 0.25s ease, color 0.25s ease;
-    }
-
-    header {
-      margin-bottom: 1.5rem;
-      width: 100%;
-      max-width: 700px;
-    }
-
-    header h1 {
-      font-family: var(--font-display);
-      font-size: clamp(1.4rem, 4vw, 2.2rem);
-      font-weight: 800;
-      letter-spacing: -0.01em;
-      color: var(--colour-ui-primary);
-    }
-
-    header p {
-      margin-top: .4rem;
-      color: var(--colour-label);
-      font-size: .82rem;
-      font-weight: 600;
-      letter-spacing: .05em;
-      text-transform: uppercase;
-    }
-
-    .theme-toggle {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      padding: 0.35rem 0.75rem;
-      font-family: var(--font-body);
-      font-size: 0.78rem;
-      font-weight: 600;
-      color: var(--colour-text);
-      background: var(--colour-panel);
-      border: 1px solid var(--colour-border);
-      border-radius: var(--radius-sm);
-      cursor: pointer;
-      transition: all 0.2s ease;
-      box-shadow: var(--shadow-card);
-    }
-
-    .theme-toggle:hover {
-      border-color: var(--colour-ui-primary);
-    }
-
-    .main-wrap {
-      width: 100%;
-      max-width: 700px;
-      display: flex;
-      flex-direction: column;
-      gap: 1.2rem;
-    }
-
-    .card-top-bar {
-      display: flex;
-      justify-content: flex-end;
-      width: 100%;
-      margin-bottom: 0.5rem;
-    }
-
-    .card {
-      background: var(--colour-panel);
-      border: 1px solid var(--colour-border);
-      border-radius: var(--radius-lg);
-      padding: 1.5rem;
-      box-shadow: var(--shadow-card);
-      transition: background 0.25s ease, border-color 0.25s ease;
-    }
-
- 
-    .back-link { font-size: .78rem; font-weight: 600; color: var(--colour-ui-primary); text-decoration: none; padding: .35rem .1rem; }
-    .back-link:hover { text-decoration: underline; }
-    .card-top-bar { justify-content: space-between; align-items: center; }
-    footer { margin-top: 2rem; font-size: .72rem; color: var(--colour-label); letter-spacing: .04em; }
-    :root { --colour-bjt: #b45309; --colour-ui-correct: #087443; --colour-ui-correct-rgb: 8, 116, 67; --colour-ui-wrong: #d92d20; }
-    body.dark-theme { --colour-bjt: #ffb454; --colour-ui-correct: #34d399; --colour-ui-correct-rgb: 52, 211, 153; --colour-ui-wrong: #f87171; }
 
     .sim-intro { font-size: .85rem; line-height: 1.6; }
     .sim-btn {
@@ -193,6 +32,11 @@
     #simSvg .fb-flash { font-size: 21px; animation: ctrBlink .18s linear infinite; }
     @keyframes ctrBlink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: .08; } }
     @media (prefers-reduced-motion: reduce) { #simSvg .out-flash, #simSvg .fb-flash { animation: none; } }
+    /* a 0 / 1 badge popping up at a pin when the level there changes (a little larger on phone-width screens) */
+    #simSvg .pin-pop { transform-box: fill-box; transform-origin: center; animation: pinPop .4s ease-out; }
+    @keyframes pinPop { 0% { transform: scale(.3); opacity: 0; } 55% { transform: scale(1.3); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+    @media (max-width: 520px) { #simSvg .pin-inner { transform-box: fill-box; transform-origin: center; scale: 1.25; } }
+    @media (prefers-reduced-motion: reduce) { #simSvg .pin-pop { animation: none; } }
     .sim-status { margin-top: .8rem; padding: .7rem .9rem; border: 1px solid var(--colour-border); border-radius: 6px; font-size: .85rem; line-height: 1.55; }
     .sim-controls { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; margin-top: .8rem; font-size: .78rem; color: var(--colour-label); }
     .sim-legend { display: flex; gap: 1.1rem; flex-wrap: wrap; justify-content: center; margin-top: .5rem; font-size: .75rem; color: var(--colour-label); }
@@ -204,15 +48,568 @@
       .sim-opt-row .lbl { min-width: 4.6rem; }
     }
   
-    /* Copyright line (college copies are self-contained, so inline) */
-    .site-copyright {
-      margin: 3rem auto 1.5rem;
-      padding: 0 1rem;
-      text-align: center;
-      font-size: 0.7rem;
-      color: var(--colour-label);
-      opacity: 0.8;
-    }
+/*
+  NSW TAFE college theme — the single source for the self-contained teacher pages
+  (cert_iii/UEEEC0069/college/*_college.html). tools/build_college.py inlines this into
+  each generated page, so a college page is the student page's own markup and script
+  with this stylesheet instead of assets/quiz-common.css.
+
+  It was lifted from the hand-made college pages (TAFE colour palette, Public Sans,
+  .main-wrap / .card-top-bar layout, light and dark themes, print rules) and then
+  extended with rules for the classes the shared engines draw with, so the college
+  pages no longer need a hand-made copy of the waveform code. To change how the
+  college pages look, edit this file and rebuild.
+*/
+
+:root {
+  --colour-bg: #f8f9fa;
+  --colour-panel: #ffffff;
+  --colour-border: #d0d5dd;
+  --colour-text: #1d2939;
+  --colour-text-strong: #002664;
+  --colour-label: #475467;
+  --colour-label-rgb: 71, 84, 103;
+  --colour-grid: rgba(0, 38, 100, 0.04);
+
+  --colour-ui-primary: #002664;
+  --colour-ui-primary-rgb: 0, 38, 100;
+  --colour-ui-correct: #087443;
+  --colour-ui-correct-rgb: 8, 116, 67;
+  --colour-ui-wrong: #d92d20;
+  --colour-ui-wrong-rgb: 217, 45, 32;
+
+  --colour-input-a: #4338ca;
+  --colour-input-b: #0f766e;
+  --colour-output-z: #0284c7;
+
+  --colour-dff: #0d80c3;
+  --colour-jfet: #7e22ce;
+  --colour-bjt: #b45309;
+  --colour-switch: #0369a1;
+
+  --font-body: 'Public Sans', system-ui, -apple-system, sans-serif;
+  --font-display: 'Public Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Share Tech Mono', monospace, sans-serif;
+
+  --radius-lg: 6px;
+  --radius-sm: 4px;
+  --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+body.dark-theme {
+  --colour-bg: #121824;
+  --colour-panel: #1a2232;
+  --colour-border: #2e3c54;
+  --colour-text: #e2e8f0;
+  --colour-text-strong: #ffffff;
+  --colour-label: #94a3b8;
+  --colour-label-rgb: 148, 163, 184;
+  --colour-grid: rgba(255, 255, 255, 0.03);
+
+  --colour-ui-primary: #38bdf8;
+  --colour-ui-primary-rgb: 56, 189, 248;
+  --colour-ui-correct: #34d399;
+  --colour-ui-correct-rgb: 52, 211, 153;
+  --colour-ui-wrong: #f87171;
+  --colour-ui-wrong-rgb: 248, 113, 113;
+
+  --colour-input-a: #818cf8;
+  --colour-input-b: #2dd4bf;
+  --colour-output-z: #38bdf8;
+
+  --colour-dff: #54c0ff;
+  --colour-jfet: #c084fc;
+  --colour-bjt: #ffb454;
+  --colour-switch: #38bdf8;
+
+  --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--colour-bg);
+  color: var(--colour-text);
+  font-family: var(--font-body);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem 1rem;
+  background-image: linear-gradient(var(--colour-grid) 1px, transparent 1px), linear-gradient(90deg, var(--colour-grid) 1px, transparent 1px);
+  background-size: 40px 40px;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+header {
+  margin-bottom: 1.5rem;
+  width: 100%;
+  max-width: 700px;
+  text-align: left;   /* stated outright: quiz-engine pages carry quiz-common.css underneath, which centres it */
+}
+
+header h1 {
+  font-family: var(--font-display);
+  font-size: clamp(1.4rem, 4vw, 2.2rem);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--colour-ui-primary);
+  text-shadow: none;
+  text-transform: none;
+}
+
+header p {
+  margin-top: .4rem;
+  color: var(--colour-label);
+  font-size: .82rem;
+  font-weight: 600;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.75rem;
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--colour-text);
+  background: var(--colour-panel);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-card);
+}
+
+.theme-toggle:hover {
+  border-color: var(--colour-ui-primary);
+}
+
+.back-link {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--colour-ui-primary);
+  text-decoration: none;
+  padding: 0.35rem 0.1rem;
+}
+
+.back-link:hover {
+  text-decoration: underline;
+}
+
+.main-wrap.wide { max-width: 1000px; }   /* galleries, e.g. the IC reference */
+.main-wrap {
+  width: 100%;
+  max-width: 700px;
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+
+.card {
+  background: var(--colour-panel);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-card);
+  transition: background 0.25s ease, border-color 0.25s ease;
+}
+
+.card-top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  margin-bottom: 0.5rem;
+}
+
+.rule-card {
+  font-size: .85rem;
+  line-height: 1.6;
+}
+
+.rule-card .rule-row {
+  display: flex;
+  gap: .5rem;
+  margin: .35rem 0;
+}
+
+.rule-card .rule-cond {
+  flex: none;
+  width: 8.5rem;
+  font-family: var(--font-mono);
+  font-weight: bold;
+}
+
+.legend-row {
+  display: flex;
+  gap: 1rem;
+  row-gap: .4rem;
+  flex-wrap: wrap;
+  margin-top: .8rem;
+  font-size: .78rem;
+  font-weight: 600;
+  color: var(--colour-label);
+}
+
+.legend-swatch {
+  display: inline-block;
+  width: 1.1rem;
+  height: 3px;
+  margin-right: .3rem;
+  vertical-align: middle;
+  border-radius: 2px;
+}
+
+.gate-toggle-card {
+  font-size: .85rem;
+}
+
+.gate-toggle-label {
+  color: var(--colour-label);
+  margin-bottom: .6rem;
+  font-weight: 600;
+}
+
+.gate-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  gap: .8rem;
+  justify-content: center;
+}
+
+.gate-toggle-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .3rem;
+  padding: .6rem 1.1rem;
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-lg);
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: .7rem;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--colour-label);
+  text-align: center;
+  transition: background .15s, color .15s, border-color .15s;
+}
+
+.gate-toggle-btn svg {
+  width: 9rem;
+  height: auto;
+  display: block;
+}
+
+.gate-toggle-btn.active {
+  border-color: var(--colour-ui-primary);
+  background: rgba(var(--colour-ui-primary-rgb), .12);
+  color: var(--colour-ui-primary);
+}
+
+.gate-toggle-btn:not(.active):hover {
+  background: rgba(var(--colour-ui-primary-rgb), .06);
+  color: var(--colour-text);
+}
+
+.hint-toggle-card { font-size: .85rem; }
+.hint-toggle-label { color: var(--colour-label); margin-bottom: .6rem; font-weight: 600; }
+.hint-toggle { display: flex; gap: .6rem; flex-wrap: wrap; justify-content: center; }
+.hint-toggle-btn {
+  padding: .5rem 1.1rem;
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-lg);
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: .7rem;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--colour-label);
+  transition: background .15s, color .15s, border-color .15s;
+}
+.hint-toggle-btn:not(.active):hover { background: rgba(var(--colour-ui-primary-rgb), .06); color: var(--colour-text); }
+.hint-toggle-btn[data-hint="edges"].active { border-color: var(--colour-switch); color: var(--colour-switch); background: color-mix(in srgb, var(--colour-switch) 14%, transparent); }
+.out-toggle-card { font-size: .82rem; margin-bottom: 1.2rem; }
+.out-toggle-btn { min-width: 3.6rem; }
+.out-toggle-btn.active { border-color: var(--colour-output-z); color: var(--colour-output-z); background: color-mix(in srgb, var(--colour-output-z) 14%, transparent); }
+
+.wb-tracks-wrap { position: relative; }
+.wb-hint-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+
+.wb-track-row {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin-bottom: 0.6rem;
+}
+
+.wb-track-label {
+  font-family: var(--font-mono);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--colour-text-strong);
+  width: 20px;
+  text-align: center;
+}
+
+.wb-track-row svg {
+  flex: 1;
+  height: 48px;
+  background: rgba(var(--colour-label-rgb), 0.05);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-sm);
+}
+
+.wb-track-path {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.wb-grid-line {
+  stroke: var(--colour-border);
+  stroke-width: 1;
+  stroke-dasharray: 2, 2;
+  opacity: 0.6;
+}
+
+.wb-track-p { stroke: var(--colour-jfet); }
+.wb-track-c { stroke: var(--colour-bjt); }
+.wb-track-clk { stroke: var(--colour-switch); }
+.wb-track-d { stroke: var(--colour-input-a); }
+.wb-track-q { stroke: var(--colour-output-z); }
+
+.wb-palette {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  margin: 1.2rem 0;
+  flex-wrap: wrap;
+}
+
+.wb-piece-btn {
+  background: var(--colour-panel);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.6rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.wb-piece-btn:hover:not(:disabled) {
+  border-color: var(--colour-ui-primary);
+  background: rgba(var(--colour-ui-primary-rgb), 0.08);
+}
+
+.wb-piece-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.wb-piece-btn svg {
+  width: 42px;
+  height: 28px;
+}
+
+.wb-piece-label {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--colour-label);
+}
+
+.result-banner {
+  display: none;
+  padding: .65rem 1rem;
+  border-radius: var(--radius-sm);
+  font-size: .82rem;
+  font-family: var(--font-body);
+  font-weight: 600;
+  align-items: center;
+  gap: .6rem;
+  margin-bottom: 1rem;
+}
+
+.result-banner.correct {
+  display: flex;
+  background: rgba(var(--colour-ui-correct-rgb), .12);
+  border: 1px solid rgba(var(--colour-ui-correct-rgb), .4);
+  color: var(--colour-ui-correct);
+}
+
+.result-banner.wrong {
+  display: flex;
+  background: rgba(var(--colour-ui-wrong-rgb), .12);
+  border: 1px solid rgba(var(--colour-ui-wrong-rgb), .4);
+  color: var(--colour-ui-wrong);
+}
+
+.btn-row {
+  display: flex;
+  gap: .6rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+  width: 100%;
+}
+
+.btn {
+  padding: .6rem 0;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: .78rem;
+  font-weight: 700;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all .15s;
+  border: 1px solid;
+  flex: 1;
+  min-width: 105px;
+  text-align: center;
+}
+
+.btn-prev {
+  background: rgba(var(--colour-label-rgb), .1);
+  border-color: rgba(var(--colour-label-rgb), .4);
+  color: var(--colour-label);
+}
+
+.btn-prev:hover:not(:disabled) {
+  background: rgba(var(--colour-label-rgb), .2);
+}
+
+.btn-prev:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.btn-check {
+  background: rgba(var(--colour-ui-correct-rgb), .15);
+  border-color: rgba(var(--colour-ui-correct-rgb), .5);
+  color: var(--colour-ui-correct);
+}
+
+.btn-check:hover:not(:disabled) {
+  background: rgba(var(--colour-ui-correct-rgb), .25);
+}
+
+.btn-check:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: rgba(var(--colour-ui-primary-rgb), .12);
+  border-color: rgba(var(--colour-ui-primary-rgb), .4);
+  color: var(--colour-ui-primary);
+}
+
+.btn-secondary:hover {
+  background: rgba(var(--colour-ui-primary-rgb), .22);
+}
+
+/* Print Worksheet — .print-only is invisible on screen, shown only via
+   @media print below. #printWorksheet (a direct child of <body>, NOT
+   nested inside .main-wrap) is built fresh by printDiagramNow() right
+   before window.print(): page title/description, the current Trigger/Q
+   diagram with Q left as a blank grid, then a page-break and the same
+   diagram again with the correct Q filled in as the solution. */
+.print-only { display: none; }
+
+@media print {
+  /* Force light regardless of whichever theme is active on screen —
+     body.dark-theme has higher specificity than a bare :root rule, so
+     it's redefined here too (same values), not just :root, or dark
+     mode would still win. */
+  :root, body.dark-theme {
+    --colour-bg: #ffffff;
+    --colour-panel: #ffffff;
+    --colour-text: #000000;
+    --colour-text-strong: #000000;
+    --colour-border: #999999;
+    --colour-label: #444444;
+  }
+  body > *:not(#printWorksheet) { display: none !important; }
+  body { background: #fff; background-image: none; padding: 0; display: block; }
+  #printWorksheet {
+    display: block !important;
+    color: #000;
+    font-family: var(--font-body);
+    max-width: 700px;
+    margin: 2rem auto;
+  }
+  #printWorksheet h1 { font-size: 1.3rem; margin: 0 0 .3rem; font-family: var(--font-display); }
+  #printWorksheet .print-subtitle { font-size: .8rem; color: #444; margin-bottom: 1rem; text-transform: uppercase; letter-spacing: .05em; }
+  #printWorksheet .print-description { margin-bottom: 1.2rem; }
+  #printWorksheet .print-diagram-section { page-break-inside: avoid; }
+  /* Solution starts on its own fresh page when printed double-sided or handed out separately. */
+  #printWorksheet .print-solution { page-break-before: always; }
+  #printWorksheet .print-solution h2 { font-size: 1.1rem; margin-bottom: .8rem; }
+  #printWorksheet .wb-track-row svg { width: 100%; height: auto; background: none; border: 1px solid #999; }
+  #printWorksheet .wb-track-label { color: #000; }
+  #printWorksheet .wb-grid-line { stroke: #999; stroke-dasharray: none; opacity: 1; }
+}
+
+/* Copyright line (college copies are self-contained, so inline) */
+.site-copyright {
+  margin: 3rem auto 1.5rem;
+  padding: 0 1rem;
+  text-align: center;
+  font-size: 0.7rem;
+  color: var(--colour-label);
+  opacity: 0.8;
+}
+
+/* ── page-structure rules shared by the waveform-builder pages ── */
+.wb-track-label { width: 2.6rem; }
+.extra-row { display: none; }
+.extra-row.shown { display: flex; }
+/* the student pages space their cards with margin-bottom; .main-wrap already spaces them with a gap */
+.main-wrap > .card { margin-bottom: 0; }
+.rule-card > div:first-of-type { margin-bottom: 0.4rem; }
+.rule-card > div:nth-last-of-type(2) { margin-top: 0.4rem; }
+
+/* ── classes assets/waveform-builder.js draws with (the student theme styles these from quiz-common.css) ── */
+.wb-grid-baseline { stroke: rgba(var(--colour-label-rgb), .4); }
+.wb-track-path.wb-track-s { stroke: var(--colour-input-a); }
+.wb-track-path.wb-track-r { stroke: var(--colour-input-b); }
+.wb-track-path.wb-track-p { stroke: var(--colour-jfet); }
+.wb-track-path.wb-track-c { stroke: var(--colour-bjt); }
+.wb-track-path.wb-track-clk { stroke: var(--colour-switch); }
+.wb-track-path.wb-track-d { stroke: var(--colour-input-a); }
+.wb-progress-shade { fill: var(--colour-ui-primary); opacity: .1; }
+.wb-q-path { fill: none; stroke-width: 2; stroke-linejoin: round; }
+.wb-q-path.wb-col-building { stroke: var(--colour-output-z); }
+.wb-q-path.wb-col-correct { stroke: var(--colour-ui-correct); }
+.wb-q-path.wb-col-wrong { stroke: var(--colour-ui-wrong); }
+.wb-piece-icon { width: 40px; height: 28px; overflow: visible; }
+.wb-piece-icon line, .wb-piece-icon polyline {
+  fill: none; stroke: var(--colour-output-z); stroke-width: 2.5;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+@media (max-width: 480px) {
+  .wb-track-label { width: 1.6rem; font-size: .8rem; }
+  .wb-piece-icon { width: 32px; height: 24px; }
+}
+@media print {
+  #printWorksheet .print-wave-row svg { width: 100%; height: auto; background: none; border: 1px solid #999; }
+}
+
   </style>
 </head>
 
@@ -229,6 +626,7 @@
         <span id="themeIcon">🌙</span> <span id="themeLabel">Dark Mode</span>
       </button>
     </div>
+
     <div class="card sim-intro">
       <div id="introText"></div>
       <div class="sim-options">
@@ -260,32 +658,41 @@
     </div>
   </div>
 
-  <footer>Electronics // Cert III // UEEEC0069</footer>
-
   <script>
-    function toggleTheme() {
-      const isDark = document.body.classList.toggle('dark-theme');
-      try { localStorage.setItem('tafe-quiz-theme', isDark ? 'dark' : 'light'); } catch (e) { }
-      updateThemeToggleUI(isDark);
-    }
-    function updateThemeToggleUI(isDark) {
-      const icon = document.getElementById('themeIcon'), label = document.getElementById('themeLabel');
-      if (icon && label) { icon.textContent = isDark ? '☀️' : '🌙'; label.textContent = isDark ? 'Light Mode' : 'Dark Mode'; }
-    }
-    (function initTheme() {
-      let isDark = false;
-      try { isDark = localStorage.getItem('tafe-quiz-theme') === 'dark'; } catch (e) { }
-      document.body.classList.toggle('dark-theme', isDark);
-      updateThemeToggleUI(isDark);
-    })();
+    // "← Back" link (same pattern as the timing diagram builders): only shown when there is a page to go back to
   </script>
+  <script>
+// Dark/light toggle for the college pages (the student pages use assets/theme-init.js instead).
+// The preference is the same localStorage key the hand-made college pages used.
+function toggleTheme() {
+  const isDark = document.body.classList.toggle('dark-theme');
+  localStorage.setItem('tafe-quiz-theme', isDark ? 'dark' : 'light');
+  updateThemeToggleUI(isDark);
+}
+
+function updateThemeToggleUI(isDark) {
+  const icon = document.getElementById('themeIcon');
+  const label = document.getElementById('themeLabel');
+  if (icon && label) {
+    icon.textContent = isDark ? '☀️' : '🌙';
+    label.textContent = isDark ? 'Light Mode' : 'Dark Mode';
+  }
+}
+
+(function initTheme() {
+  const isDark = localStorage.getItem('tafe-quiz-theme') === 'dark';
+  document.body.classList.toggle('dark-theme', isDark);
+  updateThemeToggleUI(isDark);
+})();
+
+</script>
   <script>
     // ── 74193 counter simulator ────────────────────────────────────────────────
     // State: cnt (0-15, the 4-bit count Q_D Q_C Q_B Q_A), clk (the clock level), and the levels at the control pins:
     // cIn (C, clear — active HIGH), ldIn (LD-bar, load — active LOW), andIn/andOut (the AND gate of the Mod-6 up
     // counter). Every wire that carries a changed level to a pin is a "net": the level is sent along it (a visible
     // sweep) and only takes effect when it ARRIVES. A small discrete-event engine models propagation delay.
-    const SPEEDS = { normal: { gate: 780, wire: 1920, clear: 780 }, fast: { gate: 380, wire: 950, clear: 380 } };
+    const SPEEDS = { normal: { gate: 780, wire: 2304, clear: 780 }, fast: { gate: 380, wire: 1140, clear: 380 } };   // wire: the time a level takes to travel the longest wire
     let speed = 'normal';
     let direction = 'up', mod = 16;   // (named 'direction', not 'dir': inline onclick handlers see the button's own .dir property first)
     let cnt = 0, cIn = 0, ldIn = 1, clk = 0, andIn = [0, 0], andOut = 0, boSent = 1;
@@ -294,6 +701,36 @@
 
     const HIGH = 'var(--colour-ui-correct)', LOW = 'var(--colour-label)';
     const col = (v) => v ? HIGH : LOW;
+
+    // ── pin badges: a small 0 / 1 pops up at a pin when the level there CHANGES, holds for a beat, then the next part reacts ──
+    const STEP = { normal: 520, fast: 260, turbo: 0 };      // turbo (where there is one) is for running the count up quickly: no badges, no beat
+    const stepMs = () => STEP[speed] || 0;
+    const ARRIVE_PAUSE = () => (stepMs() ? 150 : 0);        // the dot has gone and the line is complete for a moment before the badge pops up
+    let pinLv = {};                                         // each pin's last known level: a badge only shows when it changes
+    const badge = (id, x, y) => `<g id="b-${id}" visibility="hidden" transform="translate(${x},${y})"><g class="pin-inner"><rect x="-11" y="-11" width="22" height="22" rx="5" style="stroke: var(--colour-panel)" stroke-width="2" /><text x="0" y="6" text-anchor="middle" font-size="16" font-weight="bold" style="fill: var(--colour-panel)"></text></g></g>`;
+    function flashPin(id, val) {
+      const ms = stepMs() * 0.9, g = document.getElementById('b-' + id), changed = pinLv[id] !== val;
+      pinLv[id] = val;
+      if (!g || !ms || !changed) return;
+      const inner = g.firstChild;
+      inner.firstChild.style.fill = col(val); inner.lastChild.textContent = val;
+      g.setAttribute('visibility', 'visible');
+      inner.classList.remove('pin-pop'); void inner.getBoundingClientRect(); inner.classList.add('pin-pop');   // restart the pop
+      if (g._hide) g._hide.dead = true;
+      g._hide = sched(ms, () => g.setAttribute('visibility', 'hidden'));
+    }
+    const hideBadges = () => document.querySelectorAll('#simSvg [id^="b-"]').forEach(g => g.setAttribute('visibility', 'hidden'));
+    const beat = (fn) => { const u = stepMs(); if (u) sched(u, fn); else fn(); };   // hold for one beat (the badge shows), then carry on
+    // the dot riding at the leading edge of a travelling line; it vanishes on reaching the pin
+    const dotSvg = (id) => `<circle id="d-${id}" r="7" stroke-width="2.5" style="display:none; stroke: var(--colour-panel)" />`;
+    function sweepDot(id, ov, f, now) {
+      const dot = document.getElementById('d-' + id); if (!dot) return;
+      if (!f) { dot.style.display = 'none'; return; }
+      const L = ov.getTotalLength(), p = Math.max(0, Math.min(1, (now - f.t0) / (f.t1 - f.t0)));
+      if (p >= 1) { dot.style.display = 'none'; return; }
+      const pt = ov.getPointAtLength(L * p);
+      dot.setAttribute('cx', pt.x); dot.setAttribute('cy', pt.y); dot.style.fill = col(f.val); dot.style.display = '';
+    }
     const bit = (n, b) => (n >> b) & 1;
     const bin = (n) => [3, 2, 1, 0].map(b => bit(n, b)).join('');
     const names = (b) => 'ABCD'[b];
@@ -391,10 +828,12 @@
       // the wires that carry a changed level to a pin, with a travelling sweep on top
       const ids = netsForConfig();
       s += `<g fill="none" stroke-linejoin="round" stroke-linecap="round">` +
-        ids.map(id => `<path id="w-${id}" d="${NETS[id]}" stroke-width="3" /><path id="o-${id}" d="${NETS[id]}" stroke-width="4.5" />`).join('') + `</g>`;
+        ids.map(id => `<path id="w-${id}" d="${NETS[id]}" stroke-width="3" /><path id="o-${id}" d="${NETS[id]}" stroke-width="4.5" />${dotSvg(id)}`).join('') + `</g>`;
       // the value at the pin being driven
       if (hasClear()) s += `<text id="pinTxt" x="412" y="400" text-anchor="end" font-size="20" font-weight="bold"></text>`;
       if (hasLoad()) s += `<text id="pinTxt" x="428" y="72" text-anchor="start" font-size="20" font-weight="bold"></text>`;
+      // the 0 / 1 badges: the clock pin, C, LD-bar, the AND gate's pins and BO-bar
+      s += badge('ck', 495, clkY) + badge('c', 420, 352) + badge('ld', 420, 150) + badge('a1', 86, 315) + badge('a2', 86, 297) + badge('ao', 134, 336) + badge('bo', 122, 265);
       document.getElementById('simSvg').innerHTML = s;
       const g = document.getElementById('swClk'), a = document.getElementById('swAuto');
       g.addEventListener('click', pulse);
@@ -428,11 +867,12 @@
     function pulse() {
       if (busy()) return false;               // wait for the circuit to settle first
       clk = 1;
+      flashPin('ck', 1);
       phase = 'clocked';
       const gate = jitter(SPEEDS[speed].gate);
       const next = direction === 'up' ? (cnt + 1) & 15 : (cnt - 1) & 15;
       pendingCnt = { val: next, ev: sched(gate, () => applyCount(next, 'count')) };
-      sched(gate * 1.35, () => { clk = 0; onSignals(); });
+      sched(gate * 1.35, () => { clk = 0; flashPin('ck', 0); onSignals(); });
       startLoop(); render(performance.now());
       return true;
     }
@@ -458,26 +898,26 @@
     function onSignals() {
       if (hasLoad()) {
         const b = boLevel();
-        if (b !== boSent) { boSent = b; if (b === 0) phase = 'borrow'; sendNet('bo', b); }
+        if (b !== boSent) { boSent = b; if (b === 0) phase = 'borrow'; flashPin('bo', b); beat(() => sendNet('bo', b)); }
       }
     }
     function sendNet(id, val) {
       const now = performance.now(), dur = SPEEDS[speed].wire, tok = ++seq;
       flights[id] = { val, t0: now, t1: now + dur, tok };
-      sched(dur, () => arrive(id, val, tok));
+      sched(dur + ARRIVE_PAUSE(), () => arrive(id, val, tok));
     }
     function arrive(id, val, tok) {
       if (flights[id] && flights[id].tok === tok) delete flights[id];
-      if (id === 'fb' || id === 'andC') { cIn = val; clearCheck(); }
-      else if (id === 'fbC') { andIn[0] = val; reevalAnd(); }
-      else if (id === 'fbB') { andIn[1] = val; reevalAnd(); }
-      else if (id === 'bo') { ldIn = val; loadCheck(); }
+      if (id === 'fb' || id === 'andC') { cIn = val; flashPin('c', val); beat(clearCheck); }
+      else if (id === 'fbC') { andIn[0] = val; flashPin('a1', val); beat(reevalAnd); }
+      else if (id === 'fbB') { andIn[1] = val; flashPin('a2', val); beat(reevalAnd); }
+      else if (id === 'bo') { ldIn = val; flashPin('ld', val); beat(loadCheck); }
     }
     function reevalAnd() {
       const target = andIn[0] && andIn[1] ? 1 : 0;
       if (pendingAnd) { if (pendingAnd.val === target) return; pendingAnd.ev.dead = true; pendingAnd = null; }
       if (target !== andOut) {
-        pendingAnd = { val: target, ev: sched(jitter(SPEEDS[speed].gate * 0.6), () => { andOut = target; pendingAnd = null; if (target === 1) phase = 'andHigh'; sendNet('andC', target); }) };
+        pendingAnd = { val: target, ev: sched(jitter(SPEEDS[speed].gate * 0.6), () => { andOut = target; pendingAnd = null; if (target === 1) phase = 'andHigh'; flashPin('ao', target); beat(() => sendNet('andC', target)); }) };
       }
     }
     function clearCheck() {                    // C is active HIGH: an asynchronous clear
@@ -528,6 +968,7 @@
           ov.setAttribute('stroke-dashoffset', L * (1 - p));
           ov.style.display = '';
         } else ov.style.display = 'none';
+        sweepDot(id, ov, f, now);
       });
       const pt = document.getElementById('pinTxt');
       if (pt) {
@@ -570,10 +1011,12 @@
       if (!dn && hasClear() && cnt === mod - 1) return `The count is ${cnt} (${bin(cnt)}), the highest number it can settle on. Send another pulse and watch what happens.`;
       return `Click <b>CLK</b> (or <b>AUTO CLK</b>) to ${dn ? 'subtract' : 'add'} 1 on each rising edge of the clock.`;
     }
+    // While the signals are travelling the text stays still (it would change too fast to read); the explanation of the
+    // settled state appears when the click has finished.
     function renderStatus() {
       const settling = busy();
       document.getElementById('simStatus').innerHTML =
-        `<div>Count = <b>${cnt}</b> (<b>${bin(cnt)}</b>)${settling ? ' · <i>settling…</i>' : ''}</div><div style="margin-top:.35rem">${statusBody()}</div>`;
+        `<div>Count = <b>${cnt}</b> (<b>${bin(cnt)}</b>)${settling ? ' · <i>settling…</i>' : ''}</div><div style="margin-top:.35rem">${settling ? '<i>Watch the signals travel through the circuit…</i>' : statusBody()}</div>`;
     }
 
     function setConfig(d, m) {
@@ -590,6 +1033,8 @@
       events.forEach(e => e.dead = true); events = [];
       cnt = startCount(); cIn = 0; ldIn = 1; clk = 0; andIn = [0, 0]; andOut = 0; boSent = 1;
       pendingCnt = null; pendingAnd = null; flights = {}; phase = 'idle';
+      pinLv = { ck: 0, c: 0, ld: 1, a1: 0, a2: 0, ao: 0, bo: 1 };
+      hideBadges();
     }
     function resetSim() { initState(); render(); }
     function setSpeed(s) {
