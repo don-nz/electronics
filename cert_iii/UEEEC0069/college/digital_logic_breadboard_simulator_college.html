@@ -27,6 +27,13 @@
     .tt tr.cur td { background: rgba(var(--colour-ui-primary-rgb), .15); color: var(--colour-ui-primary); font-weight: 700; }
     .tt td.z1 { color: var(--colour-ui-correct); }
     .ov { text-decoration: overline; }
+    /* a 0 / 1 badge popping up on a pin as a change reaches it */
+    #bbSvg .pin-pop { transform-box: fill-box; transform-origin: center; animation: pinPop .4s ease-out; }
+    @keyframes pinPop { 0% { transform: scale(.3); opacity: 0; } 55% { transform: scale(1.3); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) { #bbSvg .pin-pop { animation: none; } }
+    .speed-row { display: flex; gap: .5rem; align-items: center; justify-content: center; margin-top: .5rem; font-size: .78rem; color: var(--colour-label); }
+    .speed-row button { padding: .35rem .9rem; border: 1px solid var(--colour-border); border-radius: 6px; background: transparent; color: var(--colour-label); cursor: pointer; font: inherit; font-weight: 700; }
+    .speed-row button.active { border-color: var(--colour-ui-primary); color: var(--colour-ui-primary); background: rgba(var(--colour-ui-primary-rgb), .1); }
     /* the workings: one line per gate, the pin it can be measured on at the right */
     /* two columns sized to their content, so each Output Pin sits right beside its result */
     .workings { margin-top: .5rem; display: grid; grid-template-columns: max-content max-content;
@@ -738,6 +745,10 @@ header p {
         <span><i style="background:#e53935"></i>+5 V</span>
         <span><i style="background:#222"></i>0 V (GND)</span>
       </div>
+      <div class="speed-row">Signal speed:
+        <button type="button" id="spd-normal" class="active" onclick="setSpeed('normal')">Normal</button>
+        <button type="button" id="spd-fast" onclick="setSpeed('fast')">Fast</button>
+      </div>
       <div class="bb-lower">
         <div class="sim-status" id="simStatus" aria-live="polite"></div>
         <table class="tt" id="truthTable"></table>
@@ -1015,8 +1026,9 @@ function updateThemeToggleUI(isDark) {
       drawLed();
       // wires on top
       gWires = el('g', { fill: 'none', 'stroke-linecap': 'round' }, svg);
-      WIRES.forEach(w => {
+      WIRES.forEach((w, i) => {
         const d = wirePath(w);
+        Object.assign(w, { id: 'w' + i, d, sa: stripKey(w.a[0], w.a[1]), sb: stripKey(w.b[0], w.b[1]) });
         el('path', { d, stroke: 'rgba(0,0,0,.35)', 'stroke-width': 9 }, gWires);
         w.el = el('path', { d, 'stroke-width': 6 }, gWires);
         [w.a, w.b].forEach(([c, r]) => el('circle', { cx: X(c), cy: hy(r), r: 4.5, fill: '#555' }, gWires));
@@ -1025,15 +1037,16 @@ function updateThemeToggleUI(isDark) {
       // first pin it drives: A -> 7408 pin 1 (col 2), B -> 7408 pin 2 (col 3), C -> 7402 pin 2 (col 13)
       const SW_Y = 680;
       [['A', 2, X(2) - 30], ['B', 3, X(3) + 100], ['C', 13, X(13)]].forEach(([n, col, sx]) => {
-        const w = { a: null, net: n };
-        w.el = el('path', { d: `M ${sx},${SW_Y} C ${sx},${SW_Y - 40} ${X(col)},${ROW.j + 110} ${X(col)},${ROW.j}`, 'stroke-width': 6, fill: 'none', 'stroke-linecap': 'round' }, svg);
+        const d = `M ${sx},${SW_Y} C ${sx},${SW_Y - 40} ${X(col)},${ROW.j + 110} ${X(col)},${ROW.j}`;
+        const w = { id: 'sw' + n, net: n, d, sa: 'SW' + n, sb: stripKey(col, 'j') };
+        w.el = el('path', { d, 'stroke-width': 6, fill: 'none', 'stroke-linecap': 'round' }, svg);
         el('circle', { cx: X(col), cy: ROW.j, r: 4.5, fill: '#555' }, svg);
         INPUT_WIRES.push(w);
         const g = el('g', { class: 'sw', id: 'sw' + n, tabindex: 0, role: 'button', 'aria-label': 'Toggle input ' + n }, svg);
         el('rect', { class: 'sw-box', x: sx - 50, y: SW_Y, width: 100, height: 92, rx: 10, style: 'fill: var(--colour-panel); stroke: var(--colour-border)', 'stroke-width': 3 }, g);
         el('text', { x: sx, y: SW_Y + 30, 'text-anchor': 'middle', 'font-size': 26, 'font-weight': 'bold', style: 'fill: var(--colour-text)' }, g, n);
         el('text', { id: 'swv' + n, x: sx, y: SW_Y + 76, 'text-anchor': 'middle', 'font-size': 36, 'font-weight': 'bold' }, g, '');
-        const fn = () => { if (n === 'A') A ^= 1; if (n === 'B') B ^= 1; if (n === 'C') C ^= 1; render(); };
+        const fn = () => flipSwitch(n);
         g.addEventListener('click', fn);
         g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); } });
       });
@@ -1093,8 +1106,9 @@ function updateThemeToggleUI(isDark) {
     // from the trainer's logic switches: one wire from 7400 pin 6, no LED, resistor or GND link on the board.
     function drawLed() {
       const LX = X(COLS) + 120, LY = ROW.h;
-      const w = { net: 'Z' };
-      w.el = el('path', { d: `M ${X(27)},${ROW.g} C ${X(27) + 40},${ROW.g + 90} ${LX - 110},${LY - 6} ${LX - 34},${LY - 6}`, 'stroke-width': 6, fill: 'none', 'stroke-linecap': 'round' }, svg);
+      const d = `M ${X(27)},${ROW.g} C ${X(27) + 40},${ROW.g + 90} ${LX - 110},${LY - 6} ${LX - 34},${LY - 6}`;
+      const w = { id: 'wz', net: 'Z', d, sa: stripKey(27, 'g'), sb: 'IND' };
+      w.el = el('path', { d, 'stroke-width': 6, fill: 'none', 'stroke-linecap': 'round' }, svg);
       el('circle', { cx: X(27), cy: ROW.g, r: 4.5, fill: '#555' }, svg);
       INPUT_WIRES.push(w);
       el('rect', { x: LX - 34, y: LY - 58, width: 90, height: 126, rx: 10, style: 'fill: var(--colour-panel); stroke: var(--colour-border)', 'stroke-width': 3 }, svg);
@@ -1157,28 +1171,165 @@ function updateThemeToggleUI(isDark) {
         `<span class="w-check">check: Z = A·B·${o('C')} + ${o('B')}·C = ${lv.AB & lv.Cn} + ${lv.Bn & lv.C} = <b>${lv.Z}</b></span>`;
     }
 
-    // ── rendering ──
-    function render() {
+    // ══════════════════════════════════════════════════════════════════════
+    // THE RIPPLE — a switch change travels through the circuit stage by stage, like the counter / multiplexer
+    // simulators: the new level runs along each wire with a dot leading it (the wire changes colour behind it), every
+    // pin in the strip it reaches flashes a 0 / 1 badge, and a beat later each gate with a changed input re-evaluates —
+    // its output pin flashes only if the output actually CHANGES, and the change carries on from there to the indicator.
+    // What is drawn comes from these "as drawn" levels (pinLv, wireLv, shownZ), not straight from the logic.
+    // ══════════════════════════════════════════════════════════════════════
+    const SPEEDS = { normal: { step: 520, msPerUnit: 1.5 }, fast: { step: 260, msPerUnit: 0.75 } };
+    let speed = 'normal';
+    const stripKey = (c, r) => TOP.includes(r) ? c + 'T' : BOT.includes(r) ? c + 'B' : r;
+    const pinKey = (ic, n) => ic.id + ':' + n;
+    const stripOfPin = key => { const [id, n] = key.split(':'); const p = pinPos(ICS.find(i => i.id === id), +n); return stripKey(p.col, p.row); };
+    const netOfPin = key => { const [id, n] = key.split(':'); return PIN_NET[id][n]; };
+    const NOR = (a, b) => 1 - (a | b), NAND = (a, b) => 1 - (a & b), AND = (a, b) => a & b;
+    const GATES = [
+      { out: 'ic1:3', ins: ['ic1:1', 'ic1:2'], fn: AND },     // 7408: A·B
+      { out: 'ic2:1', ins: ['ic2:2', 'ic2:3'], fn: NOR },     // 7402: NOT C (inputs tied)
+      { out: 'ic2:4', ins: ['ic2:5', 'ic2:6'], fn: NOR },     // 7402: NOT B (inputs tied)
+      { out: 'ic3:3', ins: ['ic3:1', 'ic3:2'], fn: NAND },    // 7400: NOT(A·B·NOT C)
+      { out: 'ic3:11', ins: ['ic3:13', 'ic3:12'], fn: NAND }, // 7400: NOT(NOT B·C)
+      { out: 'ic3:6', ins: ['ic3:4', 'ic3:5'], fn: NAND },    // 7400: Z
+    ];
+    const GATE_OF_INPUT = {}; GATES.forEach(g => g.ins.forEach(k => { GATE_OF_INPUT[k] = g; }));
+    const USED_PINS = [];                                   // every signal pin (not +5 V / GND)
+    ICS.forEach(ic => { for (let n = 1; n <= 14; n++) { const net = PIN_NET[ic.id][n]; if (net && net !== 'VCC' && net !== 'GND') USED_PINS.push(pinKey(ic, n)); } });
+    const PIN_INDEX = {}; USED_PINS.forEach(k => { (PIN_INDEX[stripOfPin(k)] = PIN_INDEX[stripOfPin(k)] || []).push(k); });
+    const SIGNAL_WIRES = () => WIRES.concat(INPUT_WIRES).filter(w => w.net !== 'VCC' && w.net !== 'GND');
+
+    let pinLv = {}, wireLv = {}, shownZ = 0;
+    function settleAll() {
       const lv = levels();
-      WIRES.forEach(w => w.el.setAttribute('stroke', netCol(w.net, lv)));
-      INPUT_WIRES.forEach(w => w.el.setAttribute('stroke', netCol(w.net, lv)));
-      // inside the chips: a used gate's wires show the level on their pin; unused gates keep the chip's own colour
-      CHIP_WIRES.forEach(w => { const net = PIN_NET[w.ic][w.pin]; w.el.setAttribute('stroke', net ? netCol(net, lv) : CHIP.gate); });
+      USED_PINS.forEach(k => { pinLv[k] = lv[netOfPin(k)]; });
+      SIGNAL_WIRES().forEach(w => { wireLv[w.id] = lv[w.net]; });
+      shownZ = lv.Z;
+    }
+
+    // ── the event engine (same shape as the other simulators) ──
+    let flights = {}, events = [], seq = 0, loopOn = false;
+    function sched(dt, fn, badge) { const e = { t: performance.now() + dt, fn, dead: false, badge: !!badge }; events.push(e); startLoop(); return e; }
+    function startLoop() { if (!loopOn) { loopOn = true; requestAnimationFrame(tick); } }
+    function tick() {
+      const now = performance.now();
+      events.sort((a, b) => a.t - b.t);
+      while (events.length && events[0].t <= now) { const e = events.shift(); if (!e.dead) e.fn(); }
+      events = events.filter(e => !e.dead);
+      render(now);
+      if (events.length || Object.keys(flights).length) requestAnimationFrame(tick); else loopOn = false;
+    }
+    const busy = () => events.some(e => !e.badge) || Object.keys(flights).length > 0;
+    const stepMs = () => SPEEDS[speed].step;
+    const beat = next => sched(stepMs(), next);
+    const ARRIVE_PAUSE = 150;
+    function hop(w, val, then) {
+      const o = document.getElementById('o-' + w.id), dur = Math.max(360, o.getTotalLength() * SPEEDS[speed].msPerUnit);
+      const now = performance.now(), tok = ++seq;
+      flights[w.id] = { val, t0: now, t1: now + dur, tok };
+      sched(dur + ARRIVE_PAUSE, () => { if (flights[w.id] && flights[w.id].tok === tok) delete flights[w.id]; then(); });
+    }
+    function buildSweeps() {                                 // a sweep line and a leading dot for every signal wire
+      const g = el('g', { fill: 'none', 'stroke-linecap': 'round' }, svg);
+      SIGNAL_WIRES().forEach(w => {
+        el('path', { id: 'o-' + w.id, d: w.d, 'stroke-width': 6.5, style: 'display:none' }, g);
+        el('circle', { id: 'd-' + w.id, r: 9, 'stroke-width': 3, style: 'display:none; stroke: var(--colour-panel)' }, g);
+      });
+    }
+    function renderSweeps(now) {
+      SIGNAL_WIRES().forEach(w => {
+        const o = document.getElementById('o-' + w.id), dot = document.getElementById('d-' + w.id), f = flights[w.id];
+        if (!f) { o.style.display = 'none'; dot.style.display = 'none'; return; }
+        const L = o.getTotalLength(), p = Math.max(0, Math.min(1, (now - f.t0) / (f.t1 - f.t0))), c = f.val ? HIGH : LOW;
+        o.setAttribute('stroke', c); o.setAttribute('stroke-dasharray', L); o.setAttribute('stroke-dashoffset', L * (1 - p)); o.style.display = '';
+        if (p < 1) { const pt = o.getPointAtLength(L * p); dot.setAttribute('cx', pt.x); dot.setAttribute('cy', pt.y); dot.style.fill = c; dot.style.display = ''; }
+        else dot.style.display = 'none';
+      });
+    }
+    // ── pin badges: a 0 / 1 that pops up on a pin when its level changes ──
+    function buildBadges() {
+      const g = el('g', {}, svg);
+      USED_PINS.forEach(k => {
+        const [id, n] = k.split(':'), ic = ICS.find(i => i.id === id), { col } = pinPos(ic, +n), y = +n <= 7 ? CY + 60 : CY - 60;
+        const b = el('g', { id: 'b-' + k.replace(':', '_'), visibility: 'hidden', transform: `translate(${X(col)},${y})` }, g);
+        const inner = el('g', {}, b);
+        el('rect', { x: -15, y: -15, width: 30, height: 30, rx: 7, 'stroke-width': 2.5, style: 'stroke: var(--colour-panel)' }, inner);
+        el('text', { x: 0, y: 8, 'text-anchor': 'middle', 'font-size': 22, 'font-weight': 'bold', style: 'fill: var(--colour-panel)' }, inner, '');
+      });
+    }
+    function flashPin(k, val) {
+      pinLv[k] = val;
+      const b = document.getElementById('b-' + k.replace(':', '_')), inner = b.firstChild;
+      inner.firstChild.style.fill = val ? HIGH : LOW; inner.lastChild.textContent = val;
+      b.setAttribute('visibility', 'visible');
+      inner.classList.remove('pin-pop'); void inner.getBoundingClientRect(); inner.classList.add('pin-pop');
+      if (b._hide) b._hide.dead = true;
+      b._hide = sched(stepMs() * 1.1, () => b.setAttribute('visibility', 'hidden'), true);
+    }
+    // a change arrives in a strip: every pin there takes the new level (and its gate re-evaluates a beat later), and the
+    // change carries on along every other wire from that strip
+    function arriveStrip(strip, net, val, origin, visited) {
+      visited.add(strip);
+      (PIN_INDEX[strip] || []).forEach(k => {
+        if (k === origin || pinLv[k] === val) return;
+        flashPin(k, val);
+        const g = GATE_OF_INPUT[k];
+        if (g) beat(() => evalGate(g));
+      });
+      if (strip === 'IND') shownZ = val;
+      SIGNAL_WIRES().forEach(w => {
+        if (w.net !== net || (w.sa !== strip && w.sb !== strip)) return;
+        const other = w.sa === strip ? w.sb : w.sa;
+        if (visited.has(other)) return;
+        visited.add(other);
+        hop(w, val, () => { wireLv[w.id] = val; arriveStrip(other, net, val, null, visited); });
+      });
+    }
+    function evalGate(g) {
+      const out = g.fn(...g.ins.map(k => pinLv[k]));
+      if (out === pinLv[g.out]) return;                     // the output does not change: nothing more happens here
+      flashPin(g.out, out);
+      const s0 = stripOfPin(g.out);
+      beat(() => arriveStrip(s0, netOfPin(g.out), out, g.out, new Set([s0])));
+    }
+    function flipSwitch(n) {
+      if (busy()) return;
+      if (n === 'A') A ^= 1; if (n === 'B') B ^= 1; if (n === 'C') C ^= 1;
+      const val = levels()[n], w = INPUT_WIRES.find(x => x.id === 'sw' + n);
+      hop(w, val, () => { wireLv[w.id] = val; arriveStrip(w.sb, n, val, null, new Set([w.sa, w.sb])); });
+      startLoop(); render();
+    }
+    function setSpeed(v) { speed = v; ['normal', 'fast'].forEach(k => document.getElementById('spd-' + k).classList.toggle('active', k === v)); }
+
+    // ── rendering ──
+    function render(now) {
+      now = now || performance.now();
+      const lv = levels();
+      const wc = w => w.net === 'VCC' ? RED : w.net === 'GND' ? BLK : (wireLv[w.id] ? HIGH : LOW);
+      WIRES.forEach(w => w.el.setAttribute('stroke', wc(w)));
+      INPUT_WIRES.forEach(w => w.el.setAttribute('stroke', wc(w)));
+      renderSweeps(now);
+      // inside the chips: a used gate's wires show the level on their pin (as drawn); unused gates keep the chip's colour
+      CHIP_WIRES.forEach(w => { const net = PIN_NET[w.ic][w.pin], k = w.ic + ':' + w.pin;
+        w.el.setAttribute('stroke', !net ? CHIP.gate : net === 'VCC' ? RED : net === 'GND' ? BLK : (pinLv[k] ? HIGH : LOW)); });
       ICS.forEach(ic => { for (let n = 1; n <= 14; n++) {
-        const net = PIN_NET[ic.id][n], p = document.getElementById(`${ic.id}p${n}`);
-        p.setAttribute('fill', !net ? '#b9b9b9' : net === 'VCC' ? RED : net === 'GND' ? '#555' : lv[net] ? '#22c55e' : '#94a3b8');
+        const net = PIN_NET[ic.id][n], p = document.getElementById(`${ic.id}p${n}`), v = pinLv[ic.id + ':' + n];
+        p.setAttribute('fill', !net ? '#b9b9b9' : net === 'VCC' ? RED : net === 'GND' ? '#555' : v ? '#22c55e' : '#94a3b8');
       } });
       ['A', 'B', 'C'].forEach(n => { const t = document.getElementById('swv' + n); t.textContent = lv[n]; t.style.fill = lv[n] ? HIGH : LOW;
         document.querySelector(`#sw${n} rect`).style.fill = lv[n] ? 'rgba(var(--colour-ui-correct-rgb), .18)' : 'var(--colour-panel)'; });
       const led = document.getElementById('ledBody');
-      // a two-colour indicator, as on the college trainer: red for 1, green for 0 (always lit)
-      led.setAttribute('fill', lv.Z ? '#ff3b30' : '#b5e61d');   // 0: a yellow-green, like the trainer's LED
-      led.setAttribute('stroke', lv.Z ? '#a11' : '#6b8e0a');
+      // a two-colour indicator, as on the college trainer: red for 1, green for 0 (always lit); it changes when the
+      // change actually reaches it
+      led.setAttribute('fill', shownZ ? '#ff3b30' : '#b5e61d');   // 0: a yellow-green, like the trainer's LED
+      led.setAttribute('stroke', shownZ ? '#a11' : '#6b8e0a');
       led.setAttribute('filter', 'url(#ledGlow)');
       // status
       const row = `A = ${A}, B = ${B}, C = ${C}`;
-      document.getElementById('simStatus').innerHTML =
-        `<div><b>${row}</b> → Z = <b style="color:${lv.Z ? 'var(--colour-ui-correct)' : 'var(--colour-label)'}">${lv.Z}</b>, indicator <b style="color:${lv.Z ? '#e53935' : '#7cb305'}">${lv.Z ? 'RED' : 'GREEN'}</b></div>
+      // while the change is travelling the text stays still; the workings appear once it has settled
+      document.getElementById('simStatus').innerHTML = busy()
+        ? `<div><b>${row}</b> · <i>settling…</i></div><div style="margin-top:.35rem"><i>Watch the change travel through the circuit…</i></div>`
+        : `<div><b>${row}</b> → Z = <b style="color:${lv.Z ? 'var(--colour-ui-correct)' : 'var(--colour-label)'}">${lv.Z}</b>, indicator <b style="color:${lv.Z ? '#e53935' : '#7cb305'}">${lv.Z ? 'RED' : 'GREEN'}</b></div>
          <div class="workings">${workings(lv)}</div>` +
         (selected ? `<div style="margin-top:.5rem">${selected}</div>` : '');
       // truth table
@@ -1192,6 +1343,9 @@ function updateThemeToggleUI(isDark) {
 
     el('defs', {}, svg).innerHTML = '<filter id="ledGlow" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="5" result="b" /><feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge></filter>';
     build();
+    buildSweeps();
+    buildBadges();
+    settleAll();
     render();
   </script>
   <p class="site-copyright">&copy; 2026 Anderson Home Technology. All rights reserved.</p>
