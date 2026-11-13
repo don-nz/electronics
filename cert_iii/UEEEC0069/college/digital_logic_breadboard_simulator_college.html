@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Digital Electronics — Logic Circuit on a Breadboard — Simulator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,600;0,700;0,800;1,400;1,600&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <style>
+
+
+    .sim-intro { font-size: .85rem; line-height: 1.6; }
+    #bbSvg { width: 100%; display: block; margin: 0 auto; }
+    #bbSvg .sw, #bbSvg .hole, #bbSvg .pin { cursor: pointer; }
+    #bbSvg .sw:focus { outline: none; }
+    #bbSvg .sw:focus-visible rect.sw-box, #bbSvg .sw:hover rect.sw-box { stroke: var(--colour-ui-primary); stroke-width: 3; }
+    #bbSvg .hole:hover { stroke: var(--colour-ui-primary); stroke-width: 1.5; }
+    .sim-status { margin-top: .8rem; padding: .7rem .9rem; border: 1px solid var(--colour-border); border-radius: 6px; font-size: .85rem; line-height: 1.55; min-height: 3.2em; }
+    .sim-legend { display: flex; gap: 1.1rem; flex-wrap: wrap; justify-content: center; margin-top: .5rem; font-size: .75rem; color: var(--colour-label); }
+    .sim-legend i { display: inline-block; width: 1.2rem; height: 4px; border-radius: 2px; margin-right: .3rem; vertical-align: middle; }
+    .bb-lower { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: .8rem; align-items: flex-start; }
+    .bb-lower .sim-status { flex: 1 1 320px; margin-top: 0; }
+    .tt { border-collapse: collapse; font-family: 'Share Tech Mono', monospace; font-size: .85rem; }
+    .tt th, .tt td { border: 1px solid var(--colour-border); padding: .2rem .6rem; text-align: center; }
+    .tt th { color: var(--colour-label); font-weight: 700; }
+    .tt tr.cur td { background: rgba(var(--colour-ui-primary-rgb), .15); color: var(--colour-ui-primary); font-weight: 700; }
+    .tt td.z1 { color: var(--colour-ui-correct); }
+    .ov { text-decoration: overline; }
+    /* the workings: one line per gate, the pin it can be measured on at the right */
+    .workings { margin-top: .5rem; font-family: 'Share Tech Mono', monospace; font-size: .9rem; line-height: 1.9; }
+    .w-line { display: flex; justify-content: space-between; gap: 1rem; border-bottom: 1px dashed var(--colour-border); }
+    .w-pin { color: var(--colour-label); font-size: .8rem; white-space: nowrap; }
+    .w-check { color: var(--colour-label); border-bottom: none; }
+    /* a NAND's bar over a whole expression, raised clear of any single-letter bar inside it */
+    .ov-outer { display: inline-block; border-top: 1.5px solid currentColor; padding-top: 3px; line-height: 1.1; }
+    /* the chips are the IC reference sheet's own drawings (resources/digital_resources_ics.html), turned a quarter turn
+       so they straddle the channel. Their body is filled so the board's holes don't show through, and their own pin
+       numbers and +5V/GND labels are hidden (they would read sideways): upright ones are drawn beside each leg instead. */
+    body.dark-theme { --colour-ic-outline: #c7d2e0; }
+    :root { --colour-ic-outline: #0f172a; }
+    .ic-body { fill: var(--colour-panel); stroke: var(--colour-ic-outline); stroke-width: 2; }
+    .ic-pin { fill: var(--colour-ic-outline); opacity: .55; }
+    .ic-pin-num, .ic-pin-label { display: none; }
+    /* the long board needs room: let this page's card use most of the screen width */
+    .quiz-wrap.single-col { max-width: min(1150px, 96vw); }
+    .quiz-wrap.single-col .questions-col { max-width: none; }
+    /* the same for the college copy (tools/build_college.py wraps the page in .main-wrap, 700 px by default) */
+    body .main-wrap { max-width: min(1150px, 96vw); }
+  
+/*
+  NSW TAFE college theme — the single source for the self-contained teacher pages
+  (cert_iii/UEEEC0069/college/*_college.html). tools/build_college.py inlines this into
+  each generated page, so a college page is the student page's own markup and script
+  with this stylesheet instead of assets/quiz-common.css.
+
+  It was lifted from the hand-made college pages (TAFE colour palette, Public Sans,
+  .main-wrap / .card-top-bar layout, light and dark themes, print rules) and then
+  extended with rules for the classes the shared engines draw with, so the college
+  pages no longer need a hand-made copy of the waveform code. To change how the
+  college pages look, edit this file and rebuild.
+*/
+
+:root {
+  --colour-bg: #f8f9fa;
+  --colour-panel: #ffffff;
+  --colour-border: #d0d5dd;
+  --colour-text: #1d2939;
+  --colour-text-strong: #002664;
+  --colour-label: #475467;
+  --colour-label-rgb: 71, 84, 103;
+  --colour-grid: rgba(0, 38, 100, 0.04);
+
+  --colour-ui-primary: #002664;
+  --colour-ui-primary-rgb: 0, 38, 100;
+  --colour-ui-correct: #087443;
+  --colour-ui-correct-rgb: 8, 116, 67;
+  --colour-ui-wrong: #d92d20;
+  --colour-ui-wrong-rgb: 217, 45, 32;
+
+  --colour-input-a: #4338ca;
+  --colour-input-b: #0f766e;
+  --colour-output-z: #0284c7;
+
+  --colour-dff: #0d80c3;
+  --colour-jfet: #7e22ce;
+  --colour-bjt: #b45309;
+  --colour-switch: #0369a1;
+
+  --font-body: 'Public Sans', system-ui, -apple-system, sans-serif;
+  --font-display: 'Public Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Share Tech Mono', monospace, sans-serif;
+
+  --radius-lg: 6px;
+  --radius-sm: 4px;
+  --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+body.dark-theme {
+  --colour-bg: #121824;
+  --colour-panel: #1a2232;
+  --colour-border: #2e3c54;
+  --colour-text: #e2e8f0;
+  --colour-text-strong: #ffffff;
+  --colour-label: #94a3b8;
+  --colour-label-rgb: 148, 163, 184;
+  --colour-grid: rgba(255, 255, 255, 0.03);
+
+  --colour-ui-primary: #38bdf8;
+  --colour-ui-primary-rgb: 56, 189, 248;
+  --colour-ui-correct: #34d399;
+  --colour-ui-correct-rgb: 52, 211, 153;
+  --colour-ui-wrong: #f87171;
+  --colour-ui-wrong-rgb: 248, 113, 113;
+
+  --colour-input-a: #818cf8;
+  --colour-input-b: #2dd4bf;
+  --colour-output-z: #38bdf8;
+
+  --colour-dff: #54c0ff;
+  --colour-jfet: #c084fc;
+  --colour-bjt: #ffb454;
+  --colour-switch: #38bdf8;
+
+  --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--colour-bg);
+  color: var(--colour-text);
+  font-family: var(--font-body);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem 1rem;
+  background-image: linear-gradient(var(--colour-grid) 1px, transparent 1px), linear-gradient(90deg, var(--colour-grid) 1px, transparent 1px);
+  background-size: 40px 40px;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+header {
+  margin-bottom: 1.5rem;
+  width: 100%;
+  max-width: 700px;
+  text-align: left;   /* stated outright: quiz-engine pages carry quiz-common.css underneath, which centres it */
+}
+
+header h1 {
+  font-family: var(--font-display);
+  font-size: clamp(1.4rem, 4vw, 2.2rem);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--colour-ui-primary);
+  text-shadow: none;
+  text-transform: none;
+}
+
+header p {
+  margin-top: .4rem;
+  color: var(--colour-label);
+  font-size: .82rem;
+  font-weight: 600;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.75rem;
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--colour-text);
+  background: var(--colour-panel);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-card);
+}
+
+.theme-toggle:hover {
+  border-color: var(--colour-ui-primary);
+}
+
+.back-link {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--colour-ui-primary);
+  text-decoration: none;
+  padding: 0.35rem 0.1rem;
+}
+
+.back-link:hover {
+  text-decoration: underline;
+}
+
+.main-wrap.wide { max-width: 1000px; }   /* galleries, e.g. the IC reference */
+.main-wrap {
+  width: 100%;
+  max-width: 700px;
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+
+.card {
+  background: var(--colour-panel);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-card);
+  transition: background 0.25s ease, border-color 0.25s ease;
+}
+
+.card-top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  margin-bottom: 0.5rem;
+}
+
+.rule-card {
+  font-size: .85rem;
+  line-height: 1.6;
+}
+
+.rule-card .rule-row {
+  display: flex;
+  gap: .5rem;
+  margin: .35rem 0;
+}
+
+.rule-card .rule-cond {
+  flex: none;
+  width: 8.5rem;
+  font-family: var(--font-mono);
+  font-weight: bold;
+}
+
+.legend-row {
+  display: flex;
+  gap: 1rem;
+  row-gap: .4rem;
+  flex-wrap: wrap;
+  margin-top: .8rem;
+  font-size: .78rem;
+  font-weight: 600;
+  color: var(--colour-label);
+}
+
+.legend-swatch {
+  display: inline-block;
+  width: 1.1rem;
+  height: 3px;
+  margin-right: .3rem;
+  vertical-align: middle;
+  border-radius: 2px;
+}
+
+.gate-toggle-card {
+  font-size: .85rem;
+}
+
+.gate-toggle-label {
+  color: var(--colour-label);
+  margin-bottom: .6rem;
+  font-weight: 600;
+}
+
+.gate-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  gap: .8rem;
+  justify-content: center;
+}
+
+.gate-toggle-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .3rem;
+  padding: .6rem 1.1rem;
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-lg);
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: .7rem;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--colour-label);
+  text-align: center;
+  transition: background .15s, color .15s, border-color .15s;
+}
+
+.gate-toggle-btn svg {
+  width: 9rem;
+  height: auto;
+  display: block;
+}
+
+.gate-toggle-btn.active {
+  border-color: var(--colour-ui-primary);
+  background: rgba(var(--colour-ui-primary-rgb), .12);
+  color: var(--colour-ui-primary);
+}
+
+.gate-toggle-btn:not(.active):hover {
+  background: rgba(var(--colour-ui-primary-rgb), .06);
+  color: var(--colour-text);
+}
+
+.hint-toggle-card { font-size: .85rem; }
+.hint-toggle-label { color: var(--colour-label); margin-bottom: .6rem; font-weight: 600; }
+.hint-toggle { display: flex; gap: .6rem; flex-wrap: wrap; justify-content: center; }
+.hint-toggle-btn {
+  padding: .5rem 1.1rem;
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-lg);
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: .7rem;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--colour-label);
+  transition: background .15s, color .15s, border-color .15s;
+}
+.hint-toggle-btn:not(.active):hover { background: rgba(var(--colour-ui-primary-rgb), .06); color: var(--colour-text); }
+.hint-toggle-btn[data-hint="edges"].active { border-color: var(--colour-switch); color: var(--colour-switch); background: color-mix(in srgb, var(--colour-switch) 14%, transparent); }
+.out-toggle-card { font-size: .82rem; margin-bottom: 1.2rem; }
+.out-toggle-btn { min-width: 3.6rem; }
+.out-toggle-btn.active { border-color: var(--colour-output-z); color: var(--colour-output-z); background: color-mix(in srgb, var(--colour-output-z) 14%, transparent); }
+
+.wb-tracks-wrap { position: relative; }
+.wb-hint-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+
+.wb-track-row {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin-bottom: 0.6rem;
+}
+
+.wb-track-label {
+  font-family: var(--font-mono);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--colour-text-strong);
+  width: 20px;
+  text-align: center;
+}
+
+.wb-track-row svg {
+  flex: 1;
+  height: 48px;
+  background: rgba(var(--colour-label-rgb), 0.05);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-sm);
+}
+
+.wb-track-path {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.wb-grid-line {
+  stroke: var(--colour-border);
+  stroke-width: 1;
+  stroke-dasharray: 2, 2;
+  opacity: 0.6;
+}
+
+.wb-track-p { stroke: var(--colour-jfet); }
+.wb-track-c { stroke: var(--colour-bjt); }
+.wb-track-clk { stroke: var(--colour-switch); }
+.wb-track-d { stroke: var(--colour-input-a); }
+.wb-track-q { stroke: var(--colour-output-z); }
+
+.wb-palette {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  margin: 1.2rem 0;
+  flex-wrap: wrap;
+}
+
+.wb-piece-btn {
+  background: var(--colour-panel);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.6rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.wb-piece-btn:hover:not(:disabled) {
+  border-color: var(--colour-ui-primary);
+  background: rgba(var(--colour-ui-primary-rgb), 0.08);
+}
+
+.wb-piece-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.wb-piece-btn svg {
+  width: 42px;
+  height: 28px;
+}
+
+.wb-piece-label {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--colour-label);
+}
+
+.result-banner {
+  display: none;
+  padding: .65rem 1rem;
+  border-radius: var(--radius-sm);
+  font-size: .82rem;
+  font-family: var(--font-body);
+  font-weight: 600;
+  align-items: center;
+  gap: .6rem;
+  margin-bottom: 1rem;
+}
+
+.result-banner.correct {
+  display: flex;
+  background: rgba(var(--colour-ui-correct-rgb), .12);
+  border: 1px solid rgba(var(--colour-ui-correct-rgb), .4);
+  color: var(--colour-ui-correct);
+}
+
+.result-banner.wrong {
+  display: flex;
+  background: rgba(var(--colour-ui-wrong-rgb), .12);
+  border: 1px solid rgba(var(--colour-ui-wrong-rgb), .4);
+  color: var(--colour-ui-wrong);
+}
+
+.btn-row {
+  display: flex;
+  gap: .6rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+  width: 100%;
+}
+
+.btn {
+  padding: .6rem 0;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: .78rem;
+  font-weight: 700;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all .15s;
+  border: 1px solid;
+  flex: 1;
+  min-width: 105px;
+  text-align: center;
+}
+
+.btn-prev {
+  background: rgba(var(--colour-label-rgb), .1);
+  border-color: rgba(var(--colour-label-rgb), .4);
+  color: var(--colour-label);
+}
+
+.btn-prev:hover:not(:disabled) {
+  background: rgba(var(--colour-label-rgb), .2);
+}
+
+.btn-prev:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.btn-check {
+  background: rgba(var(--colour-ui-correct-rgb), .15);
+  border-color: rgba(var(--colour-ui-correct-rgb), .5);
+  color: var(--colour-ui-correct);
+}
+
+.btn-check:hover:not(:disabled) {
+  background: rgba(var(--colour-ui-correct-rgb), .25);
+}
+
+.btn-check:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: rgba(var(--colour-ui-primary-rgb), .12);
+  border-color: rgba(var(--colour-ui-primary-rgb), .4);
+  color: var(--colour-ui-primary);
+}
+
+.btn-secondary:hover {
+  background: rgba(var(--colour-ui-primary-rgb), .22);
+}
+
+/* Print Worksheet — .print-only is invisible on screen, shown only via
+   @media print below. #printWorksheet (a direct child of <body>, NOT
+   nested inside .main-wrap) is built fresh by printDiagramNow() right
+   before window.print(): page title/description, the current Trigger/Q
+   diagram with Q left as a blank grid, then a page-break and the same
+   diagram again with the correct Q filled in as the solution. */
+.print-only { display: none; }
+
+@media print {
+  /* Force light regardless of whichever theme is active on screen —
+     body.dark-theme has higher specificity than a bare :root rule, so
+     it's redefined here too (same values), not just :root, or dark
+     mode would still win. */
+  :root, body.dark-theme {
+    --colour-bg: #ffffff;
+    --colour-panel: #ffffff;
+    --colour-text: #000000;
+    --colour-text-strong: #000000;
+    --colour-border: #999999;
+    --colour-label: #444444;
+  }
+  body > *:not(#printWorksheet) { display: none !important; }
+  body { background: #fff; background-image: none; padding: 0; display: block; }
+  #printWorksheet {
+    display: block !important;
+    color: #000;
+    font-family: var(--font-body);
+    max-width: 700px;
+    margin: 2rem auto;
+  }
+  #printWorksheet h1 { font-size: 1.3rem; margin: 0 0 .3rem; font-family: var(--font-display); }
+  #printWorksheet .print-subtitle { font-size: .8rem; color: #444; margin-bottom: 1rem; text-transform: uppercase; letter-spacing: .05em; }
+  #printWorksheet .print-description { margin-bottom: 1.2rem; }
+  #printWorksheet .print-diagram-section { page-break-inside: avoid; }
+  /* Solution starts on its own fresh page when printed double-sided or handed out separately. */
+  #printWorksheet .print-solution { page-break-before: always; }
+  #printWorksheet .print-solution h2 { font-size: 1.1rem; margin-bottom: .8rem; }
+  #printWorksheet .wb-track-row svg { width: 100%; height: auto; background: none; border: 1px solid #999; }
+  #printWorksheet .wb-track-label { color: #000; }
+  #printWorksheet .wb-grid-line { stroke: #999; stroke-dasharray: none; opacity: 1; }
+}
+
+/* Copyright line (college copies are self-contained, so inline) */
+.site-copyright {
+  margin: 3rem auto 1.5rem;
+  padding: 0 1rem;
+  text-align: center;
+  font-size: 0.7rem;
+  color: var(--colour-label);
+  opacity: 0.8;
+}
+
+/* ── page-structure rules shared by the waveform-builder pages ── */
+.wb-track-label { width: 2.6rem; }
+.extra-row { display: none; }
+.extra-row.shown { display: flex; }
+/* the student pages space their cards with margin-bottom; .main-wrap already spaces them with a gap */
+.main-wrap > .card { margin-bottom: 0; }
+.rule-card > div:first-of-type { margin-bottom: 0.4rem; }
+.rule-card > div:nth-last-of-type(2) { margin-top: 0.4rem; }
+
+/* ── classes assets/waveform-builder.js draws with (the student theme styles these from quiz-common.css) ── */
+.wb-grid-baseline { stroke: rgba(var(--colour-label-rgb), .4); }
+.wb-track-path.wb-track-s { stroke: var(--colour-input-a); }
+.wb-track-path.wb-track-r { stroke: var(--colour-input-b); }
+.wb-track-path.wb-track-p { stroke: var(--colour-jfet); }
+.wb-track-path.wb-track-c { stroke: var(--colour-bjt); }
+.wb-track-path.wb-track-clk { stroke: var(--colour-switch); }
+.wb-track-path.wb-track-d { stroke: var(--colour-input-a); }
+.wb-progress-shade { fill: var(--colour-ui-primary); opacity: .1; }
+.wb-q-path { fill: none; stroke-width: 2; stroke-linejoin: round; }
+.wb-q-path.wb-col-building { stroke: var(--colour-output-z); }
+.wb-q-path.wb-col-correct { stroke: var(--colour-ui-correct); }
+.wb-q-path.wb-col-wrong { stroke: var(--colour-ui-wrong); }
+.wb-piece-icon { width: 40px; height: 28px; overflow: visible; }
+.wb-piece-icon line, .wb-piece-icon polyline {
+  fill: none; stroke: var(--colour-output-z); stroke-width: 2.5;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+@media (max-width: 480px) {
+  .wb-track-label { width: 1.6rem; font-size: .8rem; }
+  .wb-piece-icon { width: 32px; height: 24px; }
+}
+@media print {
+  #printWorksheet .print-wave-row svg { width: 100%; height: auto; background: none; border: 1px solid #999; }
+}
+
+  </style>
+  <script>
+/* GENERATED by tools/build_shapes.py from assets/shapes/*.html — do not edit by hand.
+
+   Shared SVG shape library. Cross-file <use> and fetch() are blocked on
+   file://, so shapes are carried as strings here and injected into a hidden
+   <svg> on the page itself — after that, <use href="#gate-nor-trad"> etc.
+   work exactly as if the defs had been pasted into the page.
+
+   Usage (plain script, same load pattern as theme-init.js):
+     <script src="…/assets/shapes.js"><\/script>
+     <script>Shapes.use("logic-gates", "flip-flops");<\/script>
+
+   Per-page scaling — the masters are drawn at 1:1; a page that wants them
+   bigger passes a trailing options object (id globs -> SVG transform):
+     Shapes.use("logic-gates", { transform: { "*-trad": "scale(1.5)", "*-iec": "scale(1.3)" } });
+   Only top-level shapes without a transform of their own are touched.
+
+   Shapes.sets()       -> array of set names
+   Shapes.ids(name)    -> ids a set defines
+   Ids already present in the document (e.g. a page's own pasted copy) are
+   skipped, so pages can migrate one at a time. Edit the masters in
+   assets/shapes/, then run:  python3 tools/build_shapes.py
+*/
+(function () {
+  var SETS = {
+    "logic-gates": "<filter id=\"glow\" x=\"-50%\" y=\"-50%\" width=\"200%\" height=\"200%\">\n      <feGaussianBlur stdDeviation=\"2\" result=\"b\" />\n      <feMerge><feMergeNode in=\"b\" /><feMergeNode in=\"SourceGraphic\" /></feMerge>\n    </filter>\n    <g id=\"gate-lead-in2\">\n      <line x1=\"-24\" y1=\"-8\" x2=\"-8\" y2=\"-8\" stroke=\"var(--colour-bjt)\" stroke-width=\"2\" />\n      <line x1=\"-24\" y1=\"8\" x2=\"-8\" y2=\"8\" stroke=\"var(--colour-bjt)\" stroke-width=\"2\" />\n    </g>\n    <g id=\"gate-lead-in1\">\n      <line x1=\"-24\" y1=\"0\" x2=\"-8\" y2=\"0\" stroke=\"var(--colour-bjt)\" stroke-width=\"2\" />\n    </g>\n    <g id=\"gate-lead-in2-or\">\n      <line x1=\"-24\" y1=\"-8\" x2=\"-4.6\" y2=\"-8\" stroke=\"var(--colour-bjt)\" stroke-width=\"2\" />\n      <line x1=\"-24\" y1=\"8\" x2=\"-4.6\" y2=\"8\" stroke=\"var(--colour-bjt)\" stroke-width=\"2\" />\n    </g>\n    <g id=\"gate-lead-in2-xor\">\n      <line x1=\"-24\" y1=\"-8\" x2=\"-9.9\" y2=\"-8\" stroke=\"var(--colour-bjt)\" stroke-width=\"2\" />\n      <line x1=\"-24\" y1=\"8\" x2=\"-9.9\" y2=\"8\" stroke=\"var(--colour-bjt)\" stroke-width=\"2\" />\n    </g>\n    <g id=\"gate-lead-out\">\n      <line x1=\"24\" y1=\"0\" x2=\"44\" y2=\"0\" stroke=\"var(--colour-bjt)\" stroke-width=\"2\" />\n    </g>\n    <g id=\"gate-lead-out-inv\">\n      <circle cx=\"28\" cy=\"0\" r=\"4\" fill=\"var(--colour-panel)\" stroke=\"var(--colour-bjt)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n      <line x1=\"32\" y1=\"0\" x2=\"44\" y2=\"0\" stroke=\"var(--colour-bjt)\" stroke-width=\"2\" />\n    </g>\n    <path id=\"gate-and-body\" d=\"M -8,-16 L 8,-16 A 16,16 0 0 1 8,16 L -8,16 Z\"\n      fill=\"var(--colour-panel)\" stroke=\"var(--colour-bjt)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n    <path id=\"gate-or-body\" d=\"M -8,-16 Q 8,-16 24,0 Q 8,16 -8,16 Q 1,0 -8,-16 Z\"\n      fill=\"var(--colour-panel)\" stroke=\"var(--colour-bjt)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n    <path id=\"gate-xor-extra\" d=\"M -14,-16 Q -3,0 -14,16\"\n      fill=\"none\" stroke=\"var(--colour-bjt)\" stroke-width=\"2\" />\n    <path id=\"gate-tri-body\" d=\"M -8,-16 L -8,16 L 24,0 Z\"\n      fill=\"var(--colour-panel)\" stroke=\"var(--colour-bjt)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n    <rect id=\"gate-rect-body\" x=\"-8\" y=\"-16\" width=\"32\" height=\"32\"\n      fill=\"var(--colour-panel)\" stroke=\"var(--colour-bjt)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n    <g id=\"gate-and-trad\"><use href=\"#gate-lead-in2\" /><use href=\"#gate-and-body\" /><use href=\"#gate-lead-out\" /></g>\n    <g id=\"gate-nand-trad\"><use href=\"#gate-lead-in2\" /><use href=\"#gate-and-body\" /><use href=\"#gate-lead-out-inv\" /></g>\n    <g id=\"gate-and-iec\"><use href=\"#gate-lead-in2\" /><use href=\"#gate-rect-body\" /><text x=\"8\" y=\"-12\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-family=\"Arial, Helvetica, sans-serif\" font-size=\"15\" fill=\"var(--colour-bjt)\">&amp;</text><use href=\"#gate-lead-out\" /></g>\n    <g id=\"gate-nand-iec\"><use href=\"#gate-lead-in2\" /><use href=\"#gate-rect-body\" /><text x=\"8\" y=\"-12\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-family=\"Arial, Helvetica, sans-serif\" font-size=\"15\" fill=\"var(--colour-bjt)\">&amp;</text><use href=\"#gate-lead-out-inv\" /></g>\n    <g id=\"gate-or-trad\"><use href=\"#gate-lead-in2-or\" /><use href=\"#gate-or-body\" /><use href=\"#gate-lead-out\" /></g>\n    <g id=\"gate-nor-trad\"><use href=\"#gate-lead-in2-or\" /><use href=\"#gate-or-body\" /><use href=\"#gate-lead-out-inv\" /></g>\n    <g id=\"gate-or-iec\"><use href=\"#gate-lead-in2\" /><use href=\"#gate-rect-body\" /><text x=\"8\" y=\"-12\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-family=\"'Share Tech Mono', monospace\" font-size=\"14\" fill=\"var(--colour-bjt)\">&#8805;1</text><use href=\"#gate-lead-out\" /></g>\n    <g id=\"gate-nor-iec\"><use href=\"#gate-lead-in2\" /><use href=\"#gate-rect-body\" /><text x=\"8\" y=\"-12\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-family=\"'Share Tech Mono', monospace\" font-size=\"14\" fill=\"var(--colour-bjt)\">&#8805;1</text><use href=\"#gate-lead-out-inv\" /></g>\n    <g id=\"gate-xor-trad\"><use href=\"#gate-lead-in2-xor\" /><use href=\"#gate-xor-extra\" /><use href=\"#gate-or-body\" /><use href=\"#gate-lead-out\" /></g>\n    <g id=\"gate-xnor-trad\"><use href=\"#gate-lead-in2-xor\" /><use href=\"#gate-xor-extra\" /><use href=\"#gate-or-body\" /><use href=\"#gate-lead-out-inv\" /></g>\n    <g id=\"gate-xor-iec\"><use href=\"#gate-lead-in2\" /><use href=\"#gate-rect-body\" /><text x=\"8\" y=\"-12\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-family=\"'Share Tech Mono', monospace\" font-size=\"14\" fill=\"var(--colour-bjt)\">=1</text><use href=\"#gate-lead-out\" /></g>\n    <g id=\"gate-xnor-iec\"><use href=\"#gate-lead-in2\" /><use href=\"#gate-rect-body\" /><text x=\"8\" y=\"-12\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-family=\"'Share Tech Mono', monospace\" font-size=\"14\" fill=\"var(--colour-bjt)\">=1</text><use href=\"#gate-lead-out-inv\" /></g>\n    <g id=\"gate-buffer-trad\"><use href=\"#gate-lead-in1\" /><use href=\"#gate-tri-body\" /><use href=\"#gate-lead-out\" /></g>\n    <g id=\"gate-not-trad\"><use href=\"#gate-lead-in1\" /><use href=\"#gate-tri-body\" /><use href=\"#gate-lead-out-inv\" /></g>\n    <g id=\"gate-buffer-iec\"><use href=\"#gate-lead-in1\" /><use href=\"#gate-rect-body\" /><text x=\"8\" y=\"-13\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"12\" fill=\"var(--colour-bjt)\">1</text><use href=\"#gate-lead-out\" /></g>\n    <g id=\"gate-not-iec\"><use href=\"#gate-lead-in1\" /><use href=\"#gate-rect-body\" /><text x=\"8\" y=\"-12\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-family=\"'Share Tech Mono', monospace\" font-size=\"15\" fill=\"var(--colour-bjt)\">1</text><use href=\"#gate-lead-out-inv\" /></g>\n    <g id=\"gate-lead-in2-lg\">\n    <line x1=\"0\" y1=\"8\" x2=\"16\" y2=\"8\" stroke=\"var(--colour-bjt)\" stroke-width=\"2\" />\n    <line x1=\"0\" y1=\"24\" x2=\"16\" y2=\"24\" stroke=\"var(--colour-bjt)\" stroke-width=\"2\" />\n    </g>\n    <g id=\"gate-lead-in2-or-lg\">\n    <line x1=\"0\" y1=\"8\" x2=\"19.4\" y2=\"8\" stroke=\"var(--colour-bjt)\" stroke-width=\"2\" />\n    <line x1=\"0\" y1=\"24\" x2=\"19.4\" y2=\"24\" stroke=\"var(--colour-bjt)\" stroke-width=\"2\" />\n    </g>\n    <g id=\"gate-lead-out-inv-lg\">\n    <circle cx=\"52\" cy=\"16\" r=\"4\" fill=\"var(--colour-panel)\" stroke=\"var(--colour-bjt)\" stroke-width=\"2\"\n    filter=\"url(#glow)\" />\n    <line x1=\"56\" y1=\"16\" x2=\"68\" y2=\"16\" stroke=\"var(--colour-bjt)\" stroke-width=\"2\" />\n    </g>\n    <path id=\"gate-and-body-lg\" d=\"M 16,0 L 32,0 A 16,16 0 0 1 32,32 L 16,32 Z\" fill=\"var(--colour-panel)\" stroke=\"var(--colour-bjt)\"\n    stroke-width=\"2\" filter=\"url(#glow)\" />\n    <path id=\"gate-or-body-lg\" d=\"M 16,0 Q 32,0 48,16 Q 32,32 16,32 Q 25,16 16,0 Z\" fill=\"var(--colour-panel)\"\n    stroke=\"var(--colour-bjt)\" stroke-width=\"2\" filter=\"url(#glow)\" />\n    <g id=\"gate-nand-trad-lg\"><use href=\"#gate-lead-in2-lg\" /><use href=\"#gate-and-body-lg\" /><use href=\"#gate-lead-out-inv-lg\" /></g>\n    <g id=\"gate-nor-trad-lg\"><use href=\"#gate-lead-in2-or-lg\" /><use href=\"#gate-or-body-lg\" /><use href=\"#gate-lead-out-inv-lg\" /></g>"
+  };
+
+  var HOST_ID = "shapes-js-defs";
+  var wanted = [];   // [{ name, transform }]
+
+  function globRe(g) {
+    return new RegExp("^" + g.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*") + "$");
+  }
+
+  function host() {
+    var h = document.getElementById(HOST_ID);
+    if (h) return h;
+    var NS = "http://www.w3.org/2000/svg";
+    var svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("id", HOST_ID);
+    svg.setAttribute("width", "0");
+    svg.setAttribute("height", "0");
+    svg.setAttribute("aria-hidden", "true");
+    // not display:none — that breaks filters/gradients referenced via url(#id)
+    svg.style.cssText = "position:absolute;width:0;height:0;overflow:hidden";
+    svg.appendChild(document.createElementNS(NS, "defs"));
+    document.body.insertBefore(svg, document.body.firstChild);
+    return svg;
+  }
+
+  function inject(job) {
+    var name = job.name;
+    var defs = host().querySelector("defs");
+    if (defs.getAttribute("data-" + name)) return;
+    defs.setAttribute("data-" + name, "1");
+    var tmp = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    tmp.innerHTML = SETS[name];
+    Array.prototype.slice.call(tmp.childNodes).forEach(function (n) {
+      if (n.nodeType === 1 && n.id && document.getElementById(n.id)) return; // already on the page
+      if (n.nodeType === 1 && n.id && job.transform && !n.hasAttribute("transform")) {
+        Object.keys(job.transform).some(function (g) {
+          if (globRe(g).test(n.id)) { n.setAttribute("transform", job.transform[g]); return true; }
+        });
+      }
+      defs.appendChild(n);
+    });
+  }
+
+  function flush() {
+    wanted.forEach(inject);
+    wanted = [];
+  }
+
+  window.Shapes = {
+    use: function () {
+      var names = Array.prototype.slice.call(arguments), opts = null;
+      if (names.length && typeof names[names.length - 1] === "object") opts = names.pop();
+      names.forEach(function (n) {
+        if (!SETS[n]) { console.error("Shapes.use: unknown set \"" + n + "\" (have: " + Object.keys(SETS).join(", ") + ")"); return; }
+        wanted.push({ name: n, transform: opts && opts.transform });
+      });
+      if (document.body) flush();
+      else document.addEventListener("DOMContentLoaded", flush);
+    },
+    sets: function () { return Object.keys(SETS); },
+    ids: function (name) {
+      var tmp = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      tmp.innerHTML = SETS[name] || "";
+      return Array.prototype.slice.call(tmp.querySelectorAll("[id]")).map(function (e) { return e.id; });
+    }
+  };
+})();
+
+</script>
+</head>
+
+<body>
+  <header>
+    <h1>Digital Electronics</h1>
+    <p>Three-Input Logic Circuit · 7408 · 7402 · 7400 · On a Breadboard · Simulator</p>
+  </header>
+
+  <div class="main-wrap">
+    <div class="card-top-bar">
+      <a class="back-link" href="./simulators.html">← All simulators</a>
+      <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle dark and light theme">
+        <span id="themeIcon">🌙</span> <span id="themeLabel">Dark Mode</span>
+      </button>
+    </div>
+
+    <div class="card sim-intro">
+      <div>A three-input logic circuit, <b>Z = A·B·<span class="ov">C</span> + <span class="ov">B</span>·C</b>, built on a breadboard the way you would build it in the lab. Click the <b>A</b>, <b>B</b> and <b>C</b> switches and watch the levels on every wire and pin; the logic indicator shows <b>Z</b> (red for 1, green for 0, like the college trainer). Tap any <b>hole</b> to see which holes it is connected to, and tap any <b>IC pin</b> to see what it is.</div>
+    </div>
+
+    <div class="card">
+      <svg id="bbSvg" viewBox="-150 0 1480 800" xmlns="http://www.w3.org/2000/svg" font-family="'Share Tech Mono', monospace" role="img" aria-label="A breadboard with a 7408, 7402 and 7400 wired as a three-input logic circuit, three input switches and an output logic indicator"></svg>
+      <div class="sim-legend">
+        <span><i style="background:var(--colour-ui-correct)"></i>logic 1 (HIGH)</span>
+        <span><i style="background:var(--colour-label)"></i>logic 0 (LOW)</span>
+        <span><i style="background:#e53935"></i>+5 V</span>
+        <span><i style="background:#222"></i>0 V (GND)</span>
+      </div>
+      <div class="bb-lower">
+        <div class="sim-status" id="simStatus" aria-live="polite"></div>
+        <table class="tt" id="truthTable"></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- the IC drawings, copied from resources/digital_resources_ics.html (cross-file <use> does not work under file://) -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+    <g id="ic-common-body">
+      <path d="M -52,-126 L -8,-126 A 8,8 0 0 0 8,-126 L 52,-126 L 52,126 L -52,126 Z" class="ic-body" />
+      <rect x="-62" y="-110" width="10" height="4" class="ic-pin" />
+      <text x="-66" y="-104.8" text-anchor="end" class="ic-pin-num">1</text>
+      <rect x="-62" y="-74" width="10" height="4" class="ic-pin" />
+      <text x="-66" y="-68.8" text-anchor="end" class="ic-pin-num">2</text>
+      <rect x="-62" y="-38" width="10" height="4" class="ic-pin" />
+      <text x="-66" y="-32.8" text-anchor="end" class="ic-pin-num">3</text>
+      <rect x="-62" y="-2" width="10" height="4" class="ic-pin" />
+      <text x="-66" y="3.2" text-anchor="end" class="ic-pin-num">4</text>
+      <rect x="-62" y="34" width="10" height="4" class="ic-pin" />
+      <text x="-66" y="39.2" text-anchor="end" class="ic-pin-num">5</text>
+      <rect x="-62" y="70" width="10" height="4" class="ic-pin" />
+      <text x="-66" y="75.2" text-anchor="end" class="ic-pin-num">6</text>
+      <rect x="-62" y="106" width="10" height="4" class="ic-pin" />
+      <text x="-46" y="111.2" text-anchor="start" class="ic-pin-label">GND</text>
+      <text x="-66" y="111.2" text-anchor="end" class="ic-pin-num">7</text>
+      <rect x="52" y="106" width="10" height="4" class="ic-pin" />
+      <text x="66" y="111.2" text-anchor="start" class="ic-pin-num">8</text>
+      <rect x="52" y="70" width="10" height="4" class="ic-pin" />
+      <text x="66" y="75.2" text-anchor="start" class="ic-pin-num">9</text>
+      <rect x="52" y="34" width="10" height="4" class="ic-pin" />
+      <text x="66" y="39.2" text-anchor="start" class="ic-pin-num">10</text>
+      <rect x="52" y="-2" width="10" height="4" class="ic-pin" />
+      <text x="66" y="3.2" text-anchor="start" class="ic-pin-num">11</text>
+      <rect x="52" y="-38" width="10" height="4" class="ic-pin" />
+      <text x="66" y="-32.8" text-anchor="start" class="ic-pin-num">12</text>
+      <rect x="52" y="-74" width="10" height="4" class="ic-pin" />
+      <text x="66" y="-68.8" text-anchor="start" class="ic-pin-num">13</text>
+      <rect x="52" y="-110" width="10" height="4" class="ic-pin" />
+      <text x="46" y="-104.8" text-anchor="end" class="ic-pin-label">+5V</text>
+      <text x="66" y="-104.8" text-anchor="start" class="ic-pin-num">14</text>
+    </g>
+
+    <g id="gate-lines-out-bottom">
+      <!-- Gate 1 -->
+      <line x1="37.8" y1="38" x2="37.8" y2="20" stroke="var(--colour-bjt)" stroke-width="1.5" />
+      <line x1="0" y1="20" x2="38" y2="20" stroke="var(--colour-bjt)" stroke-width="1.5" />
+      <!-- Gate 2 -->
+      <line x1="0" y1="56" x2="9" y2="56" stroke="var(--colour-bjt)" stroke-width="1.5" />
+      <line x1="8" y1="31" x2="8" y2="55.3" stroke="var(--colour-bjt)" stroke-width="1.5" />
+      <line x1="8" y1="32" x2="25" y2="32" stroke="var(--colour-bjt)" stroke-width="1.5" />
+      <!-- Output-->
+      <line x1="31" y1="92" x2="31" y2="88" stroke="var(--colour-bjt)" stroke-width="1.5" />
+      <line x1="0" y1="92" x2="31.6" y2="92" stroke="var(--colour-bjt)" stroke-width="1.5" />
+    </g>
+
+    <g id="gate-lines-out-top">
+      <line x1="0" y1="0" x2="31.8" y2="0" stroke="var(--colour-bjt)" stroke-width="1.5" />
+      <line x1="7.3" y1="58" x2="25" y2="58" stroke="var(--colour-bjt)" stroke-width="1.5" />
+      <line x1="8" y1="58" x2="8" y2="35.3" stroke="var(--colour-bjt)" stroke-width="1.5" />
+      <line x1="0" y1="36" x2="8.4" y2="36" stroke="var(--colour-bjt)" stroke-width="1.5" />
+      <line x1="38" y1="58" x2="38" y2="72" stroke="var(--colour-bjt)" stroke-width="1.5" />
+      <line x1="0" y1="72" x2="38.4" y2="72" stroke="var(--colour-bjt)" stroke-width="1.5" />
+    </g>
+
+
+    <g id="ic-7400"><use href="#nand-common-ic" /></g>
+    <g id="nand-common-ic">
+      <use href="#ic-common-body" />
+      <g id="nand-gate-1-3">
+        <use href="#gate-nand-trad" transform="translate(-21,-76)" />
+        <use href="#gate-lines-out-bottom" transform="translate(-52,-128)" />
+      </g>
+      <g id="nand-gate-4-6">
+        <use href="#gate-nand-trad" transform="translate(-21,32)" />
+        <use href="#gate-lines-out-bottom" transform="translate(-52,-20)" />
+      </g>
+      <g id="nand-gate-11-13">
+        <use href="#gate-nand-trad" transform="translate(21,-39)" />
+        <use href="#gate-lines-out-bottom" transform="translate(52,-92) scale(-1, 1)" />
+      </g>
+      <g id="nand-gate-8-10">
+        <use href="#gate-nand-trad" transform="translate(21,68)" />
+        <use href="#gate-lines-out-bottom" transform="translate(52,16) scale(-1, 1)" />
+      </g>
+    </g>
+
+    <g id="ic-7402">
+      <use href="#ic-common-body" />
+      <g id="nor-common-ic">
+        <use href="#ic-common-body" />
+        <g id="nor-gate-1-3">
+          <use href="#gate-nor-trad" transform="translate(-21,-70)" />
+          <use href="#gate-lines-out-top" transform="translate(-52,-108)" />
+        </g>
+        <g id="nor-gate-4-6">
+          <use href="#gate-nor-trad" transform="translate(-21,38)" />
+          <use href="#gate-lines-out-top" transform="translate(-52,0)" />
+        </g>
+        <g id="nor-gate-11-13">
+          <use href="#gate-nor-trad" transform="translate(21,-34)" />
+          <use href="#gate-lines-out-top" transform="translate(52,-72) scale(-1, 1)" />
+        </g>
+        <g id="nor-gate-8-10">
+          <use href="#gate-nor-trad" transform="translate(21,74)" />
+          <use href="#gate-lines-out-top" transform="translate(52,36) scale(-1, 1)" />
+        </g>
+      </g>
+    </g>
+
+
+    <g id="ic-7408">
+      <use href="#ic-common-body" />
+      <g id="nand-gate-1-3">
+        <use href="#gate-and-trad" transform="translate(-21,-76)" />
+        <use href="#gate-lines-out-bottom" transform="translate(-52,-128)" />
+      </g>
+      <g id="nand-gate-4-6">
+        <use href="#gate-and-trad" transform="translate(-21,32)" />
+        <use href="#gate-lines-out-bottom" transform="translate(-52,-20)" />
+      </g>
+      <g id="nand-gate-11-13">
+        <use href="#gate-and-trad" transform="translate(21,-39)" />
+        <use href="#gate-lines-out-bottom" transform="translate(52,-92) scale(-1, 1)" />
+      </g>
+      <g id="nand-gate-8-10">
+        <use href="#gate-and-trad" transform="translate(21,68)" />
+        <use href="#gate-lines-out-bottom" transform="translate(52,16) scale(-1, 1)" />
+      </g>
+    </g>
+
+
+    </defs>
+  </svg>
+  <script>Shapes.use('logic-gates', { transform: { 'gate-and-trad': 'rotate(90) scale(0.85)', 'gate-nand-trad': 'rotate(90) scale(0.85)', 'gate-nor-trad': 'rotate(270) scale(0.85)', 'gate-not-trad': 'rotate(90) scale(0.85)' } });</script>
+
+  <script>
+  </script>
+  <script>
+// Dark/light toggle for the college pages (the student pages use assets/theme-init.js instead).
+// The preference is the same localStorage key the hand-made college pages used.
+function toggleTheme() {
+  const isDark = document.body.classList.toggle('dark-theme');
+  localStorage.setItem('tafe-quiz-theme', isDark ? 'dark' : 'light');
+  updateThemeToggleUI(isDark);
+}
+
+function updateThemeToggleUI(isDark) {
+  const icon = document.getElementById('themeIcon');
+  const label = document.getElementById('themeLabel');
+  if (icon && label) {
+    icon.textContent = isDark ? '☀️' : '🌙';
+    label.textContent = isDark ? 'Light Mode' : 'Dark Mode';
+  }
+}
+
+(function initTheme() {
+  const isDark = localStorage.getItem('tafe-quiz-theme') === 'dark';
+  document.body.classList.toggle('dark-theme', isDark);
+  updateThemeToggleUI(isDark);
+})();
+
+</script>
+  <script>
+    // ── geometry ──
+    const P = 36;                                        // hole pitch = the IC reference drawings' pin spacing
+    const COLS = 30;                                     // board columns
+    const X = c => 40 + c * P;                           // column 1..COLS
+    const CY = 330;                                      // the centre of the channel; the chips' pin rows sit 60 above and below it
+    const ROW = { a: 126, b: 162, c: 198, d: 234, e: 270, f: 390, g: 426, h: 462, i: 498, j: 534, tp: 40, tn: 76, bp: 584, bn: 620 };
+    const TOP = 'abcde', BOT = 'fghij';
+    const hy = r => ROW[r];
+
+    // ── the ICs ──
+    const ICS = [
+      { id: 'ic1', part: '7408', k: 2, kind: 'Quad 2-input AND',
+        pins: { 1: '1A', 2: '1B', 3: '1Y', 4: '2A', 5: '2B', 6: '2Y', 7: 'GND', 8: '3Y', 9: '3A', 10: '3B', 11: '4Y', 12: '4A', 13: '4B', 14: 'Vcc' } },
+      { id: 'ic2', part: '7402', k: 12, kind: 'Quad 2-input NOR',
+        pins: { 1: '1Y', 2: '1A', 3: '1B', 4: '2Y', 5: '2A', 6: '2B', 7: 'GND', 8: '3A', 9: '3B', 10: '3Y', 11: '4A', 12: '4B', 13: '4Y', 14: 'Vcc' } },
+      { id: 'ic3', part: '7400', k: 22, kind: 'Quad 2-input NAND',
+        pins: { 1: '1A', 2: '1B', 3: '1Y', 4: '2A', 5: '2B', 6: '2Y', 7: 'GND', 8: '3Y', 9: '3A', 10: '3B', 11: '4Y', 12: '4A', 13: '4B', 14: 'Vcc' } },
+    ];
+    // where a pin sits: pins 1-7 along row f left to right, 8-14 along row e right to left (notch on the left)
+    const pinPos = (ic, n) => n <= 7 ? { col: ic.k + n - 1, row: 'f' } : { col: ic.k + 14 - n, row: 'e' };
+
+    // ── the logic ──
+    let A = 1, B = 1, C = 0;
+    function levels() {
+      const AB = A & B, Cn = 1 - C, Bn = 1 - B, G1 = 1 - (AB & Cn), G2 = 1 - (Bn & C), Z = 1 - (G1 & G2);
+      return { A, B, C, AB, Cn, Bn, G1, G2, Z, VCC: 1, GND: 0, NC: null };
+    }
+    // the net on each USED pin; what each one means
+    const PIN_NET = {
+      ic1: { 1: 'A', 2: 'B', 3: 'AB', 7: 'GND', 14: 'VCC' },
+      ic2: { 1: 'Cn', 2: 'C', 3: 'C', 4: 'Bn', 5: 'B', 6: 'B', 7: 'GND', 14: 'VCC' },
+      ic3: { 1: 'AB', 2: 'Cn', 3: 'G1', 4: 'G1', 5: 'G2', 6: 'Z', 7: 'GND', 11: 'G2', 12: 'C', 13: 'Bn', 14: 'VCC' },
+    };
+    const NET_TXT = { A: 'input A', B: 'input B', C: 'input C', AB: 'A·B', Cn: 'NOT C', Bn: 'NOT B',
+      G1: 'NOT(A·B·NOT C)', G2: 'NOT(NOT B·C)', Z: 'output Z', VCC: '+5 V', GND: '0 V' };
+
+    // ── the wires: [col,row] -> [col,row], and the net they carry ──
+    const WIRES = [
+      // power: every IC's pin 14 to the + rail, pin 7 to the − rail
+      { a: [2, 'a'], b: [2, 'tp'], net: 'VCC' }, { a: [8, 'j'], b: [8, 'bn'], net: 'GND' },
+      { a: [12, 'a'], b: [12, 'tp'], net: 'VCC' }, { a: [18, 'j'], b: [18, 'bn'], net: 'GND' },
+      { a: [22, 'a'], b: [22, 'tp'], net: 'VCC' }, { a: [28, 'j'], b: [28, 'bn'], net: 'GND' },
+      // inputs: each switch wires straight to the first pin it drives (A -> 7408 pin 1, B -> 7408 pin 2,
+      // C -> 7402 pin 2); a jumper from that pin's strip carries B and C on to their second chip
+      { a: [3, 'i'], b: [16, 'i'], net: 'B', bow: 24 },    // B on to 7402 pin 5 (pulled tight: dips 18 px, between rows i and j)
+      { a: [13, 'g'], b: [24, 'c'], net: 'C', via: 19 },    // C on to 7400 pin 12 (crosses the channel in the gap between the chips)
+      // between the gates
+      { a: [4, 'g'], b: [22, 'g'], net: 'AB', bow: 18 },   // 7408 pin 3 -> 7400 pin 1 (pulled tight, running between rows g and h)
+      { a: [12, 'h'], b: [23, 'h'], net: 'Cn', bow: 32 },  // 7402 pin 1 -> 7400 pin 2 (pulled tight: dips 24 px, between rows h and i, nearer i)
+      { a: [15, 'g'], b: [23, 'd'], net: 'Bn', via: 21.2 }, // 7402 pin 4 -> 7400 pin 13 (crosses the channel in the gap between the chips)
+      { a: [24, 'g'], b: [25, 'g'], net: 'G1' },            // 7400 pin 3 -> pin 4
+      { a: [25, 'c'], b: [26, 'i'], net: 'G2', via: 30.3 }, // 7400 pin 11 -> pin 5 (round the right-hand end of the 7400)
+      // last, so they sit on top: the two links that tie each 7402 NOR's inputs together (making it a NOT). With the
+      // 7408 -> 7400 wire pulled tight above them they bow down like the other bottom-half wires and stay visible.
+      { a: [13, 'h'], b: [14, 'h'], net: 'C' },             // 7402 pins 2 and 3 tied
+      { a: [16, 'h'], b: [17, 'h'], net: 'B' },             // 7402 pins 5 and 6 tied
+    ];
+    const HIGH = 'var(--colour-ui-correct)', LOW = 'var(--colour-label)', RED = '#e53935', BLK = '#222';
+    const netCol = (net, lv) => net === 'VCC' ? RED : net === 'GND' ? BLK : (lv[net] ? HIGH : LOW);
+
+    // ── drawing ──
+    const el = (tag, attrs, parent, text) => { const e = document.createElementNS('http://www.w3.org/2000/svg', tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text !== undefined) e.textContent = text; if (parent) parent.appendChild(e); return e; };
+    const svg = document.getElementById('bbSvg');
+    let gWires, gHi;
+
+    function wirePath(w) {
+      const x1 = X(w.a[0]), y1 = hy(w.a[1]), x2 = X(w.b[0]), y2 = hy(w.b[1]);
+      if (x1 === x2) return `M ${x1},${y1} L ${x2},${y2}`;                                     // straight up / down to a rail
+      if (w.via) return `M ${x1},${y1} C ${X(w.via)},${y1} ${X(w.via)},${y2} ${x2},${y2}`;    // across the channel where no chip is
+      // keep clear of the chips: wires in the top half bow upwards, wires in the bottom half bow downwards
+      const bow = w.bow || Math.min(64, 14 + Math.abs(x2 - x1) * 0.1);
+      const upper = w.up || TOP.includes(w.a[1]);
+      const cy = upper ? Math.min(y1, y2) - bow : Math.max(y1, y2) + bow;
+      return `M ${x1},${y1} C ${x1},${cy} ${x2},${cy} ${x2},${y2}`;
+    }
+
+    const MUTED = '#8a826f';
+    function build() {
+      // board
+      el('rect', { x: 26, y: 10, width: X(COLS) + 34 - 26, height: 640, rx: 14, fill: '#f4f1ea', stroke: '#c9c2b2', 'stroke-width': 2 }, svg);
+      el('rect', { x: 34, y: CY - 52, width: X(COLS) + 26 - 34, height: 104, fill: '#e2ddd0' }, svg);                // the (wide) centre channel
+      // rail stripes
+      [['tp', RED, '+'], ['tn', '#1e63d6', '−'], ['bp', RED, '+'], ['bn', '#1e63d6', '−']].forEach(([r, c, sym]) => {
+        const off = r === 'tp' || r === 'bp' ? -20 : 20;
+        el('line', { x1: 70, y1: ROW[r] + off, x2: X(COLS) + 20, y2: ROW[r] + off, stroke: c, 'stroke-width': 3, opacity: .8 }, svg);
+        el('text', { x: 50, y: ROW[r] + 8, 'text-anchor': 'middle', 'font-size': 24, 'font-weight': 'bold', fill: c }, svg, sym);
+      });
+      // column numbers and row letters
+      [1, 5, 10, 15, 20, 25, 30].forEach(c => {
+        el('text', { x: X(c), y: ROW.a - 22, 'text-anchor': 'middle', 'font-size': 14, fill: MUTED }, svg, c);
+        el('text', { x: X(c), y: ROW.j + 30, 'text-anchor': 'middle', 'font-size': 14, fill: MUTED }, svg, c);
+      });
+      (TOP + BOT).split('').forEach(r => el('text', { x: 54, y: ROW[r] + 5, 'text-anchor': 'middle', 'font-size': 14, fill: MUTED }, svg, r));
+      // strip highlight layer (under the holes)
+      gHi = el('g', {}, svg);
+      // holes
+      for (let c = 1; c <= COLS; c++) {
+        (TOP + BOT).split('').forEach(r => hole(c, r));
+        ['tp', 'tn', 'bp', 'bn'].forEach(r => { if ((c - 1) % 6 !== 5) hole(c, r); });   // rails: groups of five
+      }
+      // power supply: +5 V straight into the top + rail and 0 V straight into the bottom − rail, so no link wires
+      // are needed between the top and bottom rails (the top − and bottom + rails are not used)
+      el('path', { d: `M -60,${ROW.tp} L ${X(1)},${ROW.tp}`, stroke: RED, 'stroke-width': 6, fill: 'none', 'stroke-linecap': 'round' }, svg);
+      el('path', { d: `M -60,${ROW.bn} L ${X(1)},${ROW.bn}`, stroke: BLK, 'stroke-width': 6, fill: 'none', 'stroke-linecap': 'round' }, svg);
+      el('text', { x: -68, y: ROW.tp + 8, 'text-anchor': 'end', 'font-size': 22, 'font-weight': 'bold', fill: RED }, svg, '+5 V');
+      el('text', { x: -68, y: ROW.bn + 8, 'text-anchor': 'end', 'font-size': 22, 'font-weight': 'bold', fill: 'var(--colour-text)' }, svg, '0 V');
+      // ICs
+      ICS.forEach(drawIc);
+      // the LED and its resistor
+      drawLed();
+      // wires on top
+      gWires = el('g', { fill: 'none', 'stroke-linecap': 'round' }, svg);
+      WIRES.forEach(w => {
+        const d = wirePath(w);
+        el('path', { d, stroke: 'rgba(0,0,0,.35)', 'stroke-width': 9 }, gWires);
+        w.el = el('path', { d, 'stroke-width': 6 }, gWires);
+        [w.a, w.b].forEach(([c, r]) => el('circle', { cx: X(c), cy: hy(r), r: 4.5, fill: '#555' }, gWires));
+      });
+      // the input switches (the trainer's logic switches), each under the chip it feeds and wired straight to the
+      // first pin it drives: A -> 7408 pin 1 (col 2), B -> 7408 pin 2 (col 3), C -> 7402 pin 2 (col 13)
+      const SW_Y = 680;
+      [['A', 2, X(2) - 30], ['B', 3, X(3) + 100], ['C', 13, X(13)]].forEach(([n, col, sx]) => {
+        const w = { a: null, net: n };
+        w.el = el('path', { d: `M ${sx},${SW_Y} C ${sx},${SW_Y - 40} ${X(col)},${ROW.j + 110} ${X(col)},${ROW.j}`, 'stroke-width': 6, fill: 'none', 'stroke-linecap': 'round' }, svg);
+        el('circle', { cx: X(col), cy: ROW.j, r: 4.5, fill: '#555' }, svg);
+        INPUT_WIRES.push(w);
+        const g = el('g', { class: 'sw', id: 'sw' + n, tabindex: 0, role: 'button', 'aria-label': 'Toggle input ' + n }, svg);
+        el('rect', { class: 'sw-box', x: sx - 50, y: SW_Y, width: 100, height: 92, rx: 10, style: 'fill: var(--colour-panel); stroke: var(--colour-border)', 'stroke-width': 3 }, g);
+        el('text', { x: sx, y: SW_Y + 30, 'text-anchor': 'middle', 'font-size': 26, 'font-weight': 'bold', style: 'fill: var(--colour-text)' }, g, n);
+        el('text', { id: 'swv' + n, x: sx, y: SW_Y + 76, 'text-anchor': 'middle', 'font-size': 36, 'font-weight': 'bold' }, g, '');
+        const fn = () => { if (n === 'A') A ^= 1; if (n === 'B') B ^= 1; if (n === 'C') C ^= 1; render(); };
+        g.addEventListener('click', fn);
+        g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); } });
+      });
+      el('text', { x: X(7), y: SW_Y + 116, 'text-anchor': 'middle', 'font-size': 18, style: 'fill: var(--colour-label)' }, svg, 'logic switches (1 = +5 V, 0 = 0 V)');
+    }
+    const INPUT_WIRES = [];
+
+    function hole(c, r) {
+      const h = el('rect', { class: 'hole', x: X(c) - 6, y: hy(r) - 6, width: 12, height: 12, rx: 2, fill: '#3b3b3b' }, svg);
+      h.addEventListener('click', () => showStrip(c, r));
+    }
+
+    // A chip: the IC reference sheet's drawing turned a quarter turn anticlockwise, so its pin 1 (top left on the sheet)
+    // lands bottom left and the notch points left, with legs into rows e and f, upright pin numbers beside every leg, and
+    // the part number and +5V / GND on the body.
+    const CHIP = { body: '#121824', outline: '#c7d2e0', gate: '#ffb454', text: '#e2e8f0', part: '#00e5ff' };   // the dark-theme values
+    // Each chip is built from the reference sheet's pieces (body + gate symbols) with every gate's internal wires drawn
+    // separately, so each one can show the level on its pin. The wire coordinates are the reference sheet's own
+    // gate-lines-out-bottom (AND / NAND: input 1, input 2, output) and gate-lines-out-top (NOR: output, input A, input B).
+    const LINES = {
+      bottom: [[[37.8, 38, 37.8, 20], [0, 20, 38, 20]], [[0, 56, 9, 56], [8, 31, 8, 55.3], [8, 32, 25, 32]], [[31, 92, 31, 88], [0, 92, 31.6, 92]]],
+      top: [[[0, 0, 31.8, 0]], [[7.3, 58, 25, 58], [8, 58, 8, 35.3], [0, 36, 8.4, 36]], [[38, 58, 38, 72], [0, 72, 38.4, 72]]],
+    };
+    // per gate: the symbol's transform, the wire group's transform, and the pins its three wire groups go to (in LINES order)
+    const AND_GATES = [['translate(-21,-76)', 'translate(-52,-128)', [1, 2, 3]], ['translate(-21,32)', 'translate(-52,-20)', [4, 5, 6]],
+      ['translate(21,-39)', 'translate(52,-92) scale(-1, 1)', [13, 12, 11]], ['translate(21,68)', 'translate(52,16) scale(-1, 1)', [10, 9, 8]]];
+    const NOR_GATES = [['translate(-21,-70)', 'translate(-52,-108)', [1, 2, 3]], ['translate(-21,38)', 'translate(-52,0)', [4, 5, 6]],
+      ['translate(21,-34)', 'translate(52,-72) scale(-1, 1)', [13, 12, 11]], ['translate(21,74)', 'translate(52,36) scale(-1, 1)', [10, 9, 8]]];
+    const CHIP_WIRES = [];                                   // { el, ic, pin } — recoloured by render()
+    function drawIc(ic) {
+      const cx = X(ic.k + 3), g = el('g', {}, svg);
+      // the chips always use the dark-theme look (dark body, light outline, bright gates) in both themes: the colour
+      // variables set on the chip's group are inherited by the copied drawings
+      const chip = el('g', { transform: `translate(${cx},${CY}) rotate(-90)`, style: `--colour-panel: ${CHIP.body}; --colour-bjt: ${CHIP.gate}; --colour-ic-outline: ${CHIP.outline}` }, g);
+      el('use', { href: '#ic-common-body' }, chip);
+      const nor = ic.part === '7402', shape = { '7400': 'gate-nand-trad', '7402': 'gate-nor-trad', '7408': 'gate-and-trad' }[ic.part];
+      (nor ? NOR_GATES : AND_GATES).forEach(([gateT, linesT, pins]) => {
+        el('use', { href: '#' + shape, transform: gateT }, chip);
+        const lg = el('g', { transform: linesT, 'stroke-width': 2, 'stroke-linecap': 'round' }, chip);
+        LINES[nor ? 'top' : 'bottom'].forEach((segs, i) => segs.forEach(([x1, y1, x2, y2]) => {
+          CHIP_WIRES.push({ el: el('line', { x1, y1, x2, y2 }, lg), ic: ic.id, pin: pins[i] });
+        }));
+      });
+      for (let n = 1; n <= 14; n++) {
+        const { col } = pinPos(ic, n), bottom = n <= 7;
+        const p = el('rect', { class: 'pin', id: `${ic.id}p${n}`, x: X(col) - 6, y: bottom ? CY + 52 : CY - 68, width: 12, height: 16, rx: 2, fill: '#b9b9b9', stroke: '#777', 'stroke-width': 1 }, g);
+        p.addEventListener('click', e => { e.stopPropagation(); showPin(ic, n); });
+        el('text', { x: X(col) + 10, y: bottom ? CY + 84 : CY - 72, 'text-anchor': 'start', 'font-size': 13, 'font-weight': 'bold', fill: MUTED }, g, n);
+      }
+      // +5V by pin 14, the part number in the clear space under it, GND by pin 7
+      el('text', { x: X(ic.k) - 12, y: CY - 30, 'text-anchor': 'start', 'font-size': 11, 'font-weight': 'bold', fill: CHIP.text }, g, '+5V');
+      el('text', { x: X(ic.k) - 12, y: CY - 8, 'text-anchor': 'start', 'font-size': 15, 'font-weight': 'bold', fill: CHIP.part }, g, ic.part);
+      el('text', { x: X(ic.k + 6) + 4, y: CY + 40, 'text-anchor': 'middle', 'font-size': 11, 'font-weight': 'bold', fill: CHIP.text }, g, 'GND');
+    }
+
+    // Z goes off the board to the trainer's logic indicator (an LED with its own resistor), like the switches come in
+    // from the trainer's logic switches: one wire from 7400 pin 6, no LED, resistor or GND link on the board.
+    function drawLed() {
+      const LX = X(COLS) + 120, LY = ROW.h;
+      const w = { net: 'Z' };
+      w.el = el('path', { d: `M ${X(27)},${ROW.g} C ${X(27) + 40},${ROW.g + 90} ${LX - 110},${LY - 6} ${LX - 34},${LY - 6}`, 'stroke-width': 6, fill: 'none', 'stroke-linecap': 'round' }, svg);
+      el('circle', { cx: X(27), cy: ROW.g, r: 4.5, fill: '#555' }, svg);
+      INPUT_WIRES.push(w);
+      el('rect', { x: LX - 34, y: LY - 58, width: 90, height: 126, rx: 10, style: 'fill: var(--colour-panel); stroke: var(--colour-border)', 'stroke-width': 3 }, svg);
+      el('circle', { id: 'ledBody', cx: LX + 11, cy: LY - 8, r: 24, stroke: '#a11', 'stroke-width': 3 }, svg);
+      el('text', { x: LX + 11, y: LY + 50, 'text-anchor': 'middle', 'font-size': 24, 'font-weight': 'bold', style: 'fill: var(--colour-text)' }, svg, 'Z');
+      el('text', { x: LX + 11, y: LY + 94, 'text-anchor': 'middle', 'font-size': 15, style: 'fill: var(--colour-label)' }, svg, 'logic');
+      el('text', { x: LX + 11, y: LY + 112, 'text-anchor': 'middle', 'font-size': 15, style: 'fill: var(--colour-label)' }, svg, 'indicator');
+    }
+
+    // ── tap a hole: light up everything it is joined to ──
+    function stripOf(c, r) {
+      if (TOP.includes(r)) return { holes: TOP.split('').map(rr => [c, rr]), txt: `column ${c}, rows a–e` };
+      if (BOT.includes(r)) return { holes: BOT.split('').map(rr => [c, rr]), txt: `column ${c}, rows f–j` };
+      const name = { tp: 'top + rail', tn: 'top − rail', bp: 'bottom + rail', bn: 'bottom − rail' }[r];
+      const holes = []; for (let cc = 1; cc <= COLS; cc++) if ((cc - 1) % 6 !== 5) holes.push([cc, r]);
+      return { holes, txt: `the whole ${name}` };
+    }
+    let selected = null;
+    function showStrip(c, r) {
+      const s = stripOf(c, r);
+      gHi.innerHTML = '';
+      s.holes.forEach(([cc, rr]) => el('rect', { x: X(cc) - 13, y: hy(rr) - 13, width: 26, height: 26, rx: 6, fill: 'rgba(37,99,235,.35)' }, gHi));
+      // what is in that strip?
+      let what = '';
+      if ('abcdefghij'.includes(r)) {
+        const lv = levels();
+        ICS.forEach(ic => { for (let n = 1; n <= 14; n++) { const p = pinPos(ic, n); if (p.col === c && (TOP.includes(r) ? p.row === 'e' : p.row === 'f')) what = describePin(ic, n, lv); } });
+      } else what = r === 'tp' ? '<b>+5 V</b> from the supply: every IC\'s pin 14 is wired here.'
+        : r === 'bn' ? '<b>0 V (GND)</b> from the supply: every IC\'s pin 7 is wired here.'
+        : 'nothing — this rail is not used (the supply goes straight to the top + rail and the bottom − rail, so no link wires are needed).';
+      selected = `Tapped hole: <b>${s.txt}</b> are all joined together (highlighted).` + (what ? ' In this strip: ' + what : ' Nothing is connected in this strip.');
+      render();
+    }
+    function describePin(ic, n, lv) {
+      const net = PIN_NET[ic.id][n];
+      const name = ic.pins[n];
+      if (!net) return `<b>${ic.part} pin ${n}</b> (${name}) — not used in this circuit.`;
+      const lvl = net === 'VCC' ? '+5 V' : net === 'GND' ? '0 V' : `level <b>${lv[net]}</b>`;
+      return `<b>${ic.part} pin ${n}</b> (${name}) — ${NET_TXT[net]}, ${lvl}.`;
+    }
+    function showPin(ic, n) {
+      const { col, row } = pinPos(ic, n);
+      showStrip(col, row);
+      selected = `Tapped pin: ${describePin(ic, n, levels())} It sits in <b>column ${col}</b>, so every hole in that strip (highlighted) is connected to it.`;
+      render();
+    }
+
+    // ── the workings, gate by gate, as in the step-through exercise ──
+    function workings(lv) {
+      const o = t => `<span class="ov">${t}</span>`, ON = t => `<span class="ov-outer">${t}</span>`;
+      const line = (expr, calc, val, where) => `<div class="w-line"><span>${expr} = ${calc} = <b>${val}</b></span><span class="w-pin">${where}</span></div>`;
+      return `<div class="w-line"><span>A = <b>${lv.A}</b> &nbsp; B = <b>${lv.B}</b> &nbsp; C = <b>${lv.C}</b></span><span class="w-pin">switches</span></div>` +
+        line('A·B', `${lv.A}·${lv.B}`, lv.AB, '7408 pin 3') +
+        line(o('C'), o(lv.C), lv.Cn, '7402 pin 1') +
+        line(o('B'), o(lv.B), lv.Bn, '7402 pin 4') +
+        line(ON(`A·B·${o('C')}`), ON(`${lv.AB}·${lv.Cn}`), lv.G1, '7400 pin 3') +
+        line(ON(`${o('B')}·C`), ON(`${lv.Bn}·${lv.C}`), lv.G2, '7400 pin 11') +
+        line('Z', ON(`${lv.G1}·${lv.G2}`), lv.Z, '7400 pin 6') +
+        `<div class="w-line w-check"><span>check: Z = A·B·${o('C')} + ${o('B')}·C = ${lv.AB & lv.Cn}${''} + ${lv.Bn & lv.C} = <b>${lv.Z}</b></span><span class="w-pin"></span></div>`;
+    }
+
+    // ── rendering ──
+    function render() {
+      const lv = levels();
+      WIRES.forEach(w => w.el.setAttribute('stroke', netCol(w.net, lv)));
+      INPUT_WIRES.forEach(w => w.el.setAttribute('stroke', netCol(w.net, lv)));
+      // inside the chips: a used gate's wires show the level on their pin; unused gates keep the chip's own colour
+      CHIP_WIRES.forEach(w => { const net = PIN_NET[w.ic][w.pin]; w.el.setAttribute('stroke', net ? netCol(net, lv) : CHIP.gate); });
+      ICS.forEach(ic => { for (let n = 1; n <= 14; n++) {
+        const net = PIN_NET[ic.id][n], p = document.getElementById(`${ic.id}p${n}`);
+        p.setAttribute('fill', !net ? '#b9b9b9' : net === 'VCC' ? RED : net === 'GND' ? '#555' : lv[net] ? '#22c55e' : '#94a3b8');
+      } });
+      ['A', 'B', 'C'].forEach(n => { const t = document.getElementById('swv' + n); t.textContent = lv[n]; t.style.fill = lv[n] ? HIGH : LOW;
+        document.querySelector(`#sw${n} rect`).style.fill = lv[n] ? 'rgba(var(--colour-ui-correct-rgb), .18)' : 'var(--colour-panel)'; });
+      const led = document.getElementById('ledBody');
+      // a two-colour indicator, as on the college trainer: red for 1, green for 0 (always lit)
+      led.setAttribute('fill', lv.Z ? '#ff3b30' : '#22c55e');
+      led.setAttribute('stroke', lv.Z ? '#a11' : '#15803d');
+      led.setAttribute('filter', 'url(#ledGlow)');
+      // status
+      const row = `A = ${A}, B = ${B}, C = ${C}`;
+      document.getElementById('simStatus').innerHTML =
+        `<div><b>${row}</b> → Z = <b style="color:${lv.Z ? 'var(--colour-ui-correct)' : 'var(--colour-label)'}">${lv.Z}</b>, indicator <b style="color:${lv.Z ? '#e53935' : '#16a34a'}">${lv.Z ? 'RED' : 'GREEN'}</b></div>
+         <div class="workings">${workings(lv)}</div>` +
+        (selected ? `<div style="margin-top:.5rem">${selected}</div>` : '');
+      // truth table
+      let h = '<tr><th>C</th><th>B</th><th>A</th><th>Z</th></tr>';
+      for (let v = 0; v < 8; v++) {
+        const c = (v >> 2) & 1, b = (v >> 1) & 1, a = v & 1, z = (a & b & (1 - c)) | ((1 - b) & c);
+        h += `<tr class="${c === C && b === B && a === A ? 'cur' : ''}"><td>${c}</td><td>${b}</td><td>${a}</td><td class="${z ? 'z1' : ''}">${z}</td></tr>`;
+      }
+      document.getElementById('truthTable').innerHTML = h;
+    }
+
+    el('defs', {}, svg).innerHTML = '<filter id="ledGlow" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="5" result="b" /><feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge></filter>';
+    build();
+    render();
+  </script>
+  <p class="site-copyright">&copy; 2026 Anderson Home Technology. All rights reserved.</p>
+</body>
+
+</html>

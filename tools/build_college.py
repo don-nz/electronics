@@ -127,9 +127,10 @@ def build_college(path, out_dir):
     body = re.sub(r'<a id="menuLink"[^>]*>.*?</a>\s*', '', body, flags=re.S)                 # the student-only "← Back" link
     body = re.sub(r'<div class="progress-wrap"[^>]*>\s*</div>\s*', '', body, count=1)        # a progress bar left empty (builders, simulators)
     if 'quiz-wrap single-col' in body:
-        body = sub_once(r'<div class="quiz-wrap single-col" id="quizWrap">\s*<div class="questions-col">\s*',
+        body = sub_once(r'<div class="quiz-wrap single-col" id="quizWrap">\s*(?:<!--.*?-->\s*)*<div class="questions-col">\s*',
                         '<div class="main-wrap">\n    ' + top_bar(*back) + '\n    ', body, 'the .quiz-wrap / .questions-col wrapper', path=path)
-        body = sub_once(r'\s*</div>\s*</div>(?=(?:\s*<!--.*?-->)*\s*(?:<div id="printWorksheet"|<script))', '\n  </div>', body, 'the end of the wrapper (before #printWorksheet or the page script)', path=path)
+        # the wrapper ends before #printWorksheet, the page script, or a hidden <svg> of shape defs
+        body = sub_once(r'\s*</div>\s*</div>(?=(?:\s*<!--.*?-->)*\s*(?:<div id="printWorksheet"|<script|<svg))', '\n  </div>', body, 'the end of the wrapper (before #printWorksheet, the page script or a hidden defs <svg>)', path=path)
     else:
         # a heading followed by free-form content (a gallery): the heading and everything after it, up to the
         # first script, go inside a wide .main-wrap, with the top bar under the heading
