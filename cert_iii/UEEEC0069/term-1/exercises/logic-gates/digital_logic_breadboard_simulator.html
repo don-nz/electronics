@@ -88,7 +88,7 @@
     .sch-title { font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; font-weight: 700; color: var(--colour-label); margin-bottom: .3rem; }
     #schSvg { width: 100%; display: block; }
     #schSvg [data-net], #schSvg .sch-gate-hit, .sch-tag { cursor: pointer; }
-    #bbSvg .bb-wire { cursor: pointer; }
+    #bbSvg .hole.off, #bbSvg .pin.off { pointer-events: none; }
     .sch-tag { display: flex; align-items: flex-end; font-family: 'Share Tech Mono', monospace; font-size: 27px; font-weight: 700; line-height: 1; white-space: nowrap; }
     /* the truth table inside the diagram (sizes are in the diagram's own units) */
     .sch-tt .tt { font-size: 19px; margin-left: auto; }
@@ -132,7 +132,7 @@
       <div class="progress-wrap" style="margin-bottom:.8rem;">
         <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
       </div>
-      <div>A three-input logic circuit, <b>Z = A·B·<span class="ov">C</span> + <span class="ov">B</span>·C</b>, built on a breadboard the way you would build it in the lab. Click the <b>A</b>, <b>B</b> and <b>C</b> switches and watch the levels on every wire and pin; the logic indicator shows <b>Z</b> (red for 1, green for 0, like the college trainer). Tap any <b>hole</b> to see which holes it is connected to, and tap any <b>IC pin</b> to see what it is. Tap a <b>wire, value or gate</b> in the circuit diagram to find it on the board — or a pin or wire on the board to find it in the diagram. Tap again to clear. Choose <b>STEP</b> to follow a change one stage at a time (click STEP to move it on), or <b>AUTO</b> to let it run straight through.</div>
+      <div>A three-input logic circuit, <b>Z = A·B·<span class="ov">C</span> + <span class="ov">B</span>·C</b>, built on a breadboard the way you would build it in the lab. Click the <b>A</b>, <b>B</b> and <b>C</b> switches and watch the levels on every wire and pin; the logic indicator shows <b>Z</b> (red for 1, green for 0, like the college trainer). Tap any <b>hole</b> to see which holes it is connected to, and tap any <b>IC pin</b> to see what it is. Tap a <b>wire, value or gate</b> in the circuit diagram to find it on the board — or a pin on the board to find it in the diagram. Tap again to clear. Choose <b>STEP</b> to follow a change one stage at a time (click STEP to move it on), or <b>AUTO</b> to let it run straight through.</div>
     </div>
 
     <div class="card">
@@ -460,7 +460,7 @@
       drawLed();
       gHiW = el('g', { fill: 'none', 'stroke-linecap': 'round', 'pointer-events': 'none' }, svg);    // the blue highlight for a selected signal / gate (taps pass through to the pin / wire underneath)
       // wires on top
-      gWires = el('g', { fill: 'none', 'stroke-linecap': 'round' }, svg);
+      gWires = el('g', { fill: 'none', 'stroke-linecap': 'round', 'pointer-events': 'none' }, svg);   // wires never take a tap: it goes through to the hole / pin underneath
       WIRES.forEach((w, i) => {
         const d = wirePath(w);
         Object.assign(w, { id: 'w' + i, d, sa: stripKey(w.a[0], w.a[1]), sb: stripKey(w.b[0], w.b[1]) });
@@ -475,8 +475,8 @@
         SW_BOX[n] = { x: sx - 50, y: SW_Y, w: 100, h: 92 };
         const d = `M ${sx},${SW_Y} C ${sx},${SW_Y - 40} ${X(col)},${ROW.j + 110} ${X(col)},${ROW.j}`;
         const w = { id: 'sw' + n, net: n, d, sa: 'SW' + n, sb: stripKey(col, 'j'), holes: [[col, 'j']] };
-        w.el = el('path', { d, 'stroke-width': 6, fill: 'none', 'stroke-linecap': 'round' }, svg);
-        el('circle', { cx: X(col), cy: ROW.j, r: 4.5, fill: '#555' }, svg);
+        w.el = el('path', { d, 'stroke-width': 6, fill: 'none', 'stroke-linecap': 'round', 'pointer-events': 'none' }, svg);
+        el('circle', { cx: X(col), cy: ROW.j, r: 4.5, fill: '#555', 'pointer-events': 'none' }, svg);
         INPUT_WIRES.push(w);
         const g = el('g', { class: 'sw', id: 'sw' + n, tabindex: 0, role: 'button', 'aria-label': 'Toggle input ' + n }, svg);
         el('rect', { class: 'sw-box', x: sx - 50, y: SW_Y, width: 100, height: 92, rx: 10, style: 'fill: var(--colour-panel); stroke: var(--colour-border)', 'stroke-width': 3 }, g);
@@ -508,9 +508,11 @@
     const SW_BOX = {};                                      // where each switch box is drawn (for its highlight)
     let IND_BOX = null;                                     // and the logic indicator's box
 
+    const HOLES = [];                                       // every hole drawn, so the unused ones can be made untappable
     function hole(c, r) {
       const h = el('rect', { class: 'hole', x: X(c) - 6, y: hy(r) - 6, width: 12, height: 12, rx: 2, fill: '#3b3b3b' }, svg);
       h.addEventListener('click', () => showStrip(c, r));
+      HOLES.push({ h, c, r });
     }
 
     // A chip: the IC reference sheet's drawing turned a quarter turn anticlockwise, so its pin 1 (top left on the sheet)
@@ -563,8 +565,8 @@
       IND_BOX = { x: LX - 34, y: LY - 58, w: 90, h: 126 };
       const d = `M ${X(27)},${ROW.g} C ${X(27) + 40},${ROW.g + 90} ${LX - 110},${LY - 6} ${LX - 34},${LY - 6}`;
       const w = { id: 'wz', net: 'Z', d, sa: stripKey(27, 'g'), sb: 'IND', holes: [[27, 'g']] };
-      w.el = el('path', { d, 'stroke-width': 6, fill: 'none', 'stroke-linecap': 'round' }, svg);
-      el('circle', { cx: X(27), cy: ROW.g, r: 4.5, fill: '#555' }, svg);
+      w.el = el('path', { d, 'stroke-width': 6, fill: 'none', 'stroke-linecap': 'round', 'pointer-events': 'none' }, svg);
+      el('circle', { cx: X(27), cy: ROW.g, r: 4.5, fill: '#555', 'pointer-events': 'none' }, svg);
       INPUT_WIRES.push(w);
       el('rect', { x: LX - 34, y: LY - 58, width: 90, height: 126, rx: 10, style: 'fill: var(--colour-panel); stroke: var(--colour-border)', 'stroke-width': 3 }, svg);
       el('circle', { id: 'ledBody', cx: LX + 11, cy: LY - 8, r: 24, stroke: '#a11', 'stroke-width': 3 }, svg);
@@ -601,20 +603,24 @@
       gHi.innerHTML = ''; gHiW.innerHTML = ''; document.getElementById('schHi').innerHTML = '';
       selected = null; hiSel = null;
     }
-    function hiStrip(strip) {                                // the five holes of a strip (not the rails / off-board ends)
-      const m = /^(\d+)([TB])$/.exec(strip); if (!m) return;
-      (m[2] === 'T' ? TOP : BOT).split('').forEach(r => el('rect', { x: X(+m[1]) - 13, y: hy(r) - 13, width: 26, height: 26, rx: 6, fill: HI }, gHi));
-    }
     function hiPin(id, n) {
       const { col } = pinPos(icOf(id), n), bottom = n <= 7;
       el('rect', { x: X(col) - 11, y: bottom ? CY + 46 : CY - 74, width: 22, height: 28, rx: 5, fill: HI, stroke: '#2563eb', 'stroke-width': 2 }, gHiW);
     }
+    // A signal tapped in the diagram: only the holes it actually uses — each of its pins' own hole and both ends of each
+    // of its wires — not the whole strips; plus its switch (A, B, C) or, for Z, a ring round the logic indicator.
     function hiBoardNet(net) {
-      USED_PINS.filter(k => netOfPin(k) === net).forEach(k => { hiStrip(stripOfPin(k)); const [id, n] = k.split(':'); hiPin(id, +n); });
+      USED_PINS.filter(k => netOfPin(k) === net).forEach(k => {
+        const [id, n] = k.split(':'), p = pinPos(icOf(id), +n);
+        hiHole(p.col, p.row); hiPin(id, +n);
+      });
       SIGNAL_WIRES().filter(w => w.net === net).forEach(w => {
-        [w.sa, w.sb].forEach(hiStrip);
+        wireHoles(w).forEach(([c, r]) => hiHole(c, r));
         el('path', { d: w.d, stroke: HI, 'stroke-width': 18 }, gHiW);
       });
+      const b = SW_BOX[net];
+      if (b) el('rect', { x: b.x - 8, y: b.y - 8, width: b.w + 16, height: b.h + 16, rx: 14, fill: HI }, gHiW);
+      if (net === 'Z' && IND_BOX) el('rect', { x: IND_BOX.x - 6, y: IND_BOX.y - 6, width: IND_BOX.w + 12, height: IND_BOX.h + 12, rx: 14, fill: 'none', stroke: HI, 'stroke-width': 12 }, gHiW);
     }
     function hiBoardGate(g) {
       const ic = icOf(g.ic), cols = g.ins.concat(g.out).map(n => pinPos(ic, n).col), bottom = g.out <= 7;
@@ -672,7 +678,15 @@
       Object.keys(NET_OF_TAG).forEach(id => document.getElementById(id).addEventListener('click', () => selectNet(NET_OF_TAG[id])));
       const hits = document.getElementById('schGateHits');
       SCH_GATES.forEach((g, i) => el('rect', { class: 'sch-gate-hit', x: g.x - 60, y: g.y - 50, width: 170, height: 100, fill: 'transparent' }, hits).addEventListener('click', () => selectGate(i)));
-      SIGNAL_WIRES().forEach(w => { w.el.classList.add('bb-wire'); w.el.addEventListener('click', () => selectNet(w.net)); });
+      // Only the parts of the circuit can be tapped: holes in a strip with a used pin or a wire end (plus the +5 V and
+      // 0 V rails), and the IC pins that are wired. Everything else looks the same but ignores taps, so working out
+      // what is (and isn't) in the circuit is left to the student. Wires are never tappable (see gWires).
+      const live = new Set(['tp', 'bn']);
+      ICS.forEach(ic => Object.keys(PIN_NET[ic.id]).forEach(n => live.add(stripOfPin(ic.id + ':' + n))));
+      WIRES.forEach(w => { live.add(w.sa); live.add(w.sb); });
+      INPUT_WIRES.forEach(w => w.holes.forEach(([c, r]) => live.add(stripKey(c, r))));
+      HOLES.forEach(({ h, c, r }) => { if (!live.has(stripKey(c, r))) h.classList.add('off'); });
+      ICS.forEach(ic => { for (let n = 1; n <= 14; n++) if (!PIN_NET[ic.id][n]) document.getElementById(ic.id + 'p' + n).classList.add('off'); });
     }
 
     function showStrip(c, r) {
