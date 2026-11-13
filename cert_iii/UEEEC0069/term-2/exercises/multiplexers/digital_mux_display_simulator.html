@@ -17,8 +17,9 @@
   (6 without its top bar, 9 without its tail, and its symbols for 10-15). Real boards drive the commons through
   transistors; the figure (and this page) leave that out.
 
-  CTRL toggles the control signal by hand (with the ripple), AUTO keeps toggling it, and "Fast multiplexing"
-  switches far too quickly to follow, so both digits look lit at once (persistence of vision).
+  CTRL toggles the control signal by hand (with the ripple) and AUTO keeps toggling it. The Multiplexing
+  buttons run the control signal on its own at 0.5 Hz (the digits take turns, a second each), 10 Hz (a visible
+  flicker) or 100 Hz (both digits look lit: persistence of vision; drawn steady, as a screen cannot show 100 Hz).
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -92,13 +93,21 @@
       <div class="sim-legend">
         <span><i style="background:var(--colour-ui-correct)"></i>logic 1 (HIGH)</span>
         <span><i style="background:var(--colour-label)"></i>logic 0 (LOW)</span>
-        <span id="legendFast"><i style="background:var(--colour-signal)"></i>switching too fast to follow</span>
+        <span id="legendFast"><i style="background:var(--colour-signal, #d97706)"></i>switching too fast to follow</span>
       </div>
       <div class="sim-status" id="simStatus" aria-live="polite"></div>
       <div class="sim-controls">
         <button type="button" class="sim-btn" onclick="explainCtrl()" id="explainBtn">? Explain the control signal</button>
-        <button type="button" class="sim-btn" onclick="toggleFast()" id="fastBtn">Fast multiplexing</button>
         <button type="button" class="sim-btn" onclick="resetSim()" id="resetBtn">↺ Reset</button>
+      </div>
+      <div class="sim-controls">
+        <span>Multiplexing:</span>
+        <button type="button" class="sim-btn active" id="rate-0" onclick="setRate(0)">Manual</button>
+        <button type="button" class="sim-btn" id="rate-0.5" onclick="setRate(0.5)">0.5 Hz</button>
+        <button type="button" class="sim-btn" id="rate-10" onclick="setRate(10)">10 Hz</button>
+        <button type="button" class="sim-btn" id="rate-100" onclick="setRate(100)">100 Hz</button>
+      </div>
+      <div class="sim-controls">
         <span>Speed:</span>
         <button type="button" class="sim-btn active" id="spd-normal" onclick="setSpeed('normal')">Normal</button>
         <button type="button" class="sim-btn" id="spd-fast" onclick="setSpeed('fast')">Fast</button>
@@ -124,9 +133,9 @@
     const SPEEDS = { normal: { step: 520 }, fast: { step: 260 } };
     let speed = 'normal';
     let flights = {}, events = [], seq = 0, loopOn = false;
-    let phase = 'idle', auto = false, autoTimer = null, pov = false, povTimer = null, povSel = 0;
+    let phase = 'idle', auto = false, autoTimer = null, rate = 0, rateTimer = null;   // rate: the control signal's frequency when multiplexing on its own (0 = manual)
 
-    const HIGH = 'var(--colour-ui-correct)', LOW = 'var(--colour-label)', FASTC = 'var(--colour-signal)';
+    const HIGH = 'var(--colour-ui-correct)', LOW = 'var(--colour-label)', FASTC = 'var(--colour-signal, #d97706)';
     const col = (v) => v ? HIGH : LOW;
     const bit = (n, b) => (n >> b) & 1;
     const bin = (n) => [3, 2, 1, 0].map(b => bit(n, b)).join('');
@@ -360,7 +369,7 @@
 
     // CTRL: the control signal flips; it travels to S0 (the MUX) and I0 (the 2-to-4 decoder) together
     function ctlClick() {
-      if (pov || busy()) return;
+      if (rate || busy()) return;
       const v = lv.s ? 0 : 1, ms = stepMs() * 0.9;
       phase = 'ctlTravel'; lastChange = 'ctl';
       hopAll([['ctlS', v], ['ctlI', v]], () => { lv.s = v; flashPin('s0', v, ms); flashPin('i0', v, ms); beat(() => rippleFromMux(true)); });
@@ -373,7 +382,7 @@
       if (d === 0) dataA ^= (1 << b); else dataB ^= (1 << b);
       const v = bit(d === 0 ? dataA : dataB, b), key = (d === 0 ? 'A' : 'B');
       lastChange = { d, b };
-      if (pov) { lv['in' + key][b] = v; render(); return; }
+      if (rate) { settle(lv.s); render(); return; }          // multiplexing on its own: the change shows straight away
       const ms = stepMs() * 0.9;
       phase = 'dataTravel';
       hop('in' + key + b, v, () => {
@@ -386,21 +395,24 @@
 
     function stopAuto() { auto = false; clearInterval(autoTimer); }
     function toggleAuto() {
-      if (pov) return;
+      if (rate) return;
       if (auto) stopAuto();
       else { auto = true; autoTimer = setInterval(() => { if (!busy()) ctlClick(); }, 1100); ctlClick(); }
       render();
     }
-    // Fast multiplexing: far too fast to follow, so both digits look lit (each is on half the time)
-    function toggleFast() {
-      pov = !pov;
-      document.body.classList.toggle('pov', pov);
-      document.getElementById('fastBtn').classList.toggle('active', pov);
+    // Multiplexing on its own at 0.5 Hz (the digits swap once a second — watch them take turns), 10 Hz (each digit
+    // is on for 50 ms: a visible flicker) or 100 Hz (too fast to see: both digits look lit). A screen only redraws
+    // about 60 times a second, so 100 Hz cannot really be shown switching: it is drawn as your eye sees it, both
+    // digits steady. At 0.5 Hz and 10 Hz the circuit really switches (no travelling-signal animation).
+    function setRate(r) {
+      rate = r;
+      document.body.classList.toggle('pov', rate >= 10);
+      [0, 0.5, 10, 100].forEach(k => document.getElementById('rate-' + k).classList.toggle('active', k === r));
       stopAuto();
       events.forEach(e => e.dead = true); events = []; flights = {}; hideBadges();
-      clearInterval(povTimer);
-      if (pov) povTimer = setInterval(() => { povSel ^= 1; render(); }, 120);   // only for the readout: the digits themselves are drawn steady
-      else { settle(0); phase = 'idle'; lastChange = null; }
+      clearInterval(rateTimer);
+      settle(0); phase = 'idle'; lastChange = null;
+      if (rate === 0.5 || rate === 10) rateTimer = setInterval(() => { settle(lv.s ? 0 : 1); render(); }, 1000 / (2 * rate));
       render();
     }
     function setSpeed(s) {
@@ -421,7 +433,7 @@
     function render(now) {
       now = now || performance.now();
       document.querySelectorAll('#simSvg [data-net]').forEach(el => {
-        const n = el.getAttribute('data-net'), c = pov && FAST_NETS.test(n) ? FASTC : col(netLevel(n));
+        const n = el.getAttribute('data-net'), c = rate >= 10 && FAST_NETS.test(n) ? FASTC : col(netLevel(n));
         if (el.tagName === 'circle') el.style.fill = c; else el.setAttribute('stroke', c);
       });
       renderSweeps(now);
@@ -433,21 +445,21 @@
       document.getElementById('valB').textContent = `${bin(dataB)} = ${dataB}`;
       // which data the MUX is passing: the ▶ and the highlighted value follow S0 (hidden in fast mode: it is switching)
       [['A', 0], ['B', 1]].forEach(([k, v]) => {
-        const on = !pov && lv.s === v;
+        const on = rate < 10 && lv.s === v;
         document.getElementById('sel' + k).style.display = on ? '' : 'none';
         document.getElementById('selBar' + k).style.display = on ? '' : 'none';
         document.getElementById('val' + k).style.fill = on ? 'var(--colour-ui-primary)' : 'var(--colour-text)';
       });
       // the decoder's selected output (as drawn): a blue arrowhead just left of that O
       const ds = document.getElementById('decSel'), oi = lv.oLine.indexOf(1);
-      ds.style.display = pov || oi < 0 ? 'none' : '';
+      ds.style.display = rate >= 10 || oi < 0 ? 'none' : '';
       if (oi >= 0) { const yO = [60, 95, 130, 165][oi]; ds.setAttribute('points', `392,${yO} 380,${yO - 7} 380,${yO + 7}`); }
       const sv = document.getElementById('sVal');
-      sv.textContent = pov ? '0/1' : lv.s; sv.style.fill = pov ? FASTC : col(lv.s);
+      sv.textContent = rate >= 10 ? '0/1' : lv.s; sv.style.fill = rate >= 10 ? FASTC : col(lv.s);
       // the digits: a segment lights when its digit's common is HIGH and its segment line is LOW
       [['dg1', 0, dataA], ['dg2', 1, dataB]].forEach(([id, k, data]) => {
         for (let i = 0; i < 7; i++) {
-          const on = pov ? SEG[data][i] === 1 : (lv.com[k] === 1 && lv.seg[i] === 0);
+          const on = rate === 100 ? SEG[data][i] === 1 : (lv.com[k] === 1 && lv.seg[i] === 0);
           const e = document.getElementById(id + 's' + i);
           e.setAttribute('stroke', on ? '#ff3b30' : '#2b2020');
           e.setAttribute('filter', on ? 'url(#segGlow)' : '');
@@ -459,8 +471,13 @@
     }
     function renderStatus() {
       const el = document.getElementById('simStatus');
-      if (pov) {
-        el.innerHTML = `<div>Control signal: <b>switching about 100 times a second</b></div><div style="margin-top:.35rem">Each digit is really only lit <b>half the time</b>, but it switches far faster than your eye can follow, so you see <b>${dataB}</b> and <b>${dataA}</b> together. That is the point of multiplexing: one decoder and one set of seven resistors drive both digits. Change a data switch and its digit changes straight away.</div>`;
+      if (rate) {
+        const txt = {
+          0.5: `The digits <b>take turns</b>: Digit 1 shows <b>${dataA}</b> for one second, then Digit 2 shows <b>${dataB}</b> for one second. Only one digit is ever lit, and the ▶ follows the data the MUX is passing.`,
+          10: `Now each digit is lit for only <b>50 ms</b> at a time. That is too fast to follow one at a time but not fast enough to fool your eye, so you see both digits <b>flicker</b>.`,
+          100: `Each digit is lit for only <b>5 ms</b> at a time, far faster than your eye can follow, so <b>${dataB}</b> and <b>${dataA}</b> look lit together, though each is really on only half the time. That is the point of multiplexing: one decoder and one set of seven resistors drive both digits. (A screen cannot redraw 100 times a second, so this setting shows what your eye sees.)`,
+        }[rate];
+        el.innerHTML = `<div>Control signal: <b>${rate} Hz</b> square wave</div><div style="margin-top:.35rem">${txt} Change a data switch and its digit changes straight away.</div>`;
         return;
       }
       const settling = busy();
@@ -480,11 +497,11 @@
       settle(0); hideBadges();
     }
     function resetSim() {
-      stopAuto(); if (pov) toggleFast();
+      stopAuto(); if (rate) setRate(0);
       dataA = 5; dataB = 2; initState(); render();
     }
     buildSvg(); initState(); render();
-    document.getElementById('introText').innerHTML = 'The course\'s <b>2-digit multiplexed display</b>. Both digits share <b>one</b> BCD to 7-segment decoder and <b>one</b> set of seven 390 Ω resistors. The <b>control signal</b> does two jobs at once: on the <b>MUX</b> (S<sub>0</sub>) it chooses whose data reaches the decoder, and on the <b>2-to-4 decoder</b> (I<sub>0</sub>) it powers the matching digit. Click <b>CTRL</b> to switch it and watch the signals travel, click a data bit to change a digit, then try <b>Fast multiplexing</b> to see why both digits look lit at once.';
+    document.getElementById('introText').innerHTML = 'The course\'s <b>2-digit multiplexed display</b>. Both digits share <b>one</b> BCD to 7-segment decoder and <b>one</b> set of seven 390 Ω resistors. The <b>control signal</b> does two jobs at once: on the <b>MUX</b> (S<sub>0</sub>) it chooses whose data reaches the decoder, and on the <b>2-to-4 decoder</b> (I<sub>0</sub>) it powers the matching digit. Click <b>CTRL</b> to switch it and watch the signals travel, click a data bit to change a digit, then try the <b>Multiplexing</b> speeds: at 0.5 Hz the digits take turns, at 10 Hz they flicker, and at 100 Hz both look lit at once.';
 
     // ── "Explain the control signal" pop-up, using the current data ──
     function explainCtrl() {
