@@ -771,13 +771,13 @@ header p {
           <g fill="none" stroke-linecap="round" stroke-linejoin="round">
             <polyline data-net="A" points="40,70 200,70 200,120 240,120" stroke-width="5" />
             <line data-net="B" x1="40" y1="160" x2="240" y2="160" stroke-width="5" />
-            <polyline data-net="B" points="150,160 150,464 416,464" stroke-width="5" />
+            <polyline data-net="B" data-off="110" points="150,160 150,464 416,464" stroke-width="5" />
             <!-- the 7402 NOR used as a NOT: both inputs (pins 5, 6) tied together, as on the board -->
-            <polyline data-net="B" points="432,464 416,464 416,496 432,496" stroke-width="5" />
+            <path data-net="B" data-off="680" d="M 416,464 L 432,464 M 416,464 L 416,496 L 432,496" stroke-width="5" />
             <path data-net="C" d="M 40,264 L 142,264 A 8,8 0 0 1 158,264 L 416,264" stroke-width="5" />
             <!-- the 7402 NOR used as a NOT: both inputs (pins 2, 3) tied together, as on the board -->
-            <polyline data-net="C" points="432,264 416,264 416,296 432,296" stroke-width="5" />
-            <polyline data-net="C" points="100,264 100,560 700,560" stroke-width="5" />
+            <path data-net="C" data-off="385" d="M 416,264 L 432,264 M 416,264 L 416,296 L 432,296" stroke-width="5" />
+            <polyline data-net="C" data-off="60" points="100,264 100,560 700,560" stroke-width="5" />
             <polyline data-net="AB" points="410,140 680,140 680,240 700,240" stroke-width="5" />
             <line data-net="Cn" x1="568" y1="280" x2="700" y2="280" stroke-width="5" />
             <polyline data-net="Bn" points="568,480 600,480 600,520 700,520" stroke-width="5" />
@@ -1377,16 +1377,54 @@ function updateThemeToggleUI(isDark) {
     }
     // the diagram value each changing pin produces: it flashes on the diagram as the pin flashes on the board
     const TAG_OF_PIN = { 'ic1:3': 'tAB', 'ic2:1': 'tCn', 'ic2:4': 'tBn', 'ic3:3': 'tG1', 'ic3:11': 'tG2', 'ic3:6': 'tZ' };
+    const NET_OF_TAG = { tA: 'A', tB: 'B', tC: 'C', tAB: 'AB', tCn: 'Cn', tBn: 'Bn', tG1: 'G1', tG2: 'G2', tZ: 'Z' };
     function flashTag(id) {
       const e = document.getElementById(id);
+      schSweep(NET_OF_TAG[id]);
       renderSchematic();                                     // the new value first, then the flash
       e.classList.remove('tag-flash'); void e.offsetWidth; e.classList.add('tag-flash');
     }
-    function renderSchematic() {
-      const v = schLevels(), c = n => v[n] ? HIGH : LOW;
+    // ── diagram wire sweeps: when a value changes, its wires sweep to the new colour with a leading dot (constant speed,
+    // each branch starting when the sweep reaches its junction); the wires take the new colour once the sweep is done ──
+    const SCH_SPEED = 0.6;                                   // diagram units per ms
+    let schLv = {}, schFlights = {}, SCH_PIECES = [];
+    function buildSchSweeps() {
+      const g = el('g', { fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, document.getElementById('schSvg'));
       document.querySelectorAll('#schSvg [data-net]').forEach(e => {
-        if (e.tagName === 'circle') e.style.fill = c(e.dataset.net); else e.setAttribute('stroke', c(e.dataset.net));
+        if (e.tagName === 'circle') return;
+        const d = e.tagName === 'path' ? e.getAttribute('d') : e.tagName === 'line'
+          ? `M ${e.getAttribute('x1')},${e.getAttribute('y1')} L ${e.getAttribute('x2')},${e.getAttribute('y2')}`
+          : 'M ' + e.getAttribute('points').trim().split(/\s+/).join(' L ');
+        const o = el('path', { d, 'stroke-width': 6, style: 'display:none' }, g);
+        const dot = el('circle', { r: 10, 'stroke-width': 3, style: 'display:none; stroke: var(--colour-panel)' }, g);
+        SCH_PIECES.push({ net: e.dataset.net, off: +(e.dataset.off || 0), o, dot, len: o.getTotalLength() });
       });
+    }
+    function schSweep(net) {
+      const val = schLevels()[net];
+      if (schLv[net] === val && !schFlights[net]) return;
+      const t0 = performance.now(), tok = ++seq;
+      schFlights[net] = { val, t0, tok };
+      const end = Math.max(...SCH_PIECES.filter(p => p.net === net).map(p => (p.off + p.len) / SCH_SPEED));
+      sched(end + 100, () => { if (schFlights[net] && schFlights[net].tok === tok) { schLv[net] = val; delete schFlights[net]; } });
+    }
+    function renderSchSweeps(now) {
+      SCH_PIECES.forEach(p => {
+        const f = schFlights[p.net];
+        if (!f) { p.o.style.display = 'none'; p.dot.style.display = 'none'; return; }
+        const prog = Math.max(0, Math.min(1, ((now - f.t0) * SCH_SPEED - p.off) / p.len)), c = f.val ? HIGH : LOW;
+        if (prog <= 0) { p.o.style.display = 'none'; p.dot.style.display = 'none'; return; }
+        p.o.setAttribute('stroke', c); p.o.setAttribute('stroke-dasharray', p.len); p.o.setAttribute('stroke-dashoffset', p.len * (1 - prog)); p.o.style.display = '';
+        if (prog < 1) { const pt = p.o.getPointAtLength(p.len * prog); p.dot.setAttribute('cx', pt.x); p.dot.setAttribute('cy', pt.y); p.dot.style.fill = c; p.dot.style.display = ''; }
+        else p.dot.style.display = 'none';
+      });
+    }
+    function renderSchematic() {
+      const v = schLevels(), c = n => v[n] ? HIGH : LOW, cw = n => schLv[n] ? HIGH : LOW;
+      document.querySelectorAll('#schSvg [data-net]').forEach(e => {
+        if (e.tagName === 'circle') e.style.fill = cw(e.dataset.net); else e.setAttribute('stroke', cw(e.dataset.net));
+      });
+      renderSchSweeps(performance.now());
       const o = t => `<span class="ov">${t}</span>`, ON = t => `<span class="ov-outer">${t}</span>`;
       const T = (id, html, n) => { const e = document.getElementById(id), h = `<span>${html} = ${v[n]}</span>`;
         if (e._h !== h) { e.innerHTML = h; e._h = h; } e.style.color = c(n); };
@@ -1442,7 +1480,9 @@ function updateThemeToggleUI(isDark) {
     build();
     buildSweeps();
     buildBadges();
+    buildSchSweeps();
     settleAll();
+    schLv = schLevels();
     render();
   </script>
   <p class="site-copyright">&copy; 2026 Anderson Home Technology. All rights reserved.</p>
