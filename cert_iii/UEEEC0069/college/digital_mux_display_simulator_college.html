@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Digital Electronics — 2-Digit Multiplexed Display — Simulator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,600;0,700;0,800;1,400;1,600&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <style>
+
+
+    .sim-intro { font-size: .85rem; line-height: 1.6; }
+    .sim-btn {
+      padding: .5rem 1.1rem; border: 1px solid var(--colour-border); border-radius: var(--radius-lg, 6px);
+      background: transparent; color: var(--colour-label); cursor: pointer; font-family: inherit;
+      font-size: .78rem; font-weight: 700; letter-spacing: .04em; transition: background .15s, color .15s, border-color .15s;
+    }
+    .sim-btn:hover:not(:disabled) { color: var(--colour-text); border-color: var(--colour-ui-primary); }
+    .sim-btn.active { border-color: var(--colour-ui-primary); color: var(--colour-ui-primary); background: rgba(var(--colour-ui-primary-rgb), .1); }
+    .sim-btn:disabled { opacity: .45; cursor: default; }
+    .sim-btn:focus-visible { outline: 2px solid var(--colour-ui-primary); outline-offset: 2px; }
+    #simSvg { width: 100%; max-width: 820px; display: block; margin: 0 auto; }
+    #simSvg .sw { cursor: pointer; }
+    #simSvg .sw:focus { outline: none; }
+    #simSvg .sw:focus-visible rect.sw-box, #simSvg .sw:hover rect.sw-box { stroke: var(--colour-ui-primary); stroke-width: 3; }
+    /* a 0 / 1 badge popping up at a pin as the signal reaches it (a little larger on phone-width screens) */
+    #simSvg .pin-pop { transform-box: fill-box; transform-origin: center; animation: pinPop .4s ease-out; }
+    @keyframes pinPop { 0% { transform: scale(.3); opacity: 0; } 55% { transform: scale(1.3); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+    @media (max-width: 520px) { #simSvg .pin-inner { transform-box: fill-box; transform-origin: center; scale: 1.25; } }
+    @media (prefers-reduced-motion: reduce) { #simSvg .pin-pop { animation: none; } }
+    .sim-status { margin-top: .8rem; padding: .7rem .9rem; border: 1px solid var(--colour-border); border-radius: 6px; font-size: .85rem; line-height: 1.55; }
+    .sim-controls { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; margin-top: .8rem; font-size: .78rem; color: var(--colour-label); }
+    .explain-back { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; padding: 1rem; }
+    .explain-back.open { display: flex; }
+    .explain-box { background: var(--colour-panel); color: var(--colour-text); border: 1px solid var(--colour-border); border-radius: 10px; max-width: 560px; width: 100%; max-height: 88vh; overflow-y: auto; padding: 1.1rem 1.3rem; font-size: .9rem; line-height: 1.55; box-shadow: 0 10px 40px rgba(0,0,0,.5); }
+    .explain-box h2 { margin: 0 0 .6rem; font-size: 1.05rem; }
+    .explain-box h3 { margin: .9rem 0 .2rem; font-size: .85rem; text-transform: uppercase; letter-spacing: .04em; opacity: .75; }
+    .explain-box p { margin: .2rem 0; }
+    .explain-box .answer { margin-top: .9rem; padding: .6rem .8rem; border-left: 4px solid var(--colour-ui-correct, #2a9d4a); background: rgba(128,128,128,.12); border-radius: 4px; }
+    .explain-box .close-row { text-align: right; margin-top: 1rem; }
+    .sim-legend { display: flex; gap: 1.1rem; flex-wrap: wrap; justify-content: center; margin-top: .5rem; font-size: .75rem; color: var(--colour-label); }
+    .sim-legend i { display: inline-block; width: 1.2rem; height: 4px; border-radius: 2px; margin-right: .3rem; vertical-align: middle; }
+    #legendFast { display: none; }
+    body.pov #legendFast { display: inline; }
+    @media (max-width: 480px) { .sim-btn { padding: .45rem .75rem; } }
+  
+/*
+  NSW TAFE college theme — the single source for the self-contained teacher pages
+  (cert_iii/UEEEC0069/college/*_college.html). tools/build_college.py inlines this into
+  each generated page, so a college page is the student page's own markup and script
+  with this stylesheet instead of assets/quiz-common.css.
+
+  It was lifted from the hand-made college pages (TAFE colour palette, Public Sans,
+  .main-wrap / .card-top-bar layout, light and dark themes, print rules) and then
+  extended with rules for the classes the shared engines draw with, so the college
+  pages no longer need a hand-made copy of the waveform code. To change how the
+  college pages look, edit this file and rebuild.
+*/
+
+:root {
+  --colour-bg: #f8f9fa;
+  --colour-panel: #ffffff;
+  --colour-border: #d0d5dd;
+  --colour-text: #1d2939;
+  --colour-text-strong: #002664;
+  --colour-label: #475467;
+  --colour-label-rgb: 71, 84, 103;
+  --colour-grid: rgba(0, 38, 100, 0.04);
+
+  --colour-ui-primary: #002664;
+  --colour-ui-primary-rgb: 0, 38, 100;
+  --colour-ui-correct: #087443;
+  --colour-ui-correct-rgb: 8, 116, 67;
+  --colour-ui-wrong: #d92d20;
+  --colour-ui-wrong-rgb: 217, 45, 32;
+
+  --colour-input-a: #4338ca;
+  --colour-input-b: #0f766e;
+  --colour-output-z: #0284c7;
+
+  --colour-dff: #0d80c3;
+  --colour-jfet: #7e22ce;
+  --colour-bjt: #b45309;
+  --colour-switch: #0369a1;
+
+  --font-body: 'Public Sans', system-ui, -apple-system, sans-serif;
+  --font-display: 'Public Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Share Tech Mono', monospace, sans-serif;
+
+  --radius-lg: 6px;
+  --radius-sm: 4px;
+  --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+body.dark-theme {
+  --colour-bg: #121824;
+  --colour-panel: #1a2232;
+  --colour-border: #2e3c54;
+  --colour-text: #e2e8f0;
+  --colour-text-strong: #ffffff;
+  --colour-label: #94a3b8;
+  --colour-label-rgb: 148, 163, 184;
+  --colour-grid: rgba(255, 255, 255, 0.03);
+
+  --colour-ui-primary: #38bdf8;
+  --colour-ui-primary-rgb: 56, 189, 248;
+  --colour-ui-correct: #34d399;
+  --colour-ui-correct-rgb: 52, 211, 153;
+  --colour-ui-wrong: #f87171;
+  --colour-ui-wrong-rgb: 248, 113, 113;
+
+  --colour-input-a: #818cf8;
+  --colour-input-b: #2dd4bf;
+  --colour-output-z: #38bdf8;
+
+  --colour-dff: #54c0ff;
+  --colour-jfet: #c084fc;
+  --colour-bjt: #ffb454;
+  --colour-switch: #38bdf8;
+
+  --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--colour-bg);
+  color: var(--colour-text);
+  font-family: var(--font-body);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem 1rem;
+  background-image: linear-gradient(var(--colour-grid) 1px, transparent 1px), linear-gradient(90deg, var(--colour-grid) 1px, transparent 1px);
+  background-size: 40px 40px;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+header {
+  margin-bottom: 1.5rem;
+  width: 100%;
+  max-width: 700px;
+  text-align: left;   /* stated outright: quiz-engine pages carry quiz-common.css underneath, which centres it */
+}
+
+header h1 {
+  font-family: var(--font-display);
+  font-size: clamp(1.4rem, 4vw, 2.2rem);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--colour-ui-primary);
+  text-shadow: none;
+  text-transform: none;
+}
+
+header p {
+  margin-top: .4rem;
+  color: var(--colour-label);
+  font-size: .82rem;
+  font-weight: 600;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.75rem;
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--colour-text);
+  background: var(--colour-panel);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-card);
+}
+
+.theme-toggle:hover {
+  border-color: var(--colour-ui-primary);
+}
+
+.back-link {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--colour-ui-primary);
+  text-decoration: none;
+  padding: 0.35rem 0.1rem;
+}
+
+.back-link:hover {
+  text-decoration: underline;
+}
+
+.main-wrap.wide { max-width: 1000px; }   /* galleries, e.g. the IC reference */
+.main-wrap {
+  width: 100%;
+  max-width: 700px;
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+
+.card {
+  background: var(--colour-panel);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-card);
+  transition: background 0.25s ease, border-color 0.25s ease;
+}
+
+.card-top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  margin-bottom: 0.5rem;
+}
+
+.rule-card {
+  font-size: .85rem;
+  line-height: 1.6;
+}
+
+.rule-card .rule-row {
+  display: flex;
+  gap: .5rem;
+  margin: .35rem 0;
+}
+
+.rule-card .rule-cond {
+  flex: none;
+  width: 8.5rem;
+  font-family: var(--font-mono);
+  font-weight: bold;
+}
+
+.legend-row {
+  display: flex;
+  gap: 1rem;
+  row-gap: .4rem;
+  flex-wrap: wrap;
+  margin-top: .8rem;
+  font-size: .78rem;
+  font-weight: 600;
+  color: var(--colour-label);
+}
+
+.legend-swatch {
+  display: inline-block;
+  width: 1.1rem;
+  height: 3px;
+  margin-right: .3rem;
+  vertical-align: middle;
+  border-radius: 2px;
+}
+
+.gate-toggle-card {
+  font-size: .85rem;
+}
+
+.gate-toggle-label {
+  color: var(--colour-label);
+  margin-bottom: .6rem;
+  font-weight: 600;
+}
+
+.gate-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  gap: .8rem;
+  justify-content: center;
+}
+
+.gate-toggle-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .3rem;
+  padding: .6rem 1.1rem;
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-lg);
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: .7rem;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--colour-label);
+  text-align: center;
+  transition: background .15s, color .15s, border-color .15s;
+}
+
+.gate-toggle-btn svg {
+  width: 9rem;
+  height: auto;
+  display: block;
+}
+
+.gate-toggle-btn.active {
+  border-color: var(--colour-ui-primary);
+  background: rgba(var(--colour-ui-primary-rgb), .12);
+  color: var(--colour-ui-primary);
+}
+
+.gate-toggle-btn:not(.active):hover {
+  background: rgba(var(--colour-ui-primary-rgb), .06);
+  color: var(--colour-text);
+}
+
+.hint-toggle-card { font-size: .85rem; }
+.hint-toggle-label { color: var(--colour-label); margin-bottom: .6rem; font-weight: 600; }
+.hint-toggle { display: flex; gap: .6rem; flex-wrap: wrap; justify-content: center; }
+.hint-toggle-btn {
+  padding: .5rem 1.1rem;
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-lg);
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: .7rem;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--colour-label);
+  transition: background .15s, color .15s, border-color .15s;
+}
+.hint-toggle-btn:not(.active):hover { background: rgba(var(--colour-ui-primary-rgb), .06); color: var(--colour-text); }
+.hint-toggle-btn[data-hint="edges"].active { border-color: var(--colour-switch); color: var(--colour-switch); background: color-mix(in srgb, var(--colour-switch) 14%, transparent); }
+.out-toggle-card { font-size: .82rem; margin-bottom: 1.2rem; }
+.out-toggle-btn { min-width: 3.6rem; }
+.out-toggle-btn.active { border-color: var(--colour-output-z); color: var(--colour-output-z); background: color-mix(in srgb, var(--colour-output-z) 14%, transparent); }
+
+.wb-tracks-wrap { position: relative; }
+.wb-hint-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+
+.wb-track-row {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin-bottom: 0.6rem;
+}
+
+.wb-track-label {
+  font-family: var(--font-mono);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--colour-text-strong);
+  width: 20px;
+  text-align: center;
+}
+
+.wb-track-row svg {
+  flex: 1;
+  height: 48px;
+  background: rgba(var(--colour-label-rgb), 0.05);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-sm);
+}
+
+.wb-track-path {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.wb-grid-line {
+  stroke: var(--colour-border);
+  stroke-width: 1;
+  stroke-dasharray: 2, 2;
+  opacity: 0.6;
+}
+
+.wb-track-p { stroke: var(--colour-jfet); }
+.wb-track-c { stroke: var(--colour-bjt); }
+.wb-track-clk { stroke: var(--colour-switch); }
+.wb-track-d { stroke: var(--colour-input-a); }
+.wb-track-q { stroke: var(--colour-output-z); }
+
+.wb-palette {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  margin: 1.2rem 0;
+  flex-wrap: wrap;
+}
+
+.wb-piece-btn {
+  background: var(--colour-panel);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.6rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.wb-piece-btn:hover:not(:disabled) {
+  border-color: var(--colour-ui-primary);
+  background: rgba(var(--colour-ui-primary-rgb), 0.08);
+}
+
+.wb-piece-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.wb-piece-btn svg {
+  width: 42px;
+  height: 28px;
+}
+
+.wb-piece-label {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--colour-label);
+}
+
+.result-banner {
+  display: none;
+  padding: .65rem 1rem;
+  border-radius: var(--radius-sm);
+  font-size: .82rem;
+  font-family: var(--font-body);
+  font-weight: 600;
+  align-items: center;
+  gap: .6rem;
+  margin-bottom: 1rem;
+}
+
+.result-banner.correct {
+  display: flex;
+  background: rgba(var(--colour-ui-correct-rgb), .12);
+  border: 1px solid rgba(var(--colour-ui-correct-rgb), .4);
+  color: var(--colour-ui-correct);
+}
+
+.result-banner.wrong {
+  display: flex;
+  background: rgba(var(--colour-ui-wrong-rgb), .12);
+  border: 1px solid rgba(var(--colour-ui-wrong-rgb), .4);
+  color: var(--colour-ui-wrong);
+}
+
+.btn-row {
+  display: flex;
+  gap: .6rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+  width: 100%;
+}
+
+.btn {
+  padding: .6rem 0;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: .78rem;
+  font-weight: 700;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all .15s;
+  border: 1px solid;
+  flex: 1;
+  min-width: 105px;
+  text-align: center;
+}
+
+.btn-prev {
+  background: rgba(var(--colour-label-rgb), .1);
+  border-color: rgba(var(--colour-label-rgb), .4);
+  color: var(--colour-label);
+}
+
+.btn-prev:hover:not(:disabled) {
+  background: rgba(var(--colour-label-rgb), .2);
+}
+
+.btn-prev:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.btn-check {
+  background: rgba(var(--colour-ui-correct-rgb), .15);
+  border-color: rgba(var(--colour-ui-correct-rgb), .5);
+  color: var(--colour-ui-correct);
+}
+
+.btn-check:hover:not(:disabled) {
+  background: rgba(var(--colour-ui-correct-rgb), .25);
+}
+
+.btn-check:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: rgba(var(--colour-ui-primary-rgb), .12);
+  border-color: rgba(var(--colour-ui-primary-rgb), .4);
+  color: var(--colour-ui-primary);
+}
+
+.btn-secondary:hover {
+  background: rgba(var(--colour-ui-primary-rgb), .22);
+}
+
+/* Print Worksheet — .print-only is invisible on screen, shown only via
+   @media print below. #printWorksheet (a direct child of <body>, NOT
+   nested inside .main-wrap) is built fresh by printDiagramNow() right
+   before window.print(): page title/description, the current Trigger/Q
+   diagram with Q left as a blank grid, then a page-break and the same
+   diagram again with the correct Q filled in as the solution. */
+.print-only { display: none; }
+
+@media print {
+  /* Force light regardless of whichever theme is active on screen —
+     body.dark-theme has higher specificity than a bare :root rule, so
+     it's redefined here too (same values), not just :root, or dark
+     mode would still win. */
+  :root, body.dark-theme {
+    --colour-bg: #ffffff;
+    --colour-panel: #ffffff;
+    --colour-text: #000000;
+    --colour-text-strong: #000000;
+    --colour-border: #999999;
+    --colour-label: #444444;
+  }
+  body > *:not(#printWorksheet) { display: none !important; }
+  body { background: #fff; background-image: none; padding: 0; display: block; }
+  #printWorksheet {
+    display: block !important;
+    color: #000;
+    font-family: var(--font-body);
+    max-width: 700px;
+    margin: 2rem auto;
+  }
+  #printWorksheet h1 { font-size: 1.3rem; margin: 0 0 .3rem; font-family: var(--font-display); }
+  #printWorksheet .print-subtitle { font-size: .8rem; color: #444; margin-bottom: 1rem; text-transform: uppercase; letter-spacing: .05em; }
+  #printWorksheet .print-description { margin-bottom: 1.2rem; }
+  #printWorksheet .print-diagram-section { page-break-inside: avoid; }
+  /* Solution starts on its own fresh page when printed double-sided or handed out separately. */
+  #printWorksheet .print-solution { page-break-before: always; }
+  #printWorksheet .print-solution h2 { font-size: 1.1rem; margin-bottom: .8rem; }
+  #printWorksheet .wb-track-row svg { width: 100%; height: auto; background: none; border: 1px solid #999; }
+  #printWorksheet .wb-track-label { color: #000; }
+  #printWorksheet .wb-grid-line { stroke: #999; stroke-dasharray: none; opacity: 1; }
+}
+
+/* Copyright line (college copies are self-contained, so inline) */
+.site-copyright {
+  margin: 3rem auto 1.5rem;
+  padding: 0 1rem;
+  text-align: center;
+  font-size: 0.7rem;
+  color: var(--colour-label);
+  opacity: 0.8;
+}
+
+/* ── page-structure rules shared by the waveform-builder pages ── */
+.wb-track-label { width: 2.6rem; }
+.extra-row { display: none; }
+.extra-row.shown { display: flex; }
+/* the student pages space their cards with margin-bottom; .main-wrap already spaces them with a gap */
+.main-wrap > .card { margin-bottom: 0; }
+.rule-card > div:first-of-type { margin-bottom: 0.4rem; }
+.rule-card > div:nth-last-of-type(2) { margin-top: 0.4rem; }
+
+/* ── classes assets/waveform-builder.js draws with (the student theme styles these from quiz-common.css) ── */
+.wb-grid-baseline { stroke: rgba(var(--colour-label-rgb), .4); }
+.wb-track-path.wb-track-s { stroke: var(--colour-input-a); }
+.wb-track-path.wb-track-r { stroke: var(--colour-input-b); }
+.wb-track-path.wb-track-p { stroke: var(--colour-jfet); }
+.wb-track-path.wb-track-c { stroke: var(--colour-bjt); }
+.wb-track-path.wb-track-clk { stroke: var(--colour-switch); }
+.wb-track-path.wb-track-d { stroke: var(--colour-input-a); }
+.wb-progress-shade { fill: var(--colour-ui-primary); opacity: .1; }
+.wb-q-path { fill: none; stroke-width: 2; stroke-linejoin: round; }
+.wb-q-path.wb-col-building { stroke: var(--colour-output-z); }
+.wb-q-path.wb-col-correct { stroke: var(--colour-ui-correct); }
+.wb-q-path.wb-col-wrong { stroke: var(--colour-ui-wrong); }
+.wb-piece-icon { width: 40px; height: 28px; overflow: visible; }
+.wb-piece-icon line, .wb-piece-icon polyline {
+  fill: none; stroke: var(--colour-output-z); stroke-width: 2.5;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+@media (max-width: 480px) {
+  .wb-track-label { width: 1.6rem; font-size: .8rem; }
+  .wb-piece-icon { width: 32px; height: 24px; }
+}
+@media print {
+  #printWorksheet .print-wave-row svg { width: 100%; height: auto; background: none; border: 1px solid #999; }
+}
+
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>Digital Electronics</h1>
+    <p id="subtitle">Multiplexer · BCD to 7-Segment Decoder · 2-Digit Display · Simulator</p>
+  </header>
+
+  <div class="main-wrap">
+    <div class="card-top-bar">
+      <a class="back-link" href="./simulators.html">← All simulators</a>
+      <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle dark and light theme">
+        <span id="themeIcon">🌙</span> <span id="themeLabel">Dark Mode</span>
+      </button>
+    </div>
+
+    <div class="card sim-intro">
+      <div id="introText"></div>
+    </div>
+
+    <div class="card">
+      <svg id="simSvg" viewBox="0 0 830 650" xmlns="http://www.w3.org/2000/svg" font-family="'Share Tech Mono', monospace" role="img" aria-label="A quad 2-to-1 multiplexer, a BCD to 7-segment decoder and a 2-to-4 decoder driving a 2-digit multiplexed display"></svg>
+      <div class="sim-legend">
+        <span><i style="background:var(--colour-ui-correct)"></i>logic 1 (HIGH)</span>
+        <span><i style="background:var(--colour-label)"></i>logic 0 (LOW)</span>
+        <span id="legendFast"><i style="background:var(--colour-signal)"></i>switching too fast to follow</span>
+      </div>
+      <div class="sim-status" id="simStatus" aria-live="polite"></div>
+      <div class="sim-controls">
+        <button type="button" class="sim-btn" onclick="explainCtrl()" id="explainBtn">? Explain the control signal</button>
+        <button type="button" class="sim-btn" onclick="toggleFast()" id="fastBtn">Fast multiplexing</button>
+        <button type="button" class="sim-btn" onclick="resetSim()" id="resetBtn">↺ Reset</button>
+        <span>Speed:</span>
+        <button type="button" class="sim-btn active" id="spd-normal" onclick="setSpeed('normal')">Normal</button>
+        <button type="button" class="sim-btn" id="spd-fast" onclick="setSpeed('fast')">Fast</button>
+      </div>
+    </div>
+    </div>
+  </div>
+
+  <div class="explain-back" id="explainBack" role="dialog" aria-modal="true" aria-label="The control signal explained">
+    <div class="explain-box"><div id="explainBody"></div>
+      <div class="close-row"><button type="button" class="sim-btn" id="explainClose" onclick="closeExplain()">Close</button></div>
+  </div>
+
+  <script>
+    // "← Back" link (same pattern as the timing diagram builders): only shown when there is a page to go back to
+  </script>
+  <script>
+// Dark/light toggle for the college pages (the student pages use assets/theme-init.js instead).
+// The preference is the same localStorage key the hand-made college pages used.
+function toggleTheme() {
+  const isDark = document.body.classList.toggle('dark-theme');
+  localStorage.setItem('tafe-quiz-theme', isDark ? 'dark' : 'light');
+  updateThemeToggleUI(isDark);
+}
+
+function updateThemeToggleUI(isDark) {
+  const icon = document.getElementById('themeIcon');
+  const label = document.getElementById('themeLabel');
+  if (icon && label) {
+    icon.textContent = isDark ? '☀️' : '🌙';
+    label.textContent = isDark ? 'Light Mode' : 'Dark Mode';
+  }
+}
+
+(function initTheme() {
+  const isDark = localStorage.getItem('tafe-quiz-theme') === 'dark';
+  document.body.classList.toggle('dark-theme', isDark);
+  updateThemeToggleUI(isDark);
+})();
+
+</script>
+  <script>
+    // ── shared engine: a small discrete-event model of propagation delay (same shape as the counter simulators) ──
+    const SPEEDS = { normal: { step: 520 }, fast: { step: 260 } };
+    let speed = 'normal';
+    let flights = {}, events = [], seq = 0, loopOn = false;
+    let phase = 'idle', auto = false, autoTimer = null, pov = false, povTimer = null, povSel = 0;
+
+    const HIGH = 'var(--colour-ui-correct)', LOW = 'var(--colour-label)', FASTC = 'var(--colour-signal)';
+    const col = (v) => v ? HIGH : LOW;
+    const bit = (n, b) => (n >> b) & 1;
+    const bin = (n) => [3, 2, 1, 0].map(b => bit(n, b)).join('');
+    const stepMs = () => SPEEDS[speed].step;
+
+    function sched(dt, fn) {
+      const e = { t: performance.now() + dt, fn, dead: false, id: ++seq };
+      events.push(e); startLoop(); return e;
+    }
+    function startLoop() { if (!loopOn) { loopOn = true; requestAnimationFrame(tick); } }
+    function tick() {
+      const now = performance.now();
+      events.sort((a, b) => a.t - b.t);
+      while (events.length && events[0].t <= now) {
+        const e = events.shift();
+        if (!e.dead) e.fn();
+      }
+      events = events.filter(e => !e.dead);
+      render(now);
+      if (events.length || Object.keys(flights).length) requestAnimationFrame(tick); else loopOn = false;
+    }
+    const busy = () => events.some(e => !e.badge) || Object.keys(flights).length > 0;
+
+    // ── wire sweeps: a changed level travels along its wire (green = 1, grey = 0) and takes effect when it arrives ──
+    let SWEEPS = {};
+    const SP = (id, d) => { SWEEPS[id] = d; return ''; };
+    const sweepLayer = () => '<g fill="none" stroke-linecap="round" stroke-linejoin="round">' + Object.keys(SWEEPS).map(id =>
+      `<path id="o-${id}" d="${SWEEPS[id]}" stroke-width="4.5" style="display:none" /><circle id="d-${id}" r="7" stroke-width="2.5" style="display:none; stroke: var(--colour-panel)" />`).join('') + '</g>';
+    const ARRIVE_PAUSE = 150;
+    function hop(id, val, then) {
+      const o = document.getElementById('o-' + id), dur = Math.max(360, o.getTotalLength() * (speed === 'fast' ? 1.44 : 2.88));
+      const now = performance.now(), tok = ++seq;
+      flights[id] = { val, t0: now, t1: now + dur, tok };
+      sched(dur + ARRIVE_PAUSE, () => { if (flights[id] && flights[id].tok === tok) delete flights[id]; if (then) then(); });
+    }
+    function hopAll(list, then) {
+      if (!list.length) { if (then) then(); return; }
+      let n = list.length;
+      list.forEach(([id, val]) => hop(id, val, () => { if (--n === 0 && then) then(); }));
+    }
+    function renderSweeps(now) {
+      Object.keys(SWEEPS).forEach(id => {
+        const o = document.getElementById('o-' + id), dot = document.getElementById('d-' + id), f = flights[id];
+        if (f) {
+          const L = o.getTotalLength(), p = Math.max(0, Math.min(1, (now - f.t0) / (f.t1 - f.t0)));
+          o.setAttribute('stroke', col(f.val)); o.setAttribute('stroke-dasharray', L); o.setAttribute('stroke-dashoffset', L * (1 - p));
+          o.style.display = '';
+          if (p < 1) {
+            const pt = o.getPointAtLength(L * p);
+            dot.setAttribute('cx', pt.x); dot.setAttribute('cy', pt.y); dot.style.fill = col(f.val); dot.style.display = '';
+          } else dot.style.display = 'none';
+        } else { o.style.display = 'none'; dot.style.display = 'none'; }
+      });
+    }
+    const chain = (steps) => { let i = 0; const go = () => { if (i < steps.length) steps[i++](go); }; go(); };
+    const beat = (next) => sched(stepMs(), next);
+
+    // ── drawing kit ──
+    const P = (d, attrs) => `<path d="${d}" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" ${attrs || ''} />`;
+    const NET = (net, d) => P(d, `data-net="${net}"`);
+    const GREY = 'style="stroke: var(--colour-label)"';
+    const T = (x, y, t, o) => { o = o || {}; return `<text x="${x}" y="${y}" text-anchor="${o.a || 'middle'}" font-size="${o.s || 16}"${o.b ? ' font-weight="bold"' : ''}${o.id ? ` id="${o.id}"` : ''} style="fill: ${o.c || 'var(--colour-label)'}">${t}</text>`; };
+    const sub = (b, s) => `${b}<tspan baseline-shift="sub" font-size="11">${s}</tspan>`;
+    const box = (x, y, w, h) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="4" style="fill: var(--colour-panel); stroke: var(--colour-border)" stroke-width="3" />`;
+    const bubble = (x, y) => `<circle cx="${x}" cy="${y}" r="5" style="fill: var(--colour-panel); stroke: var(--colour-border)" stroke-width="2.5" />`;
+    const badge = (id, x, y) => `<g id="b-${id}" visibility="hidden" transform="translate(${x},${y})"><g class="pin-inner"><rect x="-11" y="-11" width="22" height="22" rx="5" style="stroke: var(--colour-panel)" stroke-width="2" /><text x="0" y="6" text-anchor="middle" font-size="16" font-weight="bold" style="fill: var(--colour-panel)"></text></g></g>`;
+    const swBox = (id, x, y, w, h, label, aria) =>
+      `<g class="sw" id="${id}" tabindex="0" role="button" aria-label="${aria}"><rect class="sw-box" x="${x}" y="${y}" width="${w}" height="${h}" rx="6" style="fill: var(--colour-panel); stroke: var(--colour-border)" stroke-width="2" />${label}</g>`;
+
+    // ── the circuit ──
+    // 7447 segments lit (a..g = bits 0..6) for each BCD input 0-15: its own 6 (no top bar) and 9 (no tail), and its symbols for 10-15
+    const SEG = ['abcdef', 'bc', 'abdeg', 'abcdg', 'bcfg', 'acdfg', 'cdefg', 'abc', 'abcdefg', 'abcfg', 'deg', 'cdg', 'bfg', 'adfg', 'defg', '']
+      .map(s => 'abcdefg'.split('').map(ch => s.includes(ch) ? 1 : 0));
+    const SEGN = 'abcdefg';
+    const segOut = (n) => SEG[n].map(on => on ? 0 : 1);       // the decoder's outputs are ACTIVE LOW: a lit segment's line is 0
+
+    const IA_Y = [270, 300, 330, 360], IB_Y = [430, 460, 490, 520], Z_Y = [360, 390, 420, 450];
+    const SO_Y = [330, 360, 390, 420, 450, 480, 510], PIN_Y = [345, 370, 395, 420, 445, 470, 495];
+    const CTL_X = 260;
+    // the control line climbs past the four Z -> A lines with a hop over each
+    const ctlUp = () => { let d = `M ${CTL_X},600`; [...Z_Y].reverse().forEach(y => { d += ` L ${CTL_X},${y + 8} A 8,8 0 0 1 ${CTL_X},${y - 8}`; }); return d + ` L ${CTL_X},80 L 300,80`; };
+    const segPath = (i) => `M 460,${SO_Y[i]} L 570,${SO_Y[i]} L 570,${PIN_Y[i]} L 720,${PIN_Y[i]}`;
+
+    let dataA = 5, dataB = 2;                                  // the two digits' BCD data (the switches)
+    // the levels as DRAWN: they move on one stage at a time as the signals arrive
+    const lv = { inA: [], inB: [], s: 0, z: [], a: [], so: [], seg: [], oLine: [1, 0], com: [1, 0] };
+
+    function digitSvg(x, label, id) {
+      const cx = x + 45, cy = 420;
+      let s = `<rect x="${x}" y="300" width="90" height="240" rx="4" style="fill: #111; stroke: var(--colour-border)" stroke-width="3" />`;
+      const L = (i, x1, y1, x2, y2) => `<line id="${id}s${i}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke-width="9" stroke-linecap="round" />`;
+      s += L(0, cx - 17, cy - 50, cx + 17, cy - 50) + L(1, cx + 24, cy - 43, cx + 24, cy - 7) + L(2, cx + 24, cy + 7, cx + 24, cy + 43)
+         + L(3, cx - 17, cy + 50, cx + 17, cy + 50) + L(4, cx - 24, cy + 7, cx - 24, cy + 43) + L(5, cx - 24, cy - 43, cx - 24, cy - 7)
+         + L(6, cx - 17, cy, cx + 17, cy);
+      PIN_Y.forEach((y, i) => { s += T(x + 9, y + 4, SEGN[i], { a: 'start', s: 11, c: '#8a8a8a' }); });
+      s += T(cx, 566, label, { b: 1, s: 17, c: 'var(--colour-text)' });
+      s += T(cx, 318, 'common', { s: 10, c: '#8a8a8a' });
+      return s;
+    }
+
+    function buildSvg() {
+      SWEEPS = {};
+      let s = `<defs><filter id="segGlow" filterUnits="userSpaceOnUse" x="0" y="0" width="830" height="650"><feGaussianBlur stdDeviation="2.5" result="b" /><feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge></filter></defs>`;
+      // ── wires first ──
+      for (let b = 0; b < 4; b++) {
+        s += NET('inA' + b, `M 68,${IA_Y[b]} L 110,${IA_Y[b]}`); SP('inA' + b, `M 68,${IA_Y[b]} L 110,${IA_Y[b]}`);
+        s += NET('inB' + b, `M 68,${IB_Y[b]} L 110,${IB_Y[b]}`); SP('inB' + b, `M 68,${IB_Y[b]} L 110,${IB_Y[b]}`);
+        s += NET('z' + b, `M 230,${Z_Y[b]} L 330,${Z_Y[b]}`); SP('z' + b, `M 230,${Z_Y[b]} L 330,${Z_Y[b]}`);
+      }
+      // the control signal: to S0 and (up past the Z lines) to I0
+      s += NET('ctl', `M 300,600 L 170,600 L 170,560`) + NET('ctl', ctlUp());
+      SP('ctlS', 'M 300,600 L 170,600 L 170,560'); SP('ctlI', 'M 300,600 ' + ctlUp().slice(2));
+      s += `<circle data-net="ctl" cx="${CTL_X}" cy="600" r="5" />`;
+      s += P('M 282,120 L 300,120', GREY) + T(276, 125, '0', { a: 'end', b: 1, s: 16 });               // I1 tied to 0
+      // the 2-to-4 decoder's outputs: O0 powers Digit 1, O1 powers Digit 2; O2 and O3 are unused
+      s += NET('o0', 'M 420,60 L 765,60 L 765,300'); SP('o0', 'M 420,60 L 765,60 L 765,300');
+      s += NET('o1', 'M 420,95 L 645,95 L 645,300'); SP('o1', 'M 420,95 L 645,95 L 645,300');
+      s += P('M 420,130 L 436,130 M 420,165 L 436,165', GREY);
+      // the segment lines: through the 390 Ω resistors to both digits in parallel
+      for (let i = 0; i < 7; i++) { s += NET('seg' + i, segPath(i)); SP('seg' + i, segPath(i)); }
+      s += sweepLayer();
+      // ── components on top ──
+      // a blue bar beside the four data inputs the MUX is passing (follows S0, like the ▶)
+      s += `<line id="selBarA" x1="21" y1="${IA_Y[0] - 10}" x2="21" y2="${IA_Y[3] + 10}" stroke-width="5" stroke-linecap="round" style="stroke: var(--colour-ui-primary)" />`;
+      s += `<line id="selBarB" x1="21" y1="${IB_Y[0] - 10}" x2="21" y2="${IB_Y[3] + 10}" stroke-width="5" stroke-linecap="round" style="stroke: var(--colour-ui-primary)" />`;
+      // data switches
+      s += T(48, 252, 'Digit 1 data', { s: 12, b: 1, c: 'var(--colour-text)' }) + T(48, 412, 'Digit 2 data', { s: 12, b: 1, c: 'var(--colour-text)' });
+      for (let b = 0; b < 4; b++) {
+        s += swBox('swA' + b, 30, IA_Y[b] - 11, 38, 22, T(49, IA_Y[b] + 5, '', { b: 1, s: 15, id: 'tA' + b }), `Digit 1 data bit ${b}`);
+        s += swBox('swB' + b, 30, IB_Y[b] - 11, 38, 22, T(49, IB_Y[b] + 5, '', { b: 1, s: 15, id: 'tB' + b }), `Digit 2 data bit ${b}`);
+      }
+      s += T(20, 390, '', { a: 'start', s: 14, b: 1, id: 'valA', c: 'var(--colour-text)' }) + T(20, 550, '', { a: 'start', s: 14, b: 1, id: 'valB', c: 'var(--colour-text)' });
+      // ▶ marks the data the MUX is passing on (follows S0 as drawn)
+      s += T(3, 390, '▶', { a: 'start', s: 14, id: 'selA', c: 'var(--colour-ui-primary)' }) + T(3, 550, '▶', { a: 'start', s: 14, id: 'selB', c: 'var(--colour-ui-primary)' });
+      // the multiplexer
+      s += box(110, 240, 120, 320);
+      for (let b = 0; b < 4; b++) {
+        s += T(116, IA_Y[b] + 5, sub('IA', b), { a: 'start', s: 15 }) + T(116, IB_Y[b] + 5, sub('IB', b), { a: 'start', s: 15 });
+        s += T(224, Z_Y[b] + 5, sub('Z', b), { a: 'end', s: 15 });
+      }
+      s += T(170, 552, sub('S', 0), { s: 15 });
+      s += T(182, 584, '', { a: 'start', s: 16, b: 1, id: 'sVal' });          // S0's level, always shown
+      s += T(150, 395, 'MUX', { s: 13, b: 1, c: 'var(--colour-text)' }) + T(150, 412, '4 × 2-to-1', { s: 11 });
+      // the BCD to 7-segment decoder
+      s += box(330, 300, 120, 260);
+      for (let b = 0; b < 4; b++) s += T(336, Z_Y[b] + 5, sub('A', b), { a: 'start', s: 15 });
+      SO_Y.forEach((y, i) => { s += T(442, y + 5, SEGN[i], { a: 'end', s: 15 }) + bubble(455, y); });
+      s += T(390, 506, 'BCD to', { s: 11 }) + T(390, 521, '7-seg', { s: 11 }) + T(390, 548, 'Gnd', { s: 13 });
+      // the resistors
+      SO_Y.forEach(y => { s += `<rect x="482" y="${y - 9}" width="54" height="18" rx="2" style="fill: var(--colour-panel); stroke: var(--colour-resistor, var(--colour-text))" stroke-width="2" />` + T(509, y + 4, '390Ω', { s: 11, c: 'var(--colour-text)' }); });
+      // the 2-to-4 decoder
+      s += box(300, 30, 120, 160);
+      s += T(306, 85, sub('I', 0), { a: 'start', s: 15 }) + T(306, 125, sub('I', 1), { a: 'start', s: 15 });
+      [60, 95, 130, 165].forEach((y, i) => { s += T(414, y + 5, sub('O', i), { a: 'end', s: 15 }); });
+      s += T(356, 152, '2-to-4', { s: 11 }) + T(356, 168, 'DECODER', { s: 10 });
+      // a blue arrowhead inside the decoder pointing at the output that is selected (HIGH)
+      s += `<polygon id="decSel" style="fill: var(--colour-ui-primary)" />`;
+      // the displays (drawn over the segment sweeps, so a sweep runs under Digit 2 and on to Digit 1)
+      s += digitSvg(600, 'Digit 2', 'dg2') + digitSvg(720, 'Digit 1', 'dg1');
+      // the control signal: CTRL toggles it by hand, AUTO keeps toggling it
+      s += swBox('swCtl', 300, 585, 70, 30, T(335, 606, 'CTRL', { b: 1, s: 15, c: 'var(--colour-text)' }), 'Toggle the control signal');
+      s += swBox('swAuto', 380, 585, 76, 30, T(418, 606, 'AUTO', { b: 1, s: 15, c: 'var(--colour-text)' }), 'Keep toggling the control signal');
+      // badges
+      for (let b = 0; b < 4; b++) s += badge('iA' + b, 94, IA_Y[b]) + badge('iB' + b, 94, IB_Y[b]) + badge('z' + b, 242, Z_Y[b]) + badge('a' + b, 316, Z_Y[b]);
+      s += badge('s0', 170, 578) + badge('i0', 284, 80) + badge('o0', 438, 60) + badge('o1', 438, 95);
+      SO_Y.forEach((y, i) => { s += badge('so' + i, 470, y); });
+      document.getElementById('simSvg').innerHTML = s;
+      for (let b = 0; b < 4; b++) { hook('swA' + b, () => flipData(0, b)); hook('swB' + b, () => flipData(1, b)); }
+      hook('swCtl', ctlClick); hook('swAuto', toggleAuto);
+    }
+    function hook(id, fn) {
+      const g = document.getElementById(id);
+      g.addEventListener('click', fn);
+      g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); } });
+    }
+
+    // ── pin badges: a 0 / 1 pops up only when the level at that pin CHANGES ──
+    let pinLv = {};
+    function flashPin(id, val, ms) {
+      const g = document.getElementById('b-' + id); if (!g) return;
+      if (pinLv[id] === val) return;
+      pinLv[id] = val;
+      const inner = g.firstChild;
+      inner.firstChild.style.fill = col(val); inner.lastChild.textContent = val;
+      g.setAttribute('visibility', 'visible');
+      inner.classList.remove('pin-pop'); void inner.getBoundingClientRect(); inner.classList.add('pin-pop');
+      if (g._hide) g._hide.dead = true;
+      g._hide = sched(ms, () => g.setAttribute('visibility', 'hidden')); g._hide.badge = true;
+    }
+    const hideBadges = () => document.querySelectorAll('#simSvg [id^="b-"]').forEach(g => g.setAttribute('visibility', 'hidden'));
+
+    // ── the logic, from the levels as drawn ──
+    const muxOut = () => lv.s ? lv.inB.slice() : lv.inA.slice();
+    const valOf = (bits) => bits.reduce((n, v, b) => n | (v << b), 0);
+    const decOut = () => [lv.s ? 0 : 1, lv.s ? 1 : 0];          // O0 HIGH for control 0 (Digit 1), O1 HIGH for control 1 (Digit 2)
+
+    // Settle everything at once (start, reset, leaving fast mode)
+    function settle(sel) {
+      lv.s = sel;
+      lv.inA = [0, 1, 2, 3].map(b => bit(dataA, b)); lv.inB = [0, 1, 2, 3].map(b => bit(dataB, b));
+      lv.z = muxOut(); lv.a = lv.z.slice(); lv.so = segOut(valOf(lv.a)); lv.seg = lv.so.slice();
+      lv.oLine = decOut(); lv.com = lv.oLine.slice();
+      pinLv = { s0: sel, i0: sel, o0: lv.oLine[0], o1: lv.oLine[1] };
+      for (let b = 0; b < 4; b++) Object.assign(pinLv, { ['iA' + b]: lv.inA[b], ['iB' + b]: lv.inB[b], ['z' + b]: lv.z[b], ['a' + b]: lv.a[b] });
+      lv.so.forEach((v, i) => { pinLv['so' + i] = v; });
+    }
+
+    // From the MUX onwards: Z changes -> travel to the decoder's A inputs -> new a-g outputs -> travel to the digits.
+    // withSelect: the control signal changed too, so the 2-to-4 decoder switches digits on the same beat; the digit
+    // being powered changes when the new segment pattern arrives, so the display never shows the wrong digit's data.
+    function rippleFromMux(withSelect, then) {
+      const ms = stepMs() * 0.9;
+      let newZ, newO, newSo;
+      chain([
+        next => { newZ = muxOut(); newZ.forEach((v, b) => flashPin('z' + b, v, ms));
+                  if (withSelect) { newO = decOut(); flashPin('o0', newO[0], ms); flashPin('o1', newO[1], ms); }
+                  phase = 'zOut'; next(); },
+        next => beat(next),
+        next => { const hops = newZ.map((v, b) => v !== lv.a[b] ? ['z' + b, v] : null).filter(Boolean);
+                  if (withSelect) [0, 1].forEach(k => { if (newO[k] !== lv.oLine[k]) hops.push(['o' + k, newO[k]]); });
+                  hopAll(hops, () => { lv.z = newZ; lv.a = newZ.slice(); if (withSelect) lv.oLine = newO;
+                                       lv.a.forEach((v, b) => flashPin('a' + b, v, ms)); next(); }); },
+        next => beat(next),
+        next => { newSo = segOut(valOf(lv.a)); newSo.forEach((v, i) => flashPin('so' + i, v, ms)); lv.so = newSo; next(); },
+        next => beat(next),
+        next => hopAll(newSo.map((v, i) => v !== lv.seg[i] ? ['seg' + i, v] : null).filter(Boolean),
+                       () => { lv.seg = newSo.slice(); lv.com = lv.oLine.slice(); next(); }),
+        next => { phase = 'settled'; if (then) then(); render(); },
+      ]);
+    }
+
+    // CTRL: the control signal flips; it travels to S0 (the MUX) and I0 (the 2-to-4 decoder) together
+    function ctlClick() {
+      if (pov || busy()) return;
+      const v = lv.s ? 0 : 1, ms = stepMs() * 0.9;
+      phase = 'ctlTravel'; lastChange = 'ctl';
+      hopAll([['ctlS', v], ['ctlI', v]], () => { lv.s = v; flashPin('s0', v, ms); flashPin('i0', v, ms); beat(() => rippleFromMux(true)); });
+      startLoop(); render();
+    }
+    // a data switch: its new level travels to the MUX input; it only goes further if that digit is selected
+    let lastChange = null;
+    function flipData(d, b) {
+      if (busy()) return;
+      if (d === 0) dataA ^= (1 << b); else dataB ^= (1 << b);
+      const v = bit(d === 0 ? dataA : dataB, b), key = (d === 0 ? 'A' : 'B');
+      lastChange = { d, b };
+      if (pov) { lv['in' + key][b] = v; render(); return; }
+      const ms = stepMs() * 0.9;
+      phase = 'dataTravel';
+      hop('in' + key + b, v, () => {
+        lv['in' + key][b] = v; flashPin('i' + key + b, v, ms);
+        if ((d === 0 && lv.s === 0) || (d === 1 && lv.s === 1)) beat(() => rippleFromMux(false));
+        else { phase = 'unselected'; render(); }
+      });
+      startLoop(); render();
+    }
+
+    function stopAuto() { auto = false; clearInterval(autoTimer); }
+    function toggleAuto() {
+      if (pov) return;
+      if (auto) stopAuto();
+      else { auto = true; autoTimer = setInterval(() => { if (!busy()) ctlClick(); }, 1100); ctlClick(); }
+      render();
+    }
+    // Fast multiplexing: far too fast to follow, so both digits look lit (each is on half the time)
+    function toggleFast() {
+      pov = !pov;
+      document.body.classList.toggle('pov', pov);
+      document.getElementById('fastBtn').classList.toggle('active', pov);
+      stopAuto();
+      events.forEach(e => e.dead = true); events = []; flights = {}; hideBadges();
+      clearInterval(povTimer);
+      if (pov) povTimer = setInterval(() => { povSel ^= 1; render(); }, 120);   // only for the readout: the digits themselves are drawn steady
+      else { settle(0); phase = 'idle'; lastChange = null; }
+      render();
+    }
+    function setSpeed(s) {
+      speed = s;
+      ['normal', 'fast'].forEach(k => document.getElementById('spd-' + k).classList.toggle('active', k === s));
+    }
+
+    // ── rendering ──
+    const netLevel = (n) => {
+      if (n.startsWith('inA')) return lv.inA[+n[3]];
+      if (n.startsWith('inB')) return lv.inB[+n[3]];
+      if (n === 'ctl') return lv.s;
+      if (n[0] === 'z') return lv.a[+n[1]];
+      if (n[0] === 'o') return lv.oLine[+n[1]];
+      if (n.startsWith('seg')) return lv.seg[+n[3]];
+    };
+    const FAST_NETS = /^(ctl|z\d|o\d|seg\d)$/;          // the nets that flip every time the control signal does
+    function render(now) {
+      now = now || performance.now();
+      document.querySelectorAll('#simSvg [data-net]').forEach(el => {
+        const n = el.getAttribute('data-net'), c = pov && FAST_NETS.test(n) ? FASTC : col(netLevel(n));
+        if (el.tagName === 'circle') el.style.fill = c; else el.setAttribute('stroke', c);
+      });
+      renderSweeps(now);
+      // the switches and their values
+      for (let b = 0; b < 4; b++) {
+        [['A', dataA], ['B', dataB]].forEach(([k, v]) => { const t = document.getElementById('t' + k + b); t.textContent = bit(v, b); t.style.fill = col(bit(v, b)); });
+      }
+      document.getElementById('valA').textContent = `${bin(dataA)} = ${dataA}`;
+      document.getElementById('valB').textContent = `${bin(dataB)} = ${dataB}`;
+      // which data the MUX is passing: the ▶ and the highlighted value follow S0 (hidden in fast mode: it is switching)
+      [['A', 0], ['B', 1]].forEach(([k, v]) => {
+        const on = !pov && lv.s === v;
+        document.getElementById('sel' + k).style.display = on ? '' : 'none';
+        document.getElementById('selBar' + k).style.display = on ? '' : 'none';
+        document.getElementById('val' + k).style.fill = on ? 'var(--colour-ui-primary)' : 'var(--colour-text)';
+      });
+      // the decoder's selected output (as drawn): a blue arrowhead just left of that O
+      const ds = document.getElementById('decSel'), oi = lv.oLine.indexOf(1);
+      ds.style.display = pov || oi < 0 ? 'none' : '';
+      if (oi >= 0) { const yO = [60, 95, 130, 165][oi]; ds.setAttribute('points', `392,${yO} 380,${yO - 7} 380,${yO + 7}`); }
+      const sv = document.getElementById('sVal');
+      sv.textContent = pov ? '0/1' : lv.s; sv.style.fill = pov ? FASTC : col(lv.s);
+      // the digits: a segment lights when its digit's common is HIGH and its segment line is LOW
+      [['dg1', 0, dataA], ['dg2', 1, dataB]].forEach(([id, k, data]) => {
+        for (let i = 0; i < 7; i++) {
+          const on = pov ? SEG[data][i] === 1 : (lv.com[k] === 1 && lv.seg[i] === 0);
+          const e = document.getElementById(id + 's' + i);
+          e.setAttribute('stroke', on ? '#ff3b30' : '#2b2020');
+          e.setAttribute('filter', on ? 'url(#segGlow)' : '');
+        }
+      });
+      document.querySelector('#swAuto rect').style.fill = auto ? 'rgba(var(--colour-ui-primary-rgb), .22)' : 'var(--colour-panel)';
+      document.querySelector('#swCtl rect').style.fill = lv.s ? 'rgba(var(--colour-ui-correct-rgb), .22)' : 'var(--colour-panel)';
+      renderStatus();
+    }
+    function renderStatus() {
+      const el = document.getElementById('simStatus');
+      if (pov) {
+        el.innerHTML = `<div>Control signal: <b>switching about 100 times a second</b></div><div style="margin-top:.35rem">Each digit is really only lit <b>half the time</b>, but it switches far faster than your eye can follow, so you see <b>${dataB}</b> and <b>${dataA}</b> together. That is the point of multiplexing: one decoder and one set of seven resistors drive both digits. Change a data switch and its digit changes straight away.</div>`;
+        return;
+      }
+      const settling = busy();
+      el.innerHTML = `<div>Control signal = <b>${lv.s}</b>${settling ? ' · <i>settling…</i>' : ''}</div><div style="margin-top:.35rem">${settling ? '<i>Watch the signals travel through the circuit…</i>' : statusBody()}</div>`;
+    }
+    function statusBody() {
+      const sel = lv.s, d = sel ? 2 : 1, data = sel ? dataB : dataA, other = sel ? 1 : 2;
+      const base = `The MUX is passing <b>Digit ${d}'s data</b> (${sel ? 'IB' : 'IA'} = <b>${bin(data)}</b>) to the decoder, which shows <b>${data > 9 ? 'a 7447 symbol (not a digit)' : data}</b> on the segment lines, and <b>O<sub>${sel}</sub></b> powers <b>Digit ${d}</b>. Digit ${other} is off.`;
+      if (phase === 'unselected' && lastChange && lastChange.d !== sel)
+        return `Digit ${lastChange.d + 1}'s data changed, but the MUX is selecting <b>Digit ${d}</b>, so it goes no further than the MUX input. It will appear when the control signal selects Digit ${lastChange.d + 1}. ` + base;
+      if (phase === 'idle') return base + ' Click <b>CTRL</b> to switch the control signal (or <b>AUTO</b> to keep switching), and click a data bit to change a digit.';
+      return base;
+    }
+
+    function initState() {
+      events.forEach(e => e.dead = true); events = []; flights = {}; phase = 'idle'; lastChange = null;
+      settle(0); hideBadges();
+    }
+    function resetSim() {
+      stopAuto(); if (pov) toggleFast();
+      dataA = 5; dataB = 2; initState(); render();
+    }
+    buildSvg(); initState(); render();
+    document.getElementById('introText').innerHTML = 'The course\'s <b>2-digit multiplexed display</b>. Both digits share <b>one</b> BCD to 7-segment decoder and <b>one</b> set of seven 390 Ω resistors. The <b>control signal</b> does two jobs at once: on the <b>MUX</b> (S<sub>0</sub>) it chooses whose data reaches the decoder, and on the <b>2-to-4 decoder</b> (I<sub>0</sub>) it powers the matching digit. Click <b>CTRL</b> to switch it and watch the signals travel, click a data bit to change a digit, then try <b>Fast multiplexing</b> to see why both digits look lit at once.';
+
+    // ── "Explain the control signal" pop-up, using the current data ──
+    function explainCtrl() {
+      const seg = n => n > 9 ? `the 7447's symbol for ${n}` : `<b>${n}</b>`;
+      document.getElementById('explainBody').innerHTML = `<h2>What the control signal does</h2>
+      <h3>Control signal = 0</h3><p>S<sub>0</sub> = 0, so the MUX passes <b>IA</b> (Digit 1's data, ${bin(dataA)}) to Z<sub>0</sub>–Z<sub>3</sub>. The decoder puts ${seg(dataA)} on the segment lines (a lit segment's line goes <b>LOW</b>). At the same time I<sub>0</sub> = 0 and I<sub>1</sub> = 0, so the 2-to-4 decoder's <b>O<sub>0</sub></b> goes HIGH and powers <b>Digit 1</b>. Digit 2 gets the same segment lines, but its common is off, so it stays dark.</p>
+      <h3>Control signal = 1</h3><p>S<sub>0</sub> = 1, so the MUX passes <b>IB</b> (Digit 2's data, ${bin(dataB)}). The decoder now shows ${seg(dataB)}, and I<sub>0</sub> = 1 makes <b>O<sub>1</sub></b> HIGH, powering <b>Digit 2</b>. Digit 1 is dark.</p>
+      <h3>Why one wire does both jobs</h3><p>Because S<sub>0</sub> and I<sub>0</sub> are the same signal, the digit being powered is always the one whose data is on the segment lines. Each digit only ever shows its own number.</p>
+      <h3>Switching fast</h3><p>Switch the control signal fast enough (well over 50 times a second) and each digit flashes on and off too quickly to see. Your eye blends it, so both digits look lit at once, even though only one is ever on.</p>
+      <div class="answer"><b>Why bother?</b> Both digits share one decoder and one set of seven resistors. With more digits the saving grows: a 4-digit display still needs only one decoder and 7 segment lines.</div>`;
+      document.getElementById('explainBack').classList.add('open');
+      document.getElementById('explainClose').focus();
+    }
+    function closeExplain() { document.getElementById('explainBack').classList.remove('open'); }
+    document.getElementById('explainBack').addEventListener('click', e => { if (e.target.id === 'explainBack') closeExplain(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeExplain(); });
+  </script>
+  <p class="site-copyright">&copy; 2026 Anderson Home Technology. All rights reserved.</p>
+</body>
+
+</html>
