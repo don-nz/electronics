@@ -82,6 +82,23 @@
     .workings > span.w-check { color: var(--colour-label); border-bottom: none; grid-column: 1 / -1; }
     /* a NAND's bar over a whole expression, raised clear of any single-letter bar inside it */
     .ov-outer { display: inline-block; border-top: 1.5px solid currentColor; padding-top: 3px; line-height: 1.1; }
+    /* the circuit diagram under the board, with the live value on every wire */
+    .sch-wrap { margin-top: 1rem; border: 1px solid var(--colour-border); border-radius: 8px; padding: .6rem .8rem; }
+    .sch-title { font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; font-weight: 700; color: var(--colour-label); margin-bottom: .3rem; }
+    #schSvg { width: 100%; display: block; }
+    .sch-tag { display: flex; align-items: flex-end; font-family: 'Share Tech Mono', monospace; font-size: 27px; font-weight: 700; line-height: 1; white-space: nowrap; }
+    /* the truth table inside the diagram (sizes are in the diagram's own units) */
+    .sch-tt .tt { font-size: 19px; margin-left: auto; }
+    .sch-tt .tt th, .sch-tt .tt td { padding: 1px 14px; }
+    .sch-tt .tt caption { font-size: 14px; padding-bottom: 4px; }
+    .sch-tag > span { padding: 2px 6px; border-radius: 8px; }
+    .sch-tag.tag-flash > span { animation: tagFlash 1s ease-out; }
+    @keyframes tagFlash {
+      0%, 30% { background: rgba(var(--colour-ui-primary-rgb), .28); box-shadow: 0 0 0 3px rgba(var(--colour-ui-primary-rgb), .55); }
+      100% { background: transparent; box-shadow: 0 0 0 3px transparent; }
+    }
+    @media (prefers-reduced-motion: reduce) { .sch-tag.tag-flash > span { animation: none; } }
+    .sch-tag .ov-outer { border-top-width: 2.5px; padding-top: 5px; }
     /* the chips are the IC reference sheet's own drawings (resources/digital_resources_ics.html), turned a quarter turn
        so they straddle the channel. Their body is filled so the board's holes don't show through, and their own pin
        numbers and +5V/GND labels are hidden (they would read sideways): upright ones are drawn beside each leg instead. */
@@ -122,13 +139,63 @@
         <span><i style="background:#e53935"></i>+5 V</span>
         <span><i style="background:#222"></i>0 V (GND)</span>
       </div>
-      <div class="speed-row">Signal speed:
-        <button type="button" id="spd-normal" class="active" onclick="setSpeed('normal')">Normal</button>
-        <button type="button" id="spd-fast" onclick="setSpeed('fast')">Fast</button>
-      </div>
       <div class="bb-lower">
         <div class="sim-status" id="simStatus" aria-live="polite"></div>
-        <table class="tt" id="truthTable"></table>
+      </div>
+      <div class="sch-wrap">
+        <div class="sch-title">Circuit diagram — the value at each step, from the inputs to Z</div>
+        <svg id="schSvg" viewBox="-10 20 1360 600" xmlns="http://www.w3.org/2000/svg" font-family="'Share Tech Mono', monospace" role="img" aria-label="The circuit diagram with the current value on every wire">
+          <!-- wires first (the same layout as digital_circuit_derivation_abc.html), each tagged with its signal -->
+          <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <polyline data-net="A" points="40,70 300,70 300,120 360,120" stroke-width="3" />
+            <line data-net="B" x1="40" y1="160" x2="360" y2="160" stroke-width="3" />
+            <polyline data-net="B" points="150,160 150,480 252,480" stroke-width="3" />
+            <path data-net="C" d="M 40,280 L 142,280 A 8,8 0 0 1 158,280 L 252,280" stroke-width="3" />
+            <polyline data-net="C" points="100,280 100,560 700,560" stroke-width="3" />
+            <polyline data-net="AB" points="530,140 680,140 680,240 700,240" stroke-width="3" />
+            <line data-net="Cn" x1="388" y1="280" x2="700" y2="280" stroke-width="3" />
+            <polyline data-net="Bn" points="388,480 600,480 600,520 700,520" stroke-width="3" />
+            <polyline data-net="G1" points="870,260 1000,260 1000,380 1010,380" stroke-width="3" />
+            <polyline data-net="G2" points="870,540 1000,540 1000,420 1010,420" stroke-width="3" />
+            <line data-net="Z" x1="1180" y1="400" x2="1255" y2="400" stroke-width="3" />
+          </g>
+          <circle data-net="B" cx="150" cy="160" r="7" /><circle data-net="C" cx="100" cy="280" r="7" />
+          <g font-size="36" font-weight="bold" style="fill: var(--colour-text)">
+            <text x="10" y="82">A</text><text x="10" y="172">B</text><text x="10" y="292">C</text>
+          </g>
+          <!-- gates -->
+          <g transform="translate(420,140) scale(2.5) scale(1.17647) rotate(-90)"><use href="#gate-and-trad" /></g>
+          <g transform="translate(300,280) scale(2) scale(1.17647) rotate(-90)"><use href="#gate-not-trad" /></g>
+          <g transform="translate(300,480) scale(2) scale(1.17647) rotate(-90)"><use href="#gate-not-trad" /></g>
+          <g transform="translate(760,260) scale(2.5) scale(1.17647) rotate(-90)"><use href="#gate-nand-trad" /></g>
+          <g transform="translate(760,540) scale(2.5) scale(1.17647) rotate(-90)"><use href="#gate-nand-trad" /></g>
+          <g transform="translate(1070,400) scale(2.5) scale(1.17647) rotate(-90)"><use href="#gate-nand-trad" /></g>
+          <!-- IC and pin numbers -->
+          <g font-size="20" font-weight="bold" text-anchor="middle" style="fill: var(--colour-label)">
+            <text x="420" y="94">7408</text><text x="300" y="238">7402</text><text x="300" y="438">7402</text>
+            <text x="760" y="214">7400</text><text x="760" y="494">7400</text><text x="1070" y="354">7400</text>
+          </g>
+          <g font-size="16" style="fill: var(--colour-label)">
+            <text x="368" y="140">1</text><text x="368" y="180">2</text><text x="500" y="164">3</text>
+            <text x="250" y="299">2,3</text><text x="370" y="299">1</text>
+            <text x="250" y="499">5,6</text><text x="370" y="499">4</text>
+            <text x="706" y="260">1</text><text x="706" y="300">2</text><text x="850" y="284">3</text>
+            <text x="706" y="540">13</text><text x="706" y="580">12</text><text x="850" y="564">11</text>
+            <text x="1016" y="400">4</text><text x="1016" y="440">5</text><text x="1160" y="419">6</text>
+          </g>
+          <!-- the same logic indicator as the board's, at the end of the Z wire (lit by the same drawn level) -->
+          <rect x="1255" y="350" width="90" height="126" rx="10" style="fill: var(--colour-panel); stroke: var(--colour-border)" stroke-width="3" />
+          <circle id="schLed" cx="1300" cy="400" r="24" stroke-width="3" filter="url(#ledGlow)" />
+          <text x="1300" y="458" text-anchor="middle" font-size="24" font-weight="bold" style="fill: var(--colour-text)">Z</text>
+          <text x="1300" y="502" text-anchor="middle" font-size="15" style="fill: var(--colour-label)">logic</text>
+          <text x="1300" y="520" text-anchor="middle" font-size="15" style="fill: var(--colour-label)">indicator</text>
+          <!-- the truth table, in the empty top-right corner of the diagram -->
+          <foreignObject x="1000" y="22" width="300" height="350"><div xmlns="http://www.w3.org/1999/xhtml" class="sch-tt"><table class="tt" id="truthTable"></table></div></foreignObject>
+          <!-- the live values, each sitting just above (or below) its own wire -->
+          <foreignObject x="40" y="12" width="180" height="52"><div xmlns="http://www.w3.org/1999/xhtml" id="tA" class="sch-tag" style="width:180px;height:52px"></div></foreignObject><foreignObject x="40" y="100" width="135" height="52"><div xmlns="http://www.w3.org/1999/xhtml" id="tB" class="sch-tag" style="width:135px;height:52px"></div></foreignObject><foreignObject x="40" y="220" width="130" height="52"><div xmlns="http://www.w3.org/1999/xhtml" id="tC" class="sch-tag" style="width:130px;height:52px"></div></foreignObject>
+          <foreignObject x="500" y="80" width="190" height="52"><div xmlns="http://www.w3.org/1999/xhtml" id="tAB" class="sch-tag" style="width:190px;height:52px"></div></foreignObject><foreignObject x="380" y="220" width="200" height="52"><div xmlns="http://www.w3.org/1999/xhtml" id="tCn" class="sch-tag" style="width:200px;height:52px"></div></foreignObject><foreignObject x="380" y="420" width="200" height="52"><div xmlns="http://www.w3.org/1999/xhtml" id="tBn" class="sch-tag" style="width:200px;height:52px"></div></foreignObject>
+          <foreignObject x="860" y="200" width="300" height="52"><div xmlns="http://www.w3.org/1999/xhtml" id="tG1" class="sch-tag" style="width:300px;height:52px"></div></foreignObject><foreignObject x="860" y="480" width="300" height="52"><div xmlns="http://www.w3.org/1999/xhtml" id="tG2" class="sch-tag" style="width:300px;height:52px"></div></foreignObject><foreignObject x="1145" y="340" width="110" height="52"><div xmlns="http://www.w3.org/1999/xhtml" id="tZ" class="sch-tag" style="width:110px;height:52px"></div></foreignObject>
+        </svg>
       </div>
     </div>
     </div>
@@ -616,6 +683,7 @@
     }
     function flashPin(k, val) {
       pinLv[k] = val;
+      if (TAG_OF_PIN[k]) flashTag(TAG_OF_PIN[k]);
       const b = document.getElementById('b-' + k.replace(':', '_')), inner = b.firstChild;
       inner.firstChild.style.fill = val ? HIGH : LOW; inner.lastChild.textContent = val;
       b.setAttribute('visibility', 'visible');
@@ -653,10 +721,34 @@
       if (busy()) return;
       if (n === 'A') A ^= 1; if (n === 'B') B ^= 1; if (n === 'C') C ^= 1;
       const val = levels()[n], w = INPUT_WIRES.find(x => x.id === 'sw' + n);
-      hop(w, val, () => { wireLv[w.id] = val; arriveStrip(w.sb, n, val, null, new Set([w.sa, w.sb])); });
+      hop(w, val, () => { wireLv[w.id] = val; flashTag('t' + n); arriveStrip(w.sb, n, val, null, new Set([w.sa, w.sb])); });
       startLoop(); render();
     }
-    function setSpeed(v) { speed = v; ['normal', 'fast'].forEach(k => document.getElementById('spd-' + k).classList.toggle('active', k === v)); }
+
+    // ── the circuit diagram: every wire and value as drawn on the board (so it follows the ripple) ──
+    function schLevels() {
+      return { A: wireLv.swA, B: wireLv.swB, C: wireLv.swC, AB: pinLv['ic1:3'], Cn: pinLv['ic2:1'], Bn: pinLv['ic2:4'],
+               G1: pinLv['ic3:3'], G2: pinLv['ic3:11'], Z: pinLv['ic3:6'] };
+    }
+    // the diagram value each changing pin produces: it flashes on the diagram as the pin flashes on the board
+    const TAG_OF_PIN = { 'ic1:3': 'tAB', 'ic2:1': 'tCn', 'ic2:4': 'tBn', 'ic3:3': 'tG1', 'ic3:11': 'tG2', 'ic3:6': 'tZ' };
+    function flashTag(id) {
+      const e = document.getElementById(id);
+      renderSchematic();                                     // the new value first, then the flash
+      e.classList.remove('tag-flash'); void e.offsetWidth; e.classList.add('tag-flash');
+    }
+    function renderSchematic() {
+      const v = schLevels(), c = n => v[n] ? HIGH : LOW;
+      document.querySelectorAll('#schSvg [data-net]').forEach(e => {
+        if (e.tagName === 'circle') e.style.fill = c(e.dataset.net); else e.setAttribute('stroke', c(e.dataset.net));
+      });
+      const o = t => `<span class="ov">${t}</span>`, ON = t => `<span class="ov-outer">${t}</span>`;
+      const T = (id, html, n) => { const e = document.getElementById(id), h = `<span>${html} = ${v[n]}</span>`;
+        if (e._h !== h) { e.innerHTML = h; e._h = h; } e.style.color = c(n); };
+      T('tA', 'A', 'A'); T('tB', 'B', 'B'); T('tC', 'C', 'C');
+      T('tAB', 'A·B', 'AB'); T('tCn', o('C'), 'Cn'); T('tBn', o('B'), 'Bn');
+      T('tG1', ON(`A·B·${o('C')}`), 'G1'); T('tG2', ON(`${o('B')}·C`), 'G2'); T('tZ', 'Z', 'Z');
+    }
 
     // ── rendering ──
     function render(now) {
@@ -681,14 +773,17 @@
       led.setAttribute('fill', shownZ ? '#ff3b30' : '#b5e61d');   // 0: a yellow-green, like the trainer's LED
       led.setAttribute('stroke', shownZ ? '#a11' : '#6b8e0a');
       led.setAttribute('filter', 'url(#ledGlow)');
+      const sled = document.getElementById('schLed');          // the diagram's indicator, lit with the board's
+      sled.setAttribute('fill', shownZ ? '#ff3b30' : '#b5e61d');
+      sled.setAttribute('stroke', shownZ ? '#a11' : '#6b8e0a');
       // status
       const row = `A = ${A}, B = ${B}, C = ${C}`;
-      // while the change is travelling the text stays still; the workings appear once it has settled
-      document.getElementById('simStatus').innerHTML = busy()
-        ? `<div><b>${row}</b> · <i>settling…</i></div><div style="margin-top:.35rem"><i>Watch the change travel through the circuit…</i></div>`
-        : `<div><b>${row}</b> → Z = <b style="color:${lv.Z ? 'var(--colour-ui-correct)' : 'var(--colour-label)'}">${lv.Z}</b>, indicator <b style="color:${lv.Z ? '#e53935' : '#7cb305'}">${lv.Z ? 'RED' : 'GREEN'}</b></div>
-         <div class="workings">${workings(lv)}</div>` +
-        (selected ? `<div style="margin-top:.5rem">${selected}</div>` : '');
+      renderSchematic();
+      // while the change is travelling the text stays still; the summary appears once it has settled
+      // the status box only appears when a hole or pin has been tapped (it says what is in that strip)
+      const st = document.getElementById('simStatus');
+      st.innerHTML = selected || '';
+      st.style.display = selected ? '' : 'none';
       // truth table
       let h = '<caption>Truth Table</caption><tr><th>C</th><th>B</th><th>A</th><th>Z</th></tr>';
       for (let v = 0; v < 8; v++) {
