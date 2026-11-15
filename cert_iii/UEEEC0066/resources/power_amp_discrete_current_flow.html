@@ -110,6 +110,8 @@
     .card-sub { font-size: 10.5px; fill: var(--colour-label); }
     .card-k { font-size: 11.5px; fill: var(--colour-label); }
     .card-v { font-size: 12px; font-weight: bold; }
+    .mini-label { font-size: 11px; font-weight: bold; }
+    .mini-scale { font-size: 10px; fill: var(--colour-label); }
     .busy { position: relative; }
     .busy::after { content: 'Solving the circuit…'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: 'Share Tech Mono', monospace; color: var(--colour-label); background: rgba(var(--colour-label-rgb), .08); border-radius: 8px; }
   </style>
@@ -448,12 +450,15 @@
           <text id="tag-In" class="i-tag" x="740" y="1024" text-anchor="middle"></text>
         </g>
         <g id="acTags" display="none">
-          <text id="acVout" class="v-tag" x="682" y="585"></text>
+          <text id="acVout" class="v-tag" x="682" y="614"></text>
         </g>
 
         <!-- tap targets for the two trimpots (open their slider) -->
         <g class="pot-hit" onclick="openPot('rv1')"><rect x="214" y="440" width="92" height="40" rx="5" fill="transparent" /></g>
         <g class="pot-hit" onclick="openPot('rv2')"><rect x="372" y="394" width="44" height="92" rx="5" fill="transparent" /></g>
+
+        <!-- V in and V out scopes, always shown in the AC view (built by buildMinis()) -->
+        <g id="miniLayer" display="none"></g>
 
         <!-- the transistor pop-ups, on top of everything (built by buildCards()) -->
         <g id="leaders"></g>
@@ -858,7 +863,7 @@
     // TRANSISTOR POP-UPS — a card per transistor, on top of the drawing, draggable
     // ══════════════════════════════════════════════════════════════════════
     const QINFO = {
-      Q1: { part: 'BC557', role: 'input (signal side)', at: [203, 595], pos: [22, 395] },
+      Q1: { part: 'BC557', role: 'input (signal side)', at: [203, 595], pos: [22, 832] },   // bottom left: V in's scope sits above the input
       Q2: { part: 'BC557', role: 'input (feedback side)', at: [317, 595], pos: [200, 650] },
       Q3: { part: 'BC108', role: 'bias (V BE multiplier)', at: [513, 440], pos: [285, 222] },
       Q4: { part: 'BC547', role: 'voltage amplifier', at: [483, 865], pos: [300, 878] },
@@ -1058,6 +1063,7 @@
     function renderAC() {
       sampleCycle();
       drawCro();
+      drawMinis();
       const s = acStats();
       acTable(s);
       document.getElementById('stateCaption').innerHTML = acCaption(s);
@@ -1087,6 +1093,7 @@
       });
       document.getElementById('acVout').textContent = 'V out ' + fV2(r.Vout);
       positionCursors(r);
+      positionMinis(r);
       const j = cyc(acT, 2) * AC_N, cx = j / (2 * AC_N) * 500;
       document.getElementById('croCur').setAttribute('x1', cx); document.getElementById('croCur').setAttribute('x2', cx);
       document.getElementById('croD1').setAttribute('cx', cx); document.getElementById('croD1').setAttribute('cy', croCentre[0] - r.vin / croDiv[0] * 37.5);
@@ -1106,6 +1113,7 @@
       document.getElementById('dcPanel').hidden = ac;
       document.getElementById('dcTags').setAttribute('display', ac ? 'none' : 'inline');
       document.getElementById('acTags').setAttribute('display', ac ? 'inline' : 'none');
+      document.getElementById('miniLayer').setAttribute('display', ac ? 'inline' : 'none');
       document.getElementById('introText').innerHTML = ac ? INTRO_AC : INTRO_DC;
       if (ac) {
         document.querySelectorAll('.flow-line animate').forEach(a => a.remove());
@@ -1219,7 +1227,64 @@
     }
     window.addEventListener('resize', () => { if (potOpen) positionPotBox(); });
 
-    buildDarl(); buildMult(); buildCro();
+
+    // ══════════════════════════════════════════════════════════════════════
+    // V IN and V OUT — small scopes always on the drawing in the AC view (as on the 741 power-amp simulator).
+    // V out is coloured by whichever half is supplying R_L at that instant: Q7's colour while it pushes, Q8's
+    // while it pulls, grey where neither does (the crossover gap).
+    // ══════════════════════════════════════════════════════════════════════
+    const MINI_W = 122, MINI_H = 88;
+    const MINIS = [
+      { id: 'mVin', x: 25, y: 430, label: [['V in', 'var(--colour-signal)']], k: 'vin', col: 'var(--colour-signal)', floor: 0.05 },
+      { id: 'mVout', x: 700, y: 490, label: [['V out = ', 'var(--colour-series)'], ['Q7', 'var(--colour-current)'], [' + ', 'var(--colour-series)'], ['Q8', 'var(--colour-bjt-labels)']], k: 'Vout', split: true, floor: 0.5 },
+    ];
+    const supplyCol = r => { const d = r.Ie7 - r.Ie8; return Math.abs(d) < 0.5e-3 ? 'var(--colour-label)' : d > 0 ? 'var(--colour-current)' : 'var(--colour-bjt-labels)'; };
+    const miniY = (v, sc) => MINI_H / 2 + 2 - (v / sc) * (MINI_H / 2 - 18);
+    const miniX = j => 6 + (j / (2 * AC_N)) * (MINI_W - 12);
+    function buildMinis() {
+      const layer = document.getElementById('miniLayer');
+      MINIS.forEach(m => {
+        const g = mk('g', { transform: `translate(${m.x},${m.y})` }, layer);
+        mk('rect', { x: 0, y: 0, width: MINI_W, height: MINI_H, rx: 5, style: 'fill: var(--colour-panel); stroke: var(--colour-border)', 'stroke-width': 1.5, opacity: .96 }, g);
+        mk('line', { x1: 5, y1: MINI_H / 2 + 2, x2: MINI_W - 5, y2: MINI_H / 2 + 2, style: 'stroke: var(--colour-label)', 'stroke-width': .7, 'stroke-dasharray': '3,3' }, g);
+        const t = mk('text', { x: 6, y: 13, class: 'mini-label' }, g);
+        m.label.forEach(([txt, col]) => mk('tspan', { style: `fill: ${col}` }, t, txt));
+        mk('text', { x: MINI_W - 5, y: MINI_H - 4, class: 'mini-scale', 'text-anchor': 'end', id: m.id + 'Scale' }, g);
+        mk('g', { id: m.id + 'T' }, g);
+        mk('line', { id: m.id + 'Cur', y1: 18, y2: MINI_H - 16, style: 'stroke: var(--colour-text)', 'stroke-width': .8, opacity: .5 }, g);
+        mk('circle', { id: m.id + 'D', r: 3.5, style: `fill: ${m.col || 'var(--colour-series)'}` }, g);
+      });
+    }
+    const fmtScale = x => x < 1 ? (x * 1000).toFixed(0) + ' mV' : x.toFixed(x < 10 ? 1 : 0) + ' V';
+    function drawMinis() {
+      MINIS.forEach(m => {
+        let mx = m.floor; acSamples.forEach(r => { mx = Math.max(mx, Math.abs(r[m.k])); });
+        m.scale = mx * 1.05;
+        document.getElementById(m.id + 'Scale').textContent = '±' + fmtScale(mx);
+        const target = document.getElementById(m.id + 'T'), pt = j => miniX(j).toFixed(1) + ',' + miniY(acSamples[j % AC_N][m.k], m.scale).toFixed(1);
+        target.replaceChildren();
+        // one polyline per run of the same colour (each run starts at the last point of the one before)
+        let runCol = null, pts = [];
+        const flush = () => { if (pts.length > 1) mk('polyline', { points: pts.join(' '), fill: 'none', style: `stroke: ${runCol}`, 'stroke-width': 1.9, 'stroke-linejoin': 'round' }, target); };
+        for (let j = 0; j <= 2 * AC_N; j++) {
+          const col = m.split ? supplyCol(acSamples[j % AC_N]) : m.col;
+          if (col !== runCol) { flush(); pts = pts.length ? [pts[pts.length - 1]] : []; runCol = col; }
+          pts.push(pt(j));
+        }
+        flush();
+      });
+    }
+    function positionMinis(r) {
+      const x = miniX(cyc(acT, 2) * AC_N);
+      MINIS.forEach(m => {
+        const c = document.getElementById(m.id + 'Cur'), d = document.getElementById(m.id + 'D');
+        c.setAttribute('x1', x); c.setAttribute('x2', x);
+        d.setAttribute('cx', x); d.setAttribute('cy', miniY(r[m.k], m.scale));
+        if (m.split) d.style.fill = supplyCol(r);
+      });
+    }
+
+    buildDarl(); buildMult(); buildCro(); buildMinis();
     drawPots();
     document.getElementById('ampRead').textContent = '300 mV peak · 600 mV p-p · 1 kHz';
     acAmp = 0.3;
