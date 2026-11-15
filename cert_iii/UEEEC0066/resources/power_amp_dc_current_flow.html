@@ -439,6 +439,8 @@
         <!-- ════════════════════════════════════════════════════════════ -->
         <!-- ── LIVE VALUES — currents (green) beside their branch, voltages (red) at the nodes ── -->
         <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- no current into the 741's − input: all of R3's current goes on through R2 -->
+        <text class="i-tag" x="194" y="373" font-size="12">≈ 0 A</text>
         <g id="dcTags">
         <text id="tag-IR8" class="i-tag" x="850" y="80" text-anchor="middle"></text>
         <text id="tag-IR9" class="i-tag" x="850" y="612" text-anchor="middle"></text>
@@ -458,7 +460,8 @@
         <text id="tag-VB2" class="v-tag" x="527" y="500" text-anchor="start"></text>
         <text id="tag-Vo" class="v-tag" x="448" y="350" text-anchor="start"></text>
         <text id="tag-Vout" class="v-tag" x="682" y="350" text-anchor="start"></text>
-        <text id="tag-Vm" class="v-tag" x="186" y="347" text-anchor="start"></text>
+        <text id="tag-Vm" class="v-tag" x="160" y="347" text-anchor="start"></text>
+        <text id="tag-Vplus" class="v-tag" x="160" y="297" text-anchor="start"></text>
         <text id="tag-Vp" class="v-tag" x="600" y="30" text-anchor="middle"></text>
         <text id="tag-Vn" class="v-tag" x="600" y="660" text-anchor="middle"></text>
         </g>
@@ -471,6 +474,8 @@
         <g id="acTags" display="none">
           <text id="acVB1" class="v-tag" x="527" y="172" text-anchor="start"></text>
           <text id="acVB2" class="v-tag" x="527" y="500" text-anchor="start"></text>
+          <text id="acVplus" class="v-tag" x="160" y="297" text-anchor="start"></text>
+          <text id="acVminus" class="v-tag" x="160" y="347" text-anchor="start"></text>
           <text id="acVC1" class="v-tag" x="680" y="142" text-anchor="start"></text>
           <text id="acVE1" class="v-tag" x="680" y="226" text-anchor="start"></text>
           <text id="acVE2" class="v-tag" x="680" y="442" text-anchor="start"></text>
@@ -665,7 +670,11 @@
     function sampleCycle() {
       const ac = buildAC(sw.sw1, sw.sw2, sw.sw3);
       acSamples = [];
-      for (let k = 0; k < AC_N; k++) acSamples.push(instant(ac, acAmp * Math.sin(2 * Math.PI * k / AC_N), sw.sw1));
+      for (let k = 0; k < AC_N; k++) {
+        const r = instant(ac, acAmp * Math.sin(2 * Math.PI * k / AC_N), sw.sw1);
+        r.err = r.vin - r.Vm;                    // what the 741 actually amplifies: V+ − V−
+        acSamples.push(r);
+      }
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -764,7 +773,8 @@
       set('IR5', fI(r.IR5)); set('Iop', fI(r.Iop)); set('IC1', fI(r.Ic1)); set('IC2', fI(r.Ic2));
       set('IRL', r.sw3 === 'RL' ? fI(r.IRL) : '');
       const vt = (id, node, v) => { document.getElementById('tag-' + id).innerHTML = `V<tspan baseline-shift="sub" font-size="9">${node}</tspan> ${fV(v)}`; };
-      vt('VB1', 'B', r.B1); vt('VB2', 'B', r.B2); vt('VC1', 'C', r.Vp); vt('VE1', 'E', r.E1); vt('VE2', 'E', r.E2); vt('VC2', 'C', r.Vn); set('Vo', ''); set('Vout', fV(r.Vout)); set('Vm', fV(r.Vm));
+      vt('VB1', 'B', r.B1); vt('VB2', 'B', r.B2); vt('VC1', 'C', r.Vp); vt('VE1', 'E', r.E1); vt('VE2', 'E', r.E2); vt('VC2', 'C', r.Vn); set('Vo', ''); set('Vout', fV(r.Vout)); document.getElementById('tag-Vm').innerHTML = `V<tspan baseline-shift="sub" font-size="9">−</tspan> ${fV(r.Vm)}`;
+      document.getElementById('tag-Vplus').innerHTML = `V<tspan baseline-shift="sub" font-size="9">+</tspan> ${fV(0)}`;
       set('Vp', fVs(r.Vp)); set('Vn', fVs(r.Vn));
     }
 
@@ -783,7 +793,8 @@
       out.push(st('The 741 output', `C1 blocks DC, so the + input sits at <b>0 V</b> through R1. The 741 drives its output until V− = V+ = 0 V. ` +
         (r.sw1 === 'A'
           ? `SW1 is set to the <b>741 output</b>: R3 / R2 feed back the 741's own output, so V− = 0 V only when ${vv('V<sub>741</sub>')} = <b>0 V</b>. The output stage is outside the loop.`
-          : `SW1 is set to the <b>amplifier output</b>: R3 / R2 feed back the <i>amplifier</i> output, so the 741 moves its own output until ${vv('V<sub>out</sub>')} = <b>0 V</b>. Here that needs ${vv('V<sub>741</sub>')} = <b>${fV(r.Vo)}</b>.`)));
+          : `SW1 is set to the <b>amplifier output</b>: R3 / R2 feed back the <i>amplifier</i> output, so the 741 moves its own output until ${vv('V<sub>out</sub>')} = <b>0 V</b>. Here that needs ${vv('V<sub>741</sub>')} = <b>${fV(r.Vo)}</b>.`) +
+        `<br>No current flows into the − input (a 741 input draws only about 80 nA), so all of R3's current carries straight on through R2 to 0 V: ${cv('I<sub>R3</sub>')} = ${cv('I<sub>R2</sub>')} = <b>${fI(r.Ifb)}</b>. The feedback works by setting the <i>voltage</i> at the − input, not by pushing current into it.`));
       if (r.sw2 === 'open') {
         out.push(st('Bias between the bases', `SW2 is open, so the R4 → D1 → R5 chain carries about 30 mA and D1 drops ${vv('V<sub>D1</sub>')} = <b>${fV(r.VD1)}</b>. The NPN base is one diode drop above the 741 output; the PNP base is wired straight to it.<br>${vv('V<sub>B1</sub>')} = ${vv('V<sub>741</sub>')} + ${vv('V<sub>D1</sub>')} = ${n3(r.Vo)} + ${n3(r.VD1)} = <b>${fV(r.B1)}</b>`));
         out.push(st('Bias chain currents', `${cv('I<sub>R4</sub>')} = (${vv('+V<sub>rail</sub>')} − ${vv('V<sub>B1</sub>')}) / R4 = (${n3(r.Vp)} − ${n3(r.B1)}) / 470 = <b>${fI(r.IR4)}</b><br>` +
@@ -827,7 +838,15 @@
     const dashOff = {};
     const MINI_W = 122, MINI_H = 88;
     const MINIS = [
-      { id: 'mVin', x: 15, y: 172, label: 'V in', unit: 'V', floor: 0.05, series: [{ k: 'vin', col: 'var(--colour-signal)' }] },
+      { id: 'mVin', x: 15, y: 172, label: 'V in', unit: 'V', floor: 0.05, share: 'in', series: [{ k: 'vin', col: 'var(--colour-signal)' }] },
+      // the feedback arriving at the − input (R3 / R2's divided-down output), on V in's scale, with V in faint behind:
+      // while the 741 is in control the two lie on top of each other
+      { id: 'mFb', x: 145, y: 172, label: [['V', 'var(--colour-voltage-label)'], ['− feedback', 'var(--colour-voltage-label)']], unit: 'V', floor: 0.05, share: 'in',
+        series: [{ k: 'vin', col: 'var(--colour-signal)', faint: true }, { k: 'Vm', col: 'var(--colour-voltage-label)' }] },
+      // the error the 741 amplifies, V+ − V−: zero while it is in control (the model's 741 is ideal; a real one shows a
+      // few µV, V out ÷ 200 000), and it jumps when the output clips and the feedback can no longer keep up
+      { id: 'mErr', x: 145, y: 78, label: [['V+ − V− (error)', 'var(--colour-gain, var(--colour-text))']], unit: 'V', floor: 0.01,
+        series: [{ k: 'err', col: 'var(--colour-gain, var(--colour-text))' }] },
       { id: 'mVo', x: 340, y: 182, label: '741 out', unit: 'V', floor: 0.5, series: [{ k: 'Vo', col: 'var(--colour-dff)' }] },
       // the transistors' own waves are tap-to-open cards (see TRANSISTOR WAVE CARDS); V in, the 741 output and
       // V out always show
@@ -848,7 +867,8 @@
         else t.textContent = m.label;
         el('text', { x: MINI_W - 5, y: MINI_H - 4, class: 'mini-scale', 'text-anchor': 'end', id: m.id + 'Scale' }, g);
         m.series.forEach((sr, i) => sr.split ? el('g', { id: m.id + 'T' + i }, g)
-          : el('polyline', { id: m.id + 'T' + i, fill: 'none', style: `stroke: ${sr.col}`, 'stroke-width': 1.8, 'stroke-linejoin': 'round' }, g));
+          : el('polyline', Object.assign({ id: m.id + 'T' + i, fill: 'none', style: `stroke: ${sr.col}`, 'stroke-width': 1.8, 'stroke-linejoin': 'round' },
+              sr.faint ? { 'stroke-dasharray': '3,3', opacity: .45 } : {}), g));
         el('line', { id: m.id + 'Cur', y1: 18, y2: MINI_H - 16, style: 'stroke: var(--colour-text)', 'stroke-width': .8, opacity: .5 }, g);
         m.series.forEach((sr, i) => el('circle', { id: m.id + 'D' + i, r: 3.5, style: `fill: ${sr.col}` }, g));
       });
@@ -1037,6 +1057,10 @@
       // V_B, V_E and V_C of both transistors at this instant (they move with the wave)
       const fB = v => (v < -0.005 ? '−' : '') + Math.abs(v).toFixed(2) + ' V';
       const vt = (id, node, v) => { document.getElementById(id).innerHTML = `V<tspan baseline-shift="sub" font-size="9">${node}</tspan> ${fB(v)}`; };
+      // the 741's two inputs: V+ is the input signal, V− follows it (the op-amp's virtual short)
+      const f3 = v => (Math.abs(v) < 0.0005 ? '0.000' : neg(v) + Math.abs(v).toFixed(3)) + ' V';
+      document.getElementById('acVplus').innerHTML = `V<tspan baseline-shift="sub" font-size="9">+</tspan> ${f3(r.vin)}`;
+      document.getElementById('acVminus').innerHTML = `V<tspan baseline-shift="sub" font-size="9">−</tspan> ${f3(r.Vm)}`;
       vt('acVB1', 'B', r.B1); vt('acVB2', 'B', r.B2); vt('acVC1', 'C', r.Vp); vt('acVE1', 'E', r.E1); vt('acVE2', 'E', r.E2); vt('acVC2', 'C', r.Vn);
       // cursors: the traces show two cycles, so the cursor sweeps once every two cycles
       const j = cyc(acT, 2) * AC_N;
@@ -1181,7 +1205,7 @@
       const state = !on ? ['Cut off', 'var(--colour-label)', `no ${npn ? 'V<sub>BE</sub>' : 'V<sub>EB</sub>'} to speak of, so no current flows`]
         : vce < 0.3 ? ['Saturated', 'var(--colour-ui-wrong, #dc2626)', 'fully on']
         : ['Active', 'var(--colour-ui-correct)', `${npn ? 'V<sub>BE</sub>' : 'V<sub>EB</sub>'} ≈ 0.5–0.7 V and ${npn ? 'V<sub>CE</sub>' : 'V<sub>EC</sub>'} well above 0.2 V`];
-      document.getElementById('qPopTitle').textContent = npn ? 'Q1 · MJE3055 (NPN)' : 'Q2 · MJE2955 (PNP)';
+      document.getElementById('qPopTitle').textContent = npn ? 'Q1 · NPN' : 'Q2 · PNP';
       document.getElementById('qPopBody').innerHTML = cc('<ol>' + items.map(([t, h]) => `<li><span class="step-title">${t}</span>${h}</li>`).join('') + '</ol>')
         + `<div class="q-state" style="color: ${state[1]}">${state[0]}: <span style="color: var(--colour-text); font-weight: normal">${state[2]}.</span></div>`;
       if (!document.getElementById('qPop').hidden) placeQ();
@@ -1195,9 +1219,9 @@
     // ══════════════════════════════════════════════════════════════════════
     const cyc = (t, n) => ((t % n) + n) % n;     // t mod n, never negative
     const QCARD = {
-      Q1: { part: 'MJE3055 (NPN)', role: 'pushes the positive half', at: [664, 180], pos: [830, 56], v: 'V_CE',   // card: right of the V_C / V_E / A_v tags, above the V out scope
+      Q1: { part: 'NPN', role: 'pushes the positive half', at: [664, 180], pos: [830, 56], v: 'V_CE',   // card: right of the V_C / V_E / A_v tags, above the V out scope
             Ic: r => r.Ic1, Vce: r => r.Vp - r.E1, Vb: r => r.B1, Ve: r => r.E1 },
-      Q2: { part: 'MJE2955 (PNP)', role: 'pulls the negative half', at: [664, 480], pos: [800, 476], v: 'V_EC',  // card: right of the V_E / V_C / A_v tags, below R_L
+      Q2: { part: 'PNP', role: 'pulls the negative half', at: [664, 480], pos: [800, 476], v: 'V_EC',  // card: right of the V_E / V_C / A_v tags, below R_L
             Ic: r => r.Ic2, Vce: r => r.E2 - r.Vn, Vb: r => r.B2, Ve: r => r.E2 },
     };
     const CW = 172, CH = 150, PX0 = 8, PX1 = CW - 8, PH = 44;
