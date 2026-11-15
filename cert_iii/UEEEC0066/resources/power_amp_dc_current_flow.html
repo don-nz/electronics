@@ -68,6 +68,12 @@
     .q-pop .step-title { display: block; font-size: .66rem; letter-spacing: .06em; text-transform: uppercase; color: var(--colour-label); }
     .q-pop sub { font-size: .7em; }
     .q-state { margin-top: .35rem; font-weight: bold; }
+    .info-pop { border-color: var(--colour-gain, var(--colour-border)); font-family: inherit; font-size: .8rem; line-height: 1.55; }
+    .info-pop .q-pop-title { color: var(--colour-gain, var(--colour-text)); font-family: 'Share Tech Mono', monospace; }
+    .info-pop p { margin: .35rem 0; }
+    .info-pop .eqn { font-family: 'Share Tech Mono', monospace; }
+    .mini-info { cursor: pointer; }
+    .mini-info:hover rect.mini-bg { stroke: var(--colour-gain, var(--colour-ui-primary)); }
     .card { cursor: grab; }
     .card.dragging { cursor: grabbing; }
     .card-x { cursor: pointer; }
@@ -489,6 +495,10 @@
         <g id="qLeaders"></g>
         <g id="qCards"></g>
       </svg>
+      <div class="q-pop info-pop" id="infoPop" hidden>
+        <div class="q-pop-head"><span class="q-pop-title" id="infoTitle"></span><button type="button" class="q-pop-x" onclick="closeInfo()" aria-label="Close">×</button></div>
+        <div id="infoBody"></div>
+      </div>
       <div class="q-pop" id="qPop" hidden>
         <div class="q-pop-head"><span class="q-pop-title" id="qPopTitle"></span><button type="button" class="q-pop-x" onclick="closeQ()" aria-label="Close">×</button></div>
         <div id="qPopBody"></div>
@@ -845,7 +855,7 @@
         series: [{ k: 'vin', col: 'var(--colour-signal)', faint: true }, { k: 'Vm', col: 'var(--colour-voltage-label)' }] },
       // the error the 741 amplifies, V+ − V−: zero while it is in control (the model's 741 is ideal; a real one shows a
       // few µV, V out ÷ 200 000), and it jumps when the output clips and the feedback can no longer keep up
-      { id: 'mErr', x: 145, y: 78, label: [['V+ − V− (error)', 'var(--colour-gain, var(--colour-text))']], unit: 'V', floor: 0.01,
+      { id: 'mErr', info: 'err', x: 145, y: 78, label: [['V+ − V− (error)', 'var(--colour-gain, var(--colour-text))']], unit: 'V', floor: 0.01,
         series: [{ k: 'err', col: 'var(--colour-gain, var(--colour-text))' }] },
       { id: 'mVo', x: 340, y: 182, label: '741 out', unit: 'V', floor: 0.5, series: [{ k: 'Vo', col: 'var(--colour-dff)' }] },
       // the transistors' own waves are tap-to-open cards (see TRANSISTOR WAVE CARDS); V in, the 741 output and
@@ -860,7 +870,13 @@
       const layer = document.getElementById('acLayer');
       MINIS.forEach(m => {
         const g = el('g', { transform: `translate(${m.x},${m.y})` }, layer);
-        el('rect', { x: 0, y: 0, width: MINI_W, height: MINI_H, rx: 5, style: 'fill: var(--colour-panel); stroke: var(--colour-border)', 'stroke-width': 1.5, opacity: .96 }, g);
+        el('rect', { class: 'mini-bg', x: 0, y: 0, width: MINI_W, height: MINI_H, rx: 5, style: 'fill: var(--colour-panel); stroke: var(--colour-border)', 'stroke-width': 1.5, opacity: .96 }, g);
+        if (m.info) {
+          g.classList.add('mini-info');
+          g.addEventListener('click', () => toggleInfo(m.info));
+          const ic = el('text', { x: MINI_W - 6, y: 14, 'text-anchor': 'end', 'font-size': 13, style: 'fill: var(--colour-gain, var(--colour-label))' }, g);
+          ic.textContent = 'ⓘ';
+        }
         el('line', { x1: 5, y1: MINI_H / 2 + 2, x2: MINI_W - 5, y2: MINI_H / 2 + 2, style: 'stroke: var(--colour-label)', 'stroke-width': .7, 'stroke-dasharray': '3,3' }, g);
         const t = el('text', { x: 6, y: 13, class: 'mini-label', style: `fill: ${m.series[0].col}` }, g);
         if (Array.isArray(m.label)) m.label.forEach(([txt, col]) => { el('tspan', { style: `fill: ${col}` }, t).textContent = txt; });
@@ -1032,6 +1048,7 @@
       acTable(st);
       document.getElementById('stateCaption').innerHTML = cc(acCaption(st));
       renderQCards();
+      fillInfo();
       document.getElementById('acAvOp').innerHTML = `A<tspan baseline-shift="sub" font-size="9">v</tspan> ${fAvBig(opAmpAv())}`;
       ['Q1', 'Q2'].forEach((id, i) => { const a = transistorAv(id);
         document.getElementById('acAv' + (i + 1)).innerHTML = `A<tspan baseline-shift="sub" font-size="9">v</tspan> ${fAv(a)}`; });
@@ -1093,7 +1110,7 @@
       document.getElementById('dcTags').setAttribute('display', ac ? 'none' : 'inline');
       document.getElementById('acTags').setAttribute('display', ac ? 'inline' : 'none');
       document.getElementById('introText').innerHTML = cc(ac ? INTRO_AC : INTRO_DC);
-      if (ac) closeQ(); else renderQCards();
+      if (ac) closeQ(); else { renderQCards(); closeInfo(); }
       if (ac) {
         document.querySelectorAll('.flow-line animate').forEach(a => a.remove());
         renderAC();
@@ -1300,6 +1317,39 @@
       }));
     }
     window.addEventListener('resize', () => { if (scaleFor(svgC().clientWidth) !== cardScale) renderQCards(); });
+
+    // ══════════════════════════════════════════════════════════════════════
+    // INFO POP-UP — tap the V+ − V− scope for what it shows (live numbers for the current setting)
+    // ══════════════════════════════════════════════════════════════════════
+    let infoOpen = null;
+    function toggleInfo(k) { if (infoOpen === k) closeInfo(); else { infoOpen = k; fillInfo(); document.getElementById('infoPop').hidden = false; placeInfo(); } }
+    function closeInfo() { infoOpen = null; document.getElementById('infoPop').hidden = true; }
+    function placeInfo() {
+      const box = document.getElementById('infoPop'), panel = document.querySelector('.circuit-panel');
+      const m = document.getElementById('circuitSvg').getScreenCTM(), pr = panel.getBoundingClientRect();
+      const x = m.a * 276 + m.e - pr.left, y = m.d * 78 + m.f - pr.top;        // to the right of the error scope, so the V in / feedback scopes stay in view
+      const w = box.offsetWidth;
+      box.style.left = Math.max(4, Math.min(x, panel.clientWidth - w - 4)) + 'px';
+      box.style.top = y + 'px';
+    }
+    function fillInfo() {
+      if (infoOpen !== 'err' || !acSamples) return;
+      const dc = solved(), vo = Math.max(...acSamples.map(r => Math.abs(r.Vo - dc.Vo))), real = vo / 200000;
+      const maxErr = Math.max(...acSamples.map(r => Math.abs(r.err)));
+      const sub = t => `<sub>${t}</sub>`, V = n => vv('V' + sub(n));
+      const clipNote = maxErr < 1e-6
+        ? `At this input level the 741 stays in control all the way round the cycle, so the error stays at zero. Turn the input up until the output clips and watch it jump.`
+        : `Right now the output is <b>clipping</b>: the 741 has run out of output, so V${sub('−')} can't keep up with V${sub('+')} and the error jumps, peaking at <b>${fVpk(maxErr)}</b>. That shows up as distortion on the output.`;
+      document.getElementById('infoTitle').textContent = 'V+ − V−: the error the 741 amplifies';
+      document.getElementById('infoBody').innerHTML = cc(
+        `<p>The 741 amplifies the <b>difference</b> between its inputs: <span class="eqn">${V('741')} = A × (V${sub('+')} − V${sub('−')})</span>, where A is about 200 000.</p>` +
+        `<p>The feedback (R3 / R2's share of the output) goes into the <b>−</b> input, so it is <i>subtracted</i>. If the output rises too far, V${sub('−')} rises, the difference shrinks, and the 741 pulls its output back down. That subtraction is the "negative" in negative feedback. The feedback wave itself is not inverted: it is in phase with V in (compare the V in and V− feedback scopes).</p>` +
+        `<p>So while the 741 is in control the error is tiny: <span class="eqn">${V('741')} ÷ A ≈ ${fVpk(vo)} ÷ 200 000 ≈ ${(real * 1e6).toFixed(real * 1e6 < 10 ? 1 : 0)} µV</span>. That is far too small to see; the model's 741 is ideal, so its trace sits at exactly 0.</p>` +
+        `<p>${clipNote}</p>` +
+        `<p>Compare an <b>inverting</b> amplifier: there the signal goes into the − input (through a resistor) and the + input is at 0 V. V${sub('−')} then stays at about 0 V (a "virtual earth") and the output comes out inverted.</p>`);
+      if (!document.getElementById('infoPop').hidden) placeInfo();
+    }
+    window.addEventListener('resize', () => { if (infoOpen) placeInfo(); });
 
     buildMinis();
     setAmp(document.getElementById('ampSlider').value);
