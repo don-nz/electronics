@@ -1,0 +1,1118 @@
+<!--
+  DISCRETE POWER AMPLIFIER — CURRENT FLOW SIMULATOR
+  The lab panel's "Amplifier circuit" (±20 V), every stage built from transistors:
+    Q1 / Q2  BC557 PNP long-tailed pair (the input stage). R3 47k feeds the tail through RV1 (1k, the offset
+             trim); Q1's base takes the signal through C1 (R1 22k to 0 V), Q2's base takes the feedback
+             from the output through R8 100k (R4 10k + C2 10µF to 0 V: AC gain 1 + R8/R4 = 11, DC gain 1).
+    Q4       BC547, the voltage amplifier (VAS): Q1's collector current through R2 4k7 drives its base;
+             R7 27Ω in its emitter; R6 2k2 from +20 V is its collector load.
+    Q3       BC108, the VBE multiplier between the two driver bases (R5 4k7, RV2, R11 5k6): the bias.
+             S1 shorts it out (no bias: class B).
+    Q5 + Q7  the top half: driver + MJE3055, an NPN Darlington emitter follower, R9 1Ω.
+    Q6 + Q8  the bottom half: BC557 driver + MJE2955, a PNP Darlington emitter follower, R10 1Ω.
+    S2       connects the 15Ω load RL.
+  The panel drawing labels Q5 "BC557" but draws it as an NPN (arrow out), wired as the top driver: it has to
+  be an NPN for the top half to work, so it is drawn and modelled as the drawing shows it. RV2's value is not
+  on the drawing: it is taken as 10k, with its wiper set for about 25 mA of quiescent current.
+  Test points TP15 / TP16 and the chassis socket numbers are left off, as on the 741 power-amp simulator.
+
+  The circuit is SOLVED (see MODEL): every transistor follows the diode equation. For a trial output voltage
+  the input pair, Q4, the bias network and both output halves are solved in turn; the output voltage that
+  balances the currents at the output node is found by bisection. The AC view is quasi-static: each instant
+  of the 1 kHz input is the same circuit with Q1's base moved by the input and C1 / C2 holding their DC
+  voltages; a table of instants over the input range is built once per switch setting.
+
+  TRANSISTOR POP-UPS: tap any transistor for a card showing its own waves (I_C and V_CE, AC view) or readings
+  (DC view). Cards sit on top of the drawing, can be dragged anywhere, and close with × or another tap.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../assets/theme-init.js"></script>
+  <script src="../../assets/shapes.js"></script>
+  <title>Discrete Power Amplifier — Current Flow Simulator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../assets/quiz-common.css">
+  <script src="../../assets/breadcrumb.js" defer></script>
+  <style>
+    .sim-wrap { width: 100%; max-width: 980px; margin: 0 auto; }
+    .circuit-panel { cursor: default; }
+    .back-link-row { width: 100%; max-width: 980px; margin: 0 auto .5rem; text-align: right; }
+    .intro { color: var(--colour-label); font-size: .85rem; line-height: 1.5; text-align: center; margin: 0 auto 1rem; max-width: 760px; }
+    .flow-line { fill: none; stroke: var(--colour-flow); stroke-width: 4; stroke-linecap: round; stroke-dasharray: 2, 11; opacity: .9; }
+    .flow-stopped { opacity: 0; }
+    .sw-hit { cursor: pointer; }
+    .sw-hit:hover .sw-wiper { stroke-width: 3.5; }
+    .i-tag { fill: var(--colour-current); font-size: 13px; font-weight: bold; }
+    .v-tag { fill: var(--colour-voltage-label); font-size: 13px; font-weight: bold; }
+    .state-caption { text-align: center; font-size: .88rem; line-height: 1.55; color: var(--colour-text); margin: .7rem auto 0; max-width: 760px; min-height: 3em; }
+    .state-caption b { color: var(--colour-ui-primary); }
+    .readings { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: .8rem; margin: 1rem auto 0; max-width: 760px; }
+    .readings table { width: 100%; border-collapse: collapse; font-family: 'Share Tech Mono', monospace; font-size: .8rem; }
+    .readings caption { font-family: 'Orbitron', sans-serif; font-size: .65rem; letter-spacing: .15em; text-transform: uppercase; color: var(--colour-label); text-align: left; padding-bottom: .3rem; }
+    .readings td { padding: .2rem .35rem; border-bottom: 1px solid var(--colour-border); }
+    .readings td.val { text-align: right; font-weight: bold; white-space: nowrap; }
+    .readings td.chg { width: 5.5em; text-align: left; white-space: nowrap; font-size: .75rem; }
+    .readings .vrow td.val { color: var(--colour-voltage-label); }
+    .readings .irow td.val { color: var(--colour-current); }
+    .chg.up { color: var(--colour-ghost-up); }
+    .chg.down { color: var(--colour-ghost-down); }
+    .current-equations { max-width: 760px; margin: 1rem auto 0; padding: .7rem 1rem; border: 1px solid var(--colour-border); border-radius: var(--radius-sm, 6px); background: rgba(var(--colour-label-rgb), .04); font-family: 'Share Tech Mono', monospace; font-size: .78rem; line-height: 1.8; color: var(--colour-text); }
+    .current-equations sub, .state-caption sub, .readings sub, .model-note sub { font-size: .7em; }
+    .steps-title { font-family: 'Orbitron', sans-serif; font-size: .65rem; letter-spacing: .15em; text-transform: uppercase; color: var(--colour-label); margin-bottom: .4rem; }
+    .steps { margin: 0; padding-left: 1.5rem; }
+    .steps li { margin: 0 0 .45rem; }
+    .steps .step-title { display: block; font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: var(--colour-label); }
+    .eq-var { color: var(--colour-current); }
+    .eq-v { color: var(--colour-voltage-label); }
+    .mode-row { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: .5rem 1rem; margin-bottom: .7rem; }
+    .pop-ctl { display: flex; align-items: center; gap: .4rem; font-size: .78rem; color: var(--colour-label); }
+    .ac-controls { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: .5rem 1rem; margin: 0 auto .8rem; font-size: .8rem; color: var(--colour-label); }
+    .ac-controls[hidden] { display: none; }
+    .ac-controls input[type=range] { width: min(260px, 60vw); accent-color: var(--colour-signal); }
+    .ac-controls .amp-read { font-family: 'Share Tech Mono', monospace; color: var(--colour-text); min-width: 13em; }
+    .ac-controls button, .pop-ctl button { font-size: .75rem; }
+    .cro { max-width: 520px; margin: 1rem auto 0; }
+    .cro svg { width: 100%; display: block; border-radius: 8px; }
+    .cro-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: .3rem 1.2rem; font-family: 'Share Tech Mono', monospace; font-size: .78rem; margin-top: .35rem; color: var(--colour-label); }
+    .cro-legend .ch1 { color: #e0b100; } .cro-legend .ch2 { color: #00b8d4; }
+    .model-note { max-width: 760px; margin: .8rem auto 0; font-size: .75rem; line-height: 1.5; color: var(--colour-label); text-align: center; }
+    /* transistor pop-ups */
+    .q-hit { cursor: pointer; }
+    .q-hit:hover .q-ring { opacity: .5; }
+    .q-ring { fill: none; stroke: var(--colour-ui-primary); stroke-width: 3; opacity: 0; pointer-events: none; }
+    .q-ring.on { opacity: .9; }
+    .card { cursor: grab; }
+    .card.dragging { cursor: grabbing; }
+    .card-x { cursor: pointer; }
+    .card-title { font-size: 13px; font-weight: bold; fill: var(--colour-bjt-labels); }
+    .card-sub { font-size: 10.5px; fill: var(--colour-label); }
+    .card-k { font-size: 11.5px; fill: var(--colour-label); }
+    .card-v { font-size: 12px; font-weight: bold; }
+    .busy { position: relative; }
+    .busy::after { content: 'Solving the circuit…'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: 'Share Tech Mono', monospace; color: var(--colour-label); background: rgba(var(--colour-label-rgb), .08); border-radius: 8px; }
+  </style>
+</head>
+
+<body>
+  <script>Shapes.use('circuit-components', 'bjt-symbols');</script>
+
+  <div class="crumb" id="crumb" data-current="Discrete Power Amp"></div>
+  <header>
+    <h1>Discrete Power Amplifier — Current Flow</h1>
+    <p>Long-Tailed Pair · Voltage Amplifier · V<sub>BE</sub> Multiplier · Darlington Push-Pull · Interactive Simulator</p>
+  </header>
+
+  <div class="back-link-row">
+    <a id="backLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+  </div>
+
+  <p class="intro" id="introText"></p>
+
+  <div class="sim-wrap">
+    <div class="mode-row">
+      <div class="mode-seg" id="seg-mode">
+        <button data-v="ac" onclick="setMode('ac')">AC signal</button>
+        <button data-v="dc" onclick="setMode('dc')">DC conditions</button>
+      </div>
+      <div class="pop-ctl">Transistor pop-ups
+        <div class="mode-seg"><button type="button" onclick="showAllCards()">Show all</button><button type="button" onclick="hideAllCards()">Hide all</button></div>
+      </div>
+    </div>
+    <div class="ac-controls" id="acControls" hidden>
+      <label for="ampSlider">Input</label>
+      <input type="range" id="ampSlider" min="0" max="2000" step="10" value="300" oninput="setAmp(this.value)">
+      <span class="amp-read" id="ampRead"></span>
+      <div class="mode-seg"><button type="button" id="playBtn" onclick="togglePlay()">⏸ Pause</button></div>
+      <div class="mode-seg" id="seg-speed">
+        <button data-v="slow" onclick="setSpeed('slow')">Slow</button>
+        <button data-v="normal" onclick="setSpeed('normal')">Normal</button>
+      </div>
+    </div>
+    <div class="circuit-panel" id="circuitPanel">
+      <svg id="circuitSvg" viewBox="15 175 870 860" xmlns="http://www.w3.org/2000/svg"
+        font-family="'Share Tech Mono',monospace">
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── WIRES — full length first; components are layered on top ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <g fill="none" style="stroke: var(--colour-series)" stroke-width="2">
+          <!-- rails -->
+          <line x1="265" y1="210" x2="820" y2="210" />
+          <line x1="210" y1="1000" x2="820" y2="1000" />
+          <!-- input: socket, C1, R1 to 0 V, Q1 base -->
+          <line x1="66" y1="595" x2="179" y2="595" />
+          <line x1="150" y1="595" x2="150" y2="800" />
+          <!-- the tail: R3 down to RV1's wiper; RV1's ends to the two emitters -->
+          <line x1="265" y1="210" x2="265" y2="446" />
+          <polyline points="210,561 210,465 222,465" />
+          <polyline points="310,561 310,465 298,465" />
+          <!-- Q1 collector: R2 to −20 V, across to Q4's base (hops over Q2's collector lead) -->
+          <line x1="210" y1="629" x2="210" y2="1000" />
+          <path d="M 210,865 L 302,865 A 8,8 0 0 1 318,865 L 459,865" />
+          <!-- Q2 collector straight to −20 V -->
+          <line x1="310" y1="629" x2="310" y2="1000" />
+          <!-- feedback: the output through R8 to Q2's base (hops over the bias column), R4 + C2 to 0 V -->
+          <path d="M 341,595 L 512,595 A 8,8 0 0 1 528,595 L 660,595" />
+          <line x1="385" y1="595" x2="385" y2="775" />
+          <!-- the bias column: R6 from +20 V, down through Q3 to Q4's collector / Q6's base -->
+          <line x1="520" y1="210" x2="520" y2="815" />
+          <line x1="520" y1="340" x2="549" y2="340" />
+          <polyline points="520,360 395,360 395,520 520,520" />
+          <line x1="489" y1="440" x2="414" y2="440" />
+          <polyline points="520,385 565,385 565,420" />
+          <polyline points="565,500 565,540 520,540" />
+          <polyline points="520,815 490,815 490,831" />
+          <line x1="490" y1="899" x2="490" y2="1000" />
+          <line x1="520" y1="815" x2="549" y2="815" />
+          <!-- the output column: +20 V, Q7, R9, output, R10, Q8, −20 V -->
+          <line x1="660" y1="210" x2="660" y2="1000" />
+          <polyline points="660,277 580,277 580,306" />
+          <polyline points="580,374 580,385 629,385" />
+          <polyline points="580,781 580,745 629,745" />
+          <polyline points="580,849 580,880 660,880" />
+          <!-- output to S2 and the load -->
+          <polyline points="660,595 770,595 770,615" />
+          <line x1="770" y1="665" x2="770" y2="800" />
+        </g>
+        <g style="fill: var(--colour-series)">
+          <circle cx="150" cy="595" r="5" /><circle cx="210" cy="865" r="5" /><circle cx="385" cy="595" r="5" />
+          <circle cx="520" cy="210" r="5" /><circle cx="660" cy="210" r="5" /><circle cx="520" cy="340" r="5" />
+          <circle cx="520" cy="360" r="5" /><circle cx="520" cy="385" r="5" /><circle cx="520" cy="520" r="5" />
+          <circle cx="520" cy="540" r="5" /><circle cx="520" cy="815" r="5" /><circle cx="660" cy="277" r="5" />
+          <circle cx="660" cy="595" r="5" /><circle cx="660" cy="880" r="5" /><circle cx="310" cy="1000" r="5" />
+          <circle cx="490" cy="1000" r="5" /><circle cx="660" cy="1000" r="5" />
+        </g>
+        <circle cx="60" cy="595" r="6" style="fill: var(--colour-panel); stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="820" cy="210" r="6" style="fill: var(--colour-panel); stroke: var(--colour-series)" stroke-width="2" />
+        <circle cx="820" cy="1000" r="6" style="fill: var(--colour-panel); stroke: var(--colour-series)" stroke-width="2" />
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── FLOW OVERLAYS — drawn in the direction of conventional current for a POSITIVE value ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <path id="flow-railP1" class="flow-line" d="M 820,210 L 660,210" />
+        <path id="flow-railP2" class="flow-line" d="M 660,210 L 520,210" />
+        <path id="flow-railP3" class="flow-line" d="M 520,210 L 265,210" />
+        <path id="flow-r3" class="flow-line" d="M 265,210 L 265,450" />
+        <path id="flow-rv1a" class="flow-line" d="M 262,465 L 210,465 L 210,561" />
+        <path id="flow-rv1b" class="flow-line" d="M 268,465 L 310,465 L 310,561" />
+        <path id="flow-q1c" class="flow-line" d="M 210,629 L 210,865" />
+        <path id="flow-r2" class="flow-line" d="M 210,865 L 210,1000" />
+        <path id="flow-q4b" class="flow-line" d="M 210,865 L 302,865 A 8,8 0 0 1 318,865 L 459,865" />
+        <path id="flow-q1b" class="flow-line" d="M 179,595 L 150,595" />
+        <path id="flow-r1" class="flow-line" d="M 150,595 L 150,800" />
+        <path id="flow-in" class="flow-line" d="M 66,595 L 150,595" />
+        <path id="flow-q2c" class="flow-line" d="M 310,629 L 310,1000" />
+        <path id="flow-q2b" class="flow-line" d="M 341,595 L 385,595" />
+        <path id="flow-r8" class="flow-line" d="M 660,595 L 528,595 A 8,8 0 0 0 512,595 L 385,595" />
+        <path id="flow-r4" class="flow-line" d="M 385,595 L 385,775" />
+        <path id="flow-r6" class="flow-line" d="M 520,210 L 520,340" />
+        <path id="flow-q5b" class="flow-line" d="M 520,340 L 549,340" />
+        <path id="flow-t1" class="flow-line" d="M 520,340 L 520,360" />
+        <path id="flow-r5" class="flow-line" d="M 520,360 L 395,360 L 395,440" />
+        <path id="flow-q3b" class="flow-line" d="M 414,440 L 489,440" />
+        <path id="flow-r11" class="flow-line" d="M 395,440 L 395,520 L 520,520" />
+        <path id="flow-t2" class="flow-line" d="M 520,360 L 520,385" />
+        <path id="flow-q3c" class="flow-line" d="M 520,385 L 520,406" />
+        <path id="flow-s1" class="flow-line" d="M 520,385 L 565,385 L 565,540 L 520,540" />
+        <path id="flow-q3e" class="flow-line" d="M 520,474 L 520,520" />
+        <path id="flow-b1" class="flow-line" d="M 520,520 L 520,540" />
+        <path id="flow-b2" class="flow-line" d="M 520,540 L 520,815" />
+        <path id="flow-q6b" class="flow-line" d="M 549,815 L 520,815" />
+        <path id="flow-q4c" class="flow-line" d="M 520,815 L 490,815 L 490,831" />
+        <path id="flow-r7" class="flow-line" d="M 490,899 L 490,1000" />
+        <path id="flow-railN1" class="flow-line" d="M 210,1000 L 310,1000" />
+        <path id="flow-railN2" class="flow-line" d="M 310,1000 L 490,1000" />
+        <path id="flow-railN3" class="flow-line" d="M 490,1000 L 660,1000" />
+        <path id="flow-railN4" class="flow-line" d="M 660,1000 L 820,1000" />
+        <path id="flow-cP" class="flow-line" d="M 660,210 L 660,277" />
+        <path id="flow-q5c" class="flow-line" d="M 660,277 L 580,277 L 580,306" />
+        <path id="flow-q7c" class="flow-line" d="M 660,277 L 660,351" />
+        <path id="flow-q5e" class="flow-line" d="M 580,374 L 580,385 L 629,385" />
+        <path id="flow-q7e" class="flow-line" d="M 660,419 L 660,595" />
+        <path id="flow-q8e" class="flow-line" d="M 660,595 L 660,711" />
+        <path id="flow-q8b" class="flow-line" d="M 629,745 L 580,745 L 580,781" />
+        <path id="flow-q8c" class="flow-line" d="M 660,779 L 660,880" />
+        <path id="flow-q6c" class="flow-line" d="M 580,849 L 580,880 L 660,880" />
+        <path id="flow-cN" class="flow-line" d="M 660,880 L 660,1000" />
+        <path id="flow-out" class="flow-line" d="M 660,595 L 770,595 L 770,800" />
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── LABELS on the rails and the input ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <text x="834" y="216" style="fill: var(--colour-voltage-label)" font-size="15" font-weight="bold">+20 V</text>
+        <text x="834" y="1006" style="fill: var(--colour-voltage-label)" font-size="15" font-weight="bold">−20 V</text>
+        <text x="60" y="578" style="fill: var(--colour-label)" text-anchor="middle" font-size="12">in</text>
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── CAPACITORS — C1 (plain), C2 (electrolytic: + plate outlined, − plate filled) ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <g transform="translate(105,595)">  <!-- ══ C1 ══ -->
+          <use href="#cap-shape" />
+          <text x="0" y="-22" fill="var(--colour-capacitor-labels)" text-anchor="middle" font-size="15" font-weight="bold">C<tspan baseline-shift="sub" font-size="10">1</tspan></text>
+          <text x="0" y="34" fill="var(--colour-text)" text-anchor="middle" font-size="13">100nF</text>
+        </g>
+        <g transform="translate(385,735)">  <!-- ══ C2 ══ -->
+          <rect x="-15" y="-8" width="30" height="16" style="fill: var(--colour-panel)" />
+          <rect x="-14" y="-8" width="28" height="5" style="fill: var(--colour-panel); stroke: var(--colour-capacitor)" stroke-width="2" />
+          <rect x="-14" y="3" width="28" height="5" style="fill: var(--colour-capacitor); stroke: var(--colour-capacitor)" stroke-width="2" />
+          <text x="-20" y="-6" fill="var(--colour-capacitor-labels)" text-anchor="end" font-size="13" font-weight="bold">+</text>
+          <text x="22" y="-2" fill="var(--colour-capacitor-labels)" font-size="15" font-weight="bold">C<tspan baseline-shift="sub" font-size="10">2</tspan></text>
+          <text x="22" y="15" fill="var(--colour-text)" font-size="13">10µF</text>
+        </g>
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── RESISTORS and the two pots ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <g transform="translate(150,650)">  <!-- ══ R1 ══ -->
+          <g transform="scale(1,.8)"><use href="#resistor-vertical" /></g>
+          <text x="-22" y="28" fill="var(--colour-resistor-labels)" text-anchor="end" font-size="15" font-weight="bold">R<tspan baseline-shift="sub" font-size="10">1</tspan></text>
+          <text x="-22" y="46" fill="var(--colour-text)" text-anchor="end" font-size="13">22k</text>
+        </g>
+        <g transform="translate(265,280)">  <!-- ══ R3 ══ -->
+          <g transform="scale(1,.85)"><use href="#resistor-vertical" /></g>
+          <text x="-22" y="30" fill="var(--colour-resistor-labels)" text-anchor="end" font-size="15" font-weight="bold">R<tspan baseline-shift="sub" font-size="10">3</tspan></text>
+          <text x="-22" y="48" fill="var(--colour-text)" text-anchor="end" font-size="13">47k</text>
+        </g>
+        <g transform="translate(260,465)">  <!-- ══ RV1 — wiper from R3 ══ -->
+          <g transform="scale(.95,.8)"><use href="#resistor-horizontal" /></g>
+          <polygon points="5,-13 0,-22 10,-22" style="fill: var(--colour-series)" />
+          <text x="0" y="36" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="15" font-weight="bold">RV<tspan baseline-shift="sub" font-size="10">1</tspan></text>
+          <text x="0" y="53" fill="var(--colour-text)" text-anchor="middle" font-size="13">1k</text>
+        </g>
+        <g transform="translate(210,895)">  <!-- ══ R2 ══ -->
+          <g transform="scale(1,.8)"><use href="#resistor-vertical" /></g>
+          <text x="-22" y="28" fill="var(--colour-resistor-labels)" text-anchor="end" font-size="15" font-weight="bold">R<tspan baseline-shift="sub" font-size="10">2</tspan></text>
+          <text x="-22" y="46" fill="var(--colour-text)" text-anchor="end" font-size="13">4k7</text>
+        </g>
+        <g transform="translate(385,625)">  <!-- ══ R4 ══ -->
+          <g transform="scale(1,.8)"><use href="#resistor-vertical" /></g>
+          <text x="22" y="28" fill="var(--colour-resistor-labels)" font-size="15" font-weight="bold">R<tspan baseline-shift="sub" font-size="10">4</tspan></text>
+          <text x="22" y="46" fill="var(--colour-text)" font-size="13">10k</text>
+        </g>
+        <g transform="translate(450,595)">  <!-- ══ R8 ══ -->
+          <g transform="scale(.75,.8)"><use href="#resistor-horizontal" /></g>
+          <text x="0" y="-20" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="15" font-weight="bold">R<tspan baseline-shift="sub" font-size="10">8</tspan> <tspan fill="var(--colour-text)" font-weight="normal" font-size="13">100k</tspan></text>
+        </g>
+        <g transform="translate(520,228)">  <!-- ══ R6 ══ -->
+          <g transform="scale(1,.8)"><use href="#resistor-vertical" /></g>
+          <text x="-22" y="28" fill="var(--colour-resistor-labels)" text-anchor="end" font-size="15" font-weight="bold">R<tspan baseline-shift="sub" font-size="10">6</tspan></text>
+          <text x="-22" y="46" fill="var(--colour-text)" text-anchor="end" font-size="13">2k2</text>
+        </g>
+        <g transform="translate(457,360)">  <!-- ══ R5 ══ -->
+          <g transform="scale(.75,.75)"><use href="#resistor-horizontal" /></g>
+          <text x="0" y="-18" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="15" font-weight="bold">R<tspan baseline-shift="sub" font-size="10">5</tspan> <tspan fill="var(--colour-text)" font-weight="normal" font-size="13">4k7</tspan></text>
+        </g>
+        <g transform="translate(395,400)">  <!-- ══ RV2 — wiper to Q3's base ══ -->
+          <use href="#resistor-vertical" />
+          <polygon id="rv2Wiper" points="16,40 25,35 25,45" style="fill: var(--colour-series)" />
+          <text x="-22" y="34" fill="var(--colour-resistor-labels)" text-anchor="end" font-size="15" font-weight="bold">RV<tspan baseline-shift="sub" font-size="10">2</tspan></text>
+          <text x="-22" y="52" fill="var(--colour-text)" text-anchor="end" font-size="13">10k*</text>
+        </g>
+        <g transform="translate(457,520)">  <!-- ══ R11 ══ -->
+          <g transform="scale(.75,.75)"><use href="#resistor-horizontal" /></g>
+          <text x="0" y="32" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="15" font-weight="bold">R<tspan baseline-shift="sub" font-size="10">11</tspan> <tspan fill="var(--colour-text)" font-weight="normal" font-size="13">5k6</tspan></text>
+        </g>
+        <g transform="translate(490,915)">  <!-- ══ R7 ══ -->
+          <g transform="scale(1,.75)"><use href="#resistor-vertical" /></g>
+          <text x="22" y="26" fill="var(--colour-resistor-labels)" font-size="15" font-weight="bold">R<tspan baseline-shift="sub" font-size="10">7</tspan></text>
+          <text x="22" y="44" fill="var(--colour-text)" font-size="13">27Ω</text>
+        </g>
+        <g transform="translate(660,440)">  <!-- ══ R9 ══ -->
+          <g transform="scale(1,.75)"><use href="#resistor-vertical" /></g>
+          <text x="22" y="26" fill="var(--colour-resistor-labels)" font-size="15" font-weight="bold">R<tspan baseline-shift="sub" font-size="10">9</tspan></text>
+          <text x="22" y="44" fill="var(--colour-text)" font-size="13">1Ω</text>
+        </g>
+        <g transform="translate(660,625)">  <!-- ══ R10 ══ -->
+          <g transform="scale(1,.75)"><use href="#resistor-vertical" /></g>
+          <text x="22" y="26" fill="var(--colour-resistor-labels)" font-size="15" font-weight="bold">R<tspan baseline-shift="sub" font-size="10">10</tspan></text>
+          <text x="22" y="44" fill="var(--colour-text)" font-size="13">1Ω</text>
+        </g>
+        <g transform="translate(770,690)">  <!-- ══ RL ══ -->
+          <use href="#resistor-vertical" />
+          <text x="22" y="34" fill="var(--colour-resistor-labels)" font-size="15" font-weight="bold">R<tspan baseline-shift="sub" font-size="10">L</tspan></text>
+          <text x="22" y="52" fill="var(--colour-text)" font-size="13">15Ω</text>
+        </g>
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── TRANSISTORS — each is tappable (opens its pop-up); the ring shows which are open ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <g class="q-hit" onclick="toggleCard('Q1')">  <!-- ══ Q1 BC557 PNP — emitter up to RV1 ══ -->
+          <circle id="ring-Q1" class="q-ring" cx="203" cy="595" r="31" />
+          <use href="#bjt-pnp-shape" transform="translate(196,595)" />
+          <text x="186" y="548" fill="var(--colour-bjt-labels)" text-anchor="end" font-size="16" font-weight="bold">Q<tspan baseline-shift="sub" font-size="11">1</tspan></text>
+          <text x="186" y="565" fill="var(--colour-bjt)" text-anchor="end" font-size="13" font-weight="bold">BC557</text>
+        </g>
+        <g class="q-hit" onclick="toggleCard('Q2')">  <!-- ══ Q2 BC557 PNP — mirrored, base on the right ══ -->
+          <circle id="ring-Q2" class="q-ring" cx="317" cy="595" r="31" />
+          <use href="#bjt-pnp-shape" transform="translate(324,595) scale(-1,1)" />
+          <text x="336" y="548" fill="var(--colour-bjt-labels)" font-size="16" font-weight="bold">Q<tspan baseline-shift="sub" font-size="11">2</tspan></text>
+          <text x="336" y="565" fill="var(--colour-bjt)" font-size="13" font-weight="bold">BC557</text>
+        </g>
+        <g class="q-hit" onclick="toggleCard('Q3')">  <!-- ══ Q3 BC108 NPN — the VBE multiplier ══ -->
+          <circle id="ring-Q3" class="q-ring" cx="513" cy="440" r="31" />
+          <use href="#bjt-npn-shape" transform="translate(506,440)" />
+          <text x="452" y="410" fill="var(--colour-bjt-labels)" text-anchor="middle" font-size="16" font-weight="bold">Q<tspan baseline-shift="sub" font-size="11">3</tspan></text>
+          <text x="452" y="427" fill="var(--colour-bjt)" text-anchor="middle" font-size="13" font-weight="bold">BC108</text>
+        </g>
+        <g class="q-hit" onclick="toggleCard('Q4')">  <!-- ══ Q4 BC547 NPN — the voltage amplifier ══ -->
+          <circle id="ring-Q4" class="q-ring" cx="483" cy="865" r="31" />
+          <use href="#bjt-npn-shape" transform="translate(476,865)" />
+          <text x="452" y="903" fill="var(--colour-bjt-labels)" text-anchor="end" font-size="16" font-weight="bold">Q<tspan baseline-shift="sub" font-size="11">4</tspan></text>
+          <text x="452" y="920" fill="var(--colour-bjt)" text-anchor="end" font-size="13" font-weight="bold">BC547</text>
+        </g>
+        <g class="q-hit" onclick="toggleCard('Q5')">  <!-- ══ Q5 — labelled BC557, drawn (and modelled) as NPN: the top driver ══ -->
+          <circle id="ring-Q5" class="q-ring" cx="573" cy="340" r="31" />
+          <use href="#bjt-npn-shape" transform="translate(566,340)" />
+          <text x="603" y="318" fill="var(--colour-bjt-labels)" font-size="16" font-weight="bold">Q<tspan baseline-shift="sub" font-size="11">5</tspan></text>
+          <text x="603" y="335" fill="var(--colour-bjt)" font-size="13" font-weight="bold">BC557*</text>
+        </g>
+        <g class="q-hit" onclick="toggleCard('Q7')">  <!-- ══ Q7 MJE3055 NPN — top output ══ -->
+          <circle id="ring-Q7" class="q-ring" cx="653" cy="385" r="31" />
+          <use href="#bjt-npn-shape" transform="translate(646,385)" />
+          <text x="690" y="380" fill="var(--colour-bjt-labels)" font-size="16" font-weight="bold">Q<tspan baseline-shift="sub" font-size="11">7</tspan></text>
+          <text x="690" y="397" fill="var(--colour-bjt)" font-size="13" font-weight="bold">MJE3055</text>
+        </g>
+        <g class="q-hit" onclick="toggleCard('Q6')">  <!-- ══ Q6 BC557 PNP — bottom driver, emitter up to Q8's base ══ -->
+          <circle id="ring-Q6" class="q-ring" cx="573" cy="815" r="31" />
+          <use href="#bjt-pnp-shape" transform="translate(566,815)" />
+          <text x="602" y="848" fill="var(--colour-bjt-labels)" font-size="16" font-weight="bold">Q<tspan baseline-shift="sub" font-size="11">6</tspan></text>
+          <text x="602" y="865" fill="var(--colour-bjt)" font-size="13" font-weight="bold">BC557</text>
+        </g>
+        <g class="q-hit" onclick="toggleCard('Q8')">  <!-- ══ Q8 MJE2955 PNP — bottom output, emitter up to R10 ══ -->
+          <circle id="ring-Q8" class="q-ring" cx="653" cy="745" r="31" />
+          <use href="#bjt-pnp-shape" transform="translate(646,745)" />
+          <text x="690" y="740" fill="var(--colour-bjt-labels)" font-size="16" font-weight="bold">Q<tspan baseline-shift="sub" font-size="11">8</tspan></text>
+          <text x="690" y="757" fill="var(--colour-bjt)" font-size="13" font-weight="bold">MJE2955</text>
+        </g>
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── SWITCHES — tap to flip ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <g class="sw-hit" onclick="flipSw('s1')">  <!-- ══ S1 — across the bias network (closed = no bias) ══ -->
+          <rect x="548" y="405" width="50" height="110" fill="transparent" />
+          <circle cx="565" cy="420" r="3.5" style="fill: var(--colour-switch)" />
+          <circle cx="565" cy="500" r="3.5" style="fill: var(--colour-switch)" />
+          <line id="s1Wiper" class="sw-wiper" x1="565" y1="420" x2="590" y2="494" style="stroke: var(--colour-switch)" stroke-width="2.5" stroke-linecap="round" />
+          <text x="590" y="455" fill="var(--colour-switch-labels)" font-size="15" font-weight="bold">S1</text>
+        </g>
+        <g class="sw-hit" onclick="flipSw('s2')">  <!-- ══ S2 — the load ══ -->
+          <rect x="752" y="602" width="55" height="76" fill="transparent" />
+          <circle cx="770" cy="615" r="3.5" style="fill: var(--colour-switch)" />
+          <circle cx="770" cy="665" r="3.5" style="fill: var(--colour-switch)" />
+          <line id="s2Wiper" class="sw-wiper" x1="770" y1="615" x2="770" y2="662" style="stroke: var(--colour-switch)" stroke-width="2.5" stroke-linecap="round" />
+          <text x="792" y="645" fill="var(--colour-switch-labels)" font-size="15" font-weight="bold">S2</text>
+        </g>
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── GROUND SYMBOLS ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <use href="#ground-shape" transform="translate(150,800)" />
+        <use href="#ground-shape" transform="translate(385,775)" />
+        <use href="#ground-shape" transform="translate(770,800)" />
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- ── LIVE VALUES (DC view) ── -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <g id="dcTags">
+          <text id="tag-IR3" class="i-tag" x="273" y="395"></text>
+          <text id="tag-IR6" class="i-tag" x="528" y="310"></text>
+          <text id="tag-Vbias" class="v-tag" x="578" y="528"></text>
+          <text id="tag-IQ4" class="i-tag" x="512" y="982"></text>
+          <text id="tag-IQ7" class="i-tag" x="682" y="512"></text>
+          <text id="tag-IQ8" class="i-tag" x="682" y="697"></text>
+          <text id="tag-Vout" class="v-tag" x="682" y="585"></text>
+          <text id="tag-IRL" class="i-tag" x="792" y="790"></text>
+          <text id="tag-Ip" class="i-tag" x="740" y="200" text-anchor="middle"></text>
+          <text id="tag-In" class="i-tag" x="740" y="1024" text-anchor="middle"></text>
+        </g>
+        <g id="acTags" display="none">
+          <text id="acVout" class="v-tag" x="682" y="585"></text>
+        </g>
+
+        <!-- the transistor pop-ups, on top of everything (built by buildCards()) -->
+        <g id="leaders"></g>
+        <g id="cards"></g>
+      </svg>
+    </div>
+
+    <div class="state-caption" id="stateCaption"></div>
+
+    <div id="acPanel" hidden>
+      <div class="cro">
+        <svg id="croSvg" viewBox="0 -18 500 336" xmlns="http://www.w3.org/2000/svg" font-family="'Share Tech Mono',monospace"></svg>
+        <div class="cro-legend"><span class="ch1" id="croCh1"></span><span class="ch2" id="croCh2"></span><span>0.2 ms/div · 1 kHz</span></div>
+      </div>
+      <div class="readings">
+        <table>
+          <caption>Measured (as on the CRO)</caption>
+          <tbody id="acTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="dcPanel">
+      <div class="readings">
+        <table>
+          <caption>Voltages (to 0 V)</caption>
+          <tbody id="vTable"></tbody>
+        </table>
+        <table>
+          <caption>Currents</caption>
+          <tbody id="iTable"></tbody>
+        </table>
+      </div>
+      <p class="model-note">The arrow beside a reading shows how it changed with the last switch you flipped.</p>
+      <div class="current-equations">
+        <div class="steps-title">Working it out, step by step</div>
+        <ol class="steps" id="steps"></ol>
+      </div>
+    </div>
+    <p class="model-note">The numbers come from a model with typical part values (small transistors V<sub>BE</sub> ≈ 0.62 V at 1 mA, β = 200; MJE3055 / MJE2955 V<sub>BE</sub> ≈ 0.55 V at 10 mA, β = 50). * The panel drawing labels Q5 as a BC557 but draws it as an NPN, which is what the top half needs, so it is modelled as an NPN. RV2's value isn't on the drawing: it is taken as 10k, set for about 25 mA of quiescent current. A real board will read a little differently, but every reading should move the same way when a switch changes.</p>
+  </div>
+
+  <footer>Electronics // Cert III // UEEEC0066 // Resources</footer>
+
+  <script>
+    // ══════════════════════════════════════════════════════════════════════
+    // MODEL — the whole amplifier solved for the switch settings (and, in the AC view, for each instant of the
+    // input). Every transistor uses the diode equation; nothing is hand-listed.
+    // ══════════════════════════════════════════════════════════════════════
+    const P = {
+      VCC: 20, R1: 22e3, R2: 4.7e3, R3: 47e3, RV1: 1e3, R4: 10e3, R5: 4.7e3, R6: 2.2e3, R7: 27, R8: 100e3,
+      R9: 1, R10: 1, R11: 5.6e3, RV2: 10e3, RL: 15,
+      rv1: 0.5,                   // RV1 wiper position (0 = Q1 end, 1 = Q2 end): the offset trim
+      rv2: 0.832,                 // RV2 wiper position (0 = R5 end, 1 = R11 end): sets the bias (quiescent current)
+      bS: 200, IsS: 3.84e-14, nS: 1,      // BC547 / BC557 / BC108: VBE ≈ 0.62 V at 1 mA, β ≈ 200
+      bP: 50, IsP: 3.8e-8, nP: 1.7,       // MJE3055 / MJE2955: VBE ≈ 0.55 V at 10 mA, β ≈ 50
+      VT: 0.02585,
+    };
+    const aS = () => P.nS * P.VT, aP = () => P.nP * P.VT;
+    const vbeS = I => aS() * Math.log(1 + Math.max(I, 0) / P.IsS);
+    const vbeP = I => aP() * Math.log(1 + Math.max(I, 0) / P.IsP);
+    const iS = V => P.IsS * (Math.exp(Math.min(V, 1.2) / aS()) - 1);
+
+    // Emitter current of a small transistor whose base is V volts beyond the far end of its emitter resistor Re.
+    // Solves Ie·Re + n·VT·ln(1 + Ie/Is) = V exactly (Lambert-W, Newton in log form).
+    function emitterI(V, Re) {
+      const a = aS(), Is = P.IsS;
+      const c = (V + Is * Re) / a - Math.log(a / (Re * Is));
+      let y = c < 1 ? c : Math.log(c);
+      for (let k = 0; k < 60; k++) {
+        const ey = Math.exp(y), d = (ey + y - c) / (ey + 1);
+        y -= d;
+        if (Math.abs(d) < 1e-12) break;
+      }
+      return Math.max(0, (a / Re) * Math.exp(y) - Is);
+    }
+    // f must fall as x rises: f(lo) > 0 > f(hi)
+    function bisect(f, lo, hi, n = 50) {
+      for (let k = 0; k < n; k++) { const m = (lo + hi) / 2; if (f(m) > 0) lo = m; else hi = m; }
+      return (lo + hi) / 2;
+    }
+    // A monotonic table y(x) and its inverse x(y), by linear interpolation
+    function table(xs, ys) {
+      const n = xs.length;
+      const look = (src, dst, v) => {
+        if (v <= src[0]) return dst[0];
+        if (v >= src[n - 1]) return dst[n - 1];
+        let a = 0, b = n - 1;
+        while (b - a > 1) { const m = (a + b) >> 1; if (src[m] <= v) a = m; else b = m; }
+        return dst[a] + (dst[b] - dst[a]) * (v - src[a]) / (src[b] - src[a]);
+      };
+      return { y: x => look(xs, ys, x), x: y => look(ys, xs, y) };
+    }
+
+    // ── The output halves: each a Darlington (small driver + power transistor) with its 1 Ω emitter resistor.
+    // DARL.x(V) = the power transistor's emitter current when the driver's base is V volts beyond the output.
+    let DARL;
+    function buildDarl() {
+      const vs = [0], is = [0];
+      for (let k = 0; k <= 400; k++) {
+        const Ie = Math.pow(10, -10 + k * 0.026);           // 0.1 nA … ~2.5 A
+        const Ie1 = Ie / (P.bP + 1);
+        vs.push(vbeS(Ie1) + vbeP(Ie) + Ie * P.R9); is.push(Ie);
+      }
+      DARL = table(is, vs);                                 // DARL.x(volts) → amps
+    }
+
+    // ── The bias network between the driver bases: Q3's VBE multiplier (R5 + RV2 + R11, wiper to Q3's base).
+    // MULT.x(I) = the voltage across it when I flows through it. S1 closed shorts it (0 V).
+    let MULT;
+    function buildMult() {
+      const Rt = P.R5 + P.rv2 * P.RV2, Rb = (1 - P.rv2) * P.RV2 + P.R11;
+      const vs = [], is = [];
+      for (let k = 0; k <= 600; k++) {
+        const Vm = k * 0.006;                               // 0 … 3.6 V across it
+        // Q3's base voltage (above its emitter): the divider less the base current it takes
+        const vb = bisect(v => (Vm - v) / Rt - v / Rb - iS(v) / P.bS, 0, Vm || 1e-9, 40);
+        is.push((Vm - vb) / Rt + iS(vb)); vs.push(Vm);
+      }
+      MULT = table(vs, is);                                 // MULT.x(amps) → volts, MULT.y(volts) → amps
+      MULT.Rt = Rt; MULT.Rb = Rb;
+    }
+    function multDetail(Vm) {
+      const vb = bisect(v => (Vm - v) / MULT.Rt - v / MULT.Rb - iS(v) / P.bS, 0, Vm || 1e-9, 50);
+      const Ie3 = iS(vb) * (1 + 1 / P.bS);
+      return { vb, Ic3: iS(vb), Ib3: iS(vb) / P.bS, Ie3, Istr: (Vm - vb) / MULT.Rt };
+    }
+
+    // ── The whole amplifier for a given output voltage Vo. Returns the circuit, with `res` = the current left
+    // over at the output node (zero at the real operating point). ext: { vb1 (Q1 base), vc2 (C2 voltage, or
+    // null at DC: C2 open), s1, s2 }.
+    function circuitAt(Vo, ext) {
+      const V = P.VCC, Ra = P.rv1 * P.RV1, Rb = (1 - P.rv1) * P.RV1;
+      let Ib1 = 0, Ib2 = 0, W, Ie1, Ie2, Vb1, Vb2;
+      for (let it = 0; it < 4; it++) {
+        Vb1 = ext.vb1 + (ext.vc2 == null ? Ib1 * P.R1 : 0);          // DC: Q1's base current lifts it through R1
+        Vb2 = ext.vc2 == null ? Vo + Ib2 * P.R8
+          : (Vo / P.R8 + ext.vc2 / P.R4 + Ib2) / (1 / P.R8 + 1 / P.R4);
+        // the tail: R3's current shares between the two emitters (through RV1's two halves)
+        const lo = Math.max(Vb1, Vb2);
+        W = bisect(w => (V - w) / P.R3 - emitterI(w - Vb1, Ra || 1e-3) - emitterI(w - Vb2, Rb || 1e-3), lo, V);
+        Ie1 = emitterI(W - Vb1, Ra || 1e-3); Ie2 = emitterI(W - Vb2, Rb || 1e-3);
+        Ib1 = Ie1 / (P.bS + 1); Ib2 = Ie2 / (P.bS + 1);
+      }
+      const Ic1 = Ie1 - Ib1, Ic2 = Ie2 - Ib2;
+      // Q1's collector current splits between R2 and Q4's base
+      const N1 = bisect(n => Ic1 - (n + V) / P.R2 - emitterI(n + V, P.R7) / (P.bS + 1), -V, -V + 3);
+      const Ie4 = emitterI(N1 + V, P.R7), Ib4 = Ie4 / (P.bS + 1);
+      let Ic4 = Ie4 - Ib4;
+      const E4 = -V + Ie4 * P.R7;
+      // the driver bases: T (top of the bias network, Q5's base) and Bn (bottom, Q6's base and Q4's collector)
+      const at = T => {
+        const Ie7 = DARL.x(T - Vo), Ib5 = Ie7 / ((P.bP + 1) * (P.bS + 1));
+        const Ich = (V - T) / P.R6 - Ib5;
+        const Vm = ext.s1 ? 0 : MULT.x(Math.max(Ich, 0));
+        const Bn = T - Vm;
+        const Ie8 = DARL.x(Vo - Bn), Ib6 = Ie8 / ((P.bP + 1) * (P.bS + 1));
+        return { T, Ie7, Ib5, Ich, Vm, Bn, Ie8, Ib6 };
+      };
+      let s = at(bisect(T => { const q = at(T); return q.Ich + q.Ib6 - Ic4; }, -V, V));
+      // Q4 saturates if it would need its collector below its emitter: the bottom of the bias network then sits
+      // just above Q4's emitter, and Q4 passes only what the chain brings
+      const sat = s.Bn < E4 + 0.1;
+      if (sat) { s = at(bisect(T => at(T).Bn - (E4 + 0.1), V, -V)); Ic4 = s.Ich + s.Ib6; }
+      const gL = ext.s2 ? 1 / P.RL : 0;
+      const IR8 = (Vo - Vb2) / P.R8;
+      const res = s.Ie7 - s.Ie8 - Vo * gL - IR8;
+      return { Vo, Vb1, Vb2, W, Ie1, Ie2, Ib1, Ib2, Ic1, Ic2, N1, Ie4, Ib4, Ic4, E4, sat, IR8, ...s, ext, res };
+    }
+
+    // Find the output voltage where the output node balances, then fill in every branch
+    function solveAt(ext) {
+      const Vo = bisect(v => circuitAt(v, ext).res, -P.VCC + 0.05, P.VCC - 0.05, 46);
+      return detail(circuitAt(Vo, ext));
+    }
+    function detail(c) {
+      const V = P.VCC, s1 = c.ext.s1, s2 = c.ext.s2;
+      const Ie5 = c.Ie7 / (P.bP + 1), Ib7 = Ie5, Ic7 = c.Ie7 - Ib7, Ic5 = Ie5 - c.Ib5;
+      const Ie6 = c.Ie8 / (P.bP + 1), Ib8 = Ie6, Ic8 = c.Ie8 - Ib8, Ic6 = Ie6 - c.Ib6;
+      const E7 = c.Vo + c.Ie7 * P.R9, B7 = E7 + vbeP(c.Ie7);              // Q7 base = Q5 emitter
+      const E8 = c.Vo - c.Ie8 * P.R10, B8 = E8 - vbeP(c.Ie8);             // Q8 base = Q6 emitter
+      const m = s1 ? { vb: 0, Ic3: 0, Ib3: 0, Ie3: 0, Istr: 0 } : multDetail(c.Vm);
+      const IS1 = s1 ? c.Ich : 0;
+      const IR6 = (V - c.T) / P.R6, IR3 = (V - c.W) / P.R3, IR2 = (c.N1 + V) / P.R2;
+      const IRL = s2 ? c.Vo / P.RL : 0;
+      const IR4 = c.ext.vc2 == null ? 0 : (c.Vb2 - c.ext.vc2) / P.R4;
+      const IR1 = c.Vb1 / P.R1;
+      const Ra = P.rv1 * P.RV1, Rb = (1 - P.rv1) * P.RV1;
+      const E1 = c.W - c.Ie1 * Ra, E2 = c.W - c.Ie2 * Rb;
+      const q = (b, cV, e, ic, ib, ie, pnp) => ({ B: b, C: cV, E: e, Ic: ic, Ib: ib, Ie: ie,
+        Vbe: pnp ? e - b : b - e, Vce: pnp ? e - cV : cV - e });
+      const Q = {
+        Q1: q(c.Vb1, c.N1, E1, c.Ic1, c.Ib1, c.Ie1, true),
+        Q2: q(c.Vb2, -V, E2, c.Ic2, c.Ib2, c.Ie2, true),
+        Q3: q(c.Bn + m.vb, c.T, c.Bn, m.Ic3, m.Ib3, m.Ie3, false),
+        Q4: q(c.N1, c.Bn, c.E4, c.Ic4, c.Ib4, c.Ie4, false),
+        Q5: q(c.T, V, B7, Ic5, c.Ib5, Ie5, false),
+        Q6: q(c.Bn, -V, B8, Ic6, c.Ib6, Ie6, true),
+        Q7: q(B7, V, E7, Ic7, Ib7, c.Ie7, false),
+        Q8: q(B8, -V, E8, Ic8, Ib8, c.Ie8, true),
+      };
+      const Ip = IR3 + IR6 + Ic5 + Ic7;                     // from the +20 V supply
+      const In = IR2 + c.Ic2 + c.Ie4 + Ic6 + Ic8;           // into the −20 V supply
+      return { ...c, Q, Vout: c.Vo, Vbias: c.T - c.Bn, Ich: c.Ich, IS1, Istr: m.Istr, Ib3: m.Ib3, Ic3: m.Ic3, Ie3: m.Ie3,
+        IR6, IR3, IR2, IRL, IR4, IR1, Ip, In, Iq: c.Ie7, s1, s2 };
+    }
+    function solve(s1, s2) { return solveAt({ vb1: 0, vc2: null, s1, s2 }); }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // AC — a sine wave into C1. Each instant is the DC circuit with Q1's base moved by vin; C1 and C2 hold their
+    // DC voltages (they are large at 1 kHz). A table of instants across the input range is built once per switch
+    // setting; each frame interpolates in it.
+    // ══════════════════════════════════════════════════════════════════════
+    const GAIN = 1 + P.R8 / P.R4;                  // 11
+    const VIN_MAX = 2.2;
+    const acCache = {};
+    function lerpDeep(a, b, f) {
+      const o = Array.isArray(a) ? [] : {};
+      for (const k in a) {
+        const x = a[k], y = b[k];
+        o[k] = typeof x === 'number' ? x + (y - x) * f : (x && typeof x === 'object' && !(x instanceof Function)) ? lerpDeep(x, y, f) : x;
+      }
+      return o;
+    }
+    function buildAC(s1, s2) {
+      const key = '' + s1 + s2;
+      if (acCache[key]) return acCache[key];
+      const dc = solved(s1, s2), pts = [];
+      for (let i = 0; i <= 160; i++) {             // denser near 0 V, where the crossover happens
+        const u = i / 80 - 1, vin = VIN_MAX * (0.3 * u + 0.7 * u * u * u);
+        const r = solveAt({ vb1: dc.Vb1 + vin, vc2: dc.Vb2, s1, s2 });
+        r.vin = vin; pts.push(r);
+      }
+      // where the output stops following (clipping): the last point each way where the slope is still at least
+      // half the slope at the centre
+      const slope = i => (pts[i + 1].Vout - pts[i].Vout) / (pts[i + 1].vin - pts[i].vin);
+      const g0 = slope(80);
+      let hi = 80, lo = 79;
+      while (hi < 159 && slope(hi) > g0 / 2) hi++;
+      while (lo > 0 && slope(lo) > g0 / 2) lo--;
+      return (acCache[key] = { pts, dc, gain0: g0, vMax: pts[hi].Vout, vMin: pts[lo + 1].Vout });
+    }
+    function instant(ac, vin) {
+      const pts = ac.pts, n = pts.length;
+      let a = 0, b = n - 1;
+      if (vin <= pts[0].vin) return Object.assign(lerpDeep(pts[0], pts[0], 0), { vin });
+      if (vin >= pts[n - 1].vin) return Object.assign(lerpDeep(pts[n - 1], pts[n - 1], 0), { vin });
+      while (b - a > 1) { const m = (a + b) >> 1; if (pts[m].vin <= vin) a = m; else b = m; }
+      const r = lerpDeep(pts[a], pts[b], (vin - pts[a].vin) / (pts[b].vin - pts[a].vin));
+      r.vin = vin;
+      return r;
+    }
+    const AC_N = 180;
+    let acSamples = null, acAmp = 0.3, acInfo = null;
+    function sampleCycle() {
+      acInfo = buildAC(sw.s1, sw.s2);
+      acSamples = [];
+      for (let k = 0; k < AC_N; k++) {
+        const r = instant(acInfo, acAmp * Math.sin(2 * Math.PI * k / AC_N));
+        r.Iin = r.IR1 - r.Ib1;
+        acSamples.push(r);
+      }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // DISPLAY
+    // ══════════════════════════════════════════════════════════════════════
+    const sw = { s1: false, s2: true };            // S1 openCards (bias on), S2 closed (load connected)
+    const cache = {};
+    const solved = (s1 = sw.s1, s2 = sw.s2) => { const k = '' + s1 + s2; return cache[k] || (cache[k] = solve(s1, s2)); };
+    let prev = null;
+
+    const neg = x => (x < 0 ? '−' : '');
+    const fV = x => (Math.abs(x) < 0.0005 ? '0.000' : neg(x) + Math.abs(x).toFixed(3)) + ' V';
+    const fV2 = x => (Math.abs(x) < 0.005 ? '0.00' : neg(x) + Math.abs(x).toFixed(2)) + ' V';
+    const fI = x => {
+      const a = Math.abs(x);
+      if (a < 0.5e-6) return '0 mA';
+      if (a < 1e-3) return neg(x) + (a * 1e6).toFixed(0) + ' µA';
+      if (a >= 1) return neg(x) + a.toFixed(2) + ' A';
+      return neg(x) + (a * 1000).toFixed(a < 0.01 ? 2 : 1) + ' mA';
+    };
+    const fVpk = x => (Math.abs(x) < 1 ? neg(x) + (Math.abs(x) * 1000).toFixed(0) + ' mV' : neg(x) + Math.abs(x).toFixed(2) + ' V');
+    const cv = s => `<span class="eq-var">${s}</span>`;
+    const vv = s => `<span class="eq-v">${s}</span>`;
+    const n3 = x => neg(x) + Math.abs(x).toFixed(3);
+    const kk = R => R >= 1000 ? (R / 1000).toFixed(R % 1000 ? 1 : 0) + 'k' : R + ' Ω';
+
+    // ── flow animation (same tiers as the 741 power-amp simulator) ──
+    const TIERS = [[20e-6, null], [0.5e-3, 2.6], [5e-3, 1.5], [20e-3, 0.85], [Infinity, 0.45]];
+    const SVGNS = 'http://www.w3.org/2000/svg';
+    function applyFlow(id, value) {
+      const e = document.getElementById('flow-' + id); if (!e) return;
+      const old = e.querySelector('animate'); if (old) old.remove();
+      const dur = TIERS.find(t => Math.abs(value) < t[0])[1];
+      e.classList.toggle('flow-stopped', dur === null);
+      if (dur === null) return;
+      const anim = document.createElementNS(SVGNS, 'animate');
+      anim.setAttribute('attributeName', 'stroke-dashoffset');
+      anim.setAttribute('values', value >= 0 ? '0;-13' : '0;13');
+      anim.setAttribute('dur', dur + 's');
+      anim.setAttribute('repeatCount', 'indefinite');
+      e.appendChild(anim);
+    }
+    function flows(r) {
+      const Q = r.Q;
+      return {
+        railP1: r.Ip, railP2: r.IR6 + r.IR3, railP3: r.IR3, r3: r.IR3,
+        rv1a: Q.Q1.Ie, rv1b: Q.Q2.Ie, q1c: Q.Q1.Ic, r2: r.IR2, q4b: Q.Q4.Ib,
+        q1b: Q.Q1.Ib, r1: r.IR1, in: r.Iin || 0, q2c: Q.Q2.Ic, q2b: Q.Q2.Ib, r8: r.IR8, r4: r.IR4,
+        r6: r.IR6, q5b: Q.Q5.Ib, t1: r.Ich, r5: r.Istr, q3b: r.Ib3, r11: r.Istr - r.Ib3,
+        t2: r.Ic3 + r.IS1, q3c: r.Ic3, s1: r.IS1, q3e: r.Ie3, b1: r.Ich - r.IS1, b2: r.Ich,
+        q6b: Q.Q6.Ib, q4c: Q.Q4.Ic, r7: Q.Q4.Ie,
+        railN1: r.IR2, railN2: r.IR2 + Q.Q2.Ic, railN3: r.IR2 + Q.Q2.Ic + Q.Q4.Ie, railN4: r.In,
+        cP: Q.Q5.Ic + Q.Q7.Ic, q5c: Q.Q5.Ic, q7c: Q.Q7.Ic, q5e: Q.Q5.Ie, q7e: Q.Q7.Ie,
+        q8e: Q.Q8.Ie, q8b: Q.Q8.Ib, q8c: Q.Q8.Ic, q6c: Q.Q6.Ic, cN: Q.Q8.Ic + Q.Q6.Ic, out: r.IRL,
+      };
+    }
+
+    function drawSwitches() {
+      const w1 = document.getElementById('s1Wiper'), w2 = document.getElementById('s2Wiper');
+      if (sw.s1) { w1.setAttribute('x2', 565); w1.setAttribute('y2', 497); } else { w1.setAttribute('x2', 590); w1.setAttribute('y2', 494); }
+      if (sw.s2) { w2.setAttribute('x2', 770); w2.setAttribute('y2', 662); } else { w2.setAttribute('x2', 794); w2.setAttribute('y2', 658); }
+    }
+
+    // ── readings ──
+    const V_ROWS = [
+      ['Vb1', 'Q1 base (input side)'], ['Vb2', 'Q2 base (feedback side)'], ['W', 'Tail (RV1 wiper)'],
+      ['N1', 'Q4 base (top of R2)'], ['T', 'Top of the bias network (Q5 base)'], ['Bn', 'Bottom (Q6 base, Q4 collector)'],
+      ['Vbias', 'Bias voltage (across Q3)'], ['Vout', 'Amplifier output'],
+    ];
+    const I_ROWS = [
+      ['IR3', 'Tail current (R3)'], ['Ic1', 'Q1 collector'], ['Ic2', 'Q2 collector'], ['IR6', 'R6 (into the bias network)'],
+      ['Ic4', 'Q4 collector (voltage amp)'], ['Ic3', 'Q3 collector (bias)'], ['Ie7', 'Q7 emitter (top output)'],
+      ['Ie8', 'Q8 emitter (bottom output)'], ['IRL', 'R<sub>L</sub>'], ['Ip', 'From the +20 V supply'], ['In', 'Into the −20 V supply'],
+    ];
+    function chg(key, isV, r) {
+      if (!prev) return '<td class="chg"></td>';
+      const d = r[key] - prev[key];
+      if (Math.abs(d) < (isV ? 0.0005 : 0.5e-6)) return '<td class="chg"></td>';
+      const up = d > 0;
+      return `<td class="chg ${up ? 'up' : 'down'}">${up ? '⬆' : '⬇'} ${isV ? Math.abs(d).toFixed(3) : fI(Math.abs(d)).replace(' ', '')}</td>`;
+    }
+    function tables(r) {
+      document.getElementById('vTable').innerHTML = V_ROWS.map(([k, label]) =>
+        `<tr class="vrow"><td>${label}</td><td class="val">${fV(r[k])}</td>${chg(k, true, r)}</tr>`).join('');
+      document.getElementById('iTable').innerHTML = I_ROWS.map(([k, label]) =>
+        `<tr class="irow"><td>${label}</td><td class="val">${fI(r[k])}</td>${chg(k, false, r)}</tr>`).join('');
+    }
+    function tags(r) {
+      const set = (id, t) => { document.getElementById('tag-' + id).textContent = t; };
+      set('IR3', fI(r.IR3)); set('IR6', fI(r.IR6)); set('Vbias', sw.s1 ? '' : fV2(r.Vbias));
+      set('IQ4', fI(r.Q.Q4.Ic)); set('IQ7', fI(r.Ie7)); set('IQ8', fI(r.Ie8)); set('Vout', fV(r.Vout));
+      set('IRL', r.s2 ? fI(r.IRL) : ''); set('Ip', fI(r.Ip)); set('In', fI(r.In));
+    }
+
+    function caption(r) {
+      const load = r.s2 ? '' : ' (no load: S2 is open)';
+      if (r.s1) return `<b>Class B</b> — S1 shorts out the V<sub>BE</sub> multiplier, so the two driver bases are joined: <b>0 V of bias</b>. With no signal the output transistors are <b>off</b> (Q7 ${fI(r.Ie7)}, Q8 ${fI(r.Ie8)})${load}. Q4 still draws ${fI(r.Q.Q4.Ic)} through R6 and S1. Switch to the AC view to see the crossover gap.`;
+      return `<b>Class AB</b> — Q3 holds <b>${fV2(r.Vbias)}</b> between the driver bases, just enough to turn on all four base-emitter junctions of the output stage (2 × V<sub>BE</sub> each side), so a small <b>quiescent current</b> (≈ ${fI((r.Ie7 + r.Ie8) / 2)}) flows straight down through Q7, R9, R10 and Q8 with no signal${load}. The feedback through R8 holds the output at <b>${fV(r.Vout)}</b>.`;
+    }
+
+    const st = (title, html) => ({ title, html });
+    function steps(r) {
+      const Q = r.Q, Ra = P.rv1 * P.RV1;
+      const out = [];
+      out.push(st('The tail current (R3)', `R3 feeds the emitters of Q1 and Q2 through RV1. The tail sits one V<sub>EB</sub> above the bases: ${vv('V<sub>tail</sub>')} = <b>${fV(r.W)}</b>.<br>${cv('I<sub>R3</sub>')} = (20 − ${vv('V<sub>tail</sub>')}) / 47k = (20 − ${n3(r.W)}) / 47 000 = <b>${fI(r.IR3)}</b>`));
+      out.push(st('The output sits at 0 V', `C2 blocks DC, so R4 carries no DC current and the DC gain is 1: the feedback makes Q2's base follow Q1's base. Each base sits a little above 0 V because its base current flows through R1 (Q1) or R8 (Q2):<br>${vv('V<sub>B1</sub>')} = ${cv('I<sub>B1</sub>')} × 22k = ${fI(Q.Q1.Ib)} × 22k = <b>${fV(r.Vb1)}</b><br>${vv('V<sub>out</sub>')} = ${vv('V<sub>B2</sub>')} − ${cv('I<sub>B2</sub>')} × 100k = ${n3(r.Vb2)} − ${n3(Q.Q2.Ib * P.R8)} = <b>${fV(r.Vout)}</b> (the DC offset; RV1 trims it).`));
+      out.push(st('The voltage amplifier current (R6 → Q4)', `The top of the bias network is two V<sub>BE</sub>s (Q5, Q7) above the output: ${vv('V<sub>T</sub>')} = <b>${fV(r.T)}</b>. R6 sets the current:<br>${cv('I<sub>R6</sub>')} = (20 − ${vv('V<sub>T</sub>')}) / 2k2 = (20 − ${n3(r.T)}) / 2200 = <b>${fI(r.IR6)}</b><br>Almost all of it flows down through ${r.s1 ? 'S1' : 'the bias network'} into Q4's collector: ${cv('I<sub>C4</sub>')} = <b>${fI(Q.Q4.Ic)}</b>.`));
+      out.push(st('How much of the tail Q1 needs', `Q4 needs ${vv('V<sub>BE4</sub>')} + ${cv('I<sub>E4</sub>')}·R7 = ${n3(Q.Q4.Vbe)} + ${n3(Q.Q4.Ie * P.R7)} = ${n3(Q.Q4.Vbe + Q.Q4.Ie * P.R7)} V across R2, so<br>${cv('I<sub>C1</sub>')} = ${cv('I<sub>R2</sub>')} + ${cv('I<sub>B4</sub>')} = ${fI(r.IR2)} + ${fI(Q.Q4.Ib)} = <b>${fI(Q.Q1.Ic)}</b>, and the rest of the tail goes through Q2: ${cv('I<sub>C2</sub>')} = <b>${fI(Q.Q2.Ic)}</b>. The feedback loop settles on this split by itself.`));
+      if (r.s1) out.push(st('The bias', `S1 is closed: it shorts out Q3 and its resistors, so ${vv('V<sub>bias</sub>')} = <b>0 V</b>. Both driver bases sit at ${fV(r.T)} and none of the four output-stage junctions has enough voltage to conduct.`));
+      else {
+        const m = multDetail(r.Vbias), Rt = MULT.Rt, Rb = MULT.Rb;
+        out.push(st('The bias (Q3, the V<sub>BE</sub> multiplier)', `RV2's wiper splits the chain into ${kk(Math.round(Rt))} above Q3's base (R5 + part of RV2) and ${kk(Math.round(Rb))} below it (the rest of RV2 + R11). Q3 conducts just enough to hold its own V<sub>BE</sub> = ${n3(m.vb)} V across the lower part:<br>${vv('V<sub>bias</sub>')} ≈ ${vv('V<sub>BE3</sub>')} × (R<sub>top</sub> + R<sub>bottom</sub>) / R<sub>bottom</sub> + ${cv('I<sub>B3</sub>')}·R<sub>top</sub> = ${n3(m.vb)} × ${((Rt + Rb) / Rb).toFixed(2)} + ${n3(m.Ib3 * Rt)} = <b>${fV2(r.Vbias)}</b><br>(Q3's base current is a big share of the chain current here, so it adds noticeably.) Turning RV2 changes the ratio, and so the quiescent current.`));
+        out.push(st('The quiescent current', `${fV2(r.Vbias)} is shared by V<sub>BE5</sub> + V<sub>BE7</sub> + V<sub>EB8</sub> + V<sub>EB6</sub> + ${cv('I<sub>Q</sub>')}·(R9 + R10) = ${n3(Q.Q5.Vbe)} + ${n3(Q.Q7.Vbe)} + ${n3(Q.Q8.Vbe)} + ${n3(Q.Q6.Vbe)} + ${n3(r.Ie7 + r.Ie8 > 0 ? (r.Ie7 * P.R9 + r.Ie8 * P.R10) : 0)} V, which needs ${cv('I<sub>Q7</sub>')} = <b>${fI(r.Ie7)}</b>${r.s2 ? `, ${cv('I<sub>Q8</sub>')} = <b>${fI(r.Ie8)}</b> (the difference, ${fI(r.Ie8 - r.Ie7)}, is the offset current in R<sub>L</sub>)` : ' through both output transistors'}.`));
+      }
+      out.push(st('Supply current', `${cv('I<sub>+20</sub>')} = ${cv('I<sub>R3</sub>')} + ${cv('I<sub>R6</sub>')} + ${cv('I<sub>C5</sub>')} + ${cv('I<sub>C7</sub>')} = ${fI(r.IR3)} + ${fI(r.IR6)} + ${fI(Q.Q5.Ic)} + ${fI(Q.Q7.Ic)} = <b>${fI(r.Ip)}</b>`));
+      return out;
+    }
+
+    function renderDC() {
+      const r = solved();
+      r.Iin = 0;
+      const f = flows(r);
+      Object.keys(f).forEach(id => applyFlow(id, f[id]));
+      tags(r); tables(r);
+      document.getElementById('stateCaption').innerHTML = caption(r);
+      document.getElementById('steps').innerHTML = steps(r).map(x => `<li><span class="step-title">${x.title}</span>${x.html}</li>`).join('');
+      renderCards();
+      prev = r;
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // TRANSISTOR POP-UPS — a card per transistor, on top of the drawing, draggable
+    // ══════════════════════════════════════════════════════════════════════
+    const QINFO = {
+      Q1: { part: 'BC557', role: 'input (signal side)', at: [203, 595], pos: [22, 395] },
+      Q2: { part: 'BC557', role: 'input (feedback side)', at: [317, 595], pos: [200, 650] },
+      Q3: { part: 'BC108', role: 'bias (V BE multiplier)', at: [513, 440], pos: [285, 222] },
+      Q4: { part: 'BC547', role: 'voltage amplifier', at: [483, 865], pos: [300, 878] },
+      Q5: { part: 'NPN*', role: 'top driver', at: [573, 340], pos: [700, 222] },
+      Q7: { part: 'MJE3055', role: 'top output (push)', at: [653, 385], pos: [700, 352] },
+      Q6: { part: 'BC557', role: 'bottom driver', at: [573, 815], pos: [374, 688] },
+      Q8: { part: 'MJE2955', role: 'bottom output (pull)', at: [653, 745], pos: [700, 856] },
+    };
+    const CW = 172, CH = 132;
+    const openCards = {};                                 // which cards are showing
+    let cardScale = 1;
+    const svgEl = () => document.getElementById('circuitSvg');
+    function svgPoint(evt) {
+      const s = svgEl(), p = s.createSVGPoint();
+      p.x = evt.clientX; p.y = evt.clientY;
+      return p.matrixTransform(s.getScreenCTM().inverse());
+    }
+    const mk = (tag, attrs, parent, text) => { const e = document.createElementNS(SVGNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text !== undefined) e.textContent = text; if (parent) parent.appendChild(e); return e; };
+    // keep a card inside the drawing (viewBox 15 175 870 860)
+    const keepIn = ([x, y], w, h) => [Math.max(15, Math.min(x, 885 - w)), Math.max(175, Math.min(y, 1035 - h))];
+    const scaleFor = wpx => !wpx ? 1 : wpx < 450 ? 2 : wpx < 620 ? 1.6 : 1;
+    function toggleCard(id) { if (openCards[id]) delete openCards[id]; else openCards[id] = true; renderCards(); }
+    function showAllCards() { Object.keys(QINFO).forEach(id => { openCards[id] = true; }); renderCards(); }
+    function hideAllCards() { Object.keys(QINFO).forEach(id => { delete openCards[id]; }); renderCards(); }
+    // the region a transistor is in, from its readings
+    function region(q, id) {
+      if (q.Ic < 1e-6) return ['cut off', 'var(--colour-label)'];
+      if (q.Vce < 0.3) return ['saturated', 'var(--colour-ui-wrong, #dc2626)'];
+      return ['active', 'var(--colour-ui-correct)'];
+    }
+    function renderCards() {
+      const g = document.getElementById('cards'), lg = document.getElementById('leaders');
+      g.replaceChildren(); lg.replaceChildren();
+      cardScale = scaleFor(svgEl().clientWidth);
+      Object.keys(QINFO).forEach(id => document.getElementById('ring-' + id).classList.toggle('on', !!openCards[id]));
+      Object.keys(QINFO).forEach(id => { if (openCards[id]) drawCard(id, g, lg); });
+      if (mode === 'ac') positionCursors(currentInstant());
+    }
+    function drawCard(id, g, lg) {
+      const info = QINFO[id], s = cardScale, w = CW * s, h = CH * s;
+      const [x, y] = keepIn(info.pos, w, h);
+      // the leader line from the transistor to the nearest point of the card
+      const [tx, ty] = info.at, nx = Math.max(x, Math.min(tx, x + w)), ny = Math.max(y, Math.min(ty, y + h));
+      mk('line', { x1: tx, y1: ty, x2: nx, y2: ny, style: 'stroke: var(--colour-bjt)', 'stroke-width': 1.5, 'stroke-dasharray': '4,3', opacity: .8 }, lg);
+      const c = mk('g', { class: 'card', transform: `translate(${x},${y}) scale(${s})` }, g);
+      mk('rect', { x: 0, y: 0, width: CW, height: CH, rx: 7, style: 'fill: var(--colour-panel); stroke: var(--colour-bjt)', 'stroke-width': 1.5, opacity: .97 }, c);
+      mk('text', { x: 8, y: 16, class: 'card-title' }, c, `${id} · ${info.part}`);
+      mk('text', { x: 8, y: 29, class: 'card-sub' }, c, info.role);
+      const xb = mk('g', { class: 'card-x' }, c);
+      mk('rect', { x: CW - 24, y: 2, width: 22, height: 22, fill: 'transparent' }, xb);
+      mk('text', { x: CW - 13, y: 18, 'text-anchor': 'middle', 'font-size': 16, style: 'fill: var(--colour-label)' }, xb, '×');
+      xb.addEventListener('pointerdown', e => e.stopPropagation());
+      xb.addEventListener('click', e => { e.stopPropagation(); delete openCards[id]; renderCards(); });
+      if (mode === 'ac') cardWaves(id, c); else cardReadings(id, c);
+      // drag by the card itself
+      c.addEventListener('pointerdown', e => {
+        const p0 = svgPoint(e);
+        try { c.setPointerCapture(e.pointerId); } catch (err) { }
+        c.classList.add('dragging');
+        const move = ev => { const p = svgPoint(ev); info.pos = keepIn([x + p.x - p0.x, y + p.y - p0.y], w, h);
+          c.setAttribute('transform', `translate(${info.pos[0]},${info.pos[1]}) scale(${s})`); };
+        const up = () => { c.removeEventListener('pointermove', move); c.removeEventListener('pointerup', up); c.classList.remove('dragging'); renderCards(); };
+        c.addEventListener('pointermove', move); c.addEventListener('pointerup', up);
+      });
+    }
+    function cardReadings(id, c) {
+      const q = solved().Q[id], [reg, col] = region(q, id), pnp = ['Q1', 'Q2', 'Q6', 'Q8'].includes(id);
+      const rows = [['I_C', fI(q.Ic), 'var(--colour-current)'], ['I_B', fI(q.Ib), 'var(--colour-current)'],
+        [pnp ? 'V_EB' : 'V_BE', fV(q.Vbe), 'var(--colour-voltage-label)'], [pnp ? 'V_EC' : 'V_CE', fV2(q.Vce), 'var(--colour-voltage-label)'], ['state', reg, col]];
+      rows.forEach(([k, v, colour], i) => {
+        const yy = 50 + i * 18;
+        const t = mk('text', { x: 10, y: yy, class: 'card-k' }, c);
+        const [a, b] = k.split('_'); t.textContent = a; if (b) mk('tspan', { 'baseline-shift': 'sub', 'font-size': 8.5 }, t, b);
+        mk('text', { x: CW - 10, y: yy, 'text-anchor': 'end', class: 'card-v', style: `fill: ${colour}` }, c, v);
+      });
+    }
+    // AC: I_C (top) and V_CE (bottom) over two cycles, each with its range; a moving dot follows the animation
+    const PX0 = 8, PX1 = CW - 8, PLOTS = [{ k: 'Ic', y0: 36, label: 'I_C', col: 'var(--colour-current)' }, { k: 'Vce', y0: 84, label: 'V_CE', col: 'var(--colour-voltage-label)' }];
+    const PH = 44;
+    const cardY = {};                                // each open card's own value → y mapping, per plot
+    function cardWaves(id, c) {
+      PLOTS.forEach((pl, pi) => {
+        const vals = acSamples.map(r => r.Q[id][pl.k]);
+        let lo = Math.min(...vals), hi = Math.max(...vals);
+        const span = Math.max(hi - lo, pl.k === 'Ic' ? Math.max(Math.abs(hi) * 0.02, 2e-6) : 0.02);
+        const mid = (hi + lo) / 2; lo = mid - span / 2; hi = mid + span / 2;
+        const top = pl.y0 + 12, bot = pl.y0 + PH - 2;
+        const Y = v => bot - (v - lo) / (hi - lo) * (bot - top);
+        (cardY[id] = cardY[id] || [])[pi] = Y;
+        mk('rect', { x: PX0, y: top - 2, width: PX1 - PX0, height: bot - top + 4, rx: 3, style: 'fill: rgba(var(--colour-label-rgb), .06)' }, c);
+        const t = mk('text', { x: PX0 + 2, y: pl.y0 + 8, class: 'card-k', style: `fill: ${pl.col}` }, c);
+        const [a, b] = (['Q1', 'Q2', 'Q6', 'Q8'].includes(id) && pl.k === 'Vce' ? 'V_EC' : pl.label).split('_');
+        t.textContent = a; mk('tspan', { 'baseline-shift': 'sub', 'font-size': 8.5 }, t, b);
+        const rng = pl.k === 'Ic' ? `${fI(Math.min(...vals))} – ${fI(Math.max(...vals))}` : `${fV2(Math.min(...vals))} – ${fV2(Math.max(...vals))}`;
+        mk('text', { x: PX1, y: pl.y0 + 8, 'text-anchor': 'end', 'font-size': 10, style: 'fill: var(--colour-text)' }, c, rng);
+        const pts = [];
+        for (let j = 0; j <= 2 * AC_N; j++) pts.push((PX0 + j / (2 * AC_N) * (PX1 - PX0)).toFixed(1) + ',' + Y(vals[j % AC_N]).toFixed(1));
+        mk('polyline', { points: pts.join(' '), fill: 'none', style: `stroke: ${pl.col}`, 'stroke-width': 1.6, 'stroke-linejoin': 'round' }, c);
+        mk('circle', { id: `cd-${id}-${pi}`, r: 3, style: `fill: ${pl.col}` }, c);
+      });
+    }
+    function positionCursors(r) {
+      if (!r) return;
+      const j = cyc(acT, 2) * AC_N, x = PX0 + j / (2 * AC_N) * (PX1 - PX0);
+      Object.keys(openCards).forEach(id => PLOTS.forEach((pl, pi) => {
+        const d = document.getElementById(`cd-${id}-${pi}`), Y = cardY[id] && cardY[id][pi]; if (!d || !Y) return;
+        d.setAttribute('cx', x); d.setAttribute('cy', Y(r.Q[id][pl.k]));
+      }));
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // AC DISPLAY — the CRO, readings, the moving current and the card cursors
+    // ══════════════════════════════════════════════════════════════════════
+    let mode = 'ac', playing = true, acSpeed = 'normal', acT = 0, lastFrame = null, rafId = null;
+    const CYCLE_S = { slow: 6, normal: 3 };
+    const dashOff = {};
+    const el = mk;
+    function buildCro() {
+      const cro = document.getElementById('croSvg');
+      el('rect', { x: 0, y: -18, width: 500, height: 336, fill: '#0b1220' }, cro);
+      el('rect', { x: 0, y: 0, width: 500, height: 300, fill: 'none', stroke: 'rgba(255,255,255,.18)' }, cro);
+      for (let i = 1; i < 10; i++) el('line', { x1: i * 50, y1: 0, x2: i * 50, y2: 300, stroke: 'rgba(255,255,255,' + (i === 5 ? .3 : .1) + ')' }, cro);
+      for (let j = 1; j < 8; j++) el('line', { x1: 0, y1: j * 37.5, x2: 500, y2: j * 37.5, stroke: 'rgba(255,255,255,' + (j === 4 ? .3 : .1) + ')' }, cro);
+      el('polyline', { id: 'croT1', fill: 'none', stroke: '#ffd400', 'stroke-width': 2 }, cro);
+      el('polyline', { id: 'croT2', fill: 'none', stroke: '#00e5ff', 'stroke-width': 2 }, cro);
+      el('line', { id: 'croCur', y1: 0, y2: 300, stroke: 'rgba(255,255,255,.35)', 'stroke-width': 1 }, cro);
+      el('circle', { id: 'croD1', r: 4, fill: '#ffd400' }, cro);
+      el('circle', { id: 'croD2', r: 4, fill: '#00e5ff' }, cro);
+      el('text', { x: 8, y: -4, fill: '#ffd400', 'font-size': 13 }, cro, 'CH1 in');
+      el('text', { x: 8, y: 313, fill: '#00e5ff', 'font-size': 13 }, cro, 'CH2 out');
+      ['#ffd400', '#00e5ff'].forEach((col, c) => {
+        const n = c + 1, g = el('g', {}, cro);
+        el('text', { id: 'croR' + n, x: 491, fill: col, 'font-size': 13, 'text-anchor': 'end' }, g, '◂' + n);
+        el('line', { id: 'croPkHi' + n, x1: 0, x2: 500, stroke: col, 'stroke-width': 1, 'stroke-dasharray': '4,4', opacity: .55 }, g);
+        el('line', { id: 'croPkLo' + n, x1: 0, x2: 500, stroke: col, 'stroke-width': 1, 'stroke-dasharray': '4,4', opacity: .55 }, g);
+        el('line', { id: 'croPkV' + n, x1: 446, x2: 446, stroke: col, 'stroke-width': 1.5 }, g);
+        el('polygon', { id: 'croPkA' + n, fill: col }, g);
+        el('polygon', { id: 'croPkB' + n, fill: col }, g);
+        el('text', { id: 'croPkT' + n, x: 492, y: c === 0 ? -4 : 313, fill: col, 'font-size': 13, 'text-anchor': 'end' }, g);
+      });
+    }
+    const VDIV = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10];
+    const fmtDiv = d => d < 1 ? (d * 1000) + ' mV/div' : d + ' V/div';
+    let croDiv = [1, 1];
+    const croCentre = [75, 225];
+    function drawCro() {
+      const room = 1.6, pick = pk => VDIV.find(d => pk / d <= room) || 10;
+      const pk1 = Math.max(...acSamples.map(r => Math.abs(r.vin))), pk2 = Math.max(...acSamples.map(r => Math.abs(r.Vout)));
+      croDiv = [pick(Math.max(pk1, 0.005)), pick(Math.max(pk2, 0.05))];
+      ['vin', 'Vout'].forEach((k, c) => {
+        const n = c + 1, pts = [];
+        for (let j = 0; j <= 2 * AC_N; j++) pts.push((j / (2 * AC_N) * 500).toFixed(1) + ',' + (croCentre[c] - acSamples[j % AC_N][k] / croDiv[c] * 37.5).toFixed(1));
+        document.getElementById('croT' + n).setAttribute('points', pts.join(' '));
+        const vals = acSamples.map(r => r[k]), hi = Math.max(...vals), lo = Math.min(...vals);
+        const yHi = croCentre[c] - hi / croDiv[c] * 37.5, yLo = croCentre[c] - lo / croDiv[c] * 37.5;
+        const setA = (id, a) => { const e = document.getElementById(id + n); for (const key in a) e.setAttribute(key, a[key]); };
+        setA('croPkHi', { y1: yHi, y2: yHi }); setA('croPkLo', { y1: yLo, y2: yLo });
+        const big = yLo - yHi > 14;
+        setA('croPkV', { y1: yHi + (big ? 5 : 0), y2: yLo - (big ? 5 : 0) });
+        setA('croPkA', { points: `446,${yHi} 442,${yHi + 6} 450,${yHi + 6}`, display: big ? 'inline' : 'none' });
+        setA('croPkB', { points: `446,${yLo} 442,${yLo - 6} 450,${yLo - 6}`, display: big ? 'inline' : 'none' });
+        document.getElementById('croPkT' + n).textContent = fVpk(hi - lo) + ' p-p';
+        document.getElementById('croR' + n).setAttribute('y', croCentre[c] + 4.5);
+      });
+      document.getElementById('croCh1').textContent = 'CH1 (input) ' + fmtDiv(croDiv[0]);
+      document.getElementById('croCh2').textContent = 'CH2 (output) ' + fmtDiv(croDiv[1]);
+    }
+    function acStats() {
+      const v = k => acSamples.map(r => r[k]);
+      const max = a => Math.max(...a), min = a => Math.min(...a);
+      const voutP = max(v('Vout')), voutN = min(v('Vout'));
+      return { vinPk: acAmp, voutP, voutN, i7: max(v('Ie7')), i8: max(v('Ie8')), i4lo: min(acSamples.map(r => r.Q.Q4.Ic)), i4hi: max(acSamples.map(r => r.Q.Q4.Ic)),
+        clipP: voutP > acInfo.vMax - 0.05, clipN: voutN < acInfo.vMin + 0.05 };
+    }
+    function acTable(s) {
+      const pp = s.voutP - s.voutN, gain = s.vinPk > 0 ? pp / (2 * s.vinPk) : 0;
+      const rows = [
+        ['Input', `${fVpk(s.vinPk)} peak · ${fVpk(2 * s.vinPk)} p-p`],
+        ['Output', `+${fVpk(s.voutP)} / ${fVpk(s.voutN)} · ${fVpk(pp)} p-p`],
+        ['Gain = V<sub>out</sub> p-p ÷ V<sub>in</sub> p-p', s.vinPk > 0 ? gain.toFixed(1) : '—'],
+        ['Expected gain 1 + R8/R4', GAIN.toFixed(0)],
+        ['Peak output current', `I<sub>Q7</sub> ${fI(s.i7)} · I<sub>Q8</sub> ${fI(s.i8)}`],
+        ['Q4 (voltage amp) current', `${fI(s.i4lo)} to ${fI(s.i4hi)}`],
+      ];
+      document.getElementById('acTable').innerHTML = rows.map(([a, b]) => `<tr class="vrow"><td>${a}</td><td class="val">${b}</td></tr>`).join('');
+    }
+    function acCaption(s) {
+      let t;
+      if (!sw.s2) t = `<b>No load</b> — S2 is open, so the output only has to drive R8 (100k): the output transistors pass little more than their quiescent current. Watch Q7 and Q8 in their pop-ups: as the output swings down, R6's current rises, Q3's bias voltage rises with it, and both carry more current together. Tap S2 closed to see the push-pull pair work.`;
+      else if (sw.s1) t = `<b>Class B — crossover.</b> S1 shorts out the bias, so near every zero crossing both output transistors are off for a moment (open the Q7 and Q8 pop-ups and watch both currents sit at 0). The feedback largely hides it on the output: Q4 has to swing quickly through the dead band (look at its current), so only a small kink is left.`;
+      else t = `<b>Class AB.</b> Q7 pushes current into R<sub>L</sub> on the positive half and Q8 pulls it back on the negative half; the bias keeps both just conducting at the crossover, so the handover is smooth. Open the pop-ups to follow the signal through: Q1 and Q2 share the tail current in antiphase, Q4's current swings around its ${fI(solved().Q.Q4.Ic)} resting value, and so does Q3's: Q3 carries most of R6's current, which rises as the output swings down and falls as it swings up.`;
+      if (s.clipP || s.clipN) t += ` <b>Clipping:</b> ${GAIN} × ${fVpk(s.vinPk)} is more than the output can swing on ±20 V rails, so it flattens at +${fVpk(s.voutP)} / ${fVpk(s.voutN)}.`;
+      return t;
+    }
+    function renderAC() {
+      sampleCycle();
+      drawCro();
+      const s = acStats();
+      acTable(s);
+      document.getElementById('stateCaption').innerHTML = acCaption(s);
+      renderCards();
+      frame(performance.now(), true);
+    }
+    const currentInstant = () => {
+      if (!acSamples) return null;
+      const pos = cyc(acT, 1) * AC_N, k = Math.min(AC_N - 1, Math.floor(pos));
+      return lerpDeep(acSamples[k], acSamples[(k + 1) % AC_N], pos - k);
+    };
+    const cyc = (t, n) => ((t % n) + n) % n;   // t mod n, never negative
+    const flowSpeed = I => Math.abs(I) < 20e-6 ? 0 : 4 + 9 * Math.log10(Math.abs(I) / 20e-6);
+    function frame(now, still) {
+      if (mode !== 'ac') { rafId = null; return; }
+      const dt = lastFrame === null || still ? 0 : Math.max(0, Math.min(0.1, (now - lastFrame) / 1000));   // a frame's timestamp can be a little before performance.now()
+      lastFrame = now;
+      if (playing) acT += dt / CYCLE_S[acSpeed];
+      const r = currentInstant();
+      const f = flows(r);
+      Object.keys(f).forEach(id => {
+        const e = document.getElementById('flow-' + id); if (!e) return;
+        const sp = flowSpeed(f[id]);
+        e.classList.toggle('flow-stopped', sp === 0);
+        if (playing) dashOff[id] = ((dashOff[id] || 0) - Math.sign(f[id]) * sp * dt) % 13;
+        e.setAttribute('stroke-dashoffset', (dashOff[id] || 0).toFixed(2));
+      });
+      document.getElementById('acVout').textContent = 'V out ' + fV2(r.Vout);
+      positionCursors(r);
+      const j = cyc(acT, 2) * AC_N, cx = j / (2 * AC_N) * 500;
+      document.getElementById('croCur').setAttribute('x1', cx); document.getElementById('croCur').setAttribute('x2', cx);
+      document.getElementById('croD1').setAttribute('cx', cx); document.getElementById('croD1').setAttribute('cy', croCentre[0] - r.vin / croDiv[0] * 37.5);
+      document.getElementById('croD2').setAttribute('cx', cx); document.getElementById('croD2').setAttribute('cy', croCentre[1] - r.Vout / croDiv[1] * 37.5);
+      if (!still && rafId !== null) rafId = requestAnimationFrame(frame);
+    }
+
+    const INTRO_AC = 'A 1 kHz sine wave on the input, slowed right down so you can follow it. <b>Tap any transistor</b> to pop up its own current and voltage waves (drag the card anywhere; × or another tap closes it). Turn the input up until the CRO shows clipping, and tap S1 to remove the bias and see the crossover.';
+    const INTRO_DC = 'No input signal, just the DC conditions. Tap S1 or S2 on the circuit to flip it and the circuit is re-solved: the animated current shows where current flows and how much. <b>Tap any transistor</b> for its readings (I<sub>C</sub>, V<sub>BE</sub>, V<sub>CE</sub> and whether it is on).';
+    function render() {
+      drawSwitches();
+      document.querySelectorAll('#seg-mode button').forEach(b => b.classList.toggle('active', b.dataset.v === mode));
+      document.querySelectorAll('#seg-speed button').forEach(b => b.classList.toggle('active', b.dataset.v === acSpeed));
+      const ac = mode === 'ac';
+      document.getElementById('acControls').hidden = !ac;
+      document.getElementById('acPanel').hidden = !ac;
+      document.getElementById('dcPanel').hidden = ac;
+      document.getElementById('dcTags').setAttribute('display', ac ? 'none' : 'inline');
+      document.getElementById('acTags').setAttribute('display', ac ? 'inline' : 'none');
+      document.getElementById('introText').innerHTML = ac ? INTRO_AC : INTRO_DC;
+      if (ac) {
+        document.querySelectorAll('.flow-line animate').forEach(a => a.remove());
+        renderAC();
+        if (rafId === null) { lastFrame = null; rafId = requestAnimationFrame(frame); }
+      } else {
+        document.querySelectorAll('.flow-line').forEach(e => e.removeAttribute('stroke-dashoffset'));
+        renderDC();
+      }
+    }
+    // building the AC table for a new switch setting takes a moment: show "Solving…" over the drawing first
+    function withBusy(fn) {
+      const key = '' + sw.s1 + sw.s2;
+      if (mode !== 'ac' || acCache[key]) { fn(); return; }
+      const p = document.getElementById('circuitPanel');
+      p.classList.add('busy');
+      setTimeout(() => { fn(); p.classList.remove('busy'); }, 30);
+    }
+    function setMode(m) { if (mode === m) return; mode = m; withBusy(render); }
+    function setAmp(mv) {
+      acAmp = mv / 1000;
+      document.getElementById('ampRead').textContent = `${mv} mV peak · ${2 * mv} mV p-p · 1 kHz`;
+      if (mode === 'ac' && acSamples) renderAC();
+    }
+    function setSpeed(v) { acSpeed = v; render(); }
+    function togglePlay() { playing = !playing; document.getElementById('playBtn').textContent = playing ? '⏸ Pause' : '▶ Play'; }
+    function flipSw(k) { sw[k] = !sw[k]; withBusy(render); }
+    window.addEventListener('resize', () => { if (scaleFor(svgEl().clientWidth) !== cardScale) renderCards(); });
+
+    buildDarl(); buildMult(); buildCro();
+    document.getElementById('ampRead').textContent = '300 mV peak · 600 mV p-p · 1 kHz';
+    acAmp = 0.3;
+    withBusy(render);
+
+    function goBack(e) { e.preventDefault(); history.back(); }
+    if (history.length > 1) { document.getElementById('backLink').style.display = ''; }
+  </script>
+</body>
+
+</html>
