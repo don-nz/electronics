@@ -72,7 +72,8 @@
     .info-pop .q-pop-title { color: var(--colour-gain, var(--colour-text)); font-family: 'Share Tech Mono', monospace; }
     .info-pop p { margin: .35rem 0; }
     .info-pop .eqn { font-family: 'Share Tech Mono', monospace; }
-    .mini-info { cursor: pointer; }
+    .mini-info, .av-hit { cursor: pointer; }
+    .av-hit:hover { text-decoration: underline; }
     .mini-info:hover rect.mini-bg { stroke: var(--colour-gain, var(--colour-ui-primary)); }
     .card { cursor: grab; }
     .card.dragging { cursor: grabbing; }
@@ -487,9 +488,9 @@
           <text id="acVE2" class="v-tag" x="680" y="442" text-anchor="start"></text>
           <text id="acVC2" class="v-tag" x="680" y="526" text-anchor="start"></text>
           <!-- each transistor's voltage gain A_v = v_e ÷ v_b, beside its NPN / PNP label -->
-          <text id="acAvOp" x="350" y="318" font-size="13" font-weight="bold" style="fill: var(--colour-gain, var(--colour-text))"></text>
-          <text id="acAv1" x="740" y="200" font-size="13" font-weight="bold" style="fill: var(--colour-gain, var(--colour-text))"></text>
-          <text id="acAv2" x="740" y="500" font-size="13" font-weight="bold" style="fill: var(--colour-gain, var(--colour-text))"></text>
+          <text id="acAvOp" x="350" y="318" font-size="13" font-weight="bold" style="fill: var(--colour-gain, var(--colour-text))" class="av-hit" onclick="toggleInfo('avop')"></text>
+          <text id="acAv1" x="740" y="200" font-size="13" font-weight="bold" style="fill: var(--colour-gain, var(--colour-text))" class="av-hit" onclick="toggleInfo('av1')"></text>
+          <text id="acAv2" x="740" y="500" font-size="13" font-weight="bold" style="fill: var(--colour-gain, var(--colour-text))" class="av-hit" onclick="toggleInfo('av2')"></text>
         </g>
         <!-- the transistor wave cards (AC view), on top of everything (built by renderQCards()) -->
         <g id="qLeaders"></g>
@@ -1049,9 +1050,9 @@
       document.getElementById('stateCaption').innerHTML = cc(acCaption(st));
       renderQCards();
       fillInfo();
-      document.getElementById('acAvOp').innerHTML = `A<tspan baseline-shift="sub" font-size="9">v</tspan> ${fAvBig(opAmpAv())}`;
+      document.getElementById('acAvOp').innerHTML = `A<tspan baseline-shift="sub" font-size="9">v</tspan> ${fAvBig(opAmpAv())} ⓘ`;
       ['Q1', 'Q2'].forEach((id, i) => { const a = transistorAv(id);
-        document.getElementById('acAv' + (i + 1)).innerHTML = `A<tspan baseline-shift="sub" font-size="9">v</tspan> ${fAv(a)}`; });
+        document.getElementById('acAv' + (i + 1)).innerHTML = `A<tspan baseline-shift="sub" font-size="9">v</tspan> ${fAv(a)} ⓘ`; });
       frame(performance.now(), true);
     }
     const flowSpeed = I => Math.abs(I) < 20e-6 ? 0 : 4 + 9 * Math.log10(Math.abs(I) / 20e-6);   // px per second
@@ -1327,13 +1328,21 @@
     function placeInfo() {
       const box = document.getElementById('infoPop'), panel = document.querySelector('.circuit-panel');
       const m = document.getElementById('circuitSvg').getScreenCTM(), pr = panel.getBoundingClientRect();
-      const x = m.a * 276 + m.e - pr.left, y = m.d * 78 + m.f - pr.top;        // to the right of the error scope, so the V in / feedback scopes stay in view
-      const w = box.offsetWidth;
-      box.style.left = Math.max(4, Math.min(x, panel.clientWidth - w - 4)) + 'px';
-      box.style.top = y + 'px';
+      const w = box.offsetWidth, h = box.offsetHeight;
+      if (infoOpen === 'err') {                  // to the right of the error scope, so the V in / feedback scopes stay in view
+        const x = m.a * 276 + m.e - pr.left, y = m.d * 78 + m.f - pr.top;
+        box.style.left = Math.max(4, Math.min(x, panel.clientWidth - w - 4)) + 'px';
+        box.style.top = y + 'px';
+        return;
+      }
+      // a gain value: centred under it (above it for Q2, low on the drawing)
+      const [gx, gy] = GAIN_AT[infoOpen], x = m.a * gx + m.e - pr.left, y = m.d * gy + m.f - pr.top;
+      box.style.left = Math.max(4, Math.min(x - w / 2, panel.clientWidth - w - 4)) + 'px';
+      box.style.top = Math.max(4, infoOpen === 'av2' ? y - h - 18 : y + 10) + 'px';
     }
     function fillInfo() {
-      if (infoOpen !== 'err' || !acSamples) return;
+      if (!infoOpen || !acSamples) return;
+      if (infoOpen !== 'err') { fillGain(infoOpen); return; }
       const dc = solved(), vo = Math.max(...acSamples.map(r => Math.abs(r.Vo - dc.Vo))), real = vo / 200000;
       const maxErr = Math.max(...acSamples.map(r => Math.abs(r.err)));
       const sub = t => `<sub>${t}</sub>`, V = n => vv('V' + sub(n));
@@ -1350,6 +1359,53 @@
       if (!document.getElementById('infoPop').hidden) placeInfo();
     }
     window.addEventListener('resize', () => { if (infoOpen) placeInfo(); });
+    // ── tap a gain value for its calculation ──
+    const GAIN_AT = { avop: [350, 318], av1: [740, 200], av2: [740, 500] };
+    function fillGain(k) {
+      const sub = t => `<sub>${t}</sub>`, V = n => vv('V' + sub(n)), A = 'A' + sub('v');
+      const range = vals => [Math.min(...vals), Math.max(...vals)];
+      const pp = vals => Math.max(...vals) - Math.min(...vals);
+      const f3 = x => neg(x) + Math.abs(x).toFixed(3);
+      let title, html;
+      if (k === 'avop') {
+        const vo = pp(acSamples.map(r => r.Vo)), vi = pp(acSamples.map(r => r.vin)), vout = pp(acSamples.map(r => r.Vout));
+        const av = vi > 0 ? vo / vi : 0, ideal = GAIN, clipping = acSamples.some(r => Math.abs(r.err) > 1e-6);
+        title = '741 gain';
+        html = `<p><b>Measured:</b> <span class="eqn">${A} = ${V('741')} p-p ÷ ${V('in')} p-p = ${fVpk(vo)} ÷ ${fVpk(vi)} = <b>${fAvBig(av)}</b></span></p>`;
+        if (sw.sw1 === 'A') html += `<p><b>Expected:</b> SW1 feeds back the 741's <i>own</i> output, so R3 / R2 hand the − input ${V('741')} × R2 ÷ (R2 + R3), and the 741 makes that equal ${V('+')}:<br><span class="eqn">${A} = 1 + R3 ÷ R2 = 1 + 47k ÷ 1k = <b>${ideal.toFixed(0)}</b></span></p>`;
+        else {
+          const g = vo > 0 ? vout / vo : 0;
+          html += `<p><b>Why it isn't 48:</b> SW1 feeds back the <i>amplifier</i> output, so the loop makes ${V('out')} = 48 × ${V('in')}. The output stage loses a little on the way (R6 / R7 with R<sub>L</sub>${sw.sw2 === 'closed' ? ', and the dead band at the crossover' : ''}), so the 741 has to swing further to make up for it:<br>` +
+            `<span class="eqn">output stage gain = ${V('out')} p-p ÷ ${V('741')} p-p = ${fVpk(vout)} ÷ ${fVpk(vo)} = ${g.toFixed(2)}</span><br>` +
+            `<span class="eqn">${A} (741) = 48 ÷ ${g.toFixed(2)} ≈ <b>${g > 0 ? (48 / g).toFixed(1) : '—'}</b></span></p>`;
+        }
+        if (clipping) html += `<p><b>Clipping:</b> the 741 can't drive its output any further, so the measured gain falls below what the resistors set. Turn the input down and it comes back.</p>`;
+      } else {
+        const id = k === 'av1' ? 'Q1' : 'Q2', q = QCARD[id], npn = id === 'Q1';
+        const on = acSamples.filter(r => q.Ic(r) > 1e-3);
+        title = `${id} gain (${npn ? 'NPN' : 'PNP'} emitter follower)`;
+        if (on.length < 3) html = `<p>${id} doesn't conduct at this setting (its I${sub('C')} never reaches 1 mA), so it has no gain to measure. ${sw.sw3 === 'ext' ? 'Close SW3 to connect the load.' : 'Turn the input up.'}</p>`;
+        else {
+          const [b0, b1] = range(on.map(q.Vb)), [e0, e1] = range(on.map(q.Ve)), av = (e1 - e0) / (b1 - b0);
+          const Ie = on.reduce((a, r) => a + (npn ? r.Ie1 : r.Ie2), 0) / on.length, nVT = P.nQ * P.VT, re = nVT / Ie;
+          const Re = npn ? 'R6' : 'R7', Rv = npn ? P.R6 : P.R7, load = sw.sw3 === 'RL';
+          html = `<p><b>Measured</b>, over the part of the cycle where ${id} conducts:<br>` +
+            `<span class="eqn">${V('B')} ${f3(b0)} → ${f3(b1)} V (Δ ${f3(b1 - b0)} V)</span><br>` +
+            `<span class="eqn">${V('E')} ${f3(e0)} → ${f3(e1)} V (Δ ${f3(e1 - e0)} V)</span><br>` +
+            `<span class="eqn">${A} = Δ${V('E')} ÷ Δ${V('B')} = ${f3(e1 - e0)} ÷ ${f3(b1 - b0)} = <b>${av.toFixed(2)}</b></span></p>` +
+            `<p><b>Theory:</b> the emitter follows the base, less the base-emitter junction's own small resistance r′${sub('e')}:<br>` +
+            `<span class="eqn">r′${sub('e')} = n·V${sub('T')} ÷ ${cv('I' + sub('E'))} = ${nVT.toFixed(3)} V ÷ ${fI(Ie)} (its average while on) = ${re.toFixed(2)} Ω</span><br>` +
+            (load ? `<span class="eqn">${A} = (${Re} + R<sub>L</sub>) ÷ (${Re} + R<sub>L</sub> + r′${sub('e')}) = ${(Rv + P.RL).toFixed(1)} ÷ ${(Rv + P.RL + re).toFixed(2)} = <b>${((Rv + P.RL) / (Rv + P.RL + re)).toFixed(2)}</b></span></p>`
+                  : `With no load (SW3 open) the emitter drives almost nothing, so ${A} is very close to 1.</p>`) +
+            (load && av < (Rv + P.RL) / (Rv + P.RL + re) - 0.02 ? `<p>The measured figure is a little lower than the theory because it includes the <b>turn-on</b>, where ${id} has only just started to conduct: ${cv('I' + sub('E'))} is small there, so r′${sub('e')} is large${sw.sw2 === 'closed' ? ' (with SW2 closed there is no bias, so every half-cycle starts from off)' : ''}.</p>` : '') +
+            `<p>An emitter follower never quite reaches a voltage gain of 1. Its job is <b>current</b> gain: ${cv('I' + sub('E'))} = (β + 1) × ${cv('I' + sub('B'))}, so the 741 only has to supply about 1/${P.beta + 1} of the current R${sub('L')} needs.</p>`;
+        }
+      }
+      document.getElementById('infoTitle').textContent = title;
+      document.getElementById('infoBody').innerHTML = cc(html);
+      if (!document.getElementById('infoPop').hidden) placeInfo();
+    }
+
 
     buildMinis();
     setAmp(document.getElementById('ampSlider').value);
