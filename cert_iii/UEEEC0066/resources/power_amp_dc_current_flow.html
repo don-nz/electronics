@@ -471,6 +471,14 @@
         <g id="acTags" display="none">
           <text id="acVB1" class="v-tag" x="527" y="172" text-anchor="start"></text>
           <text id="acVB2" class="v-tag" x="527" y="500" text-anchor="start"></text>
+          <text id="acVC1" class="v-tag" x="680" y="142" text-anchor="start"></text>
+          <text id="acVE1" class="v-tag" x="680" y="226" text-anchor="start"></text>
+          <text id="acVE2" class="v-tag" x="680" y="442" text-anchor="start"></text>
+          <text id="acVC2" class="v-tag" x="680" y="526" text-anchor="start"></text>
+          <!-- each transistor's voltage gain A_v = v_e ÷ v_b, beside its NPN / PNP label -->
+          <text id="acAvOp" x="350" y="318" font-size="13" font-weight="bold" style="fill: var(--colour-gain, var(--colour-text))"></text>
+          <text id="acAv1" x="740" y="200" font-size="13" font-weight="bold" style="fill: var(--colour-gain, var(--colour-text))"></text>
+          <text id="acAv2" x="740" y="500" font-size="13" font-weight="bold" style="fill: var(--colour-gain, var(--colour-text))"></text>
         </g>
         <!-- the transistor wave cards (AC view), on top of everything (built by renderQCards()) -->
         <g id="qLeaders"></g>
@@ -825,7 +833,7 @@
       // V out always show
       // V out is coloured by whichever transistor is supplying R_L at that instant: Q1's colour while it
       // pushes, Q2's while it pulls, grey where neither does (the crossover gap)
-      { id: 'mVout', x: 776, y: 200, label: [['V out = ', 'var(--colour-series)'], ['Q1', 'var(--colour-current)'], [' + ', 'var(--colour-series)'], ['Q2', 'var(--colour-bjt-labels)']],
+      { id: 'mVout', x: 776, y: 212, label: [['V out = ', 'var(--colour-series)'], ['Q1', 'var(--colour-current)'], [' + ', 'var(--colour-series)'], ['Q2', 'var(--colour-bjt-labels)']],
         unit: 'V', floor: 0.5, series: [{ k: 'Vout', col: 'var(--colour-series)', split: true }] },
     ];
     const el = (tag, attrs, parent) => { const e = document.createElementNS(SVGNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
@@ -946,6 +954,21 @@
       document.getElementById('croCh1').textContent = 'CH1 (input) ' + fmtDiv(croDiv[0]);
       document.getElementById('croCh2').textContent = 'CH2 (output) ' + fmtDiv(croDiv[1]);
     }
+    // A transistor's voltage gain A_v = Δv_E ÷ Δv_B: the emitter's swing over the base's, taken only over the part of
+    // the cycle where that transistor conducts (in push-pull each carries half the wave). null if it never conducts.
+    function transistorAv(id) {
+      const q = QCARD[id], on = acSamples.filter(r => q.Ic(r) > 1e-3);
+      if (on.length < 3) return null;
+      const vb = on.map(q.Vb), ve = on.map(q.Ve), db = Math.max(...vb) - Math.min(...vb);
+      return db > 1e-4 ? (Math.max(...ve) - Math.min(...ve)) / db : null;
+    }
+    const fAv = a => a == null ? '—' : a.toFixed(2);
+    // the 741's voltage gain: its output swing ÷ the input swing (peak-to-peak over the whole cycle)
+    function opAmpAv() {
+      const vo = acSamples.map(r => r.Vo), vi = acSamples.map(r => r.vin), di = Math.max(...vi) - Math.min(...vi);
+      return di > 1e-6 ? (Math.max(...vo) - Math.min(...vo)) / di : null;
+    }
+    const fAvBig = a => a == null ? '—' : a.toFixed(a < 10 ? 2 : 1);
     function acStats() {
       const v = k => acSamples.map(r => r[k]);
       const max = a => Math.max(...a), min = a => Math.min(...a);
@@ -963,6 +986,8 @@
         ['Gain = V<sub>out</sub> p-p ÷ V<sub>in</sub> p-p', st.vinPk > 0 ? gain.toFixed(1) : '—'],
         ['Expected gain 1 + R3/R2', GAIN.toFixed(0)],
         ['Peak collector current', `I<sub>Q1</sub> ${fI(st.ic1)} · I<sub>Q2</sub> ${fI(st.ic2)}`],
+        ['741 gain A<sub>v</sub> = v<sub>741</sub> ÷ v<sub>in</sub>', fAvBig(opAmpAv())],
+        ['Transistor gain A<sub>v</sub> = v<sub>e</sub> ÷ v<sub>b</sub> (while conducting)', `Q1 ${fAv(transistorAv('Q1'))} · Q2 ${fAv(transistorAv('Q2'))}`],
         ['741 output current', `${fI(st.iopN)} to ${fI(st.iopP)}`],
       ];
       document.getElementById('acTable').innerHTML = rows.map(([a, b]) => `<tr class="vrow"><td>${a}</td><td class="val">${b}</td></tr>`).join('');
@@ -987,6 +1012,9 @@
       acTable(st);
       document.getElementById('stateCaption').innerHTML = cc(acCaption(st));
       renderQCards();
+      document.getElementById('acAvOp').innerHTML = `A<tspan baseline-shift="sub" font-size="9">v</tspan> ${fAvBig(opAmpAv())}`;
+      ['Q1', 'Q2'].forEach((id, i) => { const a = transistorAv(id);
+        document.getElementById('acAv' + (i + 1)).innerHTML = `A<tspan baseline-shift="sub" font-size="9">v</tspan> ${fAv(a)}`; });
       frame(performance.now(), true);
     }
     const flowSpeed = I => Math.abs(I) < 20e-6 ? 0 : 4 + 9 * Math.log10(Math.abs(I) / 20e-6);   // px per second
@@ -1006,9 +1034,10 @@
         e.setAttribute('stroke-dashoffset', (dashOff[id] || 0).toFixed(2));
       });
       // the base voltages of Q1 and Q2 at this instant
+      // V_B, V_E and V_C of both transistors at this instant (they move with the wave)
       const fB = v => (v < -0.005 ? '−' : '') + Math.abs(v).toFixed(2) + ' V';
-      document.getElementById('acVB1').textContent = fB(r.B1);
-      document.getElementById('acVB2').textContent = fB(r.B2);
+      const vt = (id, node, v) => { document.getElementById(id).innerHTML = `V<tspan baseline-shift="sub" font-size="9">${node}</tspan> ${fB(v)}`; };
+      vt('acVB1', 'B', r.B1); vt('acVB2', 'B', r.B2); vt('acVC1', 'C', r.Vp); vt('acVE1', 'E', r.E1); vt('acVE2', 'E', r.E2); vt('acVC2', 'C', r.Vn);
       // cursors: the traces show two cycles, so the cursor sweeps once every two cycles
       const j = cyc(acT, 2) * AC_N;
       positionQCursors(r);
@@ -1166,12 +1195,12 @@
     // ══════════════════════════════════════════════════════════════════════
     const cyc = (t, n) => ((t % n) + n) % n;     // t mod n, never negative
     const QCARD = {
-      Q1: { part: 'MJE3055 (NPN)', role: 'pushes the positive half', at: [664, 180], pos: [700, 58], v: 'V_CE',
-            Ic: r => r.Ic1, Vce: r => r.Vp - r.E1 },
-      Q2: { part: 'MJE2955 (PNP)', role: 'pulls the negative half', at: [664, 480], pos: [700, 398], v: 'V_EC',
-            Ic: r => r.Ic2, Vce: r => r.E2 - r.Vn },
+      Q1: { part: 'MJE3055 (NPN)', role: 'pushes the positive half', at: [664, 180], pos: [830, 56], v: 'V_CE',   // card: right of the V_C / V_E / A_v tags, above the V out scope
+            Ic: r => r.Ic1, Vce: r => r.Vp - r.E1, Vb: r => r.B1, Ve: r => r.E1 },
+      Q2: { part: 'MJE2955 (PNP)', role: 'pulls the negative half', at: [664, 480], pos: [800, 476], v: 'V_EC',  // card: right of the V_E / V_C / A_v tags, below R_L
+            Ic: r => r.Ic2, Vce: r => r.E2 - r.Vn, Vb: r => r.B2, Ve: r => r.E2 },
     };
-    const CW = 172, CH = 132, PX0 = 8, PX1 = CW - 8, PH = 44;
+    const CW = 172, CH = 150, PX0 = 8, PX1 = CW - 8, PH = 44;
     const cardOpen = {}, cardY = {};
     const svgC = () => document.getElementById('circuitSvg');
     const scaleFor = wpx => !wpx ? 1 : wpx < 450 ? 2 : wpx < 620 ? 1.6 : 1;
@@ -1199,13 +1228,17 @@
       mk('rect', { x: 0, y: 0, width: CW, height: CH, rx: 7, style: 'fill: var(--colour-panel); stroke: var(--colour-bjt)', 'stroke-width': 1.5, opacity: .97 }, c);
       mk('text', { x: 8, y: 16, class: 'card-title' }, c, `${id} · ${info.part}`);
       mk('text', { x: 8, y: 29, class: 'card-sub' }, c, info.role);
+      // its voltage gain: emitter swing ÷ base swing while it conducts (an emitter follower: just under 1)
+      const av = transistorAv(id), at = mk('text', { x: 8, y: 44, class: 'card-k', style: 'fill: var(--colour-gain, var(--colour-text))' }, c);
+      at.innerHTML = av == null ? 'A<tspan baseline-shift="sub" font-size="8.5">v</tspan> — (not conducting)'
+        : `A<tspan baseline-shift="sub" font-size="8.5">v</tspan> = v<tspan baseline-shift="sub" font-size="8.5">e</tspan> ÷ v<tspan baseline-shift="sub" font-size="8.5">b</tspan> = <tspan font-weight="bold">${av.toFixed(2)}</tspan>`;
       const xb = mk('g', { class: 'card-x' }, c);
       mk('rect', { x: CW - 24, y: 2, width: 22, height: 22, fill: 'transparent' }, xb);
       mk('text', { x: CW - 13, y: 18, 'text-anchor': 'middle', 'font-size': 16, style: 'fill: var(--colour-label)' }, xb, '×');
       xb.addEventListener('pointerdown', e => e.stopPropagation());
       xb.addEventListener('click', e => { e.stopPropagation(); toggleQCard(id); });
       // I_C (top) and V_CE (bottom), each with its range
-      [['Ic', 36, 'I_C', 'var(--colour-current)'], ['Vce', 84, info.v, 'var(--colour-voltage-label)']].forEach(([k, y0, label, col], pi) => {
+      [['Ic', 54, 'I_C', 'var(--colour-current)'], ['Vce', 102, info.v, 'var(--colour-voltage-label)']].forEach(([k, y0, label, col], pi) => {
         const vals = acSamples.map(info[k]);
         let lo = Math.min(...vals), hi = Math.max(...vals);
         const span = Math.max(hi - lo, k === 'Ic' ? Math.max(Math.abs(hi) * 0.02, 2e-6) : 0.02), mid = (hi + lo) / 2;

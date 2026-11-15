@@ -506,7 +506,7 @@
         <ol class="steps" id="steps"></ol>
       </div>
     </div>
-    <p class="model-note">The numbers come from a model with typical part values (small transistors V<sub>BE</sub> ≈ 0.62 V at 1 mA, β = 200; MJE3055 / MJE2955 V<sub>BE</sub> ≈ 0.55 V at 10 mA, β = 50). * The panel drawing labels Q5 as a BC557 but draws it as an NPN, which is what the top half needs, so it is modelled as an NPN. A real board will read a little differently, but every reading should move the same way when a switch changes.</p>
+    <p class="model-note">The numbers come from a model with typical part values (small transistors V<sub>BE</sub> ≈ 0.62 V at 1 mA, β = 200; MJE3055 / MJE2955 V<sub>BE</sub> ≈ 0.55 V at 10 mA, β = 50). Each transistor's card gives its A<sub>v</sub>: the output terminal ÷ the input, collector for Q4 (v<sub>c</sub> ÷ v<sub>b</sub>) and Q1 (v<sub>c</sub> ÷ the difference between the two bases), emitter for the emitter followers. * The panel drawing labels Q5 as a BC557 but draws it as an NPN, which is what the top half needs, so it is modelled as an NPN. A real board will read a little differently, but every reading should move the same way when a switch changes.</p>
   </div>
 
   <footer>Electronics // Cert III // UEEEC0066 // Resources</footer>
@@ -864,15 +864,16 @@
     // ══════════════════════════════════════════════════════════════════════
     const QINFO = {
       Q1: { part: 'BC557', role: 'input (signal side)', at: [203, 595], pos: [22, 832] },   // bottom left: V in's scope sits above the input
-      Q2: { part: 'BC557', role: 'input (feedback side)', at: [317, 595], pos: [200, 650] },
+      Q2: { part: 'BC557', role: 'input (feedback side)', at: [317, 595], pos: [190, 640] },
       Q3: { part: 'BC108', role: 'bias (V BE multiplier)', at: [513, 440], pos: [285, 222] },
       Q4: { part: 'BC547', role: 'voltage amplifier', at: [483, 865], pos: [300, 878] },
       Q5: { part: 'NPN*', role: 'top driver', at: [573, 340], pos: [700, 222] },
       Q7: { part: 'MJE3055', role: 'top output (push)', at: [653, 385], pos: [700, 352] },
-      Q6: { part: 'BC557', role: 'bottom driver', at: [573, 815], pos: [374, 688] },
+      Q6: { part: 'BC557', role: 'bottom driver', at: [573, 815], pos: [388, 714] },
       Q8: { part: 'MJE2955', role: 'bottom output (pull)', at: [653, 745], pos: [700, 856] },
     };
-    const CW = 172, CH = 132;
+    const CW = 186;
+    const cardH = () => (mode === 'ac' ? 168 : 190);
     const openCards = {};                                 // which cards are showing
     let cardScale = 1;
     const svgEl = () => document.getElementById('circuitSvg');
@@ -903,7 +904,7 @@
       if (mode === 'ac') positionCursors(currentInstant());
     }
     function drawCard(id, g, lg) {
-      const info = QINFO[id], s = cardScale, w = CW * s, h = CH * s;
+      const info = QINFO[id], s = cardScale, CH = cardH(), w = CW * s, h = CH * s;
       const [x, y] = keepIn(info.pos, w, h);
       // the leader line from the transistor to the nearest point of the card
       const [tx, ty] = info.at, nx = Math.max(x, Math.min(tx, x + w)), ny = Math.max(y, Math.min(ty, y + h));
@@ -932,19 +933,27 @@
     function cardReadings(id, c) {
       const q = solved().Q[id], [reg, col] = region(q, id), pnp = ['Q1', 'Q2', 'Q6', 'Q8'].includes(id);
       const rows = [['I_C', fI(q.Ic), 'var(--colour-current)'], ['I_B', fI(q.Ib), 'var(--colour-current)'],
+        ['V_B', fV2(q.B), 'var(--colour-voltage-label)'], ['V_E', fV2(q.E), 'var(--colour-voltage-label)'], ['V_C', fV2(q.C), 'var(--colour-voltage-label)'],
         [pnp ? 'V_EB' : 'V_BE', fV(q.Vbe), 'var(--colour-voltage-label)'], [pnp ? 'V_EC' : 'V_CE', fV2(q.Vce), 'var(--colour-voltage-label)'], ['state', reg, col]];
       rows.forEach(([k, v, colour], i) => {
-        const yy = 50 + i * 18;
+        const yy = 48 + i * 17;
         const t = mk('text', { x: 10, y: yy, class: 'card-k' }, c);
         const [a, b] = k.split('_'); t.textContent = a; if (b) mk('tspan', { 'baseline-shift': 'sub', 'font-size': 8.5 }, t, b);
         mk('text', { x: CW - 10, y: yy, 'text-anchor': 'end', class: 'card-v', style: `fill: ${colour}` }, c, v);
       });
     }
     // AC: I_C (top) and V_CE (bottom) over two cycles, each with its range; a moving dot follows the animation
-    const PX0 = 8, PX1 = CW - 8, PLOTS = [{ k: 'Ic', y0: 36, label: 'I_C', col: 'var(--colour-current)' }, { k: 'Vce', y0: 84, label: 'V_CE', col: 'var(--colour-voltage-label)' }];
+    const PX0 = 8, PX1 = CW - 8, PLOTS = [{ k: 'Ic', y0: 70, label: 'I_C', col: 'var(--colour-current)' }, { k: 'Vce', y0: 118, label: 'V_CE', col: 'var(--colour-voltage-label)' }];
     const PH = 44;
     const cardY = {};                                // each open card's own value → y mapping, per plot
     function cardWaves(id, c) {
+      // live V_B / V_E / V_C (updated every frame by positionCursors) and the stage's A_v
+      const sub = (t, a, b) => { t.textContent = a; mk('tspan', { 'baseline-shift': 'sub', 'font-size': 8 }, t, b); };
+      [['B', 8, 45, 'start'], ['E', CW - 8, 45, 'end'], ['C', 8, 59, 'start']].forEach(([n, x, y, an]) =>
+        mk('text', { id: `cv-${id}-${n}`, x, y, 'text-anchor': an, class: 'card-k', style: 'fill: var(--colour-voltage-label); font-weight: bold' }, c));
+      const av = mk('text', { x: CW - 8, y: 59, 'text-anchor': 'end', class: 'card-k', style: 'fill: var(--colour-gain, var(--colour-text)); font-weight: bold' }, c);
+      if (!QOUT[id]) av.textContent = 'bias only';
+      else { av.innerHTML = `A<tspan baseline-shift="sub" font-size="8">v</tspan> ${fAvS(avs[id])}`; }
       PLOTS.forEach((pl, pi) => {
         const vals = acSamples.map(r => r.Q[id][pl.k]);
         let lo = Math.min(...vals), hi = Math.max(...vals);
@@ -968,10 +977,17 @@
     function positionCursors(r) {
       if (!r) return;
       const j = cyc(acT, 2) * AC_N, x = PX0 + j / (2 * AC_N) * (PX1 - PX0);
-      Object.keys(openCards).forEach(id => PLOTS.forEach((pl, pi) => {
-        const d = document.getElementById(`cd-${id}-${pi}`), Y = cardY[id] && cardY[id][pi]; if (!d || !Y) return;
-        d.setAttribute('cx', x); d.setAttribute('cy', Y(r.Q[id][pl.k]));
-      }));
+      Object.keys(openCards).forEach(id => {
+        PLOTS.forEach((pl, pi) => {
+          const d = document.getElementById(`cd-${id}-${pi}`), Y = cardY[id] && cardY[id][pi]; if (!d || !Y) return;
+          d.setAttribute('cx', x); d.setAttribute('cy', Y(r.Q[id][pl.k]));
+        });
+        ['B', 'E', 'C'].forEach(n => {
+          const e = document.getElementById(`cv-${id}-${n}`); if (!e) return;
+          const html = `V<tspan baseline-shift="sub" font-size="8">${n}</tspan> ${fV2(r.Q[id][n])}`;
+          if (e._h !== html) { e.innerHTML = html; e._h = html; }
+        });
+      });
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -1064,6 +1080,7 @@
       sampleCycle();
       drawCro();
       drawMinis();
+      computeAvs();
       const s = acStats();
       acTable(s);
       document.getElementById('stateCaption').innerHTML = acCaption(s);
@@ -1236,7 +1253,7 @@
     const MINI_W = 122, MINI_H = 88;
     const MINIS = [
       { id: 'mVin', x: 25, y: 430, label: [['V in', 'var(--colour-signal)']], k: 'vin', col: 'var(--colour-signal)', floor: 0.05 },
-      { id: 'mVout', x: 700, y: 490, label: [['V out = ', 'var(--colour-series)'], ['Q7', 'var(--colour-current)'], [' + ', 'var(--colour-series)'], ['Q8', 'var(--colour-bjt-labels)']], k: 'Vout', split: true, floor: 0.5 },
+      { id: 'mVout', x: 522, y: 622, label: [['V out = ', 'var(--colour-series)'], ['Q7', 'var(--colour-current)'], [' + ', 'var(--colour-series)'], ['Q8', 'var(--colour-bjt-labels)']], k: 'Vout', split: true, floor: 0.5 },
     ];
     const supplyCol = r => { const d = r.Ie7 - r.Ie8; return Math.abs(d) < 0.5e-3 ? 'var(--colour-label)' : d > 0 ? 'var(--colour-current)' : 'var(--colour-bjt-labels)'; };
     const miniY = (v, sc) => MINI_H / 2 + 2 - (v / sc) * (MINI_H / 2 - 18);
@@ -1283,6 +1300,29 @@
         if (m.split) d.style.fill = supplyCol(r);
       });
     }
+
+
+    // ══════════════════════════════════════════════════════════════════════
+    // A_v — each transistor's signed voltage gain, shown on its card: the terminal the stage uses as its output
+    // ÷ its input. Common-emitter stages (Q1, Q4) output at the collector (inverting, so negative); the followers
+    // (Q2 drives Q1's emitter; Q5–Q8) at the emitter. Q1's input is the DIFFERENCE between the two bases (the
+    // feedback moves Q2's base almost in step with Q1's). Q3 only holds the bias, so it has none. Fitted (least
+    // squares) over the part of the cycle where the transistor conducts.
+    // ══════════════════════════════════════════════════════════════════════
+    const QOUT = { Q1: 'C', Q2: 'E', Q3: null, Q4: 'C', Q5: 'E', Q7: 'E', Q6: 'E', Q8: 'E' };
+    let avs = {};
+    const fAvS = a => a == null ? '—' : (a < 0 ? '−' : '') + Math.abs(a).toFixed(Math.abs(a) < 10 ? 2 : 0);
+    function stageAv(id) {
+      const out = QOUT[id]; if (!out) return null;
+      const ics = acSamples.map(r => r.Q[id].Ic), lim = Math.max(10e-6, 0.05 * Math.max(...ics));
+      const on = acSamples.filter(r => r.Q[id].Ic > lim);
+      if (on.length < 4) return null;
+      const xs = on.map(r => id === 'Q1' ? r.Q.Q1.B - r.Q.Q2.B : r.Q[id].B), ys = on.map(r => r.Q[id][out]);
+      const mx = xs.reduce((a, b) => a + b) / xs.length, my = ys.reduce((a, b) => a + b) / ys.length;
+      let sxy = 0, sxx = 0; xs.forEach((x, i) => { sxy += (x - mx) * (ys[i] - my); sxx += (x - mx) * (x - mx); });
+      return sxx > 1e-12 ? sxy / sxx : null;
+    }
+    function computeAvs() { avs = {}; Object.keys(QOUT).forEach(id => { avs[id] = stageAv(id); }); }
 
     buildDarl(); buildMult(); buildCro(); buildMinis();
     drawPots();
