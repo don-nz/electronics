@@ -41,7 +41,23 @@
   <script src="../../assets/breadcrumb.js" defer></script>
   <style>
     .sim-wrap { width: 100%; max-width: 980px; margin: 0 auto; }
-    .circuit-panel { cursor: default; }
+    .circuit-panel { cursor: default; position: relative; }
+    .pot-hit { cursor: pointer; }
+    .pot-hit:hover rect { fill: rgba(var(--colour-ui-primary-rgb), .08); }
+    .pot-box { position: absolute; z-index: 5; width: min(300px, 86%); padding: .6rem .75rem .7rem; border: 1.5px solid var(--colour-resistor); border-radius: 8px; background: var(--colour-panel); box-shadow: 0 4px 18px rgba(0,0,0,.18); font-size: .8rem; color: var(--colour-text); }
+    .pot-box[hidden] { display: none; }
+    .pot-head { display: flex; justify-content: space-between; align-items: baseline; gap: .5rem; margin-bottom: .35rem; }
+    .pot-title { font-family: 'Share Tech Mono', monospace; font-weight: bold; color: var(--colour-resistor-labels); }
+    .pot-x { border: none; background: none; font-size: 1.1rem; line-height: 1; cursor: pointer; color: var(--colour-label); padding: 0 .2rem; }
+    .pot-box input[type=range] { width: 100%; accent-color: var(--colour-resistor); }
+    .pot-ends { display: flex; justify-content: space-between; font-size: .68rem; color: var(--colour-label); margin-top: -.1rem; }
+    .pot-read { font-family: 'Share Tech Mono', monospace; font-size: .78rem; line-height: 1.55; margin-top: .35rem; }
+    .pot-read b { color: var(--colour-current); }
+    .pot-read .pv { color: var(--colour-voltage-label); font-weight: bold; }
+    .pot-hint { font-size: .72rem; color: var(--colour-label); line-height: 1.4; margin-top: .3rem; }
+    .pot-hint.warn { color: var(--colour-ui-wrong, #dc2626); }
+    .pot-btns { margin-top: .45rem; display: flex; justify-content: flex-end; }
+    .pot-btns button { font-size: .7rem; }
     .back-link-row { width: 100%; max-width: 980px; margin: 0 auto .5rem; text-align: right; }
     .intro { color: var(--colour-label); font-size: .85rem; line-height: 1.5; text-align: center; margin: 0 auto 1rem; max-width: 760px; }
     .flow-line { fill: none; stroke: var(--colour-flow); stroke-width: 4; stroke-linecap: round; stroke-dasharray: 2, 11; opacity: .9; }
@@ -149,7 +165,7 @@
           <line x1="66" y1="595" x2="179" y2="595" />
           <line x1="150" y1="595" x2="150" y2="800" />
           <!-- the tail: R3 down to RV1's wiper; RV1's ends to the two emitters -->
-          <line x1="265" y1="210" x2="265" y2="446" />
+          <polyline id="r3Wire" points="265,210 265,446" />
           <polyline points="210,561 210,465 222,465" />
           <polyline points="310,561 310,465 298,465" />
           <!-- Q1 collector: R2 to −20 V, across to Q4's base (hops over Q2's collector lead) -->
@@ -164,7 +180,7 @@
           <line x1="520" y1="210" x2="520" y2="815" />
           <line x1="520" y1="340" x2="549" y2="340" />
           <polyline points="520,360 395,360 395,520 520,520" />
-          <line x1="489" y1="440" x2="414" y2="440" />
+          <polyline id="rv2Line" points="489,440 414,440" />
           <polyline points="520,385 565,385 565,420" />
           <polyline points="565,500 565,540 520,540" />
           <polyline points="520,815 490,815 490,831" />
@@ -281,7 +297,7 @@
         </g>
         <g transform="translate(260,465)">  <!-- ══ RV1 — wiper from R3 ══ -->
           <g transform="scale(.95,.8)"><use href="#resistor-horizontal" /></g>
-          <polygon points="5,-13 0,-22 10,-22" style="fill: var(--colour-series)" />
+          <line id="rv1Wiper" x1="-4" y1="-18" x2="14" y2="-18" style="stroke: var(--colour-series)" stroke-width="3" stroke-linecap="round" />
           <text x="0" y="36" fill="var(--colour-resistor-labels)" text-anchor="middle" font-size="15" font-weight="bold">RV<tspan baseline-shift="sub" font-size="10">1</tspan></text>
           <text x="0" y="53" fill="var(--colour-text)" text-anchor="middle" font-size="13">1k</text>
         </g>
@@ -310,9 +326,9 @@
         </g>
         <g transform="translate(395,400)">  <!-- ══ RV2 — wiper to Q3's base ══ -->
           <use href="#resistor-vertical" />
-          <polygon id="rv2Wiper" points="16,40 25,35 25,45" style="fill: var(--colour-series)" />
+          <line id="rv2Wiper" x1="21" y1="31" x2="21" y2="49" style="stroke: var(--colour-series)" stroke-width="3" stroke-linecap="round" />
           <text x="-22" y="34" fill="var(--colour-resistor-labels)" text-anchor="end" font-size="15" font-weight="bold">RV<tspan baseline-shift="sub" font-size="10">2</tspan></text>
-          <text x="-22" y="52" fill="var(--colour-text)" text-anchor="end" font-size="13">10k*</text>
+          <text x="-22" y="52" fill="var(--colour-text)" text-anchor="end" font-size="13">10k</text>
         </g>
         <g transform="translate(457,520)">  <!-- ══ R11 ══ -->
           <g transform="scale(.75,.75)"><use href="#resistor-horizontal" /></g>
@@ -357,8 +373,8 @@
         <g class="q-hit" onclick="toggleCard('Q3')">  <!-- ══ Q3 BC108 NPN — the VBE multiplier ══ -->
           <circle id="ring-Q3" class="q-ring" cx="513" cy="440" r="31" />
           <use href="#bjt-npn-shape" transform="translate(506,440)" />
-          <text x="452" y="410" fill="var(--colour-bjt-labels)" text-anchor="middle" font-size="16" font-weight="bold">Q<tspan baseline-shift="sub" font-size="11">3</tspan></text>
-          <text x="452" y="427" fill="var(--colour-bjt)" text-anchor="middle" font-size="13" font-weight="bold">BC108</text>
+          <text x="462" y="480" fill="var(--colour-bjt-labels)" text-anchor="middle" font-size="16" font-weight="bold">Q<tspan baseline-shift="sub" font-size="11">3</tspan></text>
+          <text x="462" y="496" fill="var(--colour-bjt)" text-anchor="middle" font-size="13" font-weight="bold">BC108</text>
         </g>
         <g class="q-hit" onclick="toggleCard('Q4')">  <!-- ══ Q4 BC547 NPN — the voltage amplifier ══ -->
           <circle id="ring-Q4" class="q-ring" cx="483" cy="865" r="31" />
@@ -435,10 +451,22 @@
           <text id="acVout" class="v-tag" x="682" y="585"></text>
         </g>
 
+        <!-- tap targets for the two trimpots (open their slider) -->
+        <g class="pot-hit" onclick="openPot('rv1')"><rect x="214" y="440" width="92" height="40" rx="5" fill="transparent" /></g>
+        <g class="pot-hit" onclick="openPot('rv2')"><rect x="372" y="394" width="44" height="92" rx="5" fill="transparent" /></g>
+
         <!-- the transistor pop-ups, on top of everything (built by buildCards()) -->
         <g id="leaders"></g>
         <g id="cards"></g>
       </svg>
+      <div class="pot-box" id="potBox" hidden>
+        <div class="pot-head"><span class="pot-title" id="potTitle"></span><button type="button" class="pot-x" onclick="closePot()" aria-label="Close">×</button></div>
+        <input type="range" id="potSlider" min="0" max="1000" step="1" oninput="potInput(this.value)" onchange="potChange()">
+        <div class="pot-ends"><span id="potEndL"></span><span id="potEndR"></span></div>
+        <div class="pot-read" id="potRead"></div>
+        <div class="pot-hint" id="potHint"></div>
+        <div class="pot-btns"><div class="mode-seg"><button type="button" onclick="potReset()">Reset</button></div></div>
+      </div>
     </div>
 
     <div class="state-caption" id="stateCaption"></div>
@@ -473,7 +501,7 @@
         <ol class="steps" id="steps"></ol>
       </div>
     </div>
-    <p class="model-note">The numbers come from a model with typical part values (small transistors V<sub>BE</sub> ≈ 0.62 V at 1 mA, β = 200; MJE3055 / MJE2955 V<sub>BE</sub> ≈ 0.55 V at 10 mA, β = 50). * The panel drawing labels Q5 as a BC557 but draws it as an NPN, which is what the top half needs, so it is modelled as an NPN. RV2's value isn't on the drawing: it is taken as 10k, set for about 25 mA of quiescent current. A real board will read a little differently, but every reading should move the same way when a switch changes.</p>
+    <p class="model-note">The numbers come from a model with typical part values (small transistors V<sub>BE</sub> ≈ 0.62 V at 1 mA, β = 200; MJE3055 / MJE2955 V<sub>BE</sub> ≈ 0.55 V at 10 mA, β = 50). * The panel drawing labels Q5 as a BC557 but draws it as an NPN, which is what the top half needs, so it is modelled as an NPN. A real board will read a little differently, but every reading should move the same way when a switch changes.</p>
   </div>
 
   <footer>Electronics // Cert III // UEEEC0066 // Resources</footer>
@@ -793,7 +821,7 @@
     function caption(r) {
       const load = r.s2 ? '' : ' (no load: S2 is open)';
       if (r.s1) return `<b>Class B</b> — S1 shorts out the V<sub>BE</sub> multiplier, so the two driver bases are joined: <b>0 V of bias</b>. With no signal the output transistors are <b>off</b> (Q7 ${fI(r.Ie7)}, Q8 ${fI(r.Ie8)})${load}. Q4 still draws ${fI(r.Q.Q4.Ic)} through R6 and S1. Switch to the AC view to see the crossover gap.`;
-      return `<b>Class AB</b> — Q3 holds <b>${fV2(r.Vbias)}</b> between the driver bases, just enough to turn on all four base-emitter junctions of the output stage (2 × V<sub>BE</sub> each side), so a small <b>quiescent current</b> (≈ ${fI((r.Ie7 + r.Ie8) / 2)}) flows straight down through Q7, R9, R10 and Q8 with no signal${load}. The feedback through R8 holds the output at <b>${fV(r.Vout)}</b>.`;
+      return `<b>Class AB</b> — Q3 holds <b>${fV2(r.Vbias)}</b> between the driver bases, ${(r.Ie7 + r.Ie8) / 2 > 0.1 ? 'more than enough to turn on' : (r.Ie7 + r.Ie8) / 2 < 2e-3 ? 'not quite enough to turn on' : 'just enough to turn on'} all four base-emitter junctions of the output stage (2 × V<sub>BE</sub> each side), so ${(r.Ie7 + r.Ie8) / 2 > 0.1 ? 'a large' : 'a small'} <b>quiescent current</b> (≈ ${fI((r.Ie7 + r.Ie8) / 2)}) flows straight down through Q7, R9, R10 and Q8 with no signal${load}. The feedback through R8 holds the output at <b>${fV(r.Vout)}</b>.`;
     }
 
     const st = (title, html) => ({ title, html });
@@ -1021,7 +1049,9 @@
       let t;
       if (!sw.s2) t = `<b>No load</b> — S2 is open, so the output only has to drive R8 (100k): the output transistors pass little more than their quiescent current. Watch Q7 and Q8 in their pop-ups: as the output swings down, R6's current rises, Q3's bias voltage rises with it, and both carry more current together. Tap S2 closed to see the push-pull pair work.`;
       else if (sw.s1) t = `<b>Class B — crossover.</b> S1 shorts out the bias, so near every zero crossing both output transistors are off for a moment (open the Q7 and Q8 pop-ups and watch both currents sit at 0). The feedback largely hides it on the output: Q4 has to swing quickly through the dead band (look at its current), so only a small kink is left.`;
+      else if ((solved().Ie7 + solved().Ie8) / 2 < 2e-3) t = `<b>Class AB in name only — crossover.</b> RV2 is set too low: there is only ${fI((solved().Ie7 + solved().Ie8) / 2)} of quiescent current, so the bias doesn't quite turn the output transistors on. Near every zero crossing both Q7 and Q8 are almost off (open their pop-ups), and a crossover kink appears, much as with S1 closed. Tap RV2 and turn it up until the quiescent current is about 20–50 mA.`;
       else t = `<b>Class AB.</b> Q7 pushes current into R<sub>L</sub> on the positive half and Q8 pulls it back on the negative half; the bias keeps both just conducting at the crossover, so the handover is smooth. Open the pop-ups to follow the signal through: Q1 and Q2 share the tail current in antiphase, Q4's current swings around its ${fI(solved().Q.Q4.Ic)} resting value, and so does Q3's: Q3 carries most of R6's current, which rises as the output swings down and falls as it swings up.`;
+      if (sw.s2 && !sw.s1 && (solved().Ie7 + solved().Ie8) / 2 > 0.1) t += ` <b>Running hot:</b> RV2 is set for ${fI((solved().Ie7 + solved().Ie8) / 2)} of quiescent current, so the output transistors waste a lot of power even with no signal.`;
       if (s.clipP || s.clipN) t += ` <b>Clipping:</b> ${GAIN} × ${fVpk(s.vinPk)} is more than the output can swing on ±20 V rails, so it flattens at +${fVpk(s.voutP)} / ${fVpk(s.voutN)}.`;
       return t;
     }
@@ -1102,10 +1132,95 @@
     }
     function setSpeed(v) { acSpeed = v; render(); }
     function togglePlay() { playing = !playing; document.getElementById('playBtn').textContent = playing ? '⏸ Pause' : '▶ Play'; }
-    function flipSw(k) { sw[k] = !sw[k]; withBusy(render); }
+    function flipSw(k) { sw[k] = !sw[k]; withBusy(() => { render(); potReadout(); }); }
     window.addEventListener('resize', () => { if (scaleFor(svgEl().clientWidth) !== cardScale) renderCards(); });
 
+
+    // ══════════════════════════════════════════════════════════════════════
+    // TRIMPOTS — RV1 (offset trim) and RV2 (bias). Tap one for its slider. DC re-solves while you drag; the AC
+    // table (≈ 0.7 s) is rebuilt when you let go.
+    // ══════════════════════════════════════════════════════════════════════
+    const POT_DEF = { rv1: P.rv1, rv2: P.rv2 };
+    let potOpen = null;
+    const setAt = (id, a) => { const e = document.getElementById(id); for (const k in a) e.setAttribute(k, a[k]); };
+    function drawPots() {
+      // RV1's wiper slides along the pot (232 = Q1 end … 298 = Q2 end; the middle is under R3); R3's lead steps across to meet it
+      const xw = 232 + P.rv1 * 66;
+      setAt('rv1Wiper', { x1: xw - 269, x2: xw - 251 });
+      setAt('r3Wire', { points: `265,210 265,428 ${xw},428 ${xw},447` });
+      setAt('flow-r3', { d: `M 265,210 L 265,428 L ${xw},428 L ${xw},450` });
+      setAt('flow-rv1a', { d: `M ${xw},465 L 210,465 L 210,561` });
+      setAt('flow-rv1b', { d: `M ${xw},465 L 310,465 L 310,561` });
+      // RV2's wiper slides down the pot (404 = R5 end … 476 = R11 end); Q3's base lead steps to meet it
+      const yw = 404 + P.rv2 * 72;
+      setAt('rv2Wiper', { y1: yw - 409, y2: yw - 391 });
+      setAt('rv2Line', { points: `489,440 424,440 424,${yw} 416,${yw}` });
+      setAt('flow-q3b', { d: `M 414,${yw} L 424,${yw} L 424,440 L 489,440` });
+      setAt('flow-r5', { d: `M 520,360 L 395,360 L 395,${yw}` });
+      setAt('flow-r11', { d: `M 395,${yw} L 395,520 L 520,520` });
+    }
+    function clearCaches() { for (const k in cache) delete cache[k]; for (const k in acCache) delete acCache[k]; }
+    function potReadout() {
+      if (!potOpen) return;
+      const r = solved(), read = document.getElementById('potRead'), hint = document.getElementById('potHint');
+      const pct = Math.round(P[potOpen] * 100);
+      hint.classList.remove('warn');
+      if (potOpen === 'rv1') {
+        const Ra = P.rv1 * P.RV1, Rb = P.RV1 - Ra;
+        read.innerHTML = `Q1 side ${Ra.toFixed(0)} Ω · Q2 side ${Rb.toFixed(0)} Ω<br>Tail split: Q1 <b>${fI(r.Q.Q1.Ic)}</b> · Q2 <b>${fI(r.Q.Q2.Ic)}</b><br>Output offset: <span class="pv">${fV(r.Vout)}</span>`;
+        const off = Math.abs(r.Vout) > 0.1;
+        hint.classList.toggle('warn', off);
+        hint.textContent = off ? `The output sits ${fV(r.Vout)} away from 0 V with no signal, which puts DC through the speaker. Set RV1 so the output reads 0 V.`
+          : 'The offset trim: with no signal, set it so a meter on the output reads 0 V.';
+      } else {
+        const Rt = P.R5 + P.rv2 * P.RV2, Rb = (1 - P.rv2) * P.RV2 + P.R11;
+        read.innerHTML = `Above Q3's base ${kk(Math.round(Rt))} · below ${kk(Math.round(Rb))}<br>Bias: <span class="pv">${sw.s1 ? '0 V (S1 closed)' : fV2(r.Vbias)}</span><br>Quiescent current: Q7 <b>${fI(r.Ie7)}</b> · Q8 <b>${fI(r.Ie8)}</b>`;
+        const iq = (r.Ie7 + r.Ie8) / 2;
+        if (sw.s1) hint.textContent = 'S1 is closed and shorts out the bias network, so RV2 has no effect until S1 is opened.';
+        else if (iq > 0.1) { hint.classList.add('warn'); hint.textContent = `Far too hot: ${fI(iq)} flows through the output transistors with no signal. On the bench they would overheat (Q3 is normally mounted on the heatsink so the bias drops as they warm up).`; }
+        else if (iq < 2e-3) hint.textContent = 'Almost no quiescent current: the output stage is close to class B, so expect crossover distortion.';
+        else hint.textContent = 'A typical setting is about 20–50 mA: just enough to remove crossover distortion without wasting power.';
+      }
+      if (mode === 'ac' && potDragging) hint.textContent += ' The waves update when you let go of the slider.';
+      document.getElementById('potTitle').textContent = (potOpen === 'rv1' ? 'RV1 · offset trim · ' : 'RV2 · bias · ') + `wiper ${pct}%`;
+    }
+    function positionPotBox() {
+      const box = document.getElementById('potBox'), panel = document.getElementById('circuitPanel');
+      const m = svgEl().getScreenCTM(), pr = panel.getBoundingClientRect();
+      const [ax, ay] = potOpen === 'rv1' ? [260, 485] : [395, 490];          // just below the pot
+      const x = m.a * ax + m.e - pr.left, y = m.d * ay + m.f - pr.top;
+      const w = box.offsetWidth;
+      box.style.left = Math.max(4, Math.min(x - w / 2, panel.clientWidth - w - 4)) + 'px';
+      box.style.top = y + 'px';
+    }
+    let potDragging = false;
+    function openPot(k) {
+      if (potOpen === k) { closePot(); return; }
+      potOpen = k;
+      document.getElementById('potSlider').value = Math.round(P[k] * 1000);
+      document.getElementById('potEndL').textContent = k === 'rv1' ? '◂ Q1 end' : '◂ R5 end (less bias)';
+      document.getElementById('potEndR').textContent = k === 'rv1' ? 'Q2 end ▸' : 'R11 end (more bias) ▸';
+      document.getElementById('potBox').hidden = false;
+      potReadout(); positionPotBox();
+    }
+    function closePot() { potOpen = null; document.getElementById('potBox').hidden = true; }
+    function potInput(v) {
+      potDragging = true;
+      P[potOpen] = v / 1000;
+      if (potOpen === 'rv2') buildMult();
+      clearCaches(); drawPots();
+      if (mode === 'dc') renderDC();
+      potReadout();
+    }
+    function potChange() { potDragging = false; if (mode === 'ac') withBusy(() => { render(); potReadout(); }); else potReadout(); }
+    function potReset() {
+      document.getElementById('potSlider').value = Math.round(POT_DEF[potOpen] * 1000);
+      potInput(POT_DEF[potOpen] * 1000); potChange();
+    }
+    window.addEventListener('resize', () => { if (potOpen) positionPotBox(); });
+
     buildDarl(); buildMult(); buildCro();
+    drawPots();
     document.getElementById('ampRead').textContent = '300 mV peak · 600 mV p-p · 1 kHz';
     acAmp = 0.3;
     withBusy(render);
