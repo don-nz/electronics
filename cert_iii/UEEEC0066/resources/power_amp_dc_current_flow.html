@@ -707,6 +707,11 @@
     };
     const cv = s => `<span class="eq-var">${s}</span>`;
     const vv = s => `<span class="eq-v">${s}</span>`;
+    // the quiz engine's formats: a numerator over a denominator, and a root sign whose bar covers the value
+    const frac = (num, den) => `<span class="working-frac"><span class="num">${num}</span><span class="den">${den}</span></span>`;
+    const sqrt = inner => `<span class="working-sqrt"><span class="sqrt-sign">√</span><span class="sqrt-body">${inner}</span></span>`;
+    const rv = s => `<span class="colour-resistor">${s}</span>`;      // a resistance value
+    const gv = s => `<span class="colour-gain">${s}</span>`;          // a gain
     const n3 = x => (Math.abs(x) < 0.0005 ? '' : neg(x)) + Math.abs(x).toFixed(3);   // no '−0.000'
 
     // ── flow animation ──
@@ -808,12 +813,12 @@
         `<br>No current flows into the − input (a 741 input draws only about 80 nA), so all of R3's current carries straight on through R2 to 0 V: ${cv('I<sub>R3</sub>')} = ${cv('I<sub>R2</sub>')} = <b>${fI(r.Ifb)}</b>. The feedback works by setting the <i>voltage</i> at the − input, not by pushing current into it.`));
       if (r.sw2 === 'open') {
         out.push(st('Bias between the bases', `SW2 is open, so the R4 → D1 → R5 chain carries about 30 mA and D1 drops ${vv('V<sub>D1</sub>')} = <b>${fV(r.VD1)}</b>. The NPN base is one diode drop above the 741 output; the PNP base is wired straight to it.<br>${vv('V<sub>B1</sub>')} = ${vv('V<sub>741</sub>')} + ${vv('V<sub>D1</sub>')} = ${n3(r.Vo)} + ${n3(r.VD1)} = <b>${fV(r.B1)}</b>`));
-        out.push(st('Bias chain currents', `${cv('I<sub>R4</sub>')} = (${vv('+V<sub>rail</sub>')} − ${vv('V<sub>B1</sub>')}) / R4 = (${n3(r.Vp)} − ${n3(r.B1)}) / 470 = <b>${fI(r.IR4)}</b><br>` +
-          `${cv('I<sub>R5</sub>')} = (${vv('V<sub>B2</sub>')} − ${vv('−V<sub>rail</sub>')}) / R5 = (${n3(r.B2)} − (${n3(r.Vn)})) / 470 = <b>${fI(r.IR5)}</b><br>` +
+        out.push(st('Bias chain currents', `${cv('I<sub>R4</sub>')} = ${frac(`${vv('+V<sub>rail</sub>')} − ${vv('V<sub>B1</sub>')}`, 'R4')} = ${frac(`${n3(r.Vp)} − ${n3(r.B1)}`, rv('470 Ω'))} = <b>${fI(r.IR4)}</b><br>` +
+          `${cv('I<sub>R5</sub>')} = ${frac(`${vv('V<sub>B2</sub>')} − (${vv('−V<sub>rail</sub>')})`, 'R5')} = ${frac(`${n3(r.B2)} − (${n3(r.Vn)})`, rv('470 Ω'))} = <b>${fI(r.IR5)}</b><br>` +
           `${cv('I<sub>D1</sub>')} = ${cv('I<sub>R4</sub>')} − ${cv('I<sub>B1</sub>')} = ${fI(r.IR4)} − ${fI(r.Ib1)} = <b>${fI(r.ID1)}</b>`));
       } else {
         out.push(st('Bias between the bases', `SW2 is closed: it shorts D1, so both bases are at the 741 output, ${vv('V<sub>B1</sub>')} = ${vv('V<sub>B2</sub>')} = <b>${fV(r.B1)}</b>. There is <b>0 V</b> of bias between them.`));
-        out.push(st('Bias chain currents', `D1 is shorted, so ${cv('I<sub>D1</sub>')} = 0 and R4's current goes through SW2 instead.<br>${cv('I<sub>R4</sub>')} = (${n3(r.Vp)} − ${n3(r.B1)}) / 470 = <b>${fI(r.IR4)}</b> &nbsp; ${cv('I<sub>R5</sub>')} = (${n3(r.B2)} − (${n3(r.Vn)})) / 470 = <b>${fI(r.IR5)}</b>`));
+        out.push(st('Bias chain currents', `D1 is shorted, so ${cv('I<sub>D1</sub>')} = 0 and R4's current goes through SW2 instead.<br>${cv('I<sub>R4</sub>')} = ${frac(`${n3(r.Vp)} − ${n3(r.B1)}`, rv('470 Ω'))} = <b>${fI(r.IR4)}</b> &nbsp; ${cv('I<sub>R5</sub>')} = ${frac(`${n3(r.B2)} − (${n3(r.Vn)})`, rv('470 Ω'))} = <b>${fI(r.IR5)}</b>`));
       }
       out.push(st('The 741 output current', `What R5 takes that D1 / SW2 don't bring: ${cv('I<sub>741</sub>')} = ${cv('I<sub>R5</sub>')} − ${cv(r.sw2 === 'open' ? 'I<sub>D1</sub>' : 'I<sub>SW2</sub>')} = ${fI(r.IR5)} − ${fI(r.sw2 === 'open' ? r.ID1 : r.ISW2)} ≈ <b>${fI(r.Iop)}</b>${Math.abs(r.Iop) < 20e-6 ? ' — the two bias resistors balance, so the 741 has almost nothing to do' : r.Iop > 0 ? ' (sourcing)' : ' (sinking)'}`));
       // output stage
@@ -821,11 +826,11 @@
       let os;
       if (r.sw2 === 'closed') os = `Both bases and the output are at 0 V, so each transistor has ${vv('V<sub>BE</sub>')} = 0 V: <b>both are off</b>. ${cv('I<sub>Q1</sub>')} = ${cv('I<sub>Q2</sub>')} = 0 and ${vv('V<sub>out</sub>')} = <b>${fV(r.Vout)}</b>.`;
       else if (r.sw1 === 'B') os = `The ${fV(r.VD1)} between the bases is shared: ${vv('V<sub>BE1</sub>')} ≈ ${vv('V<sub>EB2</sub>')} ≈ <b>${n3(vbe1)} V</b>. That is below the ≈ 0.55 V a power transistor needs to conduct properly, so each passes only <b>${fI(r.Ic1)}</b>.`;
-      else if (r.sw3 === 'RL') os = `The NPN base is at ${fV(r.B1)} but the PNP base is at 0 V, so only the NPN conducts. Its current flows through R6 into R<sub>L</sub>:<br>${vv('V<sub>out</sub>')} = ${vv('V<sub>B1</sub>')} − ${vv('V<sub>BE1</sub>')} − ${cv('I<sub>E1</sub>')}·R6 = ${n3(r.B1)} − ${n3(vbe1)} − ${(r.Ie1 * P.R6).toFixed(3)} = <b>${fV(r.Vout)}</b><br>${cv('I<sub>RL</sub>')} = ${vv('V<sub>out</sub>')} / R<sub>L</sub> = ${n3(r.Vout)} / 15 = <b>${fI(r.IRL)}</b> — the PNP's ${vv('V<sub>EB</sub>')} is only ${n3(veb2)} V, so it stays off.`;
-      else os = `With no load the same current must flow through both transistors, so the output settles halfway between the bases: ${vv('V<sub>out</sub>')} ≈ (${n3(r.B1)} + ${n3(r.B2)}) / 2 = <b>${fV(r.Vout)}</b>. Each ${vv('V<sub>BE</sub>')} ≈ ${n3(vbe1)} V, so ${cv('I<sub>Q1</sub>')} = ${cv('I<sub>Q2</sub>')} = <b>${fI(r.Ic1)}</b>.`;
+      else if (r.sw3 === 'RL') os = `The NPN base is at ${fV(r.B1)} but the PNP base is at 0 V, so only the NPN conducts. Its current flows through R6 into R<sub>L</sub>:<br>${vv('V<sub>out</sub>')} = ${vv('V<sub>B1</sub>')} − ${vv('V<sub>BE1</sub>')} − ${cv('I<sub>E1</sub>')}·R6 = ${n3(r.B1)} − ${n3(vbe1)} − ${(r.Ie1 * P.R6).toFixed(3)} = <b>${fV(r.Vout)}</b><br>${cv('I<sub>RL</sub>')} = ${frac(vv('V<sub>out</sub>'), 'R<sub>L</sub>')} = ${frac(n3(r.Vout) + ' V', rv('15 Ω'))} = <b>${fI(r.IRL)}</b> — the PNP's ${vv('V<sub>EB</sub>')} is only ${n3(veb2)} V, so it stays off.`;
+      else os = `With no load the same current must flow through both transistors, so the output settles halfway between the bases: ${vv('V<sub>out</sub>')} ≈ ${frac(`${n3(r.B1)} + ${n3(r.B2)}`, '2')} = <b>${fV(r.Vout)}</b>. Each ${vv('V<sub>BE</sub>')} ≈ ${n3(vbe1)} V, so ${cv('I<sub>Q1</sub>')} = ${cv('I<sub>Q2</sub>')} = <b>${fI(r.Ic1)}</b>.`;
       out.push(st('The output transistors', os));
       out.push(st('Supply current', `${cv('I<sub>R8</sub>')} = ${cv('I<sub>R4</sub>')} + ${cv('I<sub>Q1</sub>')} + ${cv('I<sub>741(+)</sub>')} = ${fI(r.IR4)} + ${fI(r.Ic1)} + ${fI(r.IopP)} = <b>${fI(r.IR8)}</b><br>` +
-        `It drops ${cv('I<sub>R8</sub>')} × 1.8 Ω = <b>${(r.IR8 * P.R8 * 1000).toFixed(0)} mV</b> across R8, so the + rail is ${fVs(r.Vp)}. (Measuring the voltage across R8 or R9 is how you read the supply current without breaking the circuit.)`));
+        `It drops ${cv('I<sub>R8</sub>')} × ${rv('1.8 Ω')} = <b>${(r.IR8 * P.R8 * 1000).toFixed(0)} mV</b> across R8, so the + rail is ${fVs(r.Vp)}. (Measuring the voltage across R8 or R9 is how you read the supply current without breaking the circuit.)`));
       return out;
     }
 
@@ -1037,7 +1042,7 @@
       else if (s2 === 'closed') t = `<b>Class B, output inside the loop — the feedback hides the crossover.</b> When V out stalls at the zero crossing, the 741 sees the error and its output <b>jumps</b> through the dead band (look at the steps in the 741 out trace), so V out stays a clean sine.`;
       else if (s1 === 'A') t = `<b>Class AB, output stage outside the loop.</b> D1 biases the NPN, so the positive half hands over smoothly, but the PNP base gets no bias: a small dead band is left where the wave goes negative, and the DC offset rides on the output.`;
       else t = `<b>Class AB, output inside the loop — the cleanest setting.</b> D1 biases both transistors (just) and the feedback corrects what is left. I<sub>Q1</sub> pushes current into R<sub>L</sub> on the positive half and I<sub>Q2</sub> pulls it back on the negative half.`;
-      if (sw.sw1 === 'A' && sw.sw3 === 'RL' && !(st.clipP || st.clipN) && st.vinPk > 0) t += ` <b>Gain below 48:</b> with SW1 on the 741 output the output stage is outside the loop, so nothing corrects its losses — R6 (or R7) and R<sub>L</sub> form a divider (15 ÷ 19.7 ≈ 0.76) and the base-emitter drops eat into the swing. Tap SW1 over to the amp output and the gain comes back to ≈ 48.`;
+      if (sw.sw1 === 'A' && sw.sw3 === 'RL' && !(st.clipP || st.clipN) && st.vinPk > 0) t += ` <b>Gain below 48:</b> with SW1 on the 741 output the output stage is outside the loop, so nothing corrects its losses — R6 (or R7) and R<sub>L</sub> form a divider (${frac(rv('15 Ω'), rv('19.7 Ω'))} ≈ ${gv('0.76')}) and the base-emitter drops eat into the swing. Tap SW1 over to the amp output and the gain comes back to ≈ 48.`;
       if (st.clipP || st.clipN) t += ` <b>Clipping:</b> 48 × ${fVpk(st.vinPk)} = ${fVpk(GAIN * st.vinPk)} is more than the amplifier can deliver, so the output flattens at +${fVpk(st.voutP)} / ${fVpk(st.voutN)} and the measured gain drops below 48.`;
       return t;
     }
@@ -1147,14 +1152,17 @@
     const PART_RE = /(?<![\w.])(R\d+|C\d+|D\d+|SW\d+|Q\d+|741)(?!\w|\.\d)/g;   // a full stop after is fine; '0.741' is not a part
     function cc(html) {
       html = html.replace(/R<sub>L<\/sub>/g, 'R⁣L');           // R_L as one token while we work
-      let span = 0, sub = 0;
+      const spans = [];            // true for a span that colours its contents (leave those alone)
+      let sub = 0;
+      const coloured = () => spans.some(Boolean);
       return html.split(/(<[^>]+>)/).map(p => {
         if (p.startsWith('<')) {
-          if (/^<span\b/.test(p)) span++; else if (p === '</span>') span--;
+          if (/^<span\b/.test(p)) spans.push(!/class="(working-frac|num|den|working-sqrt|sqrt-sign|sqrt-body|eqn)"/.test(p));
+          else if (p === '</span>') spans.pop();
           else if (p === '<sub>') sub++; else if (p === '</sub>') sub--;
           return p;
         }
-        if (span > 0 || sub > 0) return p.replace(/R⁣L/g, 'R<sub>L</sub>');
+        if (coloured() || sub > 0) return p.replace(/R⁣L/g, 'R<sub>L</sub>');
         return p.replace(/R⁣L/g, '<span class="colour-resistor">R<sub>L</sub></span>')
           .replace(PART_RE, m => `<span class="${PART_CLASS[m === '741' ? '741' : m.match(/^[A-Z]+/)[0]]}">${m}</span>`);
       }).join('');
@@ -1203,19 +1211,19 @@
       // the emitter current
       const Re = npn ? 'R6' : 'R7';
       items.push(['Emitter current', on
-        ? `The base-emitter junction follows the diode equation, with ${Re} (${npn ? P.R6 : P.R7} Ω) in the emitter lead. It settles where ${V(npn ? 'BE' : 'EB')} = <b>${n3(vbe)} V</b>, so<br>${I('E')} = <b>${fI(Ie)}</b>`
+        ? `The base-emitter junction follows the diode equation, with ${Re} (${rv((npn ? P.R6 : P.R7) + ' Ω')}) in the emitter lead. It settles where ${V(npn ? 'BE' : 'EB')} = <b>${n3(vbe)} V</b>, so<br>${I('E')} = <b>${fI(Ie)}</b>`
         : `${V(npn ? 'BE' : 'EB')} is only ${n3(vbe)} V, well short of the ≈ 0.5 V needed, so the junction does not conduct: ${I('E')} ≈ <b>0</b>.`]);
       // the emitter voltage
       items.push(['Emitter', npn
-        ? `${V('E')} = ${V('out')} + ${I('E')} × R6 = ${n3(r.Vout)} + ${mA(Ie)} × ${P.R6} Ω = <b>${fV(VE)}</b>`
-        : `${V('E')} = ${V('out')} − ${I('E')} × R7 = ${n3(r.Vout)} − ${mA(Ie)} × ${P.R7} Ω = <b>${fV(VE)}</b>`]);
+        ? `${V('E')} = ${V('out')} + ${I('E')} × R6 = ${n3(r.Vout)} + ${mA(Ie)} × ${rv(P.R6 + ' Ω')} = <b>${fV(VE)}</b>`
+        : `${V('E')} = ${V('out')} − ${I('E')} × R7 = ${n3(r.Vout)} − ${mA(Ie)} × ${rv(P.R7 + ' Ω')} = <b>${fV(VE)}</b>`]);
       // the collector voltage
       items.push(['Collector', npn
-        ? `Q1's collector is on the + rail, after R8:<br>${V('C')} = +${V('CC')} − ${I('R8')} × R8 = ${P.VCC} − ${mA(r.IR8)} × ${P.R8} Ω = <b>${fV(VC)}</b>`
-        : `Q2's collector is on the − rail, after R9:<br>${V('C')} = −${V('CC')} + ${I('R9')} × R9 = −${P.VCC} + ${mA(r.IR9)} × ${P.R9} Ω = <b>${fV(VC)}</b>`]);
+        ? `Q1's collector is on the + rail, after R8:<br>${V('C')} = +${V('CC')} − ${I('R8')} × R8 = ${P.VCC} − ${mA(r.IR8)} × ${rv(P.R8 + ' Ω')} = <b>${fV(VC)}</b>`
+        : `Q2's collector is on the − rail, after R9:<br>${V('C')} = −${V('CC')} + ${I('R9')} × R9 = −${P.VCC} + ${mA(r.IR9)} × ${rv(P.R9 + ' Ω')} = <b>${fV(VC)}</b>`]);
       // currents
       if (!on) items.push(['Base and collector currents', `With the junction off, ${I('E')}, ${I('B')} and ${I('C')} are all ≈ <b>0</b> (the model leaves ${fI(Ic)} or less: leakage).`]);
-      else items.push(['Base and collector currents', `${I('B')} = ${I('E')} ÷ (β + 1) = ${fI(Ie)} ÷ ${b + 1} = <b>${fI(Ib)}</b><br>${I('C')} = ${I('E')} − ${I('B')} = ${fI(Ie)} − ${fI(Ib)} = <b>${fI(Ic)}</b>`]);
+      else items.push(['Base and collector currents', `${I('B')} = ${frac(I('E'), 'β + 1')} = ${frac(fI(Ie), b + 1)} = <b>${fI(Ib)}</b><br>${I('C')} = ${I('E')} − ${I('B')} = ${fI(Ie)} − ${fI(Ib)} = <b>${fI(Ic)}</b>`]);
       // the junction voltages
       items.push(['Junction voltages', npn
         ? `${V('BE')} = ${V('B')} − ${V('E')} = ${n3(VB)} − ${n3(VE)} = <b>${fV(vbe)}</b><br>${V('CE')} = ${V('C')} − ${V('E')} = ${n3(VC)} − ${n3(VE)} = <b>${fV(vce)}</b>`
@@ -1351,9 +1359,9 @@
         : `Right now the output is <b>clipping</b>: the 741 has run out of output, so V${sub('−')} can't keep up with V${sub('+')} and the error jumps, peaking at <b>${fVpk(maxErr)}</b>. That shows up as distortion on the output.`;
       document.getElementById('infoTitle').textContent = 'V+ − V−: the error the 741 amplifies';
       document.getElementById('infoBody').innerHTML = cc(
-        `<p>The 741 amplifies the <b>difference</b> between its inputs: <span class="eqn">${V('741')} = A × (V${sub('+')} − V${sub('−')})</span>, where A is about 200 000.</p>` +
+        `<p>The 741 amplifies the <b>difference</b> between its inputs: <span class="eqn">${V('741')} = ${gv('A')} × (${vv('V' + sub('+'))} − ${vv('V' + sub('−'))})</span>, where ${gv('A')} is about ${gv('200 000')}.</p>` +
         `<p>The feedback (R3 / R2's share of the output) goes into the <b>−</b> input, so it is <i>subtracted</i>. If the output rises too far, V${sub('−')} rises, the difference shrinks, and the 741 pulls its output back down. That subtraction is the "negative" in negative feedback. The feedback wave itself is not inverted: it is in phase with V in (compare the V in and V− feedback scopes).</p>` +
-        `<p>So while the 741 is in control the error is tiny: <span class="eqn">${V('741')} ÷ A ≈ ${fVpk(vo)} ÷ 200 000 ≈ ${(real * 1e6).toFixed(real * 1e6 < 10 ? 1 : 0)} µV</span>. That is far too small to see; the model's 741 is ideal, so its trace sits at exactly 0.</p>` +
+        `<p>So while the 741 is in control the error is tiny: <span class="eqn">${frac(V('741'), gv('A'))} ≈ ${frac(fVpk(vo), gv('200 000'))} ≈ ${vv((real * 1e6).toFixed(real * 1e6 < 10 ? 1 : 0) + ' µV')}</span>. That is far too small to see; the model's 741 is ideal, so its trace sits at exactly 0.</p>` +
         `<p>${clipNote}</p>` +
         `<p>Compare an <b>inverting</b> amplifier: there the signal goes into the − input (through a resistor) and the + input is at 0 V. V${sub('−')} then stays at about 0 V (a "virtual earth") and the output comes out inverted.</p>`);
       if (!document.getElementById('infoPop').hidden) placeInfo();
@@ -1362,7 +1370,7 @@
     // ── tap a gain value for its calculation ──
     const GAIN_AT = { avop: [350, 318], av1: [740, 200], av2: [740, 500] };
     function fillGain(k) {
-      const sub = t => `<sub>${t}</sub>`, V = n => vv('V' + sub(n)), A = 'A' + sub('v');
+      const sub = t => `<sub>${t}</sub>`, V = n => vv('V' + sub(n)), A = gv('A' + sub('v'));
       const range = vals => [Math.min(...vals), Math.max(...vals)];
       const pp = vals => Math.max(...vals) - Math.min(...vals);
       const f3 = x => neg(x) + Math.abs(x).toFixed(3);
@@ -1371,13 +1379,13 @@
         const vo = pp(acSamples.map(r => r.Vo)), vi = pp(acSamples.map(r => r.vin)), vout = pp(acSamples.map(r => r.Vout));
         const av = vi > 0 ? vo / vi : 0, ideal = GAIN, clipping = acSamples.some(r => Math.abs(r.err) > 1e-6);
         title = '741 gain';
-        html = `<p><b>Measured:</b> <span class="eqn">${A} = ${V('741')} p-p ÷ ${V('in')} p-p = ${fVpk(vo)} ÷ ${fVpk(vi)} = <b>${fAvBig(av)}</b></span></p>`;
-        if (sw.sw1 === 'A') html += `<p><b>Expected:</b> SW1 feeds back the 741's <i>own</i> output, so R3 / R2 hand the − input ${V('741')} × R2 ÷ (R2 + R3), and the 741 makes that equal ${V('+')}:<br><span class="eqn">${A} = 1 + R3 ÷ R2 = 1 + 47k ÷ 1k = <b>${ideal.toFixed(0)}</b></span></p>`;
+        html = `<p><b>Measured:</b> <span class="eqn">${A} = ${frac(V('741') + ' p-p', V('in') + ' p-p')} = ${frac(fVpk(vo), fVpk(vi))} = ${gv('<b>' + fAvBig(av) + '</b>')}</span></p>`;
+        if (sw.sw1 === 'A') html += `<p><b>Expected:</b> SW1 feeds back the 741's <i>own</i> output, so R3 / R2 hand the − input ${V('741')} × ${frac('R2', 'R2 + R3')}, and the 741 makes that equal ${V('+')}:<br><span class="eqn">${A} = 1 + ${frac('R3', 'R2')} = 1 + ${frac(rv('47 kΩ'), rv('1 kΩ'))} = ${gv('<b>' + ideal.toFixed(0) + '</b>')}</span></p>`;
         else {
           const g = vo > 0 ? vout / vo : 0;
           html += `<p><b>Why it isn't 48:</b> SW1 feeds back the <i>amplifier</i> output, so the loop makes ${V('out')} = 48 × ${V('in')}. The output stage loses a little on the way (R6 / R7 with R<sub>L</sub>${sw.sw2 === 'closed' ? ', and the dead band at the crossover' : ''}), so the 741 has to swing further to make up for it:<br>` +
-            `<span class="eqn">output stage gain = ${V('out')} p-p ÷ ${V('741')} p-p = ${fVpk(vout)} ÷ ${fVpk(vo)} = ${g.toFixed(2)}</span><br>` +
-            `<span class="eqn">${A} (741) = 48 ÷ ${g.toFixed(2)} ≈ <b>${g > 0 ? (48 / g).toFixed(1) : '—'}</b></span></p>`;
+            `<span class="eqn">output stage gain = ${frac(V('out') + ' p-p', V('741') + ' p-p')} = ${frac(fVpk(vout), fVpk(vo))} = ${gv(g.toFixed(2))}</span><br>` +
+            `<span class="eqn">${A} (741) = ${frac(gv('48'), gv(g.toFixed(2)))} ≈ ${gv('<b>' + (g > 0 ? (48 / g).toFixed(1) : '—') + '</b>')}</span></p>`;
         }
         if (clipping) html += `<p><b>Clipping:</b> the 741 can't drive its output any further, so the measured gain falls below what the resistors set. Turn the input down and it comes back.</p>`;
       } else {
@@ -1392,13 +1400,13 @@
           html = `<p><b>Measured</b>, over the part of the cycle where ${id} conducts:<br>` +
             `<span class="eqn">${V('B')} ${f3(b0)} → ${f3(b1)} V (Δ ${f3(b1 - b0)} V)</span><br>` +
             `<span class="eqn">${V('E')} ${f3(e0)} → ${f3(e1)} V (Δ ${f3(e1 - e0)} V)</span><br>` +
-            `<span class="eqn">${A} = Δ${V('E')} ÷ Δ${V('B')} = ${f3(e1 - e0)} ÷ ${f3(b1 - b0)} = <b>${av.toFixed(2)}</b></span></p>` +
-            `<p><b>Theory:</b> the emitter follows the base, less the base-emitter junction's own small resistance r′${sub('e')}:<br>` +
-            `<span class="eqn">r′${sub('e')} = n·V${sub('T')} ÷ ${cv('I' + sub('E'))} = ${nVT.toFixed(3)} V ÷ ${fI(Ie)} (its average while on) = ${re.toFixed(2)} Ω</span><br>` +
-            (load ? `<span class="eqn">${A} = (${Re} + R<sub>L</sub>) ÷ (${Re} + R<sub>L</sub> + r′${sub('e')}) = ${(Rv + P.RL).toFixed(1)} ÷ ${(Rv + P.RL + re).toFixed(2)} = <b>${((Rv + P.RL) / (Rv + P.RL + re)).toFixed(2)}</b></span></p>`
+            `<span class="eqn">${A} = ${frac('Δ' + V('E'), 'Δ' + V('B'))} = ${frac(vv(f3(e1 - e0) + ' V'), vv(f3(b1 - b0) + ' V'))} = ${gv('<b>' + av.toFixed(2) + '</b>')}</span></p>` +
+            `<p><b>Theory:</b> the emitter follows the base, less the base-emitter junction's own small resistance ${rv('r′' + sub('e'))}:<br>` +
+            `<span class="eqn">${rv('r′' + sub('e'))} = ${frac('n·' + vv('V' + sub('T')), cv('I' + sub('E')))} = ${frac(vv(nVT.toFixed(3) + ' V'), cv(fI(Ie)))} = ${rv(re.toFixed(2) + ' Ω')}</span> (using ${cv('I' + sub('E'))}'s average while on)<br>` +
+            (load ? `<span class="eqn">${A} = ${frac(`${Re} + R<sub>L</sub>`, `${Re} + R<sub>L</sub> + ${rv('r′' + sub('e'))}`)} = ${frac(rv((Rv + P.RL).toFixed(1) + ' Ω'), rv((Rv + P.RL + re).toFixed(2) + ' Ω'))} = ${gv('<b>' + ((Rv + P.RL) / (Rv + P.RL + re)).toFixed(2) + '</b>')}</span></p>`
                   : `With no load (SW3 open) the emitter drives almost nothing, so ${A} is very close to 1.</p>`) +
-            (load && av < (Rv + P.RL) / (Rv + P.RL + re) - 0.02 ? `<p>The measured figure is a little lower than the theory because it includes the <b>turn-on</b>, where ${id} has only just started to conduct: ${cv('I' + sub('E'))} is small there, so r′${sub('e')} is large${sw.sw2 === 'closed' ? ' (with SW2 closed there is no bias, so every half-cycle starts from off)' : ''}.</p>` : '') +
-            `<p>An emitter follower never quite reaches a voltage gain of 1. Its job is <b>current</b> gain: ${cv('I' + sub('E'))} = (β + 1) × ${cv('I' + sub('B'))}, so the 741 only has to supply about 1/${P.beta + 1} of the current R${sub('L')} needs.</p>`;
+            (load && av < (Rv + P.RL) / (Rv + P.RL + re) - 0.02 ? `<p>The measured figure is a little lower than the theory because it includes the <b>turn-on</b>, where ${id} has only just started to conduct: ${cv('I' + sub('E'))} is small there, so ${rv('r′' + sub('e'))} is large${sw.sw2 === 'closed' ? ' (with SW2 closed there is no bias, so every half-cycle starts from off)' : ''}.</p>` : '') +
+            `<p>An emitter follower never quite reaches a voltage gain of 1. Its job is <b>current</b> gain: ${cv('I' + sub('E'))} = (β + 1) × ${cv('I' + sub('B'))}, so the 741 only has to supply about ${frac('1', P.beta + 1)} of the current R${sub('L')} needs.</p>`;
         }
       }
       document.getElementById('infoTitle').textContent = title;

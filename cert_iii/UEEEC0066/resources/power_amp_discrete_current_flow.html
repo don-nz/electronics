@@ -601,7 +601,8 @@
     function circuitAt(Vo, ext) {
       const V = P.VCC, Ra = P.rv1 * P.RV1, Rb = (1 - P.rv1) * P.RV1;
       let Ib1 = 0, Ib2 = 0, W, Ie1, Ie2, Vb1, Vb2;
-      for (let it = 0; it < 4; it++) {
+      for (let it = 0; it < 20; it++) {                // until the base currents settle (Q2's goes through 100k, so it matters)
+        const pIb1 = Ib1, pIb2 = Ib2;
         Vb1 = ext.vb1 + (ext.vc2 == null ? Ib1 * P.R1 : 0);          // DC: Q1's base current lifts it through R1
         Vb2 = ext.vc2 == null ? Vo + Ib2 * P.R8
           : (Vo / P.R8 + ext.vc2 / P.R4 + Ib2) / (1 / P.R8 + 1 / P.R4);
@@ -610,6 +611,7 @@
         W = bisect(w => (V - w) / P.R3 - emitterI(w - Vb1, Ra || 1e-3) - emitterI(w - Vb2, Rb || 1e-3), lo, V);
         Ie1 = emitterI(W - Vb1, Ra || 1e-3); Ie2 = emitterI(W - Vb2, Rb || 1e-3);
         Ib1 = Ie1 / (P.bS + 1); Ib2 = Ie2 / (P.bS + 1);
+        if (Math.abs(Ib1 - pIb1) < 1e-12 && Math.abs(Ib2 - pIb2) < 1e-12) break;
       }
       const Ic1 = Ie1 - Ib1, Ic2 = Ie2 - Ib2;
       // Q1's collector current splits between R2 and Q4's base
@@ -752,8 +754,34 @@
     const fVpk = x => (Math.abs(x) < 1 ? neg(x) + (Math.abs(x) * 1000).toFixed(0) + ' mV' : neg(x) + Math.abs(x).toFixed(2) + ' V');
     const cv = s => `<span class="eq-var">${s}</span>`;
     const vv = s => `<span class="eq-v">${s}</span>`;
+    // the quiz engine's formats: a numerator over a denominator, and a root sign whose bar covers the value
+    const frac = (num, den) => `<span class="working-frac"><span class="num">${num}</span><span class="den">${den}</span></span>`;
+    const sqrt = inner => `<span class="working-sqrt"><span class="sqrt-sign">√</span><span class="sqrt-body">${inner}</span></span>`;
+    const rv = s => `<span class="colour-resistor">${s}</span>`;      // a resistance value
+    const uA2 = x => (x * 1e6).toFixed(2) + ' µA';                   // a base current, to enough places for the sum to check
+    const gv = s => `<span class="colour-gain">${s}</span>`;          // a gain
+    // COLOUR CODING — every part name in the worked text in its component's colour (R / RV resistor, C capacitor,
+    // S switch, Q transistor). Text already inside a colour span, or in a subscript (I<sub>Q7</sub> is a current), is left
+    // alone; the fraction / root spans are only layout.
+    const PART_CLASS = { R: 'colour-resistor', RV: 'colour-resistor', C: 'colour-cap', S: 'colour-switch', Q: 'colour-bjt' };
+    const PART_RE = /(?<![\w.])(RV\d+|R\d+|C\d+|S\d+|Q\d+)(?!\w|\.\d)/g;
+    function cc(html) {
+      html = html.replace(/R<sub>L<\/sub>/g, 'R⁣L');
+      const spans = []; let sub = 0;
+      return html.split(/(<[^>]+>)/).map(p => {
+        if (p.startsWith('<')) {
+          if (/^<span\b/.test(p)) spans.push(!/class="(working-frac|num|den|working-sqrt|sqrt-sign|sqrt-body|eqn)"/.test(p));
+          else if (p === '</span>') spans.pop();
+          else if (p === '<sub>') sub++; else if (p === '</sub>') sub--;
+          return p;
+        }
+        if (spans.some(Boolean) || sub > 0) return p.replace(/R⁣L/g, 'R<sub>L</sub>');
+        return p.replace(/R⁣L/g, '<span class="colour-resistor">R<sub>L</sub></span>')
+          .replace(PART_RE, m => `<span class="${PART_CLASS[m.match(/^[A-Z]+/)[0]]}">${m}</span>`);
+      }).join('');
+    }
     const n3 = x => neg(x) + Math.abs(x).toFixed(3);
-    const kk = R => R >= 1000 ? (R / 1000).toFixed(R % 1000 ? 1 : 0) + 'k' : R + ' Ω';
+    const kk = R => R >= 1000 ? (R / 1000).toFixed(R % 1000 ? 1 : 0) + ' kΩ' : R + ' Ω';
 
     // ── flow animation (same tiers as the 741 power-amp simulator) ──
     const TIERS = [[20e-6, null], [0.5e-3, 2.6], [5e-3, 1.5], [20e-3, 0.85], [Infinity, 0.45]];
@@ -812,9 +840,9 @@
     }
     function tables(r) {
       document.getElementById('vTable').innerHTML = V_ROWS.map(([k, label]) =>
-        `<tr class="vrow"><td>${label}</td><td class="val">${fV(r[k])}</td>${chg(k, true, r)}</tr>`).join('');
+        `<tr class="vrow"><td>${cc(label)}</td><td class="val">${fV(r[k])}</td>${chg(k, true, r)}</tr>`).join('');
       document.getElementById('iTable').innerHTML = I_ROWS.map(([k, label]) =>
-        `<tr class="irow"><td>${label}</td><td class="val">${fI(r[k])}</td>${chg(k, false, r)}</tr>`).join('');
+        `<tr class="irow"><td>${cc(label)}</td><td class="val">${fI(r[k])}</td>${chg(k, false, r)}</tr>`).join('');
     }
     function tags(r) {
       const set = (id, t) => { document.getElementById('tag-' + id).textContent = t; };
@@ -833,15 +861,15 @@
     function steps(r) {
       const Q = r.Q, Ra = P.rv1 * P.RV1;
       const out = [];
-      out.push(st('The tail current (R3)', `R3 feeds the emitters of Q1 and Q2 through RV1. The tail sits one V<sub>EB</sub> above the bases: ${vv('V<sub>tail</sub>')} = <b>${fV(r.W)}</b>.<br>${cv('I<sub>R3</sub>')} = (20 − ${vv('V<sub>tail</sub>')}) / 47k = (20 − ${n3(r.W)}) / 47 000 = <b>${fI(r.IR3)}</b>`));
-      out.push(st('The output sits at 0 V', `C2 blocks DC, so R4 carries no DC current and the DC gain is 1: the feedback makes Q2's base follow Q1's base. Each base sits a little above 0 V because its base current flows through R1 (Q1) or R8 (Q2):<br>${vv('V<sub>B1</sub>')} = ${cv('I<sub>B1</sub>')} × 22k = ${fI(Q.Q1.Ib)} × 22k = <b>${fV(r.Vb1)}</b><br>${vv('V<sub>out</sub>')} = ${vv('V<sub>B2</sub>')} − ${cv('I<sub>B2</sub>')} × 100k = ${n3(r.Vb2)} − ${n3(Q.Q2.Ib * P.R8)} = <b>${fV(r.Vout)}</b> (the DC offset; RV1 trims it).`));
-      out.push(st('The voltage amplifier current (R6 → Q4)', `The top of the bias network is two V<sub>BE</sub>s (Q5, Q7) above the output: ${vv('V<sub>T</sub>')} = <b>${fV(r.T)}</b>. R6 sets the current:<br>${cv('I<sub>R6</sub>')} = (20 − ${vv('V<sub>T</sub>')}) / 2k2 = (20 − ${n3(r.T)}) / 2200 = <b>${fI(r.IR6)}</b><br>Almost all of it flows down through ${r.s1 ? 'S1' : 'the bias network'} into Q4's collector: ${cv('I<sub>C4</sub>')} = <b>${fI(Q.Q4.Ic)}</b>.`));
-      out.push(st('How much of the tail Q1 needs', `Q4 needs ${vv('V<sub>BE4</sub>')} + ${cv('I<sub>E4</sub>')}·R7 = ${n3(Q.Q4.Vbe)} + ${n3(Q.Q4.Ie * P.R7)} = ${n3(Q.Q4.Vbe + Q.Q4.Ie * P.R7)} V across R2, so<br>${cv('I<sub>C1</sub>')} = ${cv('I<sub>R2</sub>')} + ${cv('I<sub>B4</sub>')} = ${fI(r.IR2)} + ${fI(Q.Q4.Ib)} = <b>${fI(Q.Q1.Ic)}</b>, and the rest of the tail goes through Q2: ${cv('I<sub>C2</sub>')} = <b>${fI(Q.Q2.Ic)}</b>. The feedback loop settles on this split by itself.`));
+      out.push(st('The tail current (R3)', `R3 feeds the emitters of Q1 and Q2 through RV1. The tail sits one ${vv('V<sub>EB</sub>')} above the bases: ${vv('V<sub>tail</sub>')} = <b>${fV(r.W)}</b>.<br>${cv('I<sub>R3</sub>')} = ${frac(`20 − ${vv('V<sub>tail</sub>')}`, 'R3')} = ${frac(`20 − ${n3(r.W)}`, rv('47 kΩ'))} = <b>${fI(r.IR3)}</b>`));
+      out.push(st('The output sits at 0 V', `C2 blocks DC, so R4 carries no DC current and the DC gain is 1: the feedback makes Q2's base follow Q1's base. Each base sits a little above 0 V because its base current flows through R1 (Q1) or R8 (Q2):<br>${vv('V<sub>B1</sub>')} = ${cv('I<sub>B1</sub>')} × R1 = ${uA2(Q.Q1.Ib)} × ${rv('22 kΩ')} = <b>${fV(r.Vb1)}</b><br>${vv('V<sub>out</sub>')} = ${vv('V<sub>B2</sub>')} − ${cv('I<sub>B2</sub>')} × R8 = ${n3(r.Vb2)} − ${uA2(Q.Q2.Ib)} × ${rv('100 kΩ')} = <b>${fV(r.Vout)}</b> (the DC offset; RV1 trims it).`));
+      out.push(st('The voltage amplifier current (R6 → Q4)', `The top of the bias network is two ${vv('V<sub>BE</sub>')}s (Q5, Q7) above the output: ${vv('V<sub>T</sub>')} = <b>${fV(r.T)}</b>. R6 sets the current:<br>${cv('I<sub>R6</sub>')} = ${frac(`20 − ${vv('V<sub>T</sub>')}`, 'R6')} = ${frac(`20 − ${n3(r.T)}`, rv('2.2 kΩ'))} = <b>${fI(r.IR6)}</b><br>Almost all of it flows down through ${r.s1 ? 'S1' : 'the bias network'} into Q4's collector: ${cv('I<sub>C4</sub>')} = <b>${fI(Q.Q4.Ic)}</b>.`));
+      out.push(st('How much of the tail Q1 needs', `Q4 needs ${vv('V<sub>BE4</sub>')} + ${cv('I<sub>E4</sub>')}·R7 = ${n3(Q.Q4.Vbe)} + ${fI(Q.Q4.Ie)} × ${rv('27 Ω')} = ${n3(Q.Q4.Vbe + Q.Q4.Ie * P.R7)} V across R2, so<br>${cv('I<sub>C1</sub>')} = ${cv('I<sub>R2</sub>')} + ${cv('I<sub>B4</sub>')} = ${fI(r.IR2)} + ${fI(Q.Q4.Ib)} = <b>${fI(Q.Q1.Ic)}</b>, and the rest of the tail goes through Q2: ${cv('I<sub>C2</sub>')} = <b>${fI(Q.Q2.Ic)}</b>. The feedback loop settles on this split by itself.`));
       if (r.s1) out.push(st('The bias', `S1 is closed: it shorts out Q3 and its resistors, so ${vv('V<sub>bias</sub>')} = <b>0 V</b>. Both driver bases sit at ${fV(r.T)} and none of the four output-stage junctions has enough voltage to conduct.`));
       else {
         const m = multDetail(r.Vbias), Rt = MULT.Rt, Rb = MULT.Rb;
-        out.push(st('The bias (Q3, the V<sub>BE</sub> multiplier)', `RV2's wiper splits the chain into ${kk(Math.round(Rt))} above Q3's base (R5 + part of RV2) and ${kk(Math.round(Rb))} below it (the rest of RV2 + R11). Q3 conducts just enough to hold its own V<sub>BE</sub> = ${n3(m.vb)} V across the lower part:<br>${vv('V<sub>bias</sub>')} ≈ ${vv('V<sub>BE3</sub>')} × (R<sub>top</sub> + R<sub>bottom</sub>) / R<sub>bottom</sub> + ${cv('I<sub>B3</sub>')}·R<sub>top</sub> = ${n3(m.vb)} × ${((Rt + Rb) / Rb).toFixed(2)} + ${n3(m.Ib3 * Rt)} = <b>${fV2(r.Vbias)}</b><br>(Q3's base current is a big share of the chain current here, so it adds noticeably.) Turning RV2 changes the ratio, and so the quiescent current.`));
-        out.push(st('The quiescent current', `${fV2(r.Vbias)} is shared by V<sub>BE5</sub> + V<sub>BE7</sub> + V<sub>EB8</sub> + V<sub>EB6</sub> + ${cv('I<sub>Q</sub>')}·(R9 + R10) = ${n3(Q.Q5.Vbe)} + ${n3(Q.Q7.Vbe)} + ${n3(Q.Q8.Vbe)} + ${n3(Q.Q6.Vbe)} + ${n3(r.Ie7 + r.Ie8 > 0 ? (r.Ie7 * P.R9 + r.Ie8 * P.R10) : 0)} V, which needs ${cv('I<sub>Q7</sub>')} = <b>${fI(r.Ie7)}</b>${r.s2 ? `, ${cv('I<sub>Q8</sub>')} = <b>${fI(r.Ie8)}</b> (the difference, ${fI(r.Ie8 - r.Ie7)}, is the offset current in R<sub>L</sub>)` : ' through both output transistors'}.`));
+        out.push(st('The bias (Q3, the V<sub>BE</sub> multiplier)', `RV2's wiper splits the chain into ${rv(kk(Math.round(Rt)))} above Q3's base (R5 + part of RV2) and ${rv(kk(Math.round(Rb)))} below it (the rest of RV2 + R11). Q3 conducts just enough to hold its own ${vv('V<sub>BE</sub>')} = ${n3(m.vb)} V across the lower part:<br>${vv('V<sub>bias</sub>')} ≈ ${vv('V<sub>BE3</sub>')} × ${frac(`${rv('R<sub>top</sub>')} + ${rv('R<sub>bottom</sub>')}`, rv('R<sub>bottom</sub>'))} + ${cv('I<sub>B3</sub>')}·${rv('R<sub>top</sub>')} = ${n3(m.vb)} × ${frac(`${rv(kk(Math.round(Rt)))} + ${rv(kk(Math.round(Rb)))}`, rv(kk(Math.round(Rb))))} + ${fI(m.Ib3)} × ${rv(kk(Math.round(Rt)))} = <b>${fV2(r.Vbias)}</b><br>(Q3's base current is a big share of the chain current here, so it adds noticeably.) Turning RV2 changes the ratio, and so the quiescent current.`));
+        out.push(st('The quiescent current', `${fV2(r.Vbias)} is shared by ${vv('V<sub>BE5</sub>')} + ${vv('V<sub>BE7</sub>')} + ${vv('V<sub>EB8</sub>')} + ${vv('V<sub>EB6</sub>')} + ${cv('I<sub>Q</sub>')}·(R9 + R10) = ${n3(Q.Q5.Vbe)} + ${n3(Q.Q7.Vbe)} + ${n3(Q.Q8.Vbe)} + ${n3(Q.Q6.Vbe)} + ${n3(r.Ie7 + r.Ie8 > 0 ? (r.Ie7 * P.R9 + r.Ie8 * P.R10) : 0)} V, which needs ${cv('I<sub>Q7</sub>')} = <b>${fI(r.Ie7)}</b>${r.s2 ? `, ${cv('I<sub>Q8</sub>')} = <b>${fI(r.Ie8)}</b> (the difference, ${fI(r.Ie8 - r.Ie7)}, is the offset current in R<sub>L</sub>)` : ' through both output transistors'}.`));
       }
       out.push(st('Supply current', `${cv('I<sub>+20</sub>')} = ${cv('I<sub>R3</sub>')} + ${cv('I<sub>R6</sub>')} + ${cv('I<sub>C5</sub>')} + ${cv('I<sub>C7</sub>')} = ${fI(r.IR3)} + ${fI(r.IR6)} + ${fI(Q.Q5.Ic)} + ${fI(Q.Q7.Ic)} = <b>${fI(r.Ip)}</b>`));
       return out;
@@ -853,8 +881,8 @@
       const f = flows(r);
       Object.keys(f).forEach(id => applyFlow(id, f[id]));
       tags(r); tables(r);
-      document.getElementById('stateCaption').innerHTML = caption(r);
-      document.getElementById('steps').innerHTML = steps(r).map(x => `<li><span class="step-title">${x.title}</span>${x.html}</li>`).join('');
+      document.getElementById('stateCaption').innerHTML = cc(caption(r));
+      document.getElementById('steps').innerHTML = steps(r).map(x => `<li><span class="step-title">${x.title}</span>${cc(x.html)}</li>`).join('');
       renderCards();
       prev = r;
     }
@@ -1083,7 +1111,7 @@
       computeAvs();
       const s = acStats();
       acTable(s);
-      document.getElementById('stateCaption').innerHTML = acCaption(s);
+      document.getElementById('stateCaption').innerHTML = cc(acCaption(s));
       renderCards();
       frame(performance.now(), true);
     }
@@ -1131,7 +1159,7 @@
       document.getElementById('dcTags').setAttribute('display', ac ? 'none' : 'inline');
       document.getElementById('acTags').setAttribute('display', ac ? 'inline' : 'none');
       document.getElementById('miniLayer').setAttribute('display', ac ? 'inline' : 'none');
-      document.getElementById('introText').innerHTML = ac ? INTRO_AC : INTRO_DC;
+      document.getElementById('introText').innerHTML = cc(ac ? INTRO_AC : INTRO_DC);
       if (ac) {
         document.querySelectorAll('.flow-line animate').forEach(a => a.remove());
         renderAC();
@@ -1192,14 +1220,14 @@
       hint.classList.remove('warn');
       if (potOpen === 'rv1') {
         const Ra = P.rv1 * P.RV1, Rb = P.RV1 - Ra;
-        read.innerHTML = `Q1 side ${Ra.toFixed(0)} Ω · Q2 side ${Rb.toFixed(0)} Ω<br>Tail split: Q1 <b>${fI(r.Q.Q1.Ic)}</b> · Q2 <b>${fI(r.Q.Q2.Ic)}</b><br>Output offset: <span class="pv">${fV(r.Vout)}</span>`;
+        read.innerHTML = cc(`Q1 side ${rv(Ra.toFixed(0) + ' Ω')} · Q2 side ${rv(Rb.toFixed(0) + ' Ω')}<br>Tail split: Q1 <b>${fI(r.Q.Q1.Ic)}</b> · Q2 <b>${fI(r.Q.Q2.Ic)}</b><br>Output offset: <span class="pv">${fV(r.Vout)}</span>`);
         const off = Math.abs(r.Vout) > 0.1;
         hint.classList.toggle('warn', off);
         hint.textContent = off ? `The output sits ${fV(r.Vout)} away from 0 V with no signal, which puts DC through the speaker. Set RV1 so the output reads 0 V.`
           : 'The offset trim: with no signal, set it so a meter on the output reads 0 V.';
       } else {
         const Rt = P.R5 + P.rv2 * P.RV2, Rb = (1 - P.rv2) * P.RV2 + P.R11;
-        read.innerHTML = `Above Q3's base ${kk(Math.round(Rt))} · below ${kk(Math.round(Rb))}<br>Bias: <span class="pv">${sw.s1 ? '0 V (S1 closed)' : fV2(r.Vbias)}</span><br>Quiescent current: Q7 <b>${fI(r.Ie7)}</b> · Q8 <b>${fI(r.Ie8)}</b>`;
+        read.innerHTML = cc(`Above Q3's base ${rv(kk(Math.round(Rt)))} · below ${rv(kk(Math.round(Rb)))}<br>Bias: <span class="pv">${sw.s1 ? '0 V (S1 closed)' : fV2(r.Vbias)}</span><br>Quiescent current: Q7 <b>${fI(r.Ie7)}</b> · Q8 <b>${fI(r.Ie8)}</b>`);
         const iq = (r.Ie7 + r.Ie8) / 2;
         if (sw.s1) hint.textContent = 'S1 is closed and shorts out the bias network, so RV2 has no effect until S1 is opened.';
         else if (iq > 0.1) { hint.classList.add('warn'); hint.textContent = `Far too hot: ${fI(iq)} flows through the output transistors with no signal. On the bench they would overheat (Q3 is normally mounted on the heatsink so the bias drops as they warm up).`; }
