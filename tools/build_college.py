@@ -114,6 +114,17 @@ def build_college(path, out_dir):
     # and a page with the shared zoom modal uses its classes too: quiz-common.css goes first as the base layer,
     # so anything the TAFE theme does not restyle still works
     base_css = asset('quiz-common.css') if (uses(page, 'quiz-engine.js') or 'class="diagram-modal"' in page) else ''
+    # a resources current-flow simulator (a circuit panel, no quiz engine) draws with the site's full component palette
+    # (wires, current flow, R / C / D / Q colours, the AC/DC buttons): quiz-common.css goes underneath, flipped to the
+    # college light/dark switch, with the TAFE theme's own core colours (background, panel, text…) left to the theme
+    if not base_css and '/resources/' in os.path.abspath(path) and 'class="circuit-panel"' in page:
+        qc = asset('quiz-common.css').replace(':root[data-theme="light"]', 'body:not(.dark-theme)')
+        theme_vars = set(re.findall(r'(--[a-z0-9-]+)\s*:', theme_css))
+        def drop_theme_vars(m):
+            keep = [l for l in m.group(2).split('\n') if not (re.match(r'\s*(--[a-z0-9-]+)\s*:', l) and re.match(r'\s*(--[a-z0-9-]+)\s*:', l).group(1) in theme_vars)]
+            return m.group(1) + '\n'.join(keep) + m.group(3)
+        qc = re.sub(r'(body:not\(\.dark-theme\)\s*\{)(.*?)(\n\})', drop_theme_vars, qc, count=1, flags=re.S)
+        base_css = qc
     # the student pages are dark-first (:root) with a light override under :root[data-theme="light"]; the college
     # pages are light-first with body.dark-theme, so a page that uses that pattern is flipped to match
     if ':root[data-theme="light"]' in page_css:
@@ -125,6 +136,8 @@ def build_college(path, out_dir):
     body = re.sub(r'<div class="crumb"[^>]*></div>\s*', '', body)
     body = re.sub(r'<footer>.*?</footer>\s*', '', body, flags=re.S)
     body = re.sub(r'<a id="menuLink"[^>]*>.*?</a>\s*', '', body, flags=re.S)                 # the student-only "← Back" link
+    body = re.sub(r'<div class="back-link-row">\s*<a id="backLink"[^>]*>.*?</a>\s*</div>\s*', '', body, flags=re.S)   # …or its "backLink" form
+    body = re.sub(r"\n\s*if \(history\.length > 1\) \{ document\.getElementById\('backLink'\)[^\n]*", '', body)
     body = re.sub(r'<div class="progress-wrap"[^>]*>\s*</div>\s*', '', body, count=1)        # a progress bar left empty (builders, simulators)
     if 'quiz-wrap single-col' in body:
         body = sub_once(r'<div class="quiz-wrap single-col" id="quizWrap">\s*(?:<!--.*?-->\s*)*<div class="questions-col">\s*',
