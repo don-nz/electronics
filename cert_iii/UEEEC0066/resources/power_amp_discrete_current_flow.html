@@ -86,6 +86,8 @@
     .steps .step-title { display: block; font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: var(--colour-label); }
     .eq-var { color: var(--colour-current); }
     .eq-v { color: var(--colour-voltage-label); }
+    .sim { color: var(--colour-label); font-size: .92em; white-space: nowrap; }
+    .steps-method { margin: 0 0 .5rem; font-family: inherit; font-size: .75rem; color: var(--colour-label); }
     .mode-row { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: .5rem 1rem; margin-bottom: .7rem; }
     .pop-ctl { display: flex; align-items: center; gap: .4rem; font-size: .78rem; color: var(--colour-label); }
     .ac-controls { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: .5rem 1rem; margin: 0 auto .8rem; font-size: .8rem; color: var(--colour-label); }
@@ -503,6 +505,7 @@
       <p class="model-note">The arrow beside a reading shows how it changed with the last switch you flipped.</p>
       <div class="current-equations">
         <div class="steps-title">Working it out, step by step</div>
+        <p class="steps-method">The course method: V<sub>BE</sub> = 0.6 V, base currents ignored, Q1's base at 0 V. The simulator's more exact value is given in brackets.</p>
         <ol class="steps" id="steps"></ol>
       </div>
     </div>
@@ -859,19 +862,37 @@
 
     const st = (title, html) => ({ title, html });
     function steps(r) {
-      const Q = r.Q, Ra = P.rv1 * P.RV1;
-      const out = [];
-      out.push(st('The tail current (R3)', `R3 feeds the emitters of Q1 and Q2 through RV1. The tail sits one ${vv('V<sub>EB</sub>')} above the bases: ${vv('V<sub>tail</sub>')} = <b>${fV(r.W)}</b>.<br>${cv('I<sub>R3</sub>')} = ${frac(`20 − ${vv('V<sub>tail</sub>')}`, 'R3')} = ${frac(`20 − ${n3(r.W)}`, rv('47 kΩ'))} = <b>${fI(r.IR3)}</b>`));
-      out.push(st('The output sits at 0 V', `C2 blocks DC, so R4 carries no DC current and the DC gain is 1: the feedback makes Q2's base follow Q1's base. Each base sits a little above 0 V because its base current flows through R1 (Q1) or R8 (Q2):<br>${vv('V<sub>B1</sub>')} = ${cv('I<sub>B1</sub>')} × R1 = ${uA2(Q.Q1.Ib)} × ${rv('22 kΩ')} = <b>${fV(r.Vb1)}</b><br>${vv('V<sub>out</sub>')} = ${vv('V<sub>B2</sub>')} − ${cv('I<sub>B2</sub>')} × R8 = ${n3(r.Vb2)} − ${uA2(Q.Q2.Ib)} × ${rv('100 kΩ')} = <b>${fV(r.Vout)}</b> (the DC offset; RV1 trims it).`));
-      out.push(st('The voltage amplifier current (R6 → Q4)', `The top of the bias network is two ${vv('V<sub>BE</sub>')}s (Q5, Q7) above the output: ${vv('V<sub>T</sub>')} = <b>${fV(r.T)}</b>. R6 sets the current:<br>${cv('I<sub>R6</sub>')} = ${frac(`20 − ${vv('V<sub>T</sub>')}`, 'R6')} = ${frac(`20 − ${n3(r.T)}`, rv('2.2 kΩ'))} = <b>${fI(r.IR6)}</b><br>Almost all of it flows down through ${r.s1 ? 'S1' : 'the bias network'} into Q4's collector: ${cv('I<sub>C4</sub>')} = <b>${fI(Q.Q4.Ic)}</b>.`));
-      out.push(st('How much of the tail Q1 needs', `Q4 needs ${vv('V<sub>BE4</sub>')} + ${cv('I<sub>E4</sub>')}·R7 = ${n3(Q.Q4.Vbe)} + ${fI(Q.Q4.Ie)} × ${rv('27 Ω')} = ${n3(Q.Q4.Vbe + Q.Q4.Ie * P.R7)} V across R2, so<br>${cv('I<sub>C1</sub>')} = ${cv('I<sub>R2</sub>')} + ${cv('I<sub>B4</sub>')} = ${fI(r.IR2)} + ${fI(Q.Q4.Ib)} = <b>${fI(Q.Q1.Ic)}</b>, and the rest of the tail goes through Q2: ${cv('I<sub>C2</sub>')} = <b>${fI(Q.Q2.Ic)}</b>. The feedback loop settles on this split by itself.`));
-      if (r.s1) out.push(st('The bias', `S1 is closed: it shorts out Q3 and its resistors, so ${vv('V<sub>bias</sub>')} = <b>0 V</b>. Both driver bases sit at ${fV(r.T)} and none of the four output-stage junctions has enough voltage to conduct.`));
+      // the course method: V_BE = 0.6 V, Q1's base at 0 V, base currents ignored; the simulator's own value follows in brackets
+      const Q = r.Q, VBE = 0.6, VCC = P.VCC, out = [];
+      const sim = t => `<span class="sim">(simulator: ${t})</span>`;
+      const mA = x => (x * 1000).toFixed(x < 1e-3 ? 3 : 2) + ' mA';
+      const Vtail = 0 + VBE, IR3 = (VCC - Vtail) / P.R3;
+      const VT = 0 + 2 * VBE, IR6 = (VCC - VT) / P.R6;
+      const VR2 = VBE + IR6 * P.R7, IC1 = VR2 / P.R2, IC2 = IR3 - IC1;
+      out.push(st('The tail current (R3)', `Q1's base is taken as <b>0 V</b> (its tiny base current through R1 is ignored), so the tail sits one ${vv('V<sub>EB</sub>')} above it:<br>${vv('V<sub>tail</sub>')} = ${vv('V<sub>B1</sub>')} + ${vv('V<sub>EB</sub>')} = 0 + 0.6 = <b>0.6 V</b> ${sim(fV(r.W))}<br>` +
+        `${cv('I<sub>R3</sub>')} = ${frac(`${VCC} − ${vv('V<sub>tail</sub>')}`, 'R3')} = ${frac(`${VCC} − 0.6`, rv('47 kΩ'))} = <b>${mA(IR3)}</b> ${sim(fI(r.IR3))}`));
+      out.push(st('The output sits at 0 V', `C2 blocks DC, so R4 carries no DC current and the DC gain is 1: the feedback makes Q2's base follow Q1's. With the base currents ignored,<br>${vv('V<sub>out</sub>')} = ${vv('V<sub>B2</sub>')} = ${vv('V<sub>B1</sub>')} = <b>0 V</b> ${sim(fV(r.Vout))}<br>The small offset in the simulator comes from the base currents flowing through R1 and R8; RV1 trims it out.`));
+      out.push(st('The voltage amplifier current (R6 → Q4)', `The top of the bias network is two ${vv('V<sub>BE</sub>')}s (Q5, Q7) above the output:<br>${vv('V<sub>T</sub>')} = ${vv('V<sub>out</sub>')} + ${vv('V<sub>BE5</sub>')} + ${vv('V<sub>BE7</sub>')} = 0 + 0.6 + 0.6 = <b>1.2 V</b> ${sim(fV(r.T))}<br>` +
+        `${cv('I<sub>R6</sub>')} = ${frac(`${VCC} − ${vv('V<sub>T</sub>')}`, 'R6')} = ${frac(`${VCC} − 1.2`, rv('2.2 kΩ'))} = <b>${mA(IR6)}</b> ${sim(fI(r.IR6))}<br>` +
+        `Almost all of it flows down through ${r.s1 ? 'S1' : 'the bias network'} into Q4's collector: ${cv('I<sub>C4</sub>')} ≈ ${cv('I<sub>R6</sub>')} = <b>${mA(IR6)}</b> ${sim(fI(Q.Q4.Ic))}`));
+      out.push(st('How much of the tail Q1 needs', `Q4 needs ${vv('V<sub>BE4</sub>')} + ${cv('I<sub>E4</sub>')} × R7 = 0.6 + ${mA(IR6)} × ${rv('27 Ω')} = <b>${VR2.toFixed(3)} V</b> across R2, so with Q4's base current ignored<br>` +
+        `${cv('I<sub>C1</sub>')} ≈ ${cv('I<sub>R2</sub>')} = ${frac(`${VR2.toFixed(3)} V`, rv('4.7 kΩ'))} = <b>${mA(IC1)}</b> ${sim(fI(Q.Q1.Ic))}<br>` +
+        `and the rest of the tail goes through Q2: ${cv('I<sub>C2</sub>')} = ${cv('I<sub>R3</sub>')} − ${cv('I<sub>C1</sub>')} = ${mA(IR3)} − ${mA(IC1)} = <b>${mA(IC2)}</b> ${sim(fI(Q.Q2.Ic))}<br>` +
+        `The simulator's Q1 carries a little more because Q4's base current (${fI(Q.Q4.Ib)}) also comes from it, and Q4's ${vv('V<sub>BE</sub>')} at ${fI(Q.Q4.Ic)} is nearer ${n3(Q.Q4.Vbe)} V. The feedback loop settles on the split by itself.`));
+      if (r.s1) out.push(st('The bias', `S1 is closed: it shorts out Q3 and its resistors, so ${vv('V<sub>bias</sub>')} = <b>0 V</b>. The output stage needs 4 × 0.6 = 2.4 V before it conducts, so all four junctions are off: ${cv('I<sub>Q</sub>')} = <b>0</b> ${sim(fI(r.Ie7))}`));
       else {
-        const m = multDetail(r.Vbias), Rt = MULT.Rt, Rb = MULT.Rb;
-        out.push(st('The bias (Q3, the V<sub>BE</sub> multiplier)', `RV2's wiper splits the chain into ${rv(kk(Math.round(Rt)))} above Q3's base (R5 + part of RV2) and ${rv(kk(Math.round(Rb)))} below it (the rest of RV2 + R11). Q3 conducts just enough to hold its own ${vv('V<sub>BE</sub>')} = ${n3(m.vb)} V across the lower part:<br>${vv('V<sub>bias</sub>')} ≈ ${vv('V<sub>BE3</sub>')} × ${frac(`${rv('R<sub>top</sub>')} + ${rv('R<sub>bottom</sub>')}`, rv('R<sub>bottom</sub>'))} + ${cv('I<sub>B3</sub>')}·${rv('R<sub>top</sub>')} = ${n3(m.vb)} × ${frac(`${rv(kk(Math.round(Rt)))} + ${rv(kk(Math.round(Rb)))}`, rv(kk(Math.round(Rb))))} + ${fI(m.Ib3)} × ${rv(kk(Math.round(Rt)))} = <b>${fV2(r.Vbias)}</b><br>(Q3's base current is a big share of the chain current here, so it adds noticeably.) Turning RV2 changes the ratio, and so the quiescent current.`));
-        out.push(st('The quiescent current', `${fV2(r.Vbias)} is shared by ${vv('V<sub>BE5</sub>')} + ${vv('V<sub>BE7</sub>')} + ${vv('V<sub>EB8</sub>')} + ${vv('V<sub>EB6</sub>')} + ${cv('I<sub>Q</sub>')}·(R9 + R10) = ${n3(Q.Q5.Vbe)} + ${n3(Q.Q7.Vbe)} + ${n3(Q.Q8.Vbe)} + ${n3(Q.Q6.Vbe)} + ${n3(r.Ie7 + r.Ie8 > 0 ? (r.Ie7 * P.R9 + r.Ie8 * P.R10) : 0)} V, which needs ${cv('I<sub>Q7</sub>')} = <b>${fI(r.Ie7)}</b>${r.s2 ? `, ${cv('I<sub>Q8</sub>')} = <b>${fI(r.Ie8)}</b> (the difference, ${fI(r.Ie8 - r.Ie7)}, is the offset current in R<sub>L</sub>)` : ' through both output transistors'}.`));
+        const m = multDetail(r.Vbias), Rt = MULT.Rt, Rb = MULT.Rb, Vb = VBE * (Rt + Rb) / Rb;
+        out.push(st('The bias (Q3, the V<sub>BE</sub> multiplier)', `With 0.6 V per junction the output stage needs ${vv('V<sub>BE5</sub>')} + ${vv('V<sub>BE7</sub>')} + ${vv('V<sub>EB8</sub>')} + ${vv('V<sub>EB6</sub>')} = 4 × 0.6 = <b>2.4 V</b> across the bias network before it conducts.<br>` +
+          `RV2's wiper splits the chain into ${rv(kk(Math.round(Rt)))} above Q3's base (R5 + part of RV2) and ${rv(kk(Math.round(Rb)))} below it (the rest of RV2 + R11). Q3 holds 0.6 V across the lower part, so<br>` +
+          `${vv('V<sub>bias</sub>')} ≈ ${vv('V<sub>BE3</sub>')} × ${frac(`${rv('R<sub>top</sub>')} + ${rv('R<sub>bottom</sub>')}`, rv('R<sub>bottom</sub>'))} = 0.6 × ${frac(`${rv(kk(Math.round(Rt)))} + ${rv(kk(Math.round(Rb)))}`, rv(kk(Math.round(Rb))))} = <b>${Vb.toFixed(2)} V</b> ${sim(fV2(r.Vbias))}<br>` +
+          `Here the simple method falls well short. Q3 carries ${fI(m.Ic3)}, so its ${vv('V<sub>BE</sub>')} is nearer ${n3(m.vb)} V, and its ${fI(m.Ib3)} of base current dropping across ${rv('R<sub>top</sub>')} adds another ${(m.Ib3 * Rt).toFixed(2)} V. That is why RV2 is set by adjusting it on the bench, not by calculation.`));
+        const iq = (r.Vbias - 4 * VBE) / (P.R9 + P.R10);
+        out.push(st('The quiescent current', `Any bias above 2.4 V is dropped across R9 + R10. Using the simulator's ${vv('V<sub>bias</sub>')}:<br>` +
+          `${cv('I<sub>Q</sub>')} ≈ ${frac(`${vv('V<sub>bias</sub>')} − 2.4`, 'R9 + R10')} = ${frac(`${r.Vbias.toFixed(3)} − 2.4`, rv('2 Ω'))} = <b>${iq > 0 ? mA(iq) : '0 (below 2.4 V: off)'}</b> ${sim(fI((r.Ie7 + r.Ie8) / 2))}<br>` +
+          `A few millivolts more or less of bias changes this a lot, which is why the quiescent current is measured (across R9 or R10) while RV2 is turned, rather than calculated.`));
       }
-      out.push(st('Supply current', `${cv('I<sub>+20</sub>')} = ${cv('I<sub>R3</sub>')} + ${cv('I<sub>R6</sub>')} + ${cv('I<sub>C5</sub>')} + ${cv('I<sub>C7</sub>')} = ${fI(r.IR3)} + ${fI(r.IR6)} + ${fI(Q.Q5.Ic)} + ${fI(Q.Q7.Ic)} = <b>${fI(r.Ip)}</b>`));
+      const iqS = (r.Ie7 + r.Ie8) / 2;
+      out.push(st('Supply current', `${cv('I<sub>+20</sub>')} ≈ ${cv('I<sub>R3</sub>')} + ${cv('I<sub>R6</sub>')} + ${cv('I<sub>Q</sub>')} = ${mA(IR3)} + ${mA(IR6)} + ${fI(iqS)} = <b>${mA(IR3 + IR6 + iqS)}</b> ${sim(fI(r.Ip))}<br>(using the simulator's quiescent current, since the course method can't pin that down)`));
       return out;
     }
 

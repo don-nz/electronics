@@ -119,6 +119,8 @@
     .steps .step-title { display: block; font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: var(--colour-label); }
     .eq-var { color: var(--colour-current); }
     .eq-v { color: var(--colour-voltage-label); }
+    .sim { color: var(--colour-label); font-size: .92em; white-space: nowrap; }
+    .steps-method { margin: 0 0 .5rem; font-family: inherit; font-size: .75rem; color: var(--colour-label); }
     /* AC view */
     .mode-row { display: flex; justify-content: center; margin-bottom: .7rem; }
     .ac-controls { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: .5rem 1rem; margin: 0 auto .8rem; font-size: .8rem; color: var(--colour-label); }
@@ -537,6 +539,7 @@
 
     <div class="current-equations">
       <div class="steps-title">Working it out, step by step</div>
+        <p class="steps-method">The course method: V<sub>BE</sub> = 0.6 V, D1 = 0.6 V, base currents ignored. The simulator's more exact value is given in brackets.</p>
       <ol class="steps" id="steps"></ol>
     </div>
     </div>
@@ -805,32 +808,47 @@
     // ── hand-solve steps, in the order you would work it out ──
     const st = (title, html) => ({ title, html });
     function steps(r) {
-      const out = [];
+      // the course method: V_BE = 0.6 V, D1 = 0.6 V, base currents ignored, rails at ±15 V; the simulator's own value follows in brackets
+      const VBE = 0.6, VD = 0.6, VCC = P.VCC, out = [];
+      const sim = t => `<span class="sim">(simulator: ${t})</span>`;
+      const mA = x => (Math.abs(x) < 0.5e-6 ? '0' : (x * 1000).toFixed(Math.abs(x) < 0.01 ? 2 : 1)) + ' mA';
+      const open = r.sw2 === 'open';
+      const v1 = x => (Math.abs(x) < 1e-9 ? '0' : x.toFixed(1));       // 0 not 0.0
+      // the 741 output by the course numbers: SW1 A holds it at 0 V; SW1 B moves it so that V_out = 0 V
+      const Vo = r.sw1 === 'A' ? 0 : (open ? -VD / 2 : 0);
+      const VB1 = open ? Vo + VD : Vo, VB2 = Vo;
+      const IR4 = (VCC - VB1) / P.R4, IR5 = (VB2 + VCC) / P.R5, Iop = IR5 - IR4;
       out.push(st('The 741 output', `C1 blocks DC, so the + input sits at <b>0 V</b> through R1. The 741 drives its output until V− = V+ = 0 V. ` +
         (r.sw1 === 'A'
           ? `SW1 is set to the <b>741 output</b>: R3 / R2 feed back the 741's own output, so V− = 0 V only when ${vv('V<sub>741</sub>')} = <b>0 V</b>. The output stage is outside the loop.`
-          : `SW1 is set to the <b>amplifier output</b>: R3 / R2 feed back the <i>amplifier</i> output, so the 741 moves its own output until ${vv('V<sub>out</sub>')} = <b>0 V</b>. Here that needs ${vv('V<sub>741</sub>')} = <b>${fV(r.Vo)}</b>.`) +
-        `<br>No current flows into the − input (a 741 input draws only about 80 nA), so all of R3's current carries straight on through R2 to 0 V: ${cv('I<sub>R3</sub>')} = ${cv('I<sub>R2</sub>')} = <b>${fI(r.Ifb)}</b>. The feedback works by setting the <i>voltage</i> at the − input, not by pushing current into it.`));
-      if (r.sw2 === 'open') {
-        out.push(st('Bias between the bases', `SW2 is open, so the R4 → D1 → R5 chain carries about 30 mA and D1 drops ${vv('V<sub>D1</sub>')} = <b>${fV(r.VD1)}</b>. The NPN base is one diode drop above the 741 output; the PNP base is wired straight to it.<br>${vv('V<sub>B1</sub>')} = ${vv('V<sub>741</sub>')} + ${vv('V<sub>D1</sub>')} = ${n3(r.Vo)} + ${n3(r.VD1)} = <b>${fV(r.B1)}</b>`));
-        out.push(st('Bias chain currents', `${cv('I<sub>R4</sub>')} = ${frac(`${vv('+V<sub>rail</sub>')} − ${vv('V<sub>B1</sub>')}`, 'R4')} = ${frac(`${n3(r.Vp)} − ${n3(r.B1)}`, rv('470 Ω'))} = <b>${fI(r.IR4)}</b><br>` +
-          `${cv('I<sub>R5</sub>')} = ${frac(`${vv('V<sub>B2</sub>')} − (${vv('−V<sub>rail</sub>')})`, 'R5')} = ${frac(`${n3(r.B2)} − (${n3(r.Vn)})`, rv('470 Ω'))} = <b>${fI(r.IR5)}</b><br>` +
-          `${cv('I<sub>D1</sub>')} = ${cv('I<sub>R4</sub>')} − ${cv('I<sub>B1</sub>')} = ${fI(r.IR4)} − ${fI(r.Ib1)} = <b>${fI(r.ID1)}</b>`));
+          : `SW1 is set to the <b>amplifier output</b>: R3 / R2 feed back the <i>amplifier</i> output, so the 741 moves its own output until ${vv('V<sub>out</sub>')} = <b>0 V</b>.` +
+            (open ? ` With 0.6 V across D1 shared equally by the two base-emitters, that needs ${vv('V<sub>741</sub>')} = −${frac('0.6', '2')} = <b>−0.3 V</b> ${sim(fV(r.Vo))}.` : ` With the bases joined that needs ${vv('V<sub>741</sub>')} = <b>0 V</b> ${sim(fV(r.Vo))}.`)) +
+        `<br>No current flows into the − input (a 741 input draws only about 80 nA), so all of R3's current carries straight on through R2 to 0 V: ${cv('I<sub>R3</sub>')} = ${cv('I<sub>R2</sub>')}. The feedback works by setting the <i>voltage</i> at the − input, not by pushing current into it.`));
+      if (open) {
+        out.push(st('Bias between the bases', `SW2 is open, so D1 sits between the bases. Taking D1 as 0.6 V, the NPN base is one diode drop above the 741 output; the PNP base is wired straight to it.<br>` +
+          `${vv('V<sub>B1</sub>')} = ${vv('V<sub>741</sub>')} + ${vv('V<sub>D1</sub>')} = ${v1(Vo)} + 0.6 = <b>${v1(VB1)} V</b> ${sim(fV(r.B1))}<br>` +
+          `(A real diode carrying about 30 mA drops nearer ${n3(r.VD1)} V.)`));
+        out.push(st('Bias chain currents', `${cv('I<sub>R4</sub>')} = ${frac(`+${VCC} − ${vv('V<sub>B1</sub>')}`, 'R4')} = ${frac(`${VCC} − ${v1(VB1)}`, rv('470 Ω'))} = <b>${mA(IR4)}</b> ${sim(fI(r.IR4))}<br>` +
+          `${cv('I<sub>R5</sub>')} = ${frac(`${vv('V<sub>B2</sub>')} − (−${VCC})`, 'R5')} = ${frac(`${v1(VB2)} + ${VCC}`, rv('470 Ω'))} = <b>${mA(IR5)}</b> ${sim(fI(r.IR5))}<br>` +
+          `With the NPN's base current ignored, all of R4's current goes through D1: ${cv('I<sub>D1</sub>')} ≈ ${cv('I<sub>R4</sub>')} = <b>${mA(IR4)}</b> ${sim(fI(r.ID1))}`));
       } else {
-        out.push(st('Bias between the bases', `SW2 is closed: it shorts D1, so both bases are at the 741 output, ${vv('V<sub>B1</sub>')} = ${vv('V<sub>B2</sub>')} = <b>${fV(r.B1)}</b>. There is <b>0 V</b> of bias between them.`));
-        out.push(st('Bias chain currents', `D1 is shorted, so ${cv('I<sub>D1</sub>')} = 0 and R4's current goes through SW2 instead.<br>${cv('I<sub>R4</sub>')} = ${frac(`${n3(r.Vp)} − ${n3(r.B1)}`, rv('470 Ω'))} = <b>${fI(r.IR4)}</b> &nbsp; ${cv('I<sub>R5</sub>')} = ${frac(`${n3(r.B2)} − (${n3(r.Vn)})`, rv('470 Ω'))} = <b>${fI(r.IR5)}</b>`));
+        out.push(st('Bias between the bases', `SW2 is closed: it shorts D1, so both bases are at the 741 output, ${vv('V<sub>B1</sub>')} = ${vv('V<sub>B2</sub>')} = <b>0 V</b> ${sim(fV(r.B1))}. There is <b>0 V</b> of bias between them.`));
+        out.push(st('Bias chain currents', `D1 is shorted, so R4's current goes through SW2 instead.<br>` +
+          `${cv('I<sub>R4</sub>')} = ${frac(`${VCC} − 0`, rv('470 Ω'))} = <b>${mA(IR4)}</b> ${sim(fI(r.IR4))} &nbsp; ${cv('I<sub>R5</sub>')} = ${frac(`0 + ${VCC}`, rv('470 Ω'))} = <b>${mA(IR5)}</b> ${sim(fI(r.IR5))}`));
       }
-      out.push(st('The 741 output current', `What R5 takes that D1 / SW2 don't bring: ${cv('I<sub>741</sub>')} = ${cv('I<sub>R5</sub>')} − ${cv(r.sw2 === 'open' ? 'I<sub>D1</sub>' : 'I<sub>SW2</sub>')} = ${fI(r.IR5)} − ${fI(r.sw2 === 'open' ? r.ID1 : r.ISW2)} ≈ <b>${fI(r.Iop)}</b>${Math.abs(r.Iop) < 20e-6 ? ' — the two bias resistors balance, so the 741 has almost nothing to do' : r.Iop > 0 ? ' (sourcing)' : ' (sinking)'}`));
-      // output stage
-      const vbe1 = r.B1 - r.E1, veb2 = r.E2 - r.B2;
+      out.push(st('The 741 output current', `What R5 takes that ${open ? 'D1' : 'SW2'} doesn't bring: ${cv('I<sub>741</sub>')} = ${cv('I<sub>R5</sub>')} − ${cv('I<sub>R4</sub>')} = ${mA(IR5)} − ${mA(IR4)} = <b>${mA(Iop)}</b>${Iop > 0 ? ' (sourcing)' : Iop < 0 ? ' (sinking)' : ''} ${sim(fI(r.Iop))}` +
+        (Math.abs(Iop) < 1e-5 ? ' — the two bias resistors balance, so the 741 has almost nothing to do.' : '')));
+      // output stage, by the course numbers
       let os;
-      if (r.sw2 === 'closed') os = `Both bases and the output are at 0 V, so each transistor has ${vv('V<sub>BE</sub>')} = 0 V: <b>both are off</b>. ${cv('I<sub>Q1</sub>')} = ${cv('I<sub>Q2</sub>')} = 0 and ${vv('V<sub>out</sub>')} = <b>${fV(r.Vout)}</b>.`;
-      else if (r.sw1 === 'B') os = `The ${fV(r.VD1)} between the bases is shared: ${vv('V<sub>BE1</sub>')} ≈ ${vv('V<sub>EB2</sub>')} ≈ <b>${n3(vbe1)} V</b>. That is below the ≈ 0.55 V a power transistor needs to conduct properly, so each passes only <b>${fI(r.Ic1)}</b>.`;
-      else if (r.sw3 === 'RL') os = `The NPN base is at ${fV(r.B1)} but the PNP base is at 0 V, so only the NPN conducts. Its current flows through R6 into R<sub>L</sub>:<br>${vv('V<sub>out</sub>')} = ${vv('V<sub>B1</sub>')} − ${vv('V<sub>BE1</sub>')} − ${cv('I<sub>E1</sub>')}·R6 = ${n3(r.B1)} − ${n3(vbe1)} − ${(r.Ie1 * P.R6).toFixed(3)} = <b>${fV(r.Vout)}</b><br>${cv('I<sub>RL</sub>')} = ${frac(vv('V<sub>out</sub>'), 'R<sub>L</sub>')} = ${frac(n3(r.Vout) + ' V', rv('15 Ω'))} = <b>${fI(r.IRL)}</b> — the PNP's ${vv('V<sub>EB</sub>')} is only ${n3(veb2)} V, so it stays off.`;
-      else os = `With no load the same current must flow through both transistors, so the output settles halfway between the bases: ${vv('V<sub>out</sub>')} ≈ ${frac(`${n3(r.B1)} + ${n3(r.B2)}`, '2')} = <b>${fV(r.Vout)}</b>. Each ${vv('V<sub>BE</sub>')} ≈ ${n3(vbe1)} V, so ${cv('I<sub>Q1</sub>')} = ${cv('I<sub>Q2</sub>')} = <b>${fI(r.Ic1)}</b>.`;
+      if (!open) os = `Both bases and the output are at 0 V, so each transistor has ${vv('V<sub>BE</sub>')} = 0 V, well short of 0.6 V: <b>both are off</b>. ${cv('I<sub>Q1</sub>')} = ${cv('I<sub>Q2</sub>')} = <b>0</b> ${sim(fI(r.Ic1) + ', ' + fI(r.Ic2))} and ${vv('V<sub>out</sub>')} = <b>0 V</b> ${sim(fV(r.Vout))}.`;
+      else if (r.sw1 === 'B') os = `The 0.6 V between the bases is shared: ${vv('V<sub>BE1</sub>')} = ${vv('V<sub>EB2</sub>')} = ${frac('0.6', '2')} = <b>0.3 V</b>, short of the 0.6 V needed, so both are (just about) <b>off</b>: ${cv('I<sub>Q1</sub>')} ≈ <b>0</b> ${sim(fI(r.Ic1))}.`;
+      else if (r.sw3 === 'RL') os = `The NPN base is at 0.6 V and the output at 0 V, so ${vv('V<sub>BE1</sub>')} = 0.6 V: the NPN is right at the point of turning on, so ${cv('I<sub>Q1</sub>')} ≈ <b>0</b> and ${vv('V<sub>out</sub>')} ≈ <b>0 V</b> ${sim(fI(r.Ic1) + ', ' + fV(r.Vout))}.<br>` +
+        `In the simulator the diode drops ${n3(r.VD1)} V, more than the NPN's ${n3(r.B1 - r.E1)} V at that current, so the NPN does conduct and pushes current into R<sub>L</sub>: ${cv('I<sub>RL</sub>')} = ${frac(vv('V<sub>out</sub>'), 'R<sub>L</sub>')} = ${frac(n3(r.Vout) + ' V', rv('15 Ω'))} = ${fI(r.IRL)}, a small DC offset that nothing corrects.`;
+      else os = `With no load the output settles halfway between the bases, ${frac('0.6', '2')} = 0.3 V, leaving 0.3 V on each base-emitter: both stay <b>off</b> ${sim(fI(r.Ic1) + ' through both, ' + fV(r.Vout))}.`;
       out.push(st('The output transistors', os));
-      out.push(st('Supply current', `${cv('I<sub>R8</sub>')} = ${cv('I<sub>R4</sub>')} + ${cv('I<sub>Q1</sub>')} + ${cv('I<sub>741(+)</sub>')} = ${fI(r.IR4)} + ${fI(r.Ic1)} + ${fI(r.IopP)} = <b>${fI(r.IR8)}</b><br>` +
-        `It drops ${cv('I<sub>R8</sub>')} × ${rv('1.8 Ω')} = <b>${(r.IR8 * P.R8 * 1000).toFixed(0)} mV</b> across R8, so the + rail is ${fVs(r.Vp)}. (Measuring the voltage across R8 or R9 is how you read the supply current without breaking the circuit.)`));
+      const Ic1c = 0, IopP = Math.max(Iop, 0), IR8 = IR4 + Ic1c + IopP;
+      out.push(st('Supply current', `${cv('I<sub>R8</sub>')} ≈ ${cv('I<sub>R4</sub>')} + ${cv('I<sub>Q1</sub>')} + ${cv('I<sub>741(+)</sub>')} = ${mA(IR4)} + 0 + ${mA(IopP)} = <b>${mA(IR8)}</b> ${sim(fI(r.IR8))}<br>` +
+        `(The simulator also includes the 741's own 1.7 mA supply current${r.Ic1 > 1e-3 ? ' and Q1\'s ' + fI(r.Ic1) : ''}.) It drops ${cv('I<sub>R8</sub>')} × ${rv('1.8 Ω')} = <b>${(IR8 * P.R8 * 1000).toFixed(0)} mV</b> across R8. Measuring the voltage across R8 or R9 is how you read the supply current without breaking the circuit.`));
       return out;
     }
 
