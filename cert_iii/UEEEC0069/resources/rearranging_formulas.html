@@ -1,0 +1,781 @@
+<!--
+  Rearranging formulas — practice, one algebra step per question.
+
+  Each PROBLEM starts from a formula and asks for one variable to be made the
+  subject. The picker offers two ways to work it:
+    Step by step   every step is its own question: the student sees the equation
+                   so far and picks the correct next line from four (one correct,
+                   three invalid — each a real, common slip: wrong operation,
+                   operation applied to one side only, or the right operation on
+                   the wrong terms).
+    Order the lines  one question per problem, laid out like the Negative Feedback
+                   Overview Q3: line 1 is given (locked) and the student clicks the
+                   lines that follow in order. The worked solution numbers each step
+                   with what was done and why. (Uses `goal` and `why`, not `wrong`.)
+
+  The page opens on a picker (one card per base formula). Choosing a formula
+  and pressing Next starts a run made of that formula's problems — each one
+  once, in random order, with its steps always in order. Restart reshuffles.
+
+  To add a formula, append to FORMULAS below: { id, title, shown, blurb,
+  problems: [...] }. A problem is:
+    { name, start, target, given?, steps: [ { goal, line, wrong: [3 lines], why } ... ] }
+  `given` is optional extra text shown under the question (e.g. a substitution).
+  `start` and every `line`/`wrong` entry are HTML (use the helpers V, I, R, ...
+  and frac()). Keep a formula's problems to three or fewer, and avoid two
+  problems in one formula whose first step is the same line.
+
+  Built on the shared cert_iii/assets/quiz-engine.js (single column, no
+  circuit panel).
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../assets/theme-init.js"></script>
+  <script src="../../assets/quiz-engine.js"></script>
+  <title>Rearranging Formulas</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../assets/quiz-common.css">
+  <script src="../../assets/breadcrumb.js" defer></script>
+  <style>
+    .eq-strip {
+      margin: .7rem 0 .2rem;
+      padding: .7rem 1rem;
+      border: 1px solid var(--colour-border);
+      border-radius: 8px;
+      background: rgba(var(--colour-ui-primary-rgb), .06);
+      font-size: 1.15rem;
+      text-align: center;
+    }
+    .eq-strip .eq-label { display: block; font-size: .7rem; letter-spacing: .08em; text-transform: uppercase; color: var(--colour-label); margin-bottom: .2rem; }
+    .eq-goal { font-size: .85rem; }
+    .picker { max-width: 1000px; margin: 0 auto 2rem; padding: 0 16px; }
+    .picker-intro { text-align: center; color: var(--colour-label); margin: 0 0 1.2rem; }
+    .formula-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: .8rem; }
+    @media (min-width: 900px) { .formula-grid { grid-template-columns: repeat(4, 1fr); } }
+    .formula-card {
+      display: flex; flex-direction: column; align-items: center; justify-content: space-between; gap: .6rem;
+      padding: 1rem .6rem; min-height: 9.5rem; text-align: center; cursor: pointer;
+      border: 1px solid var(--colour-border); border-radius: 10px;
+      background: var(--colour-panel); color: var(--colour-text);
+      font: inherit; transition: border-color .15s, box-shadow .15s, background .15s;
+    }
+    .formula-card:hover { border-color: var(--colour-ui-primary); }
+    .formula-card.selected {
+      border-color: var(--colour-ui-primary);
+      background: rgba(var(--colour-ui-primary-rgb), .1);
+      box-shadow: 0 0 0 2px rgba(var(--colour-ui-primary-rgb), .35);
+    }
+    .formula-title { font-weight: 700; font-size: .85rem; }
+    .formula-eq { font-size: 1.05rem; }
+    .formula-blurb { font-size: .72rem; color: var(--colour-label); }
+    .mode-pick { display: flex; flex-wrap: wrap; justify-content: center; gap: .6rem 1.6rem; margin: 0 0 1.2rem; font-size: .85rem; color: var(--colour-label); }
+    .mode-pick label { cursor: pointer; }
+    .eq-line { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .4rem .7rem; }
+    .eq-arrow { color: var(--colour-label); }
+    .eq-step:last-child { font-weight: 700; }
+    /* base raised to a stacked exponent, with tall brackets — e.g. 10^( A/20 ).
+       The base is drawn larger and the exponent sits well above its baseline. */
+    .pow { display: inline-flex; align-items: flex-start; white-space: nowrap; margin-top: 1.1em; vertical-align: baseline; }
+    .pow-base { font-size: 1.45em; line-height: 1; margin-top: .15em; }
+    .pow-exp { display: inline-flex; align-items: center; font-size: .78em; margin-left: .15em; transform: translateY(-1.15em); }
+    .pow-exp .pow-par { font-size: 1.9em; font-weight: 200; line-height: 1; }
+    .pow > .pow-par { font-size: 1.9em; font-weight: 200; line-height: 1; }
+    .pow-exp .working-frac .den, .pow-exp .working-frac .num { padding: 0 .15rem; }
+    .option-btn .pow-exp, .working-box .pow-exp { font-size: .92em; }
+    /* quiz-common.css gives every span inside an option flex:1; keep the bracketed exponent at its natural width */
+    .option-btn .pow span:not(.option-letter):not(.result-icon) { flex: 0 0 auto; min-width: auto; }
+  </style>
+</head>
+
+<body>
+  <div class="crumb" id="crumb" data-current="Rearranging Formulas"></div>
+  <header>
+    <h1>Rearranging Formulas</h1>
+    <p>Pick a Formula · Make the Subject · One Step at a Time</p>
+  </header>
+
+  <section class="picker" id="picker">
+    <p class="picker-intro">Choose how to work, then click a formula to start.</p>
+    <div class="mode-pick" role="radiogroup" aria-label="How to work">
+      <label><input type="radio" name="mode" value="steps" checked> <b>Step by step</b> — pick each next line</label>
+      <label><input type="radio" name="mode" value="order"> <b>Order the lines</b> — click the whole working in order</label>
+    </div>
+    <div class="formula-grid" id="formulaGrid" role="group" aria-label="Formulas"></div>
+</section>
+
+  <div class="quiz-wrap single-col" id="quizWrap" style="display:none">
+    <div class="questions-col">
+      <div class="card">
+        <div class="progress-wrap">
+          <div id="progressDots" style="display:contents"></div>
+          <span class="progress-label" id="progressLabel"></span>
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+
+        <div class="q-panel" id="qPanel">
+          <div class="q-header">
+            <div class="q-num" id="qNum"></div>
+            <div>
+              <div class="q-text" id="qText"></div>
+              <div class="q-hint" id="qHint"></div>
+            </div>
+          </div>
+
+          <div class="options" id="qOptions"></div>
+          <div class="match-wrap" id="qMatch" style="display:none">
+            <div class="match-pool-row" id="matchPoolRow">
+              <div class="match-pool-arrow">▶</div>
+              <div class="match-pool" id="matchPool"></div>
+            </div>
+            <div class="match-columns" id="matchColumns"></div>
+          </div>
+          <div class="selected-list" id="qSelectedList" style="display:none"></div>
+          <div class="result-banner" id="qBanner"><span id="qIcon"></span>&nbsp;<span id="qBannerText"></span></div>
+          <div class="working-box" id="qWorking">
+            <div class="working-title">Worked Solution</div>
+            <div id="qWorkingContent"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-prev" id="qBack" onclick="backQuestion()" style="display:none">← Prev</button>
+            <button class="btn btn-check" id="qCheck" onclick="checkAnswer()" disabled>Check</button>
+            <button class="btn btn-next" id="qNext" onclick="nextQuestion()" style="display:none">Next →</button>
+            <button class="btn btn-summary" id="qSummary" onclick="showSummary()" style="display:none">See Summary →</button>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+            <button class="btn btn-prev" onclick="backToPicker()">← Formulas</button>
+          </div>
+        </div>
+
+        <div id="summaryPanel" style="display:none">
+          <div class="summary-head">
+            <div class="summary-title">Quiz Summary</div>
+            <button class="btn btn-shuffle" onclick="resetQuiz()">↺ Restart</button>
+            <button class="btn btn-prev" onclick="backToPicker()">← Formulas</button>
+          </div>
+          <div id="summaryContent"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ── symbol helpers: same colours as the rest of the course ──
+    const V = '<b class="colour-voltage">V</b>';
+    const I = '<b class="colour-current">I</b>';
+    const R = '<b class="colour-resistor">R</b>';
+    const F = '<b class="colour-gain">f</b>';
+    const C = '<b class="colour-cap">C</b>';
+    const PI2 = '2π';
+    const XC = '<b class="colour-cap">X<sub>C</sub></b>';
+    const AVDB = '<b class="colour-gain">A<sub>V(dB)</sub></b>';
+    const VIN = '<b class="colour-voltage">V<sub>in</sub></b>';
+    const VOUT = '<b class="colour-voltage">V<sub>out</sub></b>';
+    const LOGQ = `log(${frac(VOUT, VIN)})`;                  // log(Vout / Vin)
+    // base raised to a (stacked) exponent with tall brackets: 10^( A / 20 )
+    const pw = (base, exp) => `<span class="pow"><span class="pow-base">${base}</span><span class="pow-exp"><span class="pow-par">(</span>${exp}<span class="pow-par">)</span></span></span>`;
+    const POW = pw('10', frac(AVDB, '20'));                  // 10^(AV(dB) / 20)
+    const APDB = '<b class="colour-gain">A<sub>P(dB)</sub></b>';
+    const PIN = '<b class="colour-power">P<sub>in</sub></b>';
+    const POUT = '<b class="colour-power">P<sub>out</sub></b>';
+    const LOGP = `log(${frac(POUT, PIN)})`;                  // log(Pout / Pin)
+    const POW10 = pw('10', frac(APDB, '10'));                // 10^(AP(dB) / 10)
+    const XL = '<b class="colour-cap">X<sub>L</sub></b>';
+    const L = '<b class="colour-cap">L</b>';
+    const GA = '<b class="colour-gain">A</b>';
+    const BETA = '<b class="colour-bjt">β</b>';
+    const VA = '<b class="colour-voltage">V<sub>A</sub></b>';
+    const X = ' × ', EQ = ' = ';
+
+    const FORMULAS = [
+      {
+        id: 'ohm',
+        title: "Ohm's law",
+        shown: `${V}${EQ}${I}${X}${R}`,
+        blurb: 'Make V, I or R the subject',
+        problems: [
+      {
+        name: "make R the subject",
+        start: `${I} = ${frac(V, R)}`,
+        target: R,
+        steps: [
+          {
+            goal: `${R} is stuck underneath ${V}, so it is being <b>divided</b> into it. Undo the divide by ${R} by doing the opposite to <b>both</b> sides.`,
+            line: `${I}${X}${R}${EQ}${V}`,
+            wrong: [
+              `${frac(I, R)}${EQ}${V}`,
+              `${I}${EQ}${V}${X}${R}`,
+              `${I} + ${R}${EQ}${V}`,
+            ],
+            why: `The opposite of ÷${R} is ×${R}. Multiply <b>both</b> sides by ${R}: on the right, ${frac(V, R)}${X}${R} cancels to ${V}; on the left, ${I} picks up the ${R}.`,
+          },
+          {
+            goal: `${R} is now multiplied by ${I}. Undo it with the opposite operation on both sides.`,
+            line: `${R}${EQ}${frac(V, I)}`,
+            wrong: [
+              `${R}${EQ}${V}${X}${I}`,
+              `${R}${EQ}${frac(I, V)}`,
+              `${R}${EQ}${V} − ${I}`,
+            ],
+            why: `The opposite of ×${I} is ÷${I}. Divide <b>both</b> sides by ${I}: the left becomes ${R}, the right becomes ${frac(V, I)}.`,
+          },
+        ],
+      },
+      {
+        name: "make V the subject",
+        start: `${R}${EQ}${frac(V, I)}`,
+        target: V,
+        steps: [
+          {
+            goal: `${V} is divided by ${I}. Get it out of the fraction by doing the opposite to <b>both</b> sides.`,
+            line: `${R}${X}${I}${EQ}${V}`,
+            wrong: [
+              `${frac(R, I)}${EQ}${V}`,
+              `${R} + ${I}${EQ}${V}`,
+              `${R}${EQ}${V}${X}${I}`,
+            ],
+            why: `The opposite of ÷${I} is ×${I}. Multiply <b>both</b> sides by ${I}: on the right the ${I} cancels leaving ${V}; on the left ${R} becomes ${R}${X}${I}.`,
+          },
+          {
+            goal: `The unknown is on the right-hand side. Write the equation with ${V} as the subject, on the left.`,
+            line: `${V}${EQ}${R}${X}${I}`,
+            wrong: [
+              `${V}${EQ}${frac(R, I)}`,
+              `${V}${EQ}${R} + ${I}`,
+              `${V}${EQ}${frac(I, R)}`,
+            ],
+            why: `If a = b then b = a. Nothing about the values changes — you are only swapping sides so the subject is on the left.`,
+          },
+        ],
+      },
+      {
+        name: "make I the subject",
+        start: `${V}${EQ}${I}${X}${R}`,
+        target: I,
+        steps: [
+          {
+            goal: `${I} is multiplied by ${R}. Undo that by doing the opposite to <b>both</b> sides.`,
+            line: `${frac(V, R)}${EQ}${I}`,
+            wrong: [
+              `${V} − ${R}${EQ}${I}`,
+              `${V}${X}${R}${EQ}${I}`,
+              `${V}${EQ}${frac(I, R)}`,
+            ],
+            why: `The opposite of ×${R} is ÷${R}. Divide <b>both</b> sides by ${R}: the right becomes ${I}, the left becomes ${frac(V, R)}.`,
+          },
+          {
+            goal: `Write it with ${I} as the subject on the left.`,
+            line: `${I}${EQ}${frac(V, R)}`,
+            wrong: [
+              `${I}${EQ}${frac(R, V)}`,
+              `${I}${EQ}${V}${X}${R}`,
+              `${I}${EQ}${V} − ${R}`,
+            ],
+            why: `Swap the two sides. ${frac(V, R)}${EQ}${I} and ${I}${EQ}${frac(V, R)} say exactly the same thing.`,
+          },
+        ],
+      },
+        ],
+      },
+      {
+        id: 'rc',
+        title: 'Frequency (RC)',
+        shown: `${F}${EQ}${frac('1', `${PI2}${X}${R}${X}${C}`)}`,
+        blurb: 'Make R or C the subject',
+        problems: [
+      {
+        name: "make R the subject",
+        start: `${F}${EQ}${frac('1', `${PI2}${X}${R}${X}${C}`)}`,
+        target: R,
+        steps: [
+          {
+            goal: `${R} is part of the bottom line, multiplied by ${PI2} and ${C}. Multiply <b>both</b> sides by ${R} to bring it out of the fraction.`,
+            line: `${F}${X}${R}${EQ}${frac('1', `${PI2}${X}${C}`)}`,
+            wrong: [
+              `${frac(F, R)}${EQ}${frac('1', `${PI2}${X}${C}`)}`,
+              `${F}${EQ}${frac('1', `${PI2}${X}${C}`)}`,
+              `${F}${X}${R}${EQ}${frac('1', `${PI2}${X}${R}${X}${C}`)}`,
+            ],
+            why: `Multiplying the right side by ${R} cancels the ${R} on the bottom, leaving ${frac('1', `${PI2}${X}${C}`)}. The left side must be multiplied by ${R} too: ${F}${X}${R}. Doing it to one side only (or dropping the ${R} without multiplying the left) breaks the equation.`,
+          },
+          {
+            goal: `${R} is now multiplied by ${F}. Do the opposite to <b>both</b> sides so ${R} is on its own.`,
+            line: `${R}${EQ}${frac('1', `${PI2}${X}${F}${X}${C}`)}`,
+            wrong: [
+              `${R}${EQ}${frac(F, `${PI2}${X}${C}`)}`,
+              `${R}${EQ}${frac('1', `${PI2}${X}${C}`)} − ${F}`,
+              `${R}${EQ}${PI2}${X}${F}${X}${C}`,
+            ],
+            why: `Divide <b>both</b> sides by ${F}. The left becomes ${R}; on the right, ${frac('1', `${PI2}${X}${C}`)} divided by ${F} puts the ${F} underneath alongside ${PI2} and ${C}.`,
+          },
+        ],
+      },
+      {
+        name: "make C the subject",
+        start: `${F}${EQ}${frac('1', `${PI2}${X}${R}${X}${C}`)}`,
+        target: C,
+        steps: [
+          {
+            goal: `${C} is part of the bottom line, multiplied by ${PI2} and ${R}. Multiply <b>both</b> sides by ${C} to bring it out of the fraction.`,
+            line: `${F}${X}${C}${EQ}${frac('1', `${PI2}${X}${R}`)}`,
+            wrong: [
+              `${frac(F, C)}${EQ}${frac('1', `${PI2}${X}${R}`)}`,
+              `${F}${EQ}${frac('1', `${PI2}${X}${R}`)}`,
+              `${F}${X}${C}${EQ}${frac('1', `${PI2}${X}${R}${X}${C}`)}`,
+            ],
+            why: `Multiplying the right side by ${C} cancels the ${C} on the bottom, leaving ${frac('1', `${PI2}${X}${R}`)}. The left side must be multiplied by ${C} too: ${F}${X}${C}.`,
+          },
+          {
+            goal: `${C} is now multiplied by ${F}. Do the opposite to <b>both</b> sides so ${C} is on its own.`,
+            line: `${C}${EQ}${frac('1', `${PI2}${X}${F}${X}${R}`)}`,
+            wrong: [
+              `${C}${EQ}${frac(F, `${PI2}${X}${R}`)}`,
+              `${C}${EQ}${frac('1', `${PI2}${X}${R}`)} − ${F}`,
+              `${C}${EQ}${PI2}${X}${F}${X}${R}`,
+            ],
+            why: `Divide <b>both</b> sides by ${F}. The left becomes ${C}; on the right the ${F} goes underneath alongside ${PI2} and ${R}. The result has the same shape as the ${R} version — ${R} and ${C} swap places.`,
+          },
+        ],
+      },
+        ],
+      },
+      {
+        id: 'xc',
+        title: 'Capacitive reactance',
+        shown: `${XC}${EQ}${frac('1', `${PI2}${X}${F}${X}${C}`)}`,
+        blurb: 'Make f or C the subject',
+        problems: [
+      {
+        name: "make f the subject",
+        start: `${XC}${EQ}${frac('1', `${PI2}${X}${F}${X}${C}`)}`,
+        target: F,
+        steps: [
+          {
+            goal: `${F} is part of the bottom line, multiplied by ${PI2} and ${C}. Multiply <b>both</b> sides by ${F} to bring it out of the fraction.`,
+            line: `${XC}${X}${F}${EQ}${frac('1', `${PI2}${X}${C}`)}`,
+            wrong: [
+              `${frac(XC, F)}${EQ}${frac('1', `${PI2}${X}${C}`)}`,
+              `${XC}${EQ}${frac('1', `${PI2}${X}${C}`)}`,
+              `${XC}${X}${F}${EQ}${frac('1', `${PI2}${X}${F}${X}${C}`)}`,
+            ],
+            why: `Multiplying the right side by ${F} cancels the ${F} on the bottom, leaving ${frac('1', `${PI2}${X}${C}`)}. The left side must be multiplied by ${F} too: ${XC}${X}${F}.`,
+          },
+          {
+            goal: `${F} is now multiplied by ${XC}. Do the opposite to <b>both</b> sides so ${F} is on its own.`,
+            line: `${F}${EQ}${frac('1', `${PI2}${X}${XC}${X}${C}`)}`,
+            wrong: [
+              `${F}${EQ}${frac(XC, `${PI2}${X}${C}`)}`,
+              `${F}${EQ}${frac('1', `${PI2}${X}${C}`)} − ${XC}`,
+              `${F}${EQ}${PI2}${X}${XC}${X}${C}`,
+            ],
+            why: `Divide <b>both</b> sides by ${XC}. The left becomes ${F}; on the right the ${XC} goes underneath alongside ${PI2} and ${C}. The same pattern as making R or C the subject of f = 1/(2πRC).`,
+          },
+        ],
+      },
+      {
+        name: "make C the subject",
+        start: `${XC}${EQ}${frac('1', `${PI2}${X}${F}${X}${C}`)}`,
+        target: C,
+        steps: [
+          {
+            goal: `${C} is part of the bottom line, multiplied by ${PI2} and ${F}. Multiply <b>both</b> sides by ${C} to bring it out of the fraction.`,
+            line: `${XC}${X}${C}${EQ}${frac('1', `${PI2}${X}${F}`)}`,
+            wrong: [
+              `${frac(XC, C)}${EQ}${frac('1', `${PI2}${X}${F}`)}`,
+              `${XC}${EQ}${frac('1', `${PI2}${X}${F}`)}`,
+              `${XC}${X}${C}${EQ}${frac('1', `${PI2}${X}${F}${X}${C}`)}`,
+            ],
+            why: `Multiplying the right side by ${C} cancels the ${C} on the bottom, leaving ${frac('1', `${PI2}${X}${F}`)}. The left side must be multiplied by ${C} too: ${XC}${X}${C}.`,
+          },
+          {
+            goal: `${C} is now multiplied by ${XC}. Do the opposite to <b>both</b> sides so ${C} is on its own.`,
+            line: `${C}${EQ}${frac('1', `${PI2}${X}${F}${X}${XC}`)}`,
+            wrong: [
+              `${C}${EQ}${frac(XC, `${PI2}${X}${F}`)}`,
+              `${C}${EQ}${frac('1', `${PI2}${X}${F}`)} − ${XC}`,
+              `${C}${EQ}${PI2}${X}${F}${X}${XC}`,
+            ],
+            why: `Divide <b>both</b> sides by ${XC}. The left becomes ${C}; on the right the ${XC} goes underneath alongside ${PI2} and ${F}.`,
+          },
+        ],
+      },
+        ],
+      },
+      {
+        id: 'db',
+        title: 'Decibel voltage gain',
+        shown: `${AVDB}${EQ}20${X}${LOGQ}`,
+        blurb: 'Make V<sub>in</sub> the subject',
+        problems: [
+      {
+        name: "make V<sub>in</sub> the subject",
+        start: `${AVDB}${EQ}20${X}${LOGQ}`,
+        target: VIN,
+        steps: [
+          {
+            goal: `The 20 is multiplying the log. Undo it by doing the opposite to <b>both</b> sides.`,
+            line: `${frac(AVDB, '20')}${EQ}${LOGQ}`,
+            wrong: [
+              `${AVDB} − 20${EQ}${LOGQ}`,
+              `${AVDB}${X}20${EQ}${LOGQ}`,
+              `${frac(AVDB, '20')}${EQ}${frac('log(' + VOUT + ')', 'log(' + VIN + ')')}`,
+            ],
+            why: `The opposite of ×20 is ÷20. Divide <b>both</b> sides by 20. (The log of a ratio can't be split into one log over another — leave ${LOGQ} as it is.)`,
+          },
+          {
+            goal: `Now ${VIN} is trapped inside a log. The opposite of log (base 10) is 10 to the power of — do it to <b>both</b> sides.`,
+            line: `${POW}${EQ}${frac(VOUT, VIN)}`,
+            wrong: [
+              `${frac(AVDB, '20')}${EQ}${pw('10', frac(VOUT, VIN))}`,
+              `10${X}${frac(AVDB, '20')}${EQ}${frac(VOUT, VIN)}`,
+              `<span class="pow"><span class="pow-par">(</span>${frac(AVDB, '20')}<span class="pow-par">)</span><span class="pow-exp pow-plain">10</span></span>${EQ}${frac(VOUT, VIN)}`,
+            ],
+            why: `Raising 10 to a power undoes a base-10 log: 10<sup>log(x)</sup> = x. Apply it to <b>both</b> sides — the whole left side becomes the power, and the log on the right disappears leaving ${frac(VOUT, VIN)}.`,
+          },
+          {
+            goal: `${VIN} is on the bottom of the fraction. Multiply <b>both</b> sides by ${VIN} to bring it up.`,
+            line: `${VIN}${X}${POW}${EQ}${VOUT}`,
+            wrong: [
+              `${frac(POW, VIN)}${EQ}${VOUT}`,
+              `${VIN}${EQ}${VOUT}${X}${POW}`,
+              `${VIN} + ${POW}${EQ}${VOUT}`,
+            ],
+            why: `Multiplying the right side by ${VIN} cancels the ${VIN} underneath, leaving ${VOUT}. The left side gets ×${VIN} as well, so it becomes ${VIN}${X}${POW}.`,
+          },
+          {
+            goal: `${VIN} is now multiplied by ${POW}. Do the opposite to <b>both</b> sides so ${VIN} stands alone.`,
+            line: `${VIN}${EQ}${frac(VOUT, POW)}`,
+            wrong: [
+              `${VIN}${EQ}${VOUT}${X}${POW}`,
+              `${VIN}${EQ}${frac(POW, VOUT)}`,
+              `${VIN}${EQ}${VOUT} − ${POW}`,
+            ],
+            why: `Divide <b>both</b> sides by ${POW}. The left becomes ${VIN}; the right becomes ${frac(VOUT, POW)}. In words: the input voltage is the output voltage divided by the voltage gain, where the gain ratio is 10 to the power of (dB ÷ 20).`,
+          },
+        ],
+      },
+        ],
+      },
+      {
+        id: 'dbp',
+        title: 'Decibel power gain',
+        shown: `${APDB}${EQ}10${X}${LOGP}`,
+        blurb: 'Make P<sub>in</sub> the subject',
+        problems: [
+      {
+        name: "make P<sub>in</sub> the subject",
+        start: `${APDB}${EQ}10${X}${LOGP}`,
+        target: PIN,
+        steps: [
+          {
+            goal: `The 10 is multiplying the log. Undo it by doing the opposite to <b>both</b> sides.`,
+            line: `${frac(APDB, '10')}${EQ}${LOGP}`,
+            wrong: [
+              `${APDB} − 10${EQ}${LOGP}`,
+              `${APDB}${X}10${EQ}${LOGP}`,
+              `${frac(APDB, '10')}${EQ}${frac('log(' + POUT + ')', 'log(' + PIN + ')')}`,
+            ],
+            why: `The opposite of ×10 is ÷10. Divide <b>both</b> sides by 10. (The log of a ratio can't be split into one log over another — leave ${LOGP} as it is.)`,
+          },
+          {
+            goal: `Now ${PIN} is trapped inside a log. The opposite of log (base 10) is 10 to the power of — do it to <b>both</b> sides.`,
+            line: `${POW10}${EQ}${frac(POUT, PIN)}`,
+            wrong: [
+              `${frac(APDB, '10')}${EQ}${pw('10', frac(POUT, PIN))}`,
+              `10${X}${frac(APDB, '10')}${EQ}${frac(POUT, PIN)}`,
+              `<span class="pow"><span class="pow-par">(</span>${frac(APDB, '10')}<span class="pow-par">)</span><span class="pow-exp pow-plain">10</span></span>${EQ}${frac(POUT, PIN)}`,
+            ],
+            why: `Raising 10 to a power undoes a base-10 log: 10<sup>log(x)</sup> = x. Apply it to <b>both</b> sides — the whole left side becomes the power, and the log on the right disappears leaving ${frac(POUT, PIN)}.`,
+          },
+          {
+            goal: `${PIN} is on the bottom of the fraction. Multiply <b>both</b> sides by ${PIN} to bring it up.`,
+            line: `${PIN}${X}${POW10}${EQ}${POUT}`,
+            wrong: [
+              `${frac(POW10, PIN)}${EQ}${POUT}`,
+              `${PIN}${EQ}${POUT}${X}${POW10}`,
+              `${PIN} + ${POW10}${EQ}${POUT}`,
+            ],
+            why: `Multiplying the right side by ${PIN} cancels the ${PIN} underneath, leaving ${POUT}. The left side gets ×${PIN} as well, so it becomes ${PIN}${X}${POW10}.`,
+          },
+          {
+            goal: `${PIN} is now multiplied by ${POW10}. Do the opposite to <b>both</b> sides so ${PIN} stands alone.`,
+            line: `${PIN}${EQ}${frac(POUT, POW10)}`,
+            wrong: [
+              `${PIN}${EQ}${POUT}${X}${POW10}`,
+              `${PIN}${EQ}${frac(POW10, POUT)}`,
+              `${PIN}${EQ}${POUT} − ${POW10}`,
+            ],
+            why: `Divide <b>both</b> sides by ${POW10}. The left becomes ${PIN}; the right becomes ${frac(POUT, POW10)}. Note the 10 in the exponent's denominator: power ratios use 10 log, voltage ratios use 20 log.`,
+          },
+        ],
+      },
+        ],
+      },
+      {
+        id: 'xl',
+        title: 'Inductive reactance',
+        shown: `${XL}${EQ}${PI2}${X}${F}${X}${L}`,
+        blurb: 'Make f or L the subject',
+        problems: [
+      {
+        name: "make f the subject",
+        start: `${XL}${EQ}${PI2}${X}${F}${X}${L}`,
+        target: F,
+        steps: [
+          {
+            goal: `${F} is multiplied by ${PI2} and ${L}. Start by undoing the ${L}: do the opposite to <b>both</b> sides.`,
+            line: `${frac(XL, L)}${EQ}${PI2}${X}${F}`,
+            wrong: [
+              `${XL} − ${L}${EQ}${PI2}${X}${F}`,
+              `${XL}${X}${L}${EQ}${PI2}${X}${F}`,
+              `${XL}${EQ}${frac(`${PI2}${X}${F}`, L)}`,
+            ],
+            why: `The opposite of ×${L} is ÷${L}. Divide <b>both</b> sides by ${L}: on the right the ${L} cancels, leaving ${PI2}${X}${F}; on the left ${XL} goes over ${L}.`,
+          },
+          {
+            goal: `${F} is still multiplied by ${PI2}. Do the opposite to <b>both</b> sides.`,
+            line: `${frac(XL, `${PI2}${X}${L}`)}${EQ}${F}`,
+            wrong: [
+              `${frac(XL, L)}${EQ}${F}`,
+              `${frac(`${XL}${X}${PI2}`, L)}${EQ}${F}`,
+              `${frac(XL, L)} − ${PI2}${EQ}${F}`,
+            ],
+            why: `The opposite of ×${PI2} is ÷${PI2}. Divide <b>both</b> sides by ${PI2}: the right becomes ${F}; the left becomes ${frac(XL, `${PI2}${X}${L}`)} (the ${PI2} joins the ${L} underneath).`,
+          },
+          {
+            goal: `Write it with ${F} as the subject on the left.`,
+            line: `${F}${EQ}${frac(XL, `${PI2}${X}${L}`)}`,
+            wrong: [
+              `${F}${EQ}${frac(`${PI2}${X}${L}`, XL)}`,
+              `${F}${EQ}${XL}${X}${PI2}${X}${L}`,
+              `${F}${EQ}${XL} − ${PI2}${X}${L}`,
+            ],
+            why: `Swap the two sides — the equation says exactly the same thing, with the subject on the left.`,
+          },
+        ],
+      },
+      {
+        name: "make L the subject",
+        start: `${XL}${EQ}${PI2}${X}${F}${X}${L}`,
+        target: L,
+        steps: [
+          {
+            goal: `${L} is multiplied by ${PI2} and ${F}. Start by undoing the ${F}: do the opposite to <b>both</b> sides.`,
+            line: `${frac(XL, F)}${EQ}${PI2}${X}${L}`,
+            wrong: [
+              `${XL} − ${F}${EQ}${PI2}${X}${L}`,
+              `${XL}${X}${F}${EQ}${PI2}${X}${L}`,
+              `${XL}${EQ}${frac(`${PI2}${X}${L}`, F)}`,
+            ],
+            why: `The opposite of ×${F} is ÷${F}. Divide <b>both</b> sides by ${F}: on the right the ${F} cancels, leaving ${PI2}${X}${L}; on the left ${XL} goes over ${F}.`,
+          },
+          {
+            goal: `${L} is still multiplied by ${PI2}. Do the opposite to <b>both</b> sides.`,
+            line: `${frac(XL, `${PI2}${X}${F}`)}${EQ}${L}`,
+            wrong: [
+              `${frac(XL, F)}${EQ}${L}`,
+              `${frac(`${XL}${X}${PI2}`, F)}${EQ}${L}`,
+              `${frac(XL, F)} − ${PI2}${EQ}${L}`,
+            ],
+            why: `The opposite of ×${PI2} is ÷${PI2}. Divide <b>both</b> sides by ${PI2}: the right becomes ${L}; the left becomes ${frac(XL, `${PI2}${X}${F}`)} (the ${PI2} joins the ${F} underneath).`,
+          },
+          {
+            goal: `Write it with ${L} as the subject on the left.`,
+            line: `${L}${EQ}${frac(XL, `${PI2}${X}${F}`)}`,
+            wrong: [
+              `${L}${EQ}${frac(`${PI2}${X}${F}`, XL)}`,
+              `${L}${EQ}${XL}${X}${PI2}${X}${F}`,
+              `${L}${EQ}${XL} − ${PI2}${X}${F}`,
+            ],
+            why: `Swap the two sides — the equation says exactly the same thing, with the subject on the left.`,
+          },
+        ],
+      },
+        ],
+      },
+      {
+        id: 'fb',
+        title: 'Feedback equation',
+        shown: `${frac(VOUT, VIN)}${EQ}${frac(GA, `1 + (${GA}${X}${BETA})`)}`,
+        blurb: 'Derive the closed-loop gain',
+        problems: [
+      {
+        name: "derive V<sub>out</sub> / V<sub>in</sub>",
+        start: `${GA}${X}${VA}${EQ}${VOUT}`,
+        given: `The summing network delivers the signal ${VA} that the amplifier receives:<div style="margin:.5rem 0">${VA}${EQ}${VIN} − ${BETA}${X}${VOUT}</div>`,
+        target: `${frac(VOUT, VIN)}`,
+        steps: [
+          {
+            goal: `Substitute ${VA}${EQ}${VIN} − ${BETA}${X}${VOUT} into ${GA}${X}${VA}${EQ}${VOUT}.`,
+            line: `${GA}${X}(${VIN} − ${BETA}${X}${VOUT})${EQ}${VOUT}`,
+            wrong: [
+              `${GA}${X}${VIN} − ${BETA}${X}${VOUT}${EQ}${VOUT}`,
+              `${GA}${X}(${VIN} + ${BETA}${X}${VOUT})${EQ}${VOUT}`,
+              `${frac(`${VIN} − ${BETA}${X}${VOUT}`, GA)}${EQ}${VOUT}`,
+            ],
+            why: `${VA} is replaced by what the summing network delivers, in brackets so the whole of it is multiplied by ${GA}.`,
+          },
+          {
+            goal: `Multiply out the bracket.`,
+            line: `(${GA}${X}${VIN}) − (${GA}${X}${BETA}${X}${VOUT})${EQ}${VOUT}`,
+            wrong: [
+              `(${GA}${X}${VIN}) − ${BETA}${X}${VOUT}${EQ}${VOUT}`,
+              `(${GA}${X}${VIN}) + (${GA}${X}${BETA}${X}${VOUT})${EQ}${VOUT}`,
+              `(${GA}${X}${VIN}) × (${GA}${X}${BETA}${X}${VOUT})${EQ}${VOUT}`,
+            ],
+            why: `${GA} multiplies <b>both</b> terms inside the bracket.`,
+          },
+          {
+            goal: `Add (${GA}${X}${BETA}${X}${VOUT}) to both sides, so every ${VOUT} term is on one side.`,
+            line: `${GA}${X}${VIN}${EQ}${VOUT} + (${GA}${X}${BETA}${X}${VOUT})`,
+            wrong: [
+              `${GA}${X}${VIN}${EQ}${VOUT} − (${GA}${X}${BETA}${X}${VOUT})`,
+              `${GA}${X}${VIN} + (${GA}${X}${BETA}${X}${VOUT})${EQ}${VOUT}`,
+              `${GA}${X}${VIN}${EQ}${VOUT}${X}(${GA}${X}${BETA}${X}${VOUT})`,
+            ],
+            why: `Adding the same term to <b>both</b> sides moves it across and changes its sign.`,
+          },
+          {
+            goal: `Take ${VOUT} out as a common factor.`,
+            line: `${GA}${X}${VIN}${EQ}${VOUT}${X}(1 + (${GA}${X}${BETA}))`,
+            wrong: [
+              `${GA}${X}${VIN}${EQ}${VOUT}${X}(1 + (${GA}${X}${BETA}${X}${VOUT}))`,
+              `${GA}${X}${VIN}${EQ}${VOUT} + (1${X}(${GA}${X}${BETA}))`,
+              `${GA}${X}${VIN}${EQ}${VOUT}${X}(${GA}${X}${BETA})`,
+            ],
+            why: `${VOUT} appears in both terms on the right, so it can be taken outside a bracket: ${VOUT}${X}(1 + (${GA}${X}${BETA})).`,
+          },
+          {
+            goal: `Divide both sides by ${VIN} and by (1 + (${GA}${X}${BETA})).`,
+            line: `${frac(VOUT, VIN)}${EQ}${frac(GA, `1 + (${GA}${X}${BETA})`)}`,
+            wrong: [
+              `${frac(VOUT, VIN)}${EQ}${frac(`1 + (${GA}${X}${BETA})`, GA)}`,
+              `${frac(VOUT, VIN)}${EQ}${GA}${X}(1 + (${GA}${X}${BETA}))`,
+              `${frac(VIN, VOUT)}${EQ}${frac(GA, `1 + (${GA}${X}${BETA})`)}`,
+            ],
+            why: `Dividing <b>both</b> sides by ${VIN} and by the bracket leaves ${VOUT} over ${VIN} on the left and ${GA} over the bracket on the right. This is the closed-loop gain.`,
+          },
+        ],
+      },
+        ],
+      },
+    ];
+
+    // ══════════════════════════════════════════════════════════════════════
+    // RUN — one formula at a time. Each problem in the chosen formula is used
+    // once, in random order; the steps inside a problem always stay in order.
+    // QUESTIONS is rebuilt in place (the engine holds a reference to it), and
+    // RESET_EXTRA reshuffles it on every Restart.
+    // ══════════════════════════════════════════════════════════════════════
+    const QUESTIONS = [];
+    let currentFormula = null;
+
+    let currentMode = 'steps';   // 'steps' = pick each next line; 'order' = click the lines in order
+
+    function buildRun() {
+      QUESTIONS.length = 0;
+      if (!currentFormula) return;
+      const problems = shuffle(currentFormula.problems.slice());
+      (currentMode === 'order' ? buildOrderRun : buildStepRun)(problems);
+      buildProgressDots();
+    }
+
+    // step by step: the equation so far, pick the correct next line from four
+    function buildStepRun(problems) {
+      problems.forEach((p, pi) => {
+        p.steps.forEach((s, si) => {
+          const history = [p.start, ...p.steps.slice(0, si).map(prev => prev.line)];
+          const current = history[history.length - 1];
+          const strip = `<div class="eq-strip"><span class="eq-label">Equation so far</span><span class="eq-line">${history.map(h => `<span class="eq-step">${h}</span>`).join('<span class="eq-arrow">→</span>')}</span></div>`;
+          QUESTIONS.push({
+            leftPanel: 'none',
+            text: () => `<b>${currentFormula.title}</b> — problem ${pi + 1} of ${problems.length}: ${p.name}.<br>${si === 0 && p.given ? p.given : ''}Step ${si + 1} of ${p.steps.length}: which line comes next?${strip}`,
+            hint: () => `<span class="eq-goal">${s.goal}</span>`,
+            options: () => shuffle([
+              { label: s.line, type: 'correct' },
+              ...s.wrong.map(w => ({ label: w, type: 'wrong' })),
+            ]),
+            correctExplain: () => s.line,
+            working: () => `
+    <div class="working-line">${s.why}</div>
+    <div class="working-formula-row">${current} &nbsp;→&nbsp; ${s.line}</div>
+    ${si === p.steps.length - 1 ? `<div class="working-total">Done: ${p.target} is now the subject — ${s.line}</div>` : `<div class="working-line">Next step: carry on from ${s.line}.</div>`}`,
+          });
+        });
+      });
+    }
+
+    // order the lines: one question per problem, as in the Negative Feedback Overview Q3
+    function buildOrderRun(problems) {
+      problems.forEach((p, pi) => {
+        const n = p.steps.length;
+        // one question per problem, as in the Negative Feedback Overview Q3: the starting line is given
+        // (locked, line 1) and the student clicks the lines that follow in the order the working goes
+        QUESTIONS.push({
+          kind: 'match',
+          order: true,
+          numbered: true,
+          keepPicker: true,
+          orderCols: 1,
+          prefilled: [p.start],
+          columns: () => p.steps.map((_, i) => `${i + 2}`),
+          text: () => `<b>${currentFormula.title}</b> — problem ${pi + 1} of ${problems.length}: ${p.name}.<br>Line 1 is given. ${p.given || ''}Click the next ${n} lines in the order the working goes — a number appears beside each one, 2 to ${n + 1}.`,
+          hint: () => `<span class="eq-goal">${p.steps[0].goal}</span>`,
+          options: () => shuffle(p.steps.map((s, i) => ({
+            label: `<span>${s.line}</span>`, key: `s${i}`, col: i,
+            after: i ? [`s${i - 1}`] : []
+          }))),
+          correctExplain: (st) => {
+            const ok = st.opts.filter((o, i) => orderChipOk(st, i)).length;
+            return ok === st.opts.length ? `All ${st.opts.length} lines are in the right order` : `${ok} of ${st.opts.length} lines in the right place`;
+          },
+          working: () => `
+    <div class="working-line"><b>1.</b> Start from ${p.start} (given).</div>
+    ${p.steps.map((s, i) => `<div class="working-line"><b>${i + 2}.</b> ${s.goal} ${s.why}</div>`).join('')}
+    <div class="working-total">Done: ${p.target} is now the subject — ${p.steps[n - 1].line}</div>`,
+        });
+      });
+    }
+    RESET_EXTRA = buildRun;
+
+    // ── picker ──
+    let chosenId = null;
+    function renderPicker() {
+      const grid = document.getElementById('formulaGrid');
+      grid.innerHTML = FORMULAS.map(f => `
+        <button type="button" class="formula-card${f.id === chosenId ? ' selected' : ''}" data-id="${f.id}" aria-pressed="${f.id === chosenId}">
+          <span class="formula-title">${f.title}</span>
+          <span class="formula-eq">${f.shown}</span>
+          <span class="formula-blurb">${f.blurb}</span>
+        </button>`).join('');
+      grid.querySelectorAll('.formula-card').forEach(btn => btn.addEventListener('click', () => {
+        chosenId = btn.dataset.id;
+        startQuiz();
+      }));
+    }
+    function startQuiz() {
+      currentFormula = FORMULAS.find(f => f.id === chosenId);
+      currentMode = document.querySelector('input[name="mode"]:checked').value;
+      if (!currentFormula) return;
+      document.getElementById('picker').style.display = 'none';
+      document.getElementById('quizWrap').style.display = '';
+      resetQuiz();
+      window.scrollTo(0, 0);
+    }
+    function backToPicker() {
+      document.getElementById('quizWrap').style.display = 'none';
+      document.getElementById('picker').style.display = '';
+      renderPicker();
+      window.scrollTo(0, 0);
+    }
+
+    initQuizNav();
+    renderPicker();
+  </script>
+</body>
+
+</html>
