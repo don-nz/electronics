@@ -49,6 +49,12 @@
     .card-title { font-size: .85rem; font-weight: 700; color: var(--colour-label); margin-bottom: .4rem; }
     .others { display: flex; gap: .6rem; flex-wrap: wrap; }
     .others a { text-decoration: none; }
+    /* RC explorer */
+    .rc-ctl { display: grid; grid-template-columns: 4.5rem 1fr 5.5rem; gap: .35rem .7rem; align-items: center; font-size: .85rem; margin-top: .3rem; }
+    .rc-ctl input[type=range] { width: 100%; }
+    .rc-ctl .v { font-weight: 700; text-align: right; }
+    #rcSvg { width: 100%; display: block; margin-top: .5rem; }
+    .rc-read { font-size: .88rem; line-height: 1.8; margin-top: .3rem; }
   
 /*
   NSW TAFE college theme — the single source for the self-contained teacher pages
@@ -1053,6 +1059,19 @@ svg.ipz-panning, .ipz-stage.ipz-panning { cursor:grabbing !important; }
 
       </div>
 
+      <div class="card" id="rcCard">
+        <div class="card-title">Why R and C set the pulse width</div>
+        <div style="font-size:.83rem;line-height:1.55">When the IC triggers, <b style="color:var(--mv-capacitor-labels)">C<sub>x</sub></b> charges through
+          <b style="color:var(--mv-resistor-labels)">R<sub>x</sub></b>. Q stays HIGH until the capacitor voltage reaches the IC's switching level — then the pulse ends.
+          Drag the sliders: a bigger R or C charges more slowly, reaches the switching level later, and makes a <b>longer</b> pulse. The faint trace is the setting before your last change.</div>
+        <div class="rc-ctl">
+          <span style="color:var(--mv-resistor-labels);font-weight:700">R<sub>x</sub></span><input type="range" id="rcR" min="0" max="5" step="1" aria-label="Rx"><span class="v" id="rcRv" style="color:var(--mv-resistor-labels)"></span>
+          <span style="color:var(--mv-capacitor-labels);font-weight:700">C<sub>x</sub></span><input type="range" id="rcC" min="0" max="4" step="1" aria-label="Cx"><span class="v" id="rcCv" style="color:var(--mv-capacitor-labels)"></span>
+        </div>
+        <svg id="rcSvg" viewBox="0 0 640 300" xmlns="http://www.w3.org/2000/svg" font-family="'Share Tech Mono', monospace" role="img" aria-label="Capacitor charging curve reaching the switching level, and the Q pulse it produces"></svg>
+        <div class="rc-read" id="rcRead"></div>
+      </div>
+
       <div class="card">
         <div class="card-title">Working out the pulse width</div>
         <div class="work" id="work"></div>
@@ -1194,7 +1213,7 @@ function updateThemeToggleUI(isDark) {
       document.querySelectorAll('#rRow .sim-btn').forEach(b => b.classList.toggle('active', +b.dataset.v === R));
       document.querySelectorAll('#cRow .sim-btn').forEach(b => b.classList.toggle('active', +b.dataset.v === C));
       ['221', '122'].forEach(k => document.getElementById('ic-' + k).classList.toggle('active', k === ic));
-      drawCircuit(); writeWork();
+      drawCircuit(); writeWork(); syncRC();
       lastMsg = `Now t<sub>w</sub> = ${fmtT(tw())}. The next trigger uses the new value${q ? ' (the pulse already running keeps its old end time)' : ''}.`;
     }
     function writeWork() {
@@ -1347,9 +1366,106 @@ function updateThemeToggleUI(isDark) {
       requestAnimationFrame(frame);
     }
 
+
+    // ── RC explorer: the charging curve that sets t_w ──
+    // Vc = Vcc(1 − e^(−t/RC)). The switching level is placed at Vcc(1 − e^(−k)) so the crossing lands at
+    // exactly t = k·R·C — the course formula — whatever k the chosen IC uses (0.7 or 0.45).
+    // The sliders step through the SAME fixed values as the Rx / Cx buttons at the top: one R and one C drive
+    // the buttons, sliders, circuit, working and this graph, whichever is changed.
+    const RC_R = R_OPTS, RC_C = C_OPTS;
+    const SPANS = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5];
+    const rcIdx = () => ({ r: R_OPTS.indexOf(R), c: C_OPTS.indexOf(C) });
+    let rc = rcIdx(), rcCommitted = rcIdx(), rcGhost = null, rcSpan = 0.2, rcDragging = false;
+    // called from changed(): keep the sliders on the current values, update the ghost, redraw
+    function syncRC() {
+      rc = rcIdx();
+      const rs = document.getElementById('rcR'), cs = document.getElementById('rcC');
+      if (+rs.value !== rc.r) rs.value = rc.r;
+      if (+cs.value !== rc.c) cs.value = rc.c;
+      if (rcDragging) rcGhost = rcCommitted;                       // mid-drag: compare with where the drag started
+      else if (rc.r !== rcCommitted.r || rc.c !== rcCommitted.c) { rcGhost = rcCommitted; rcCommitted = { ...rc }; }
+      drawRC();
+    }
+    function rcFit(w) {                        // keep the time axis steady; only change it when the pulse no longer fits well
+      if (w > rcSpan * 0.82 || w < rcSpan * 0.12) rcSpan = SPANS.find(sp => w <= sp * 0.6) || SPANS[SPANS.length - 1];
+    }
+    function drawRC() {
+      const k = IC[ic].k, Rv = RC_R[rc.r], Cv = RC_C[rc.c], tau = Rv * Cv, w = k * tau;
+      document.getElementById('rcRv').textContent = fmtR(Rv);
+      document.getElementById('rcCv').textContent = fmtC(Cv);
+      const ghostW = rcGhost ? k * RC_R[rcGhost.r] * RC_C[rcGhost.c] : null;
+      rcFit(Math.max(w, ghostW || 0));
+      const s = document.getElementById('rcSvg'); s.innerHTML = '';
+      const x0 = 70, xT = 100, x1 = 625, span = rcSpan, X = t => xT + t / span * (x1 - xT);
+      const vTop = 30, vBot = 150, V = f => vBot - f * (vBot - vTop);     // f = Vc / Vcc
+      const qHi = 215, qLo = 255, th = 1 - Math.exp(-k);
+      // grid + axes
+      for (let i = 0; i <= 10; i++) { const x = xT + i * (x1 - xT) / 10; el('line', { x1: x, y1: vTop - 6, x2: x, y2: qLo + 4, stroke: 'var(--colour-border)', 'stroke-width': .6, 'stroke-dasharray': '2 4' }, s); }
+      el('line', { x1: xT, y1: vBot, x2: x1, y2: vBot, stroke: 'var(--colour-border)', 'stroke-width': 1 }, s);
+      txt(8, 40, 'V', { 'font-size': 14, 'font-weight': 'bold', fill: 'var(--mv-capacitor-labels)' }, s);
+      txt(20, 44, 'Cx', { 'font-size': 10, 'font-weight': 'bold', fill: 'var(--mv-capacitor-labels)' }, s);
+      el('line', { x1: xT, y1: vTop, x2: x1, y2: vTop, stroke: 'var(--colour-label)', 'stroke-width': 1, 'stroke-dasharray': '6 4' }, s);
+      txt(xT - 4, vTop + 4, '+5V', { 'font-size': 10, 'text-anchor': 'end', fill: 'var(--colour-label)' }, s);
+      el('line', { x1: xT, y1: V(th), x2: x1, y2: V(th), stroke: 'var(--mv-signal)', 'stroke-width': 1.4, 'stroke-dasharray': '6 4' }, s);
+      txt(x1, V(th) - 5, 'switching level', { 'font-size': 11, 'text-anchor': 'end', fill: 'var(--mv-signal)' }, s);
+      txt(8, qHi + 24, 'Q', { 'font-size': 14, 'font-weight': 'bold', fill: 'var(--colour-ui-correct)' }, s);
+      el('line', { x1: xT, y1: vTop - 8, x2: xT, y2: qLo + 6, stroke: 'var(--colour-label)', 'stroke-width': 1 }, s);
+      txt(xT, qLo + 20, 'trigger', { 'font-size': 10, 'text-anchor': 'middle', fill: 'var(--colour-label)' }, s);
+      txt(x1, qLo + 34, `${fmtT(span / 10)} / div`, { 'font-size': 11, 'text-anchor': 'end', fill: 'var(--colour-label)' }, s);
+      // curve + pulse for a setting
+      function trace(tauV, wV, ghost) {
+        const op = ghost ? .35 : 1, dash = ghost ? '5 4' : null;
+        let dS = `M ${x0} ${vBot} L ${xT} ${vBot}`, dA = '';
+        const tEnd = Math.min(span, wV), N = 120;
+        for (let i = 1; i <= N; i++) { const t = tEnd * i / N; dS += ` L ${X(t).toFixed(1)} ${V(1 - Math.exp(-t / tauV)).toFixed(1)}`; }
+        if (wV < span) { dA = `M ${X(wV).toFixed(1)} ${V(th).toFixed(1)}`; for (let i = 1; i <= 60; i++) { const t = wV + (span - wV) * i / 60; dA += ` L ${X(t).toFixed(1)} ${V(1 - Math.exp(-t / tauV)).toFixed(1)}`; } }
+        const ca = { fill: 'none', stroke: 'var(--mv-capacitor-labels)', 'stroke-width': ghost ? 1.6 : 2.4, opacity: op }; if (dash) ca['stroke-dasharray'] = dash;
+        el('path', Object.assign({ d: dS }, ca), s);
+        if (dA) el('path', { d: dA, fill: 'none', stroke: 'var(--mv-capacitor-labels)', 'stroke-width': 1, opacity: ghost ? .15 : .3, 'stroke-dasharray': '2 3' }, s);
+        const xe = X(Math.min(wV, span));
+        const qa = { d: `M ${x0} ${qLo} L ${xT} ${qLo} L ${xT} ${qHi} L ${xe} ${qHi} L ${xe} ${qLo} L ${x1} ${qLo}`, fill: 'none', stroke: 'var(--colour-ui-correct)', 'stroke-width': ghost ? 1.6 : 2.4, opacity: op };
+        if (dash) qa['stroke-dasharray'] = dash;
+        el('path', qa, s);
+        return xe;
+      }
+      if (ghostW != null && rcGhost && (rcGhost.r !== rc.r || rcGhost.c !== rc.c)) trace(RC_R[rcGhost.r] * RC_C[rcGhost.c], ghostW, true);
+      const xe = trace(tau, w, false);
+      // crossing → Q falls
+      if (w <= span) {
+        el('circle', { cx: xe, cy: V(th), r: 4, fill: 'var(--mv-signal)' }, s);
+        el('line', { x1: xe, y1: V(th), x2: xe, y2: qHi, stroke: 'var(--mv-signal)', 'stroke-width': 1.2, 'stroke-dasharray': '3 3' }, s);
+        el('path', { d: `M ${xT} ${qHi - 10} L ${xT} ${qHi - 15} L ${xe} ${qHi - 15} L ${xe} ${qHi - 10}`, fill: 'none', stroke: 'var(--colour-text)', 'stroke-width': 1.2 }, s);
+        txt((xT + xe) / 2, qHi - 20, `tw = ${fmtT(w)}`, { 'font-size': 12, 'font-weight': 'bold', 'text-anchor': 'middle', fill: 'var(--colour-ui-correct)' }, s);
+      }
+      // τ marker on the curve (63% charged)
+      if (tau <= span) {
+        const xt = X(tau);
+        el('line', { x1: xt, y1: vBot, x2: xt, y2: vBot + 6, stroke: 'var(--mv-capacitor-labels)', 'stroke-width': 1.5 }, s);
+        txt(xt, vBot + 18, 'τ = RC', { 'font-size': 10, 'text-anchor': 'middle', fill: 'var(--mv-capacitor-labels)' }, s);
+      }
+      let cmp = '';
+      if (ghostW != null && rcGhost && (rcGhost.r !== rc.r || rcGhost.c !== rc.c)) {
+        const ratio = w / ghostW;
+        cmp = `<div>Compared with before (faint trace): t<sub>w</sub> is <b>${ratio >= 1 ? +ratio.toFixed(2) + '× longer' : +(1 / ratio).toFixed(2) + '× shorter'}</b>` +
+          ` — R changed ${+(RC_R[rc.r] / RC_R[rcGhost.r]).toFixed(2)}×, C changed ${+(RC_C[rc.c] / RC_C[rcGhost.c]).toFixed(2)}×.</div>`;
+      }
+      document.getElementById('rcRead').innerHTML =
+        `<div>τ = <span style="color:var(--mv-resistor-labels);font-weight:700">R</span> × <span style="color:var(--mv-capacitor-labels);font-weight:700">C</span> = ${fmtR(RC_R[rc.r])} × ${fmtC(RC_C[rc.c])} = <b>${fmtT(tau)}</b></div>` +
+        `<div>${IC[ic].name}: t<sub>w</sub> = ${k} × τ = <b style="color:var(--colour-ui-correct)">${fmtT(w)}</b> <span style="color:var(--colour-label);font-size:.8rem">(the switching level is reached after ${k} time constants)</span></div>` + cmp;
+    }
+    function initRC() {
+      const rs = document.getElementById('rcR'), cs = document.getElementById('rcC');
+      rs.value = rc.r; cs.value = rc.c;
+      const onInput = () => { rcDragging = true; R = R_OPTS[+rs.value]; C = C_OPTS[+cs.value]; changed(); };
+      const onChange = () => { rcDragging = false; R = R_OPTS[+rs.value]; C = C_OPTS[+cs.value]; changed(); };
+      [rs, cs].forEach(x => { x.addEventListener('input', onInput); x.addEventListener('change', onChange); });
+      drawRC();
+    }
+
     buildPickers();
     bindHold(document.getElementById('trigBtn'));
     changed(); lastMsg = '';
+    initRC();
     requestAnimationFrame(frame);
 
     function goBack(e) { e.preventDefault(); history.back(); }
