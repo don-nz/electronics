@@ -709,7 +709,7 @@ header p {
 /* ══════════════════════════════════════════════════════════════════════
    inplace-zoom.js — zoom an <svg> diagram where it sits (no pop-up).
 
-   InPlaceZoom.attach(svg, { tapToZoom, wrap, group, onChange })
+   InPlaceZoom.attach(svg, { tapToZoom, wrap, group, onChange, barIn, barBefore })
      - −, %, + and reset buttons are added to the svg's parent (top-right).
        Zooms in to 200% and out to 50% (smaller than its panel); +/− step 10%.
      - group: diagrams given the same group name share ONE set of buttons
@@ -725,6 +725,10 @@ header p {
      - wrap: put the svg in its own box, with the buttons in a strip ABOVE it
        rather than over its corner (for drawings whose labels reach the top
        edge, and when the svg's parent holds other content too).
+     - barIn / barBefore: put the buttons inside barIn (before barBefore) — a
+       toolbar the page already has — instead of on the diagram.
+     - Drags that start on a slider, button, link or other form control are
+       left to it (never pan) — e.g. a range input laid over a drawing.
      - onChange(scale): called after every zoom/pan/reset (e.g. to re-place
        pop-ups that are positioned from the drawing).
      - A drag never fires the page's own click handlers (the click that ends
@@ -734,12 +738,13 @@ header p {
        per question), that becomes the new full view and the zoom resets.
        The full view is kept in svg.dataset.baseViewBox (print uses it).
 
-   InPlaceZoom.attachUnit(el)
+   InPlaceZoom.attachUnit(el, { barAbove })
      - Zooms a whole block of the page (several diagrams and whatever sits
        between them) as ONE unit, so the gaps scale with the diagrams. Same
        buttons (top-right of el), drag/wheel/pinch rules and 50%–200% range;
        scales el's contents with a CSS transform and clips to el's box.
-       Taps are left to the page (like tapToZoom off).
+       Taps are left to the page (like tapToZoom off). barAbove: buttons in a
+       strip just above el instead of over its top-right corner.
 
    quiz-engine.js attaches this automatically to every quiz circuit panel
    that used to open the zoom pop-up; other pages include this file and call
@@ -821,7 +826,10 @@ svg.ipz-panning, .ipz-stage.ipz-panning { cursor:grabbing !important; }
       + '<button type="button" class="ipz-in" title="Zoom in" aria-label="Zoom in">+</button>'
       + '<button type="button" class="ipz-reset" title="Reset zoom" aria-label="Reset zoom">⟲</button>';
     if (hasBar) {
-      if (opts.wrap) { bar.classList.add('ipz-row'); host.insertBefore(bar, svg); }  // own strip above the diagram
+      if (opts.barIn) {                                                            // a spot the page chose (e.g. a toolbar)
+        bar.style.position = 'static';
+        opts.barIn.insertBefore(bar, opts.barBefore || null);
+      } else if (opts.wrap) { bar.classList.add('ipz-row'); host.insertBefore(bar, svg); }  // own strip above the diagram
       else host.appendChild(bar);                                                  // over its top-right corner
     }
     // Keep button clicks away from the panel's own onclick (and from the page).
@@ -904,6 +912,7 @@ svg.ipz-panning, .ipz-stage.ipz-panning { cursor:grabbing !important; }
     let dragged = false, startX = 0, startY = 0, pinch = null;
     svg.addEventListener('pointerdown', e => {
       if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if (e.target.closest && e.target.closest('input, select, textarea, button, a, label')) return;
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (pts.size === 1) { dragged = false; startX = e.clientX; startY = e.clientY; }
       if (pts.size === 2) {
@@ -962,12 +971,17 @@ svg.ipz-panning, .ipz-stage.ipz-panning { cursor:grabbing !important; }
   }
 
   // ── a whole block as one unit (CSS transform on a stage inside el) ──
-  function attachUnit(el) {
+  function attachUnit(el, opts) {
     if (!el || el._ipz) return el && el._ipz;
+    opts = opts || {};
     injectStyle();
     const stage = document.createElement('div');
     stage.className = 'ipz-stage';
     stage.style.transformOrigin = '0 0';
+    // fill el and be the box absolutely-placed children measure from, zoomed or not
+    // (a transform would otherwise switch their containing block mid-zoom)
+    stage.style.position = 'relative';
+    stage.style.height = '100%';
     while (el.firstChild) stage.appendChild(el.firstChild);
     el.appendChild(stage);
     if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
@@ -979,7 +993,8 @@ svg.ipz-panning, .ipz-stage.ipz-panning { cursor:grabbing !important; }
       + '<button type="button" class="ipz-level" disabled aria-live="polite">100%</button>'
       + '<button type="button" class="ipz-in" title="Zoom in" aria-label="Zoom in">+</button>'
       + '<button type="button" class="ipz-reset" title="Reset zoom" aria-label="Reset zoom">⟲</button>';
-    el.appendChild(bar);
+    if (opts.barAbove) { bar.classList.add('ipz-row'); el.parentNode.insertBefore(bar, el); }  // own strip above el
+    else el.appendChild(bar);                                                                  // over el's top-right corner
     bar.addEventListener('click', e => e.stopPropagation());
     bar.addEventListener('pointerdown', e => e.stopPropagation());
     const bOut = bar.querySelector('.ipz-out'), bIn = bar.querySelector('.ipz-in'),
@@ -1035,6 +1050,7 @@ svg.ipz-panning, .ipz-stage.ipz-panning { cursor:grabbing !important; }
     let dragged = false, sx = 0, sy = 0, pinch = null;
     stage.addEventListener('pointerdown', e => {
       if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if (e.target.closest && e.target.closest('input, select, textarea, button, a, label')) return;
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (pts.size === 1) { dragged = false; sx = e.clientX; sy = e.clientY; }
       if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, s: scale }; dragged = true; }
