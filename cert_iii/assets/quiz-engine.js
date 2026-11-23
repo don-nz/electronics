@@ -1089,6 +1089,8 @@ function workingHtml(data, st) { return data.working(st) + answerKeyHtml(data, s
 function renderQuestion() {
   const data = QUESTIONS[cur], st = Q[cur];
   const multi = isMulti(data);
+  // every question starts with its diagram unzoomed (inplace-zoom.js)
+  document.querySelectorAll('.circuit-panel svg').forEach(s => { if (s._ipz) s._ipz.reset(); });
 
   document.getElementById('qNum').textContent = 'Q' + (cur + 1);
   document.getElementById('qText').innerHTML = data.text(st);
@@ -1404,6 +1406,9 @@ function showSummary() {
 // ── zoom modal — fully defensive; pages without a #diagramModal simply
 // never have anything call these (no onclick="openModal()" exists there).
 function openModal() {
+  // Diagrams now zoom in place (inplace-zoom.js, attached below), so the
+  // pop-up is no longer opened. Kept so pages' onclick="openModal()" is harmless.
+  if (IPZ_ACTIVE) return;
   const src = document.getElementById(CIRCUIT_SVG_ID), dst = document.getElementById('modalSvg');
   if (!src || !dst) return;
   dst.innerHTML = src.innerHTML; dst.setAttribute('viewBox', src.getAttribute('viewBox'));
@@ -1426,6 +1431,39 @@ function closeModal() {
 }
 function handleModalClick(e) { if (e.target.closest('.modal-close')) return; closeModal(); }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// ── in-place zoom — replaces the pop-up on every circuit panel that used to
+// open it (onclick="openModal()"). Loads assets/inplace-zoom.js from beside
+// this file, then attaches after the page's own inline script has set
+// CIRCUIT_SVG_ID. Tap zooms 2× there, tap again zooms out, +/−/⟲ buttons,
+// drag to pan, wheel/pinch to zoom while zoomed.
+let IPZ_ACTIVE = false;
+(function () {
+  const me = document.currentScript && document.currentScript.src;
+  function attachAll() {
+    document.querySelectorAll('.circuit-panel[onclick*="openModal"]').forEach(panel => {
+      const byId = document.getElementById(CIRCUIT_SVG_ID);
+      const svg = (byId && panel.contains(byId)) ? byId
+        : [...panel.querySelectorAll('svg[viewBox]')].find(el => !el.closest('.zoom-hint'));
+      if (!svg) return;
+      InPlaceZoom.attach(svg, { tapToZoom: true });
+      panel.removeAttribute('title');
+      panel.style.cursor = 'default';
+      IPZ_ACTIVE = true;
+    });
+  }
+  function load() {
+    if (!document.querySelector('.circuit-panel[onclick*="openModal"]')) return;
+    if (window.InPlaceZoom) return attachAll();   // already on the page (inlined in college copies)
+    if (!me) return;                             // inlined engine without it: keep the pop-up
+    const sc = document.createElement('script');
+    sc.src = me.replace(/quiz-engine\.js(\?.*)?$/, 'inplace-zoom.js');
+    sc.onload = attachAll;
+    document.head.appendChild(sc);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', load);
+  else load();
+})();
 
 // ── print worksheet — fully defensive, opt-in like the zoom modal above:
 // pages without a #printWorksheet element simply never call this (no
@@ -1568,7 +1606,7 @@ function buildPrintWorksheet() {
     const label = document.querySelector('.panel-label');
     html += `<div class="print-circuit">
       ${label ? `<div class="print-circuit-label">${esc(label.textContent)}</div>` : ''}
-      <svg viewBox="${circuitSvg.getAttribute('viewBox')}" xmlns="http://www.w3.org/2000/svg">${circuitSvg.innerHTML}</svg>
+      <svg viewBox="${circuitSvg.dataset.baseViewBox || circuitSvg.getAttribute('viewBox')}" xmlns="http://www.w3.org/2000/svg">${circuitSvg.innerHTML}</svg>
     </div>`;
   }
 
@@ -1577,7 +1615,7 @@ function buildPrintWorksheet() {
     const st = Q[i];
     html += `<div class="print-question"><span class="print-qnum">Q${i + 1}.</span> <span class="print-qtext">${data.text(st)}</span>`;
     if (data.circuitId && circuitSvg) {
-      const vb = data.circuitViewBox || DEFAULT_CIRCUIT_VIEWBOX || circuitSvg.getAttribute('viewBox');
+      const vb = data.circuitViewBox || DEFAULT_CIRCUIT_VIEWBOX || circuitSvg.dataset.baseViewBox || circuitSvg.getAttribute('viewBox');
       html += `<div class="print-circuit"><svg viewBox="${vb}" xmlns="http://www.w3.org/2000/svg"><use href="#${data.circuitId}"/></svg></div>`;
     }
     if (data.printFigure) html += `<div class="print-circuit">${data.printFigure(st)}</div>`;

@@ -165,8 +165,10 @@ def build_college(path, out_dir):
             f'  <style>\n{base_css}\n{page_css}\n{theme_css}\n  </style>\n')
     if shapes:
         head += '  ' + inline_js(shapes) + '\n'
-    for lib in ('quiz-engine.js', 'waveform-builder.js'):
-        if uses(page, lib):
+    # inplace-zoom.js: loaded by the sims directly, and fetched by quiz-engine.js at run time — which a
+    # bundled page can't do, so it goes in whenever the engine does
+    for lib in ('inplace-zoom.js', 'quiz-engine.js', 'waveform-builder.js'):
+        if uses(page, lib) or (lib == 'inplace-zoom.js' and uses(page, 'quiz-engine.js')):
             head += '  ' + inline_js(asset(lib)) + '\n'
     head += '</head>\n\n'
     out_html = head + body.rstrip() + '\n  ' + COPYRIGHT + '\n</body>\n\n</html>\n'
@@ -193,6 +195,8 @@ def bundle(path, out_dir):
         js = read(os.path.normpath(os.path.join(base, src)))
         if name == 'shapes.js':
             js = trim_shapes(js, page)
+        if name == 'quiz-engine.js':   # the engine fetches inplace-zoom.js at run time; inline it alongside instead
+            return inline_js(read(os.path.join(os.path.dirname(os.path.normpath(os.path.join(base, src))), 'inplace-zoom.js'))) + '\n' + inline_js(js)
         return inline_js(js)
 
     def css(m):
