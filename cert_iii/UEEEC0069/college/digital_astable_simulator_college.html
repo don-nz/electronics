@@ -38,8 +38,13 @@
     .work .f { color: var(--mv-signal); font-weight: 700; }
     .work .t { color: var(--colour-ui-correct); font-weight: 700; }
     .card-title { font-size: .85rem; font-weight: 700; color: var(--colour-label); margin-bottom: .4rem; }
-    .others { display: flex; gap: .6rem; flex-wrap: wrap; }
-    .others a { text-decoration: none; }
+    .sim-btn.r.active { border-color: var(--mv-resistor-labels); color: var(--mv-resistor-labels); background: transparent; }
+    .sim-btn.c.active { border-color: var(--mv-capacitor-labels); color: var(--mv-capacitor-labels); background: transparent; }
+    .rc-ctl { display: grid; grid-template-columns: 4.5rem 1fr 5.5rem; gap: .35rem .7rem; align-items: center; font-size: .85rem; margin-top: .3rem; }
+    .rc-ctl input[type=range] { width: 100%; }
+    .rc-ctl .v { font-weight: 700; text-align: right; }
+    #rcSvg { width: 100%; display: block; margin-top: .5rem; }
+    .rc-read { font-size: .88rem; line-height: 1.8; margin-top: .3rem; }
   
 /*
   NSW TAFE college theme — the single source for the self-contained teacher pages
@@ -1013,6 +1018,9 @@ svg.ipz-panning, .ipz-stage.ipz-panning { cursor:grabbing !important; }
 
       <div class="card">
         <div class="sim-row" style="margin-top:0" id="fRow"><span class="lbl" style="color:var(--mv-signal)">Frequency</span></div>
+        <div style="font-size:.78rem;color:var(--colour-label);margin-top:.7rem">…or set it with the timing parts (f = 1 / 1.4 R C):</div>
+        <div class="sim-row" id="rRow" style="margin-top:.35rem"><span class="lbl" style="color:var(--mv-resistor-labels)">R</span></div>
+        <div class="sim-row" id="cRow"><span class="lbl" style="color:var(--mv-capacitor-labels)">C</span></div>
       </div>
 
       <div class="card">
@@ -1025,17 +1033,23 @@ svg.ipz-panning, .ipz-stage.ipz-panning { cursor:grabbing !important; }
         <svg id="scopeSvg" viewBox="0 0 640 150" xmlns="http://www.w3.org/2000/svg" font-family="'Share Tech Mono', monospace" role="img" aria-label="Scope trace of the astable output"></svg>
       </div>
 
-      <div class="card">
-        <div class="card-title">Working out the period</div>
-        <div class="work" id="work"></div>
+      <div class="card" id="rcCard">
+        <div class="card-title">Why R and C set the frequency</div>
+        <div style="font-size:.83rem;line-height:1.55">Inside a simple RC astable the capacitor <b style="color:var(--mv-capacitor-labels)">C</b> charges through
+          <b style="color:var(--mv-resistor-labels)">R</b> until it reaches the <b>upper</b> switching level — the output flips LOW and C starts discharging through R —
+          until it reaches the <b>lower</b> level, the output flips HIGH, and it starts again. It never rests: <b>no stable state</b>. Each half takes 0.7 × R × C
+          (like two monostable pulses back to back), so a bigger R or C gives a longer period and a <b>lower</b> frequency. The faint trace is the setting before your last change.</div>
+        <div class="rc-ctl">
+          <span style="color:var(--mv-resistor-labels);font-weight:700">R</span><input type="range" id="rcR" min="0" max="5" step="1" aria-label="R"><span class="v" id="rcRv" style="color:var(--mv-resistor-labels)"></span>
+          <span style="color:var(--mv-capacitor-labels);font-weight:700">C</span><input type="range" id="rcC" min="0" max="4" step="1" aria-label="C"><span class="v" id="rcCv" style="color:var(--mv-capacitor-labels)"></span>
+        </div>
+        <svg id="rcSvg" viewBox="0 0 640 300" xmlns="http://www.w3.org/2000/svg" font-family="'Share Tech Mono', monospace" role="img" aria-label="Capacitor voltage charging and discharging between two switching levels, and the squarewave output it makes"></svg>
+        <div class="rc-read" id="rcRead"></div>
       </div>
 
       <div class="card">
-        <div class="card-title">The other multivibrators</div>
-        <div class="others">
-          <a class="sim-btn" href="./digital_monostable_simulator.html">Monostable — one stable state</a>
-          <a class="sim-btn" href="./digital_bistable_simulator.html">Bistable — two stable states</a>
-        </div>
+        <div class="card-title">Working out the period</div>
+        <div class="work" id="work"></div>
       </div>
   </div>
 
@@ -1075,7 +1089,7 @@ function updateThemeToggleUI(isDark) {
     const F_OPTS = [0.5, 1, 2, 5, 50, 1000, 10000];
     const FAST = 20;                         // above this the eye can't follow it
     let f = 1;
-    const fmtF = v => v >= 1000 ? +(v / 1000).toFixed(1) + ' kHz' : v + ' Hz';
+    const fmtF = v => v >= 1000 ? +(v / 1000).toPrecision(3) + ' kHz' : +v.toPrecision(3) + ' Hz';
     function fmtT(s) {
       if (s >= 1) return +s.toFixed(3) + ' s';
       if (s >= 1e-3) return +(s * 1e3).toPrecision(3) + ' ms';
@@ -1163,6 +1177,7 @@ function updateThemeToggleUI(isDark) {
     function writeWork() {
       const T = 1 / f;
       document.getElementById('work').innerHTML =
+        (fromRC ? `<div>f = 1 / (1.4 × <span style="color:var(--mv-resistor-labels);font-weight:700">R</span> × <span style="color:var(--mv-capacitor-labels);font-weight:700">C</span>) = 1 / (1.4 × ${fmtR(R)} × ${fmtC(C)}) = <span class="f">${fmtF(f)}</span></div>` : '') +
         `<div>T = 1 / <span class="f">f</span> = 1 / <span class="f">${fmtF(f)}</span> = <span class="t">${fmtT(T)}</span></div>` +
         `<div>For a squarewave (50% duty): t<sub>HIGH</sub> = t<sub>LOW</sub> = T / 2 = <span class="t">${fmtT(T / 2)}</span></div>` +
         `<div style="font-size:.8rem;color:var(--colour-label);margin-top:.3rem">Higher frequency → shorter period. Ten times the frequency means one tenth of the period.</div>`;
@@ -1171,21 +1186,125 @@ function updateThemeToggleUI(isDark) {
         `<b>NO STABLE STATE</b> — Q keeps switching by itself, ${fmtF(f)} (${fmtT(T / 2)} HIGH, ${fmtT(T / 2)} LOW).` +
         `<div style="margin-top:.35rem">` + (fast
           ? `At ${fmtF(f)} the LED switches on and off ${fmtF(f).replace(' Hz', '').replace(' kHz', ' thousand')} times a second — far faster than your eye can follow (about 20 flashes a second is the limit), so it <b>looks steadily lit at about half brightness</b>. Only the scope shows it's really a squarewave.`
-          : `Slow enough to watch: the LED flashes ${f < 1 ? 'once every ' + fmtT(T) : f + (f === 1 ? ' time' : ' times') + ' a second'}. Pick a higher frequency and see more cycles squeeze into the scope.`) + `</div>`;
+          : `Slow enough to watch: the LED flashes ${f < 1 ? 'once every ' + fmtT(T) : fmtF(f).replace(' Hz', '') + (f === 1 ? ' time' : ' times') + ' a second'}. Pick a higher frequency and see more cycles squeeze into the scope.`) + `</div>`;
     }
 
     function buildPicker() {
       const r = document.getElementById('fRow');
       F_OPTS.forEach(v => { const b = document.createElement('button'); b.type = 'button'; b.className = 'sim-btn'; b.textContent = fmtF(v); b.dataset.v = v; b.onclick = () => setF(v); r.appendChild(b); });
     }
-    function setF(v) {
-      f = v; phase0 = now();
-      document.querySelectorAll('#fRow .sim-btn').forEach(b => b.classList.toggle('active', +b.dataset.v === f));
-      writeWork();
+    // ── R and C: f = 1 / (1.4 R C) for this simple RC astable (each half = 0.7 R C, more exactly ln2 R C) ──
+    const R_OPTS = [10e3, 22e3, 33e3, 47e3, 68e3, 100e3];
+    const C_OPTS = [1e-6, 4.7e-6, 10e-6, 22e-6, 47e-6];
+    let R = 33e3, C = 10e-6, fromRC = false;
+    const fRC = () => 1 / (1.4 * R * C);
+    const fmtR = r => +(r / 1e3).toFixed(1) + ' kΩ';
+    const fmtC = c => +(c * 1e6).toFixed(2) + ' µF';
+    function setF(v, rcSet) {
+      f = v; phase0 = now(); fromRC = !!rcSet;
+      document.querySelectorAll('#fRow .sim-btn').forEach(b => b.classList.toggle('active', !fromRC && +b.dataset.v === f));
+      document.querySelectorAll('#rRow .sim-btn').forEach(b => b.classList.toggle('active', fromRC && +b.dataset.v === R));
+      document.querySelectorAll('#cRow .sim-btn').forEach(b => b.classList.toggle('active', fromRC && +b.dataset.v === C));
+      writeWork(); if (typeof syncRC === 'function') syncRC();
+    }
+    function setRC(r, c) { R = r; C = c; setF(fRC(), true); }
+
+    // ── RC graph: Vc swings between a lower and an upper switching level (≈ 1/3 and 2/3 of +5 V).
+    // They're set to LO = e^-0.7 / (1 + e^-0.7) ≈ 0.332 and HI = 1 − LO ≈ 0.668 so each half takes exactly
+    // 0.7 R C — matching the f = 1 / 1.4 R C readout (true 1/3–2/3 levels would give ln2 = 0.693). ──
+    const LO = Math.exp(-0.7) / (1 + Math.exp(-0.7)), HI = 1 - LO;
+    const SPANS = [0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20];
+    const rcIdx = () => ({ r: R_OPTS.indexOf(R), c: C_OPTS.indexOf(C) });
+    let rcCommitted = rcIdx(), rcGhost = null, rcSpan = 1, rcDragging = false;
+    function rcFit(T) { if (T > rcSpan * 0.45 || T < rcSpan * 0.1) rcSpan = SPANS.find(sp => T <= sp * 0.35) || SPANS[SPANS.length - 1]; }
+    function syncRC() {
+      const rc = rcIdx(), rs = document.getElementById('rcR'), cs = document.getElementById('rcC');
+      if (+rs.value !== rc.r) rs.value = rc.r;
+      if (+cs.value !== rc.c) cs.value = rc.c;
+      if (rcDragging) rcGhost = rcCommitted;
+      else if (fromRC && (rc.r !== rcCommitted.r || rc.c !== rcCommitted.c)) { rcGhost = rcCommitted; rcCommitted = { ...rc }; }
+      drawRC();
+    }
+    function drawRC() {
+      const rc = rcIdx(), tau = R * C, half = 0.7 * tau, T = 2 * half;
+      document.getElementById('rcRv').textContent = fmtR(R);
+      document.getElementById('rcCv').textContent = fmtC(C);
+      const g = rcGhost && (rcGhost.r !== rc.r || rcGhost.c !== rc.c) ? rcGhost : null;
+      const gT = g ? 1.4 * R_OPTS[g.r] * C_OPTS[g.c] : 0;
+      rcFit(Math.max(T, gT));
+      const s = document.getElementById('rcSvg'); s.innerHTML = '';
+      const xT = 100, x1 = 625, span = rcSpan, X = t => xT + t / span * (x1 - xT);
+      const vTop = 30, vBot = 150, V = fr => vBot - fr * (vBot - vTop), qHi = 215, qLo = 255;
+      for (let i = 0; i <= 10; i++) { const x = xT + i * (x1 - xT) / 10; el('line', { x1: x, y1: vTop - 6, x2: x, y2: qLo + 4, stroke: 'var(--colour-border)', 'stroke-width': .6, 'stroke-dasharray': '2 4' }, s); }
+      el('line', { x1: xT, y1: vBot, x2: x1, y2: vBot, stroke: 'var(--colour-border)', 'stroke-width': 1 }, s);
+      el('line', { x1: xT, y1: vTop, x2: x1, y2: vTop, stroke: 'var(--colour-label)', 'stroke-width': 1, 'stroke-dasharray': '6 4' }, s);
+      txt(xT - 4, vTop + 4, '+5V', { 'font-size': 10, 'text-anchor': 'end', fill: 'var(--colour-label)' }, s);
+      txt(xT - 4, vBot + 4, '0V', { 'font-size': 10, 'text-anchor': 'end', fill: 'var(--colour-label)' }, s);
+      [[HI, 'upper switching level'], [LO, 'lower switching level']].forEach(([fr, lab]) => {
+        el('line', { x1: xT, y1: V(fr), x2: x1, y2: V(fr), stroke: 'var(--mv-signal)', 'stroke-width': 1.3, 'stroke-dasharray': '6 4' }, s);
+        txt(x1, fr === HI ? V(fr) - 5 : V(fr) + 13, lab, { 'font-size': 10, 'text-anchor': 'end', fill: 'var(--mv-signal)' }, s);   // upper label above its line, lower label below
+      });
+      txt(8, 40, 'V', { 'font-size': 14, 'font-weight': 'bold', fill: 'var(--mv-capacitor-labels)' }, s);
+      txt(20, 44, 'C', { 'font-size': 10, 'font-weight': 'bold', fill: 'var(--mv-capacitor-labels)' }, s);
+      txt(8, qHi + 24, 'Q', { 'font-size': 14, 'font-weight': 'bold', fill: 'var(--colour-ui-correct)' }, s);
+      txt(x1, qLo + 34, `${fmtT(span / 10)} / div`, { 'font-size': 11, 'text-anchor': 'end', fill: 'var(--colour-label)' }, s);
+      function trace(tauV, ghost) {
+        const h = 0.7 * tauV, op = ghost ? .35 : 1, w = ghost ? 1.6 : 2.4;
+        let dv = `M ${xT} ${V(LO).toFixed(1)}`, dq = `M ${xT} ${qHi}`, t = 0, up = true, edges = [];
+        while (t < span) {
+          const tEnd = Math.min(t + h, span), N = 40;
+          for (let i = 1; i <= N; i++) {
+            const tt = t + (tEnd - t) * i / N, u = tt - t;
+            const fr = up ? 1 - (1 - LO) * Math.exp(-u / tauV) : HI * Math.exp(-u / tauV);
+            dv += ` L ${X(tt).toFixed(1)} ${V(fr).toFixed(1)}`;
+          }
+          if (tEnd >= span) { dq += ` L ${x1} ${up ? qHi : qLo}`; break; }
+          const x = X(tEnd).toFixed(1); edges.push(+x);
+          dq += ` L ${x} ${up ? qHi : qLo} L ${x} ${up ? qLo : qHi}`;
+          t = tEnd; up = !up;
+        }
+        const ca = { d: dv, fill: 'none', stroke: 'var(--mv-capacitor-labels)', 'stroke-width': w, opacity: op };
+        const qa = { d: dq, fill: 'none', stroke: 'var(--colour-ui-correct)', 'stroke-width': w, opacity: op };
+        if (ghost) { ca['stroke-dasharray'] = '5 4'; qa['stroke-dasharray'] = '5 4'; }
+        el('path', ca, s); el('path', qa, s);
+        return edges;
+      }
+      if (g) trace(R_OPTS[g.r] * C_OPTS[g.c], true);
+      const edges = trace(tau, false);
+      // each crossing of a switching level flips Q
+      edges.forEach((x, i) => {
+        const fr = i % 2 === 0 ? HI : LO;
+        el('circle', { cx: x, cy: V(fr), r: 3.5, fill: 'var(--mv-signal)' }, s);
+        el('line', { x1: x, y1: V(fr), x2: x, y2: qHi, stroke: 'var(--mv-signal)', 'stroke-width': 1, 'stroke-dasharray': '3 3', opacity: .7 }, s);
+      });
+      if (X(T) <= x1) {
+        el('path', { d: `M ${xT} ${qLo + 8} L ${xT} ${qLo + 13} L ${X(T)} ${qLo + 13} L ${X(T)} ${qLo + 8}`, fill: 'none', stroke: 'var(--colour-text)', 'stroke-width': 1.2 }, s);
+        txt((xT + X(T)) / 2, qLo + 26, `T = ${fmtT(T)}`, { 'font-size': 12, 'font-weight': 'bold', 'text-anchor': 'middle', fill: 'var(--colour-ui-correct)' }, s);
+      }
+      let cmp = '';
+      if (g) {
+        const ratio = T / gT;
+        cmp = `<div>Compared with before (faint trace): the period is <b>${ratio >= 1 ? +ratio.toFixed(2) + '× longer' : +(1 / ratio).toFixed(2) + '× shorter'}</b>, so the frequency is <b>${ratio >= 1 ? +ratio.toFixed(2) + '× lower' : +(1 / ratio).toFixed(2) + '× higher'}</b>.</div>`;
+      }
+      const note = fromRC ? '' : `<div style="color:var(--colour-label);font-size:.8rem">The simulator is on a preset frequency (${fmtF(f)}) — move a slider or pick R or C at the top to run it from these parts instead.</div>`;
+      document.getElementById('rcRead').innerHTML =
+        `<div>t<sub>HIGH</sub> = t<sub>LOW</sub> = 0.7 × <span style="color:var(--mv-resistor-labels);font-weight:700">R</span> × <span style="color:var(--mv-capacitor-labels);font-weight:700">C</span> = 0.7 × ${fmtR(R)} × ${fmtC(C)} = <b>${fmtT(0.7 * tau)}</b></div>` +
+        `<div>T = 1.4 × R × C = <b>${fmtT(1.4 * tau)}</b> &nbsp;→&nbsp; f = 1 / T = <b style="color:var(--colour-ui-correct)">${fmtF(1 / (1.4 * tau))}</b></div>` +
+        `<div style="color:var(--colour-label);font-size:.8rem">Why 0.7? Charging from about ⅓ to ⅔ of the supply (or discharging back) takes about 0.7 time constants — more exactly ln 2 = 0.693.</div>` + cmp + note;
+    }
+    function initRC() {
+      const rr = document.getElementById('rRow'), cr = document.getElementById('cRow');
+      R_OPTS.forEach(v => { const b = document.createElement('button'); b.type = 'button'; b.className = 'sim-btn r'; b.textContent = fmtR(v); b.dataset.v = v; b.onclick = () => setRC(v, C); rr.appendChild(b); });
+      C_OPTS.forEach(v => { const b = document.createElement('button'); b.type = 'button'; b.className = 'sim-btn c'; b.textContent = fmtC(v); b.dataset.v = v; b.onclick = () => setRC(R, v); cr.appendChild(b); });
+      const rs = document.getElementById('rcR'), cs = document.getElementById('rcC');
+      const rc = rcIdx(); rs.value = rc.r; cs.value = rc.c;
+      rs.addEventListener('input', () => { rcDragging = true; setRC(R_OPTS[+rs.value], C_OPTS[+cs.value]); });
+      cs.addEventListener('input', () => { rcDragging = true; setRC(R_OPTS[+rs.value], C_OPTS[+cs.value]); });
+      [rs, cs].forEach(x => x.addEventListener('change', () => { rcDragging = false; setRC(R_OPTS[+rs.value], C_OPTS[+cs.value]); }));
     }
 
     function frame() { const tn = now(); updateCircuit(tn); drawScope(tn); requestAnimationFrame(frame); }
-    buildPicker(); drawCircuit(); setF(1); requestAnimationFrame(frame);
+    buildPicker(); initRC(); drawCircuit(); setF(1); requestAnimationFrame(frame);
 
     function goBack(e) { e.preventDefault(); history.back(); }
     if (history.length > 1) { const ml = document.getElementById('menuLink'); if (ml) ml.style.display = ''; }
