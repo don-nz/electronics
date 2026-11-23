@@ -1,0 +1,410 @@
+<!--
+  Monostable multivibrator simulator — companion to the multivibrators quiz and the monostable
+  timing-diagram exercise.
+
+  A monostable IC wired with its timing resistor Rx and capacitor Cx (the quiz's generic
+  "mv-mono-ic" drawing, redrawn here so the values can change). Press and HOLD the trigger push
+  button: on the rising edge Q goes HIGH for exactly t_w, however long the button is held — then
+  falls back to its one stable state (Q = 0).
+
+  Two ICs, with the course's own formulas (see the multivibrators quiz Q15–Q17):
+    74LS221 — t_w = 0.7  × Rx × Cx, NON-retriggerable (a trigger during the pulse is ignored)
+    74LS122 — t_w = 0.45 × Rx × Cx, retriggerable   (a trigger during the pulse restarts t_w)
+  The 0.45 constant is the course's value, not a datasheet one (memory: week12 quiz open items).
+
+  Rx 10k–100k and Cx 1µF–47µF give t_w from ~4.5 ms to ~3.3 s, so the pulse plays out in REAL time:
+  the Q LED stays lit for t_w, and the scrolling scope (5 s / 1 s / 0.2 s window) shows Trigger,
+  Q and Q-bar with every pulse width measured underneath.
+
+  "Two triggers" fires two short triggers half a pulse width apart — the clean way to see the
+  retriggerable / non-retriggerable difference. Events are scheduled in simulation time (not
+  setTimeout), so even a 4.5 ms pulse is handled exactly.
+
+  Self-contained apart from the site chrome (quiz-common.css, theme-init, breadcrumb, inplace-zoom).
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../../assets/theme-init.js"></script>
+  <script src="../../../../assets/inplace-zoom.js"></script>
+  <title>Digital Electronics — Monostable Simulator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../../assets/quiz-common.css">
+  <script src="../../../../assets/breadcrumb.js" defer></script>
+  <style>
+    /* colours: the site's tokens, with fallbacks for the college theme (which lacks these) */
+    body {
+      --mv-series: var(--colour-series, var(--colour-dff));
+      --mv-resistor: var(--colour-resistor, var(--colour-dff));
+      --mv-capacitor: var(--colour-capacitor, var(--colour-dff));
+      --mv-resistor-labels: var(--colour-resistor-labels, #a21caf);
+      --mv-capacitor-labels: var(--colour-capacitor-labels, #1d4ed8);
+      --mv-signal: var(--colour-signal, #a16207);
+      --mv-supply: var(--colour-supply, #dc2626);
+    }
+    .sim-intro { font-size: .85rem; line-height: 1.6; }
+    .sim-row { display: flex; gap: .45rem; flex-wrap: wrap; align-items: center; margin-top: .7rem; font-size: .78rem; color: var(--colour-label); }
+    .sim-row > .lbl { min-width: 5.5rem; font-weight: 700; }
+    .sim-btn {
+      padding: .45rem .9rem; border: 1px solid var(--colour-border); border-radius: var(--radius-lg, 6px);
+      background: transparent; color: var(--colour-label); cursor: pointer; font-family: inherit;
+      font-size: .78rem; font-weight: 700; letter-spacing: .03em; transition: background .15s, color .15s, border-color .15s;
+    }
+    .sim-btn:hover { color: var(--colour-text); border-color: var(--colour-ui-primary); }
+    .sim-btn.active { border-color: var(--colour-ui-primary); color: var(--colour-ui-primary); background: rgba(var(--colour-ui-primary-rgb), .1); }
+    .sim-btn:focus-visible { outline: 2px solid var(--colour-ui-primary); outline-offset: 2px; }
+    .sim-btn.r.active { border-color: var(--mv-resistor-labels); color: var(--mv-resistor-labels); background: transparent; }
+    .sim-btn.c.active { border-color: var(--mv-capacitor-labels); color: var(--mv-capacitor-labels); background: transparent; }
+    .trig-btn {
+      padding: .8rem 1.6rem; font-size: .95rem; border-width: 2px; border-color: var(--mv-signal); color: var(--mv-signal);
+      touch-action: none; user-select: none; -webkit-user-select: none;
+    }
+    .trig-btn.down { background: rgba(255, 209, 102, .22); }
+    #simSvg { width: 100%; max-width: 620px; display: block; margin: 0 auto; }
+    #simSvg .pb { cursor: pointer; }
+    #scopeSvg { width: 100%; display: block; margin-top: .4rem; }
+    .sim-status { margin-top: .8rem; padding: .7rem .9rem; border: 1px solid var(--colour-border); border-radius: 6px; font-size: .85rem; line-height: 1.55; }
+    .work { font-size: .9rem; line-height: 1.9; }
+    .work .r { color: var(--mv-resistor-labels); font-weight: 700; }
+    .work .c { color: var(--mv-capacitor-labels); font-weight: 700; }
+    .work .t { color: var(--colour-ui-correct); font-weight: 700; }
+    .card-title { font-size: .85rem; font-weight: 700; color: var(--colour-label); margin-bottom: .4rem; }
+    .others { display: flex; gap: .6rem; flex-wrap: wrap; }
+    .others a { text-decoration: none; }
+  </style>
+</head>
+
+<body>
+  <div class="crumb" id="crumb" data-current="Monostable Simulator"></div>
+  <header>
+    <h1>Digital Electronics</h1>
+    <p>Monostable Multivibrator — Simulator</p>
+  </header>
+
+  <div class="quiz-wrap single-col" id="quizWrap">
+    <div class="questions-col">
+      <div class="card sim-intro">
+        <div class="progress-wrap" style="margin-bottom:.6rem;">
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+        <div>A <b>monostable</b> has <b>one stable state</b> (Q = 0). A rising edge on its Trigger input kicks Q HIGH for a set time,
+          the <b>pulse width t<sub>w</sub></b>, and then Q drops back on its own. The timing resistor <b style="color:var(--mv-resistor-labels)">R<sub>x</sub></b>
+          and capacitor <b style="color:var(--mv-capacitor-labels)">C<sub>x</sub></b> set t<sub>w</sub>. Press and <b>hold</b> TRIGGER (or tap the push button in the
+          circuit) and watch the Q LED: it stays lit for t<sub>w</sub> no matter how long you hold the button. Change R<sub>x</sub> or C<sub>x</sub> and try again.</div>
+      </div>
+
+      <div class="card">
+        <div class="sim-row"><span class="lbl">IC</span>
+          <button type="button" class="sim-btn active" id="ic-221" onclick="setIC('221')">74LS221 · t<sub>w</sub> = 0.7 R C · non-retriggerable</button>
+          <button type="button" class="sim-btn" id="ic-122" onclick="setIC('122')">74LS122 · t<sub>w</sub> = 0.45 R C · retriggerable</button>
+        </div>
+        <div class="sim-row" id="rRow"><span class="lbl" style="color:var(--mv-resistor-labels)">R<sub>x</sub></span></div>
+        <div class="sim-row" id="cRow"><span class="lbl" style="color:var(--mv-capacitor-labels)">C<sub>x</sub></span></div>
+      </div>
+
+      <div class="card">
+        <svg id="simSvg" viewBox="0 0 620 330" xmlns="http://www.w3.org/2000/svg" font-family="'Share Tech Mono', monospace" role="img" aria-label="Monostable IC with timing resistor and capacitor, a trigger push button and an LED on Q"></svg>
+        <div class="sim-row" style="justify-content:center">
+          <button type="button" class="sim-btn trig-btn" id="trigBtn">TRIGGER (hold)</button>
+          <button type="button" class="sim-btn" onclick="twoTriggers()">Two triggers, ½ t<sub>w</sub> apart</button>
+          <button type="button" class="sim-btn" onclick="clearScope()">Clear scope</button>
+        </div>
+        <div class="sim-status" id="simStatus" aria-live="polite"></div>
+      </div>
+
+      <div class="card">
+        <div class="sim-row" style="margin-top:0"><span class="lbl">Scope window</span>
+          <button type="button" class="sim-btn active" id="win-5" onclick="setWin(5)">5 s</button>
+          <button type="button" class="sim-btn" id="win-1" onclick="setWin(1)">1 s</button>
+          <button type="button" class="sim-btn" id="win-0.2" onclick="setWin(0.2)">0.2 s</button>
+        </div>
+        <svg id="scopeSvg" viewBox="0 0 640 250" xmlns="http://www.w3.org/2000/svg" font-family="'Share Tech Mono', monospace" role="img" aria-label="Scrolling scope traces of Trigger, Q and Q-bar"></svg>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Working out the pulse width</div>
+        <div class="work" id="work"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">The other multivibrators</div>
+        <div class="others">
+          <a class="sim-btn" href="./digital_astable_simulator.html">Astable — no stable state</a>
+          <a class="sim-btn" href="./digital_bistable_simulator.html">Bistable — two stable states</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>Electronics // Cert III // UEEEC0069</footer>
+
+  <!-- zoom the circuit in place: −/+/⟲ buttons above it, wheel or pinch to zoom, drag to move around -->
+  <script>
+    addEventListener('DOMContentLoaded', () => {
+      InPlaceZoom.attach(document.getElementById('simSvg'), { wrap: true });
+    });
+  </script>
+  <script>
+    const NS = 'http://www.w3.org/2000/svg';
+    const R_OPTS = [10e3, 22e3, 33e3, 47e3, 68e3, 100e3];
+    const C_OPTS = [1e-6, 4.7e-6, 10e-6, 22e-6, 47e-6];
+    const IC = {
+      '221': { name: '74LS221', k: 0.7, retrig: false },
+      '122': { name: '74LS122', k: 0.45, retrig: true },
+    };
+    let ic = '221', R = 33e3, C = 4.7e-6, WIN = 5;
+    const tw = () => IC[ic].k * R * C;
+
+    // ── formatting ──
+    const fmtR = r => (r >= 1e3 ? +(r / 1e3).toFixed(1) + ' kΩ' : r + ' Ω');
+    const fmtC = c => (c >= 1e-6 ? +(c * 1e6).toFixed(2) + ' µF' : +(c * 1e9).toFixed(1) + ' nF');
+    const fmtRs = r => +(r / 1e3).toFixed(1) + 'k';
+    const fmtCs = c => +(c * 1e6).toFixed(2) + 'µF';
+    function fmtT(s) {
+      if (s >= 1) return +s.toFixed(3) + ' s';
+      if (s >= 1e-3) return +(s * 1e3).toPrecision(3) + ' ms';
+      return +(s * 1e6).toPrecision(3) + ' µs';
+    }
+    const plain = n => n.toLocaleString('en-AU', { maximumSignificantDigits: 6, useGrouping: true }).replace(/,/g, ' ');
+
+    // ── simulation state (times in seconds since page load) ──
+    const t0 = performance.now() / 1000;
+    const now = () => performance.now() / 1000 - t0;
+    let trig = 0, q = 0, qStart = 0, qEnd = 0;
+    let queue = [];                 // scheduled trigger level changes {t, v}
+    let trigLog = [[0, 0]], qLog = [[0, 0]];
+    let pulses = [];                // {s, e, retrigs:[t]}
+    let ignored = [];               // trigger edges ignored (non-retriggerable)
+    let lastMsg = '';
+
+    function setTrig(t, v) {
+      if (v === trig) return;
+      trig = v; trigLog.push([t, v]);
+      if (v !== 1) return;          // only the rising edge matters (positive-edge TRIG)
+      if (!q) {
+        q = 1; qStart = t; qEnd = t + tw(); qLog.push([t, 1]);
+        pulses.push({ s: t, e: null, retrigs: [] });
+        lastMsg = `Rising edge on Trigger → Q goes HIGH and the IC starts timing ${fmtT(tw())}.`;
+      } else if (IC[ic].retrig) {
+        qEnd = t + tw(); pulses[pulses.length - 1].retrigs.push(t);
+        lastMsg = `Another rising edge DURING the pulse: the ${IC[ic].name} is <b>retriggerable</b>, so t<sub>w</sub> starts again from this edge — Q stays HIGH longer.`;
+      } else {
+        ignored.push(t);
+        lastMsg = `Another rising edge DURING the pulse: the ${IC[ic].name} is <b>non-retriggerable</b>, so this edge is <b>ignored</b> — Q still drops ${fmtT(tw())} after the FIRST edge.`;
+      }
+    }
+    function step(tn) {
+      for (;;) {
+        const tq = queue.length ? queue[0].t : Infinity, te = q ? qEnd : Infinity;
+        const t = Math.min(tq, te);
+        if (t > tn) break;
+        if (te <= tq) {
+          q = 0; qLog.push([qEnd, 0]);
+          const p = pulses[pulses.length - 1]; p.e = qEnd;
+          lastMsg = `t<sub>w</sub> is up: Q falls back to 0, its one <b>stable</b> state, and waits for the next trigger. This pulse lasted <b>${fmtT(p.e - p.s)}</b>.`;
+        } else { const ev = queue.shift(); setTrig(ev.t, ev.v); }
+      }
+    }
+    function schedule(t, v) { queue.push({ t, v }); queue.sort((a, b) => a.t - b.t); }
+
+    // trigger push button (hold) — on the page and in the drawing
+    function press() { schedule(now(), 1); document.getElementById('trigBtn').classList.add('down'); }
+    function release() { schedule(now(), 0); document.getElementById('trigBtn').classList.remove('down'); }
+    function bindHold(el) {
+      el.addEventListener('pointerdown', e => { e.preventDefault(); try { el.setPointerCapture(e.pointerId); } catch (_) {} press(); });
+      el.addEventListener('pointerup', release);
+      el.addEventListener('pointercancel', release);
+      el.addEventListener('keydown', e => { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); press(); } });
+      el.addEventListener('keyup', e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); release(); } });
+    }
+    function twoTriggers() {
+      const t = now(), w = tw(), pw = Math.min(0.04, w * 0.15);
+      schedule(t, 1); schedule(t + pw, 0);
+      schedule(t + w / 2, 1); schedule(t + w / 2 + pw, 0);
+    }
+    function clearScope() {
+      const t = now();
+      trigLog = [[t, trig]]; qLog = [[t, q]]; pulses = q ? [{ s: t, e: null, retrigs: [], cut: true }] : []; ignored = [];
+    }
+
+    // ── controls ──
+    function buildPickers() {
+      const rr = document.getElementById('rRow'), cr = document.getElementById('cRow');
+      R_OPTS.forEach(v => { const b = document.createElement('button'); b.type = 'button'; b.className = 'sim-btn r'; b.textContent = fmtR(v); b.dataset.v = v; b.onclick = () => { R = v; changed(); }; rr.appendChild(b); });
+      C_OPTS.forEach(v => { const b = document.createElement('button'); b.type = 'button'; b.className = 'sim-btn c'; b.textContent = fmtC(v); b.dataset.v = v; b.onclick = () => { C = v; changed(); }; cr.appendChild(b); });
+    }
+    function setIC(k) { ic = k; changed(); }
+    function setWin(w) { WIN = w; ['5', '1', '0.2'].forEach(k => document.getElementById('win-' + k).classList.toggle('active', +k === w)); }
+    function changed() {
+      document.querySelectorAll('#rRow .sim-btn').forEach(b => b.classList.toggle('active', +b.dataset.v === R));
+      document.querySelectorAll('#cRow .sim-btn').forEach(b => b.classList.toggle('active', +b.dataset.v === C));
+      ['221', '122'].forEach(k => document.getElementById('ic-' + k).classList.toggle('active', k === ic));
+      drawCircuit(); writeWork();
+      lastMsg = `Now t<sub>w</sub> = ${fmtT(tw())}. The next trigger uses the new value${q ? ' (the pulse already running keeps its old end time)' : ''}.`;
+    }
+    function writeWork() {
+      const k = IC[ic].k, w = tw();
+      document.getElementById('work').innerHTML =
+        `<div>${IC[ic].name}: t<sub>w</sub> = ${k} × <span class="r">R<sub>x</sub></span> × <span class="c">C<sub>x</sub></span></div>` +
+        `<div>t<sub>w</sub> = ${k} × <span class="r">${fmtR(R)}</span> × <span class="c">${fmtC(C)}</span></div>` +
+        `<div>t<sub>w</sub> = ${k} × <span class="r">${plain(R)}</span> × <span class="c">${plain(+C.toPrecision(3))}</span> = <span class="t">${fmtT(w)}</span></div>` +
+        `<div style="font-size:.8rem;color:var(--colour-label);margin-top:.3rem">Double R<sub>x</sub> or C<sub>x</sub> and t<sub>w</sub> doubles — it's directly proportional to both. ` +
+        (IC[ic].retrig ? 'The 0.45 constant is the value this course gives for the 74LS122.' : 'The 0.7 constant is from the 74LS221 datasheet.') + `</div>`;
+    }
+
+    // ── circuit drawing ──
+    const el = (tag, a, p) => { const e = document.createElementNS(NS, tag); for (const k in a) e.setAttribute(k, a[k]); if (p) p.appendChild(e); return e; };
+    const txt = (x, y, s, a, p) => { const e = el('text', Object.assign({ x, y }, a), p); e.textContent = s; return e; };
+    let dyn = {};
+    function drawCircuit() {
+      const s = document.getElementById('simSvg'); s.innerHTML = '';
+      const W = 'var(--mv-series)', B = 'var(--colour-dff)';
+      const g = el('g', {}, s);
+      // supply rail and wires first (full length), components on top
+      el('line', { x1: 200, y1: 30, x2: 340, y2: 30, stroke: W, 'stroke-width': 2 }, g);
+      txt(346, 35, '+5 V', { 'font-size': 16, 'font-weight': 'bold', fill: 'var(--mv-supply)' }, g);
+      el('line', { x1: 200, y1: 30, x2: 200, y2: 184, stroke: W, 'stroke-width': 2 }, g);           // CLR tied high
+      el('line', { x1: 250, y1: 30, x2: 250, y2: 200, stroke: W, 'stroke-width': 2 }, g);           // Rx down to Rx/Cx
+      el('line', { x1: 250, y1: 150, x2: 310, y2: 150, stroke: W, 'stroke-width': 2 }, g);
+      el('line', { x1: 310, y1: 150, x2: 310, y2: 200, stroke: W, 'stroke-width': 2 }, g);
+      [[200, 30], [250, 30], [250, 150]].forEach(([x, y]) => el('circle', { cx: x, cy: y, r: 5, fill: W }, g));
+      // Rx
+      el('rect', { x: 235, y: 45, width: 30, height: 80, rx: 3, fill: 'var(--colour-panel)', stroke: 'var(--mv-resistor)', 'stroke-width': 2 }, g);
+      txt(228, 90, 'Rx', { 'font-size': 16, 'font-weight': 'bold', 'text-anchor': 'end', fill: 'var(--mv-resistor-labels)' }, g);
+      txt(272, 90, fmtRs(R), { 'font-size': 16, 'font-weight': 'bold', fill: 'var(--mv-resistor-labels)' }, g);
+      // Cx
+      el('rect', { x: 276, y: 138, width: 8, height: 24, fill: 'var(--colour-panel)' }, g);
+      el('line', { x1: 276, y1: 138, x2: 276, y2: 162, stroke: 'var(--mv-capacitor)', 'stroke-width': 2.5 }, g);
+      el('line', { x1: 284, y1: 138, x2: 284, y2: 162, stroke: 'var(--mv-capacitor)', 'stroke-width': 2.5 }, g);
+      txt(290, 146, '+', { 'font-size': 14, 'font-weight': 'bold', fill: 'var(--mv-capacitor-labels)' }, g);
+      txt(280, 132, 'Cx', { 'font-size': 16, 'font-weight': 'bold', 'text-anchor': 'middle', fill: 'var(--mv-capacitor-labels)' }, g);
+      txt(280, 182, fmtCs(C), { 'font-size': 15, 'font-weight': 'bold', 'text-anchor': 'middle', fill: 'var(--mv-capacitor-labels)' }, g);
+      // IC body
+      el('rect', { x: 180, y: 200, width: 150, height: 110, rx: 4, fill: 'none', stroke: B, 'stroke-width': 2 }, g);
+      el('circle', { cx: 200, cy: 192, r: 8, fill: 'none', stroke: B, 'stroke-width': 2 }, g);
+      txt(200, 228, 'CLR', { 'font-size': 13, 'font-weight': 'bold', 'text-anchor': 'middle', fill: B, 'text-decoration': 'overline' }, g);
+      txt(250, 222, 'Rx/Cx', { 'font-size': 13, 'font-weight': 'bold', 'text-anchor': 'middle', fill: B }, g);
+      txt(310, 222, 'Cx', { 'font-size': 13, 'font-weight': 'bold', 'text-anchor': 'middle', fill: B }, g);
+      txt(255, 302, IC[ic].name, { 'font-size': 13, 'font-weight': 'bold', 'text-anchor': 'middle', fill: 'var(--colour-label)' }, g);
+      // timing bar inside the IC
+      el('rect', { x: 200, y: 268, width: 110, height: 8, rx: 3, fill: 'none', stroke: 'var(--colour-border)', 'stroke-width': 1 }, g);
+      dyn.bar = el('rect', { x: 200, y: 268, width: 0, height: 8, rx: 3, fill: 'var(--mv-signal)' }, g);
+      dyn.barTxt = txt(255, 263, '', { 'font-size': 10, 'text-anchor': 'middle', fill: 'var(--colour-label)' }, g);
+      // TRIG input: push button from +5 V → trigger pin
+      dyn.trigWire = el('line', { x1: 60, y1: 245, x2: 180, y2: 245, 'stroke-width': 3 }, g);
+      el('path', { d: 'M 180 233 L 196 245 L 180 257', fill: 'none', stroke: B, 'stroke-width': 2 }, g);
+      txt(202, 250, 'TRIG', { 'font-size': 14, 'font-weight': 'bold', fill: B }, g);
+      const pb = el('g', { class: 'pb', tabindex: 0, role: 'button', 'aria-label': 'Trigger push button (hold)' }, g);
+      el('rect', { x: 14, y: 205, width: 86, height: 80, fill: 'transparent' }, pb);
+      el('line', { x1: 30, y1: 245, x2: 40, y2: 245, stroke: W, 'stroke-width': 2 }, pb);
+      el('circle', { cx: 40, cy: 245, r: 4, fill: 'none', stroke: W, 'stroke-width': 2 }, pb);
+      el('circle', { cx: 60, cy: 245, r: 4, fill: 'none', stroke: W, 'stroke-width': 2 }, pb);
+      dyn.pbBar = el('line', { x1: 36, y1: 233, x2: 64, y2: 233, stroke: 'var(--mv-signal)', 'stroke-width': 3, 'stroke-linecap': 'round' }, pb);
+      dyn.pbStem = el('line', { x1: 50, y1: 233, x2: 50, y2: 221, stroke: 'var(--mv-signal)', 'stroke-width': 3, 'stroke-linecap': 'round' }, pb);
+      txt(50, 214, 'PUSH', { 'font-size': 11, 'font-weight': 'bold', 'text-anchor': 'middle', fill: 'var(--mv-signal)' }, pb);
+      txt(30, 262, '+5V', { 'font-size': 11, 'font-weight': 'bold', 'text-anchor': 'middle', fill: 'var(--mv-supply)' }, pb);
+      txt(46, 275, 'Trigger', { 'font-size': 12, 'text-anchor': 'middle', fill: 'var(--colour-label)' }, pb);
+      dyn.trigVal = txt(120, 238, '0', { 'font-size': 15, 'font-weight': 'bold', 'text-anchor': 'middle' }, g);
+      bindHold(pb);
+      // outputs
+      dyn.qWire = el('line', { x1: 330, y1: 245, x2: 470, y2: 245, 'stroke-width': 3 }, g);
+      txt(320, 250, 'Q', { 'font-size': 18, 'font-weight': 'bold', 'text-anchor': 'end', fill: B }, g);
+      dyn.qbWire = el('line', { x1: 330, y1: 290, x2: 470, y2: 290, 'stroke-width': 3 }, g);
+      const qb = txt(320, 296, 'Q', { 'font-size': 18, 'font-weight': 'bold', 'text-anchor': 'end', fill: B, 'text-decoration': 'overline' }, g);
+      dyn.qVal = txt(400, 238, '0', { 'font-size': 15, 'font-weight': 'bold', 'text-anchor': 'middle' }, g);
+      dyn.qbVal = txt(400, 283, '1', { 'font-size': 15, 'font-weight': 'bold', 'text-anchor': 'middle' }, g);
+      // LEDs (red = 1, like the college trainer)
+      dyn.qLed = el('circle', { cx: 488, cy: 245, r: 14, 'stroke-width': 2 }, g);
+      dyn.qbLed = el('circle', { cx: 488, cy: 290, r: 14, 'stroke-width': 2 }, g);
+      txt(510, 250, 'Q LED', { 'font-size': 12, fill: 'var(--colour-label)' }, g);
+      txt(510, 295, 'Q̄ LED', { 'font-size': 12, fill: 'var(--colour-label)' }, g);
+      dyn.twTag = txt(470, 200, '', { 'font-size': 14, 'font-weight': 'bold', 'text-anchor': 'middle', fill: 'var(--colour-ui-correct)' }, g);
+    }
+    const lvl = v => v ? 'var(--colour-ui-correct)' : 'var(--colour-label)';
+    function updateCircuit(tn) {
+      dyn.trigWire.setAttribute('stroke', lvl(trig)); dyn.trigVal.textContent = trig; dyn.trigVal.setAttribute('fill', lvl(trig));
+      dyn.pbBar.setAttribute('y1', trig ? 241 : 233); dyn.pbBar.setAttribute('y2', trig ? 241 : 233);
+      dyn.pbStem.setAttribute('y1', trig ? 241 : 233); dyn.pbStem.setAttribute('y2', trig ? 229 : 221);
+      dyn.qWire.setAttribute('stroke', lvl(q)); dyn.qbWire.setAttribute('stroke', lvl(!q));
+      dyn.qVal.textContent = q; dyn.qVal.setAttribute('fill', lvl(q));
+      dyn.qbVal.textContent = q ? 0 : 1; dyn.qbVal.setAttribute('fill', lvl(!q));
+      const on = 'fill:#ff3b3b;stroke:#ff8a8a;filter:drop-shadow(0 0 8px #ff3b3b)', off = 'fill:transparent;stroke:var(--colour-border)';
+      dyn.qLed.setAttribute('style', q ? on : off); dyn.qbLed.setAttribute('style', q ? off : on);
+      const frac = q ? Math.min(1, (tn - qStart) / (qEnd - qStart)) : 0;
+      dyn.bar.setAttribute('width', 110 * frac);
+      dyn.barTxt.textContent = q ? `timing ${fmtT(Math.max(0, qEnd - tn))} left` : 'idle (stable)';
+      dyn.twTag.textContent = `tw = ${fmtT(tw())}`;
+    }
+
+    // ── scope ──
+    function drawScope(tn) {
+      const s = document.getElementById('scopeSvg'); s.innerHTML = '';
+      const x0 = 70, x1 = 630, ts = tn - WIN, X = t => x0 + (t - ts) / WIN * (x1 - x0);
+      const rows = [['Trigger', trigLog, 50, 'var(--mv-signal)', false], ['Q', qLog, 120, 'var(--colour-ui-correct)', false], ['Q̄', qLog, 190, 'var(--colour-output-z)', true]];
+      // grid: 10 divisions
+      for (let i = 0; i <= 10; i++) el('line', { x1: x0 + i * (x1 - x0) / 10, y1: 14, x2: x0 + i * (x1 - x0) / 10, y2: 212, stroke: 'var(--colour-border)', 'stroke-width': .6, 'stroke-dasharray': '2 4' }, s);
+      txt(x1, 244, `${fmtT(WIN / 10)} / div  ·  now →`, { 'font-size': 11, 'text-anchor': 'end', fill: 'var(--colour-label)' }, s);
+      rows.forEach(([name, log, y, col, inv]) => {
+        txt(8, y - 6, name, { 'font-size': 14, 'font-weight': 'bold', fill: col }, s);
+        const hi = y - 28, lo = y;
+        const L = v => (inv ? !v : v) ? hi : lo;
+        let v = log[0][1];
+        for (const [t, nv] of log) { if (t <= ts) v = nv; }
+        let d = `M ${x0} ${L(v)}`;
+        for (const [t, nv] of log) {
+          if (t <= ts || t > tn) continue;
+          const x = X(t).toFixed(1);
+          d += ` L ${x} ${L(v)} L ${x} ${L(nv)}`; v = nv;
+        }
+        d += ` L ${x1} ${L(v)}`;
+        el('path', { d, fill: 'none', stroke: col, 'stroke-width': 2.2 }, s);
+      });
+      // pulse-width brackets under Q
+      pulses.forEach(p => {
+        const e = p.e == null ? tn : p.e;
+        if (e < ts) return;
+        const a = Math.max(x0, X(p.s)), b = X(e);
+        if (p.e != null && b - a > 2) {
+          el('path', { d: `M ${a} 128 L ${a} 133 L ${b} 133 L ${b} 128`, fill: 'none', stroke: 'var(--colour-text)', 'stroke-width': 1.2 }, s);
+          if (b - a > 46) txt((a + b) / 2, 146, fmtT(p.e - p.s), { 'font-size': 11, 'text-anchor': 'middle', fill: 'var(--colour-text)' }, s);
+        }
+        p.retrigs.forEach(t => { if (t > ts) { const x = X(t); el('line', { x1: x, y1: 88, x2: x, y2: 124, stroke: 'var(--mv-signal)', 'stroke-width': 1, 'stroke-dasharray': '3 2' }, s); txt(x + 3, 100, 'retrigger', { 'font-size': 10, fill: 'var(--mv-signal)' }, s); } });
+      });
+      ignored.forEach(t => { if (t > ts) { const x = X(t); txt(x, 70, '✕ ignored', { 'font-size': 10, 'text-anchor': 'middle', fill: 'var(--colour-ui-wrong)' }, s); } });
+    }
+
+    function status(tn) {
+      const st = q ? `<b style="color:var(--colour-ui-correct)">QUASI-STABLE (timing)</b> — Q = 1 for ${fmtT(qEnd - qStart)}` : `<b>STABLE</b> — Q = 0, waiting for a rising edge on Trigger`;
+      document.getElementById('simStatus').innerHTML = st + (lastMsg ? `<div style="margin-top:.35rem">${lastMsg}</div>` : '');
+    }
+
+    // ── loop ──
+    let lastStatus = '';
+    function frame() {
+      const tn = now();
+      step(tn);
+      // keep logs short
+      const keep = tn - 6;
+      [trigLog, qLog].forEach(lg => { while (lg.length > 2 && lg[1][0] < keep) lg.shift(); });
+      pulses = pulses.filter(p => p.e == null || p.e > keep); ignored = ignored.filter(t => t > keep);
+      updateCircuit(tn); drawScope(tn);
+      const sKey = q + lastMsg; if (sKey !== lastStatus) { lastStatus = sKey; status(tn); }
+      requestAnimationFrame(frame);
+    }
+
+    buildPickers();
+    bindHold(document.getElementById('trigBtn'));
+    changed(); lastMsg = '';
+    requestAnimationFrame(frame);
+
+    function goBack(e) { e.preventDefault(); history.back(); }
+    if (history.length > 1) { const ml = document.getElementById('menuLink'); if (ml) ml.style.display = ''; }
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,242 @@
+<!--
+  Astable multivibrator simulator — companion to the multivibrators quiz.
+
+  Block level, as the course treats it (the quiz's mv-astable-block: no input, one squarewave
+  output). Don chose a frequency picker rather than a 555 R/C formula, because the course has no
+  astable timing formula (2026-11-24).
+
+  Pick a frequency: at 0.5–5 Hz everything runs in REAL time — the output wire changes colour,
+  the LED flashes, and the scrolling scope (fixed 5 s window) shows more cycles squeezed in as f
+  rises. At 50 Hz and above the LED is switching too fast for the eye, so it looks steadily lit
+  (at about half brightness — 50% duty), and the scope switches to a "triggered" view of five
+  periods with its own timebase, as a real scope would. T = 1/f, t_HIGH = t_LOW = T/2 worked out
+  below.
+
+  Self-contained apart from the site chrome (quiz-common.css, theme-init, breadcrumb, inplace-zoom).
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="../../../../assets/theme-init.js"></script>
+  <script src="../../../../assets/inplace-zoom.js"></script>
+  <title>Digital Electronics — Astable Simulator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../../../assets/quiz-common.css">
+  <script src="../../../../assets/breadcrumb.js" defer></script>
+  <style>
+    /* colours: the site's tokens, with fallbacks for the college theme (which lacks these) */
+    body {
+      --mv-series: var(--colour-series, var(--colour-dff));
+      --mv-resistor: var(--colour-resistor, var(--colour-dff));
+      --mv-capacitor: var(--colour-capacitor, var(--colour-dff));
+      --mv-resistor-labels: var(--colour-resistor-labels, #a21caf);
+      --mv-capacitor-labels: var(--colour-capacitor-labels, #1d4ed8);
+      --mv-signal: var(--colour-signal, #a16207);
+      --mv-supply: var(--colour-supply, #dc2626);
+    }
+    .sim-intro { font-size: .85rem; line-height: 1.6; }
+    .sim-row { display: flex; gap: .45rem; flex-wrap: wrap; align-items: center; margin-top: .7rem; font-size: .78rem; color: var(--colour-label); }
+    .sim-row > .lbl { min-width: 5.5rem; font-weight: 700; }
+    .sim-btn {
+      padding: .45rem .9rem; border: 1px solid var(--colour-border); border-radius: var(--radius-lg, 6px);
+      background: transparent; color: var(--colour-label); cursor: pointer; font-family: inherit;
+      font-size: .78rem; font-weight: 700; letter-spacing: .03em; transition: background .15s, color .15s, border-color .15s;
+    }
+    .sim-btn:hover { color: var(--colour-text); border-color: var(--colour-ui-primary); }
+    .sim-btn.active { border-color: var(--colour-ui-primary); color: var(--colour-ui-primary); background: rgba(var(--colour-ui-primary-rgb), .1); }
+    .sim-btn:focus-visible { outline: 2px solid var(--colour-ui-primary); outline-offset: 2px; }
+    #simSvg { width: 100%; max-width: 560px; display: block; margin: 0 auto; }
+    #scopeSvg { width: 100%; display: block; margin-top: .4rem; }
+    .sim-status { margin-top: .8rem; padding: .7rem .9rem; border: 1px solid var(--colour-border); border-radius: 6px; font-size: .85rem; line-height: 1.55; }
+    .work { font-size: .9rem; line-height: 1.9; }
+    .work .f { color: var(--mv-signal); font-weight: 700; }
+    .work .t { color: var(--colour-ui-correct); font-weight: 700; }
+    .card-title { font-size: .85rem; font-weight: 700; color: var(--colour-label); margin-bottom: .4rem; }
+    .others { display: flex; gap: .6rem; flex-wrap: wrap; }
+    .others a { text-decoration: none; }
+  </style>
+</head>
+
+<body>
+  <div class="crumb" id="crumb" data-current="Astable Simulator"></div>
+  <header>
+    <h1>Digital Electronics</h1>
+    <p>Astable Multivibrator — Simulator</p>
+  </header>
+
+  <div class="quiz-wrap single-col" id="quizWrap">
+    <div class="questions-col">
+      <div class="card sim-intro">
+        <div class="progress-wrap" style="margin-bottom:.6rem;">
+          <a id="menuLink" class="menu-link" href="#" onclick="goBack(event)" style="display:none">← Back</a>
+        </div>
+        <div>An <b>astable</b> has <b>no stable state</b> — and <b>no input</b>. As soon as it's powered it keeps switching its output
+          HIGH, LOW, HIGH, LOW on its own, making a <b>squarewave</b>. That's why it's used as a <b>clock</b> for counters and
+          flip-flops, to flash lights, and to make tones. Pick a frequency and watch the LED and the scope.</div>
+      </div>
+
+      <div class="card">
+        <div class="sim-row" style="margin-top:0" id="fRow"><span class="lbl" style="color:var(--mv-signal)">Frequency</span></div>
+      </div>
+
+      <div class="card">
+        <svg id="simSvg" viewBox="0 0 560 230" xmlns="http://www.w3.org/2000/svg" font-family="'Share Tech Mono', monospace" role="img" aria-label="Astable multivibrator block driving an LED"></svg>
+        <div class="sim-status" id="simStatus" aria-live="polite"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title" id="scopeTitle">Scope</div>
+        <svg id="scopeSvg" viewBox="0 0 640 150" xmlns="http://www.w3.org/2000/svg" font-family="'Share Tech Mono', monospace" role="img" aria-label="Scope trace of the astable output"></svg>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Working out the period</div>
+        <div class="work" id="work"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">The other multivibrators</div>
+        <div class="others">
+          <a class="sim-btn" href="./digital_monostable_simulator.html">Monostable — one stable state</a>
+          <a class="sim-btn" href="./digital_bistable_simulator.html">Bistable — two stable states</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>Electronics // Cert III // UEEEC0069</footer>
+
+  <!-- zoom the circuit in place: −/+/⟲ buttons above it, wheel or pinch to zoom, drag to move around -->
+  <script>
+    addEventListener('DOMContentLoaded', () => {
+      InPlaceZoom.attach(document.getElementById('simSvg'), { wrap: true });
+    });
+  </script>
+  <script>
+    const NS = 'http://www.w3.org/2000/svg';
+    const F_OPTS = [0.5, 1, 2, 5, 50, 1000, 10000];
+    const FAST = 20;                         // above this the eye can't follow it
+    let f = 1;
+    const fmtF = v => v >= 1000 ? +(v / 1000).toFixed(1) + ' kHz' : v + ' Hz';
+    function fmtT(s) {
+      if (s >= 1) return +s.toFixed(3) + ' s';
+      if (s >= 1e-3) return +(s * 1e3).toPrecision(3) + ' ms';
+      return +(s * 1e6).toPrecision(3) + ' µs';
+    }
+    const t0 = performance.now() / 1000, now = () => performance.now() / 1000 - t0;
+    let phase0 = 0;                          // time the current frequency started (so Q starts HIGH on a change)
+    const level = t => (Math.floor((t - phase0) * f * 2) % 2 === 0) ? 1 : 0;
+
+    const el = (tag, a, p) => { const e = document.createElementNS(NS, tag); for (const k in a) e.setAttribute(k, a[k]); if (p) p.appendChild(e); return e; };
+    const txt = (x, y, s, a, p) => { const e = el('text', Object.assign({ x, y }, a), p); e.textContent = s; return e; };
+    const lvl = v => v ? 'var(--colour-ui-correct)' : 'var(--colour-label)';
+
+    let dyn = {};
+    function drawCircuit() {
+      const s = document.getElementById('simSvg'); s.innerHTML = '';
+      const B = 'var(--colour-dff)';
+      el('line', { x1: 110, y1: 15, x2: 110, y2: 40, stroke: 'var(--mv-series)', 'stroke-width': 2 }, s);
+      txt(110, 12, '+5 V', { 'font-size': 13, 'font-weight': 'bold', 'text-anchor': 'middle', fill: 'var(--mv-supply)' }, s);
+      el('line', { x1: 110, y1: 190, x2: 110, y2: 212, stroke: 'var(--mv-series)', 'stroke-width': 2 }, s);
+      el('line', { x1: 98, y1: 212, x2: 122, y2: 212, stroke: 'var(--colour-ground, var(--mv-series))', 'stroke-width': 2 }, s);
+      el('line', { x1: 102, y1: 217, x2: 118, y2: 217, stroke: 'var(--colour-ground, var(--mv-series))', 'stroke-width': 2 }, s);
+      el('line', { x1: 106, y1: 222, x2: 114, y2: 222, stroke: 'var(--colour-ground, var(--mv-series))', 'stroke-width': 2 }, s);
+      dyn.out = el('line', { x1: 185, y1: 115, x2: 430, y2: 115, 'stroke-width': 3 }, s);
+      el('rect', { x: 35, y: 40, width: 150, height: 150, rx: 4, fill: 'none', stroke: B, 'stroke-width': 2 }, s);
+      txt(110, 72, 'ASTABLE', { 'font-size': 15, 'font-weight': 'bold', 'text-anchor': 'middle', fill: B }, s);
+      txt(110, 92, '(no input)', { 'font-size': 12, 'text-anchor': 'middle', fill: 'var(--colour-label)' }, s);
+      txt(175, 120, 'Q', { 'font-size': 22, 'font-weight': 'bold', 'text-anchor': 'end', fill: B }, s);
+      el('polyline', { points: '75,160 85,160 85,140 100,140 100,160 115,160 115,140 130,140 130,160 140,160', fill: 'none', stroke: 'var(--colour-output-z)', 'stroke-width': 2 }, s);
+      dyn.val = txt(300, 105, '1', { 'font-size': 17, 'font-weight': 'bold', 'text-anchor': 'middle' }, s);
+      dyn.fTag = txt(300, 142, '', { 'font-size': 15, 'font-weight': 'bold', 'text-anchor': 'middle', fill: 'var(--mv-signal)' }, s);
+      dyn.led = el('circle', { cx: 452, cy: 115, r: 18, 'stroke-width': 2 }, s);
+      txt(452, 155, 'LED', { 'font-size': 12, 'text-anchor': 'middle', fill: 'var(--colour-label)' }, s);
+      dyn.ledNote = txt(452, 172, '', { 'font-size': 11, 'text-anchor': 'middle', fill: 'var(--colour-label)' }, s);
+    }
+    function updateCircuit(tn) {
+      const fast = f > FAST, v = level(tn);
+      if (fast) {
+        dyn.out.setAttribute('stroke', 'var(--colour-ui-correct)'); dyn.out.setAttribute('stroke-dasharray', '6 6');
+        dyn.val.textContent = '1/0'; dyn.val.setAttribute('fill', 'var(--colour-text)');
+        dyn.led.setAttribute('style', 'fill:rgba(255,59,59,.55);stroke:#ff8a8a;filter:drop-shadow(0 0 5px rgba(255,59,59,.7))');
+        dyn.ledNote.textContent = 'looks steady — too fast to see';
+      } else {
+        dyn.out.removeAttribute('stroke-dasharray'); dyn.out.setAttribute('stroke', lvl(v));
+        dyn.val.textContent = v; dyn.val.setAttribute('fill', lvl(v));
+        dyn.led.setAttribute('style', v ? 'fill:#ff3b3b;stroke:#ff8a8a;filter:drop-shadow(0 0 8px #ff3b3b)' : 'fill:transparent;stroke:var(--colour-border)');
+        dyn.ledNote.textContent = 'flashing';
+      }
+      dyn.fTag.textContent = `f = ${fmtF(f)}`;
+    }
+
+    function drawScope(tn) {
+      const s = document.getElementById('scopeSvg'); s.innerHTML = '';
+      const x0 = 60, x1 = 630, hi = 40, lo = 100, T = 1 / f, fast = f > FAST;
+      const WIN = fast ? 5 * T : 5;
+      const ts = fast ? 0 : tn - WIN;                  // fast: a triggered, steady view starting on a rising edge
+      const lv = t => fast ? ((Math.floor(t * f * 2) % 2 === 0) ? 1 : 0) : level(t);
+      for (let i = 0; i <= 10; i++) el('line', { x1: x0 + i * (x1 - x0) / 10, y1: 20, x2: x0 + i * (x1 - x0) / 10, y2: 112, stroke: 'var(--colour-border)', 'stroke-width': .6, 'stroke-dasharray': '2 4' }, s);
+      txt(8, 76, 'Q', { 'font-size': 15, 'font-weight': 'bold', fill: 'var(--colour-ui-correct)' }, s);
+      const X = t => x0 + (t - ts) / WIN * (x1 - x0);
+      // edges are every T/2 from phase0 (or 0 when fast)
+      const p0 = fast ? 0 : phase0, half = T / 2;
+      let k = Math.floor((ts - p0) / half);
+      let d = '', v = lv(ts + 1e-9);
+      d = `M ${x0} ${v ? hi : lo}`;
+      for (let e = p0 + (k + 1) * half; e < ts + WIN; e += half) {
+        if (e <= ts) continue;
+        const x = X(e).toFixed(1), nv = v ? 0 : 1;
+        d += ` L ${x} ${v ? hi : lo} L ${x} ${nv ? hi : lo}`; v = nv;
+      }
+      d += ` L ${x1} ${v ? hi : lo}`;
+      el('path', { d, fill: 'none', stroke: 'var(--colour-ui-correct)', 'stroke-width': 2.2 }, s);
+      // mark one period
+      const a = fast ? X(0) : null;
+      if (fast) {
+        el('path', { d: `M ${X(0)} 118 L ${X(0)} 123 L ${X(T)} 123 L ${X(T)} 118`, fill: 'none', stroke: 'var(--colour-text)', 'stroke-width': 1.2 }, s);
+        txt((X(0) + X(T)) / 2, 137, `T = ${fmtT(T)}`, { 'font-size': 11, 'text-anchor': 'middle', fill: 'var(--colour-text)' }, s);
+      }
+      txt(x1, 147, `${fmtT(WIN / 10)} / div${fast ? '  ·  triggered (steady) view' : '  ·  now →'}`, { 'font-size': 11, 'text-anchor': 'end', fill: 'var(--colour-label)' }, s);
+      document.getElementById('scopeTitle').textContent = fast
+        ? `Scope — 5 periods (${fmtT(WIN)} across the screen)`
+        : `Scope — last 5 seconds: ${+(5 * f).toFixed(1)} cycles fit in`;
+    }
+
+    function writeWork() {
+      const T = 1 / f;
+      document.getElementById('work').innerHTML =
+        `<div>T = 1 / <span class="f">f</span> = 1 / <span class="f">${fmtF(f)}</span> = <span class="t">${fmtT(T)}</span></div>` +
+        `<div>For a squarewave (50% duty): t<sub>HIGH</sub> = t<sub>LOW</sub> = T / 2 = <span class="t">${fmtT(T / 2)}</span></div>` +
+        `<div style="font-size:.8rem;color:var(--colour-label);margin-top:.3rem">Higher frequency → shorter period. Ten times the frequency means one tenth of the period.</div>`;
+      const fast = f > FAST;
+      document.getElementById('simStatus').innerHTML =
+        `<b>NO STABLE STATE</b> — Q keeps switching by itself, ${fmtF(f)} (${fmtT(T / 2)} HIGH, ${fmtT(T / 2)} LOW).` +
+        `<div style="margin-top:.35rem">` + (fast
+          ? `At ${fmtF(f)} the LED switches on and off ${fmtF(f).replace(' Hz', '').replace(' kHz', ' thousand')} times a second — far faster than your eye can follow (about 20 flashes a second is the limit), so it <b>looks steadily lit at about half brightness</b>. Only the scope shows it's really a squarewave.`
+          : `Slow enough to watch: the LED flashes ${f < 1 ? 'once every ' + fmtT(T) : f + (f === 1 ? ' time' : ' times') + ' a second'}. Pick a higher frequency and see more cycles squeeze into the scope.`) + `</div>`;
+    }
+
+    function buildPicker() {
+      const r = document.getElementById('fRow');
+      F_OPTS.forEach(v => { const b = document.createElement('button'); b.type = 'button'; b.className = 'sim-btn'; b.textContent = fmtF(v); b.dataset.v = v; b.onclick = () => setF(v); r.appendChild(b); });
+    }
+    function setF(v) {
+      f = v; phase0 = now();
+      document.querySelectorAll('#fRow .sim-btn').forEach(b => b.classList.toggle('active', +b.dataset.v === f));
+      writeWork();
+    }
+
+    function frame() { const tn = now(); updateCircuit(tn); drawScope(tn); requestAnimationFrame(frame); }
+    buildPicker(); drawCircuit(); setF(1); requestAnimationFrame(frame);
+
+    function goBack(e) { e.preventDefault(); history.back(); }
+    if (history.length > 1) { const ml = document.getElementById('menuLink'); if (ml) ml.style.display = ''; }
+  </script>
+</body>
+
+</html>
