@@ -725,7 +725,7 @@ header p {
 /* ══════════════════════════════════════════════════════════════════════
    inplace-zoom.js — zoom an <svg> diagram where it sits (no pop-up).
 
-   InPlaceZoom.attach(svg, { tapToZoom, wrap, group })
+   InPlaceZoom.attach(svg, { tapToZoom, wrap, group, onChange })
      - −, %, + and reset buttons are added to the svg's parent (top-right).
        Zooms in to 200% and out to 50% (smaller than its panel); +/− step 10%.
      - group: diagrams given the same group name share ONE set of buttons
@@ -738,8 +738,11 @@ header p {
        zooms back out — for diagrams with nothing tappable inside them (the
        quiz circuit panels). Leave it off for interactive diagrams (the
        breadboard simulators), where taps belong to the page.
-     - wrap: put the svg in its own positioned box for the buttons (use when
-       the svg's parent holds other content too).
+     - wrap: put the svg in its own box, with the buttons in a strip ABOVE it
+       rather than over its corner (for drawings whose labels reach the top
+       edge, and when the svg's parent holds other content too).
+     - onChange(scale): called after every zoom/pan/reset (e.g. to re-place
+       pop-ups that are positioned from the drawing).
      - A drag never fires the page's own click handlers (the click that ends
        a pan is swallowed), so panning across tappable holes is safe.
      - Zooming works by narrowing the svg's own viewBox, so lines and text stay
@@ -773,6 +776,7 @@ header p {
     st.id = 'inplaceZoomStyle';
     st.textContent = `
 .ipz-controls { position:absolute; right:.5rem; top:.5rem; display:flex; gap:.3rem; z-index:5; }
+.ipz-controls.ipz-row { position:static; justify-content:flex-end; margin:0 0 .3rem; }
 .ipz-controls button {
   width:2rem; height:2rem; padding:0; border-radius:6px; cursor:pointer;
   font:700 1.05rem/1 system-ui, sans-serif;
@@ -832,7 +836,10 @@ svg.ipz-panning, .ipz-stage.ipz-panning { cursor:grabbing !important; }
       + '<button type="button" class="ipz-level" disabled aria-live="polite">100%</button>'
       + '<button type="button" class="ipz-in" title="Zoom in" aria-label="Zoom in">+</button>'
       + '<button type="button" class="ipz-reset" title="Reset zoom" aria-label="Reset zoom">⟲</button>';
-    if (hasBar) host.appendChild(bar);
+    if (hasBar) {
+      if (opts.wrap) { bar.classList.add('ipz-row'); host.insertBefore(bar, svg); }  // own strip above the diagram
+      else host.appendChild(bar);                                                  // over its top-right corner
+    }
     // Keep button clicks away from the panel's own onclick (and from the page).
     bar.addEventListener('click', e => e.stopPropagation());
     bar.addEventListener('pointerdown', e => e.stopPropagation());
@@ -859,6 +866,7 @@ svg.ipz-panning, .ipz-stage.ipz-panning { cursor:grabbing !important; }
       bReset.disabled = Math.abs(scale - 1) < 0.001;
       bIn.disabled = scale >= MAX - 0.001;
       bLevel.textContent = Math.round(scale * 100) + '%';
+      if (opts.onChange) opts.onChange(scale);
     }
     // Screen point → svg user units (allows for preserveAspectRatio letterboxing).
     function toUser(cx, cy) {
