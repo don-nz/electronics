@@ -3377,8 +3377,12 @@ header p {
 /* ══════════════════════════════════════════════════════════════════════
    inplace-zoom.js — zoom an <svg> diagram where it sits (no pop-up).
 
-   InPlaceZoom.attach(svg, { tapToZoom, wrap })
-     - +, − and reset buttons are added to the svg's parent (bottom-right).
+   InPlaceZoom.attach(svg, { tapToZoom, wrap, group })
+     - −, %, + and reset buttons are added to the svg's parent (top-right).
+       Zooms in to 200% and out to 50% (smaller than its panel); +/− step 10%.
+     - group: diagrams given the same group name share ONE set of buttons
+       (on the first one attached) and always share a zoom level — zooming any
+       of them zooms them all; each still pans on its own.
      - While zoomed: drag (mouse or one finger) pans; wheel / pinch zooms.
        Unzoomed, the wheel and a one-finger swipe scroll the page as normal.
        Ctrl+wheel (a laptop trackpad pinch) zooms at any time.
@@ -3395,6 +3399,13 @@ header p {
        per question), that becomes the new full view and the zoom resets.
        The full view is kept in svg.dataset.baseViewBox (print uses it).
 
+   InPlaceZoom.attachUnit(el)
+     - Zooms a whole block of the page (several diagrams and whatever sits
+       between them) as ONE unit, so the gaps scale with the diagrams. Same
+       buttons (top-right of el), drag/wheel/pinch rules and 50%–200% range;
+       scales el's contents with a CSS transform and clips to el's box.
+       Taps are left to the page (like tapToZoom off).
+
    quiz-engine.js attaches this automatically to every quiz circuit panel
    that used to open the zoom pop-up; other pages include this file and call
    attach() themselves.
@@ -3402,14 +3413,18 @@ header p {
 (function () {
   if (window.InPlaceZoom) return;
 
-  const MAX = 8, STEP = 1.5, TAP_SCALE = 2, DRAG_PX = 6;
+  const MAX = 2, MIN = 0.5, TAP_SCALE = 2, DRAG_PX = 6;
+  // +/− move in 10% steps on a 10% grid (so 100% is always reachable);
+  // wheel/pinch are smooth but settle on 100% when they pass within 4% of it.
+  const stepScale = (s, dir) => Math.round(s * 10 + dir) / 10;
+  const settle = s => { s = Math.min(MAX, Math.max(MIN, s)); return Math.abs(s - 1) < 0.04 ? 1 : s; };
 
   function injectStyle() {
     if (document.getElementById('inplaceZoomStyle')) return;
     const st = document.createElement('style');
     st.id = 'inplaceZoomStyle';
     st.textContent = `
-.ipz-controls { position:absolute; right:.5rem; bottom:.5rem; display:flex; gap:.3rem; z-index:5; }
+.ipz-controls { position:absolute; right:.5rem; top:.5rem; display:flex; gap:.3rem; z-index:5; }
 .ipz-controls button {
   width:2rem; height:2rem; padding:0; border-radius:6px; cursor:pointer;
   font:700 1.05rem/1 system-ui, sans-serif;
@@ -3421,9 +3436,9 @@ header p {
 .ipz-controls button:disabled { opacity:.35; cursor:default; }
 .ipz-controls .ipz-level { min-width:2.6rem; width:auto; font-size:.7rem; cursor:default; opacity:.7; padding:0 .3rem; }
 svg.ipz-tap { cursor:zoom-in; }
-svg.ipz-zoomed { cursor:grab; }
+svg.ipz-zoomed, .ipz-stage.ipz-zoomed { cursor:grab; }
 svg.ipz-tap.ipz-zoomed { cursor:zoom-out; }
-svg.ipz-panning { cursor:grabbing !important; }
+svg.ipz-panning, .ipz-stage.ipz-panning { cursor:grabbing !important; }
 @media print { .ipz-controls { display:none; } }`;
     document.head.appendChild(st);
   }
@@ -3432,6 +3447,8 @@ svg.ipz-panning { cursor:grabbing !important; }
     const v = (s || '').trim().split(/[\s,]+/).map(Number);
     return v.length === 4 && v.every(isFinite) && v[2] > 0 && v[3] > 0 ? { x: v[0], y: v[1], w: v[2], h: v[3] } : null;
   }
+
+  const groups = {};                               // group name → [controllers]
 
   function attach(svg, opts) {
     if (!svg || svg._ipz) return svg && svg._ipz;
@@ -3459,13 +3476,15 @@ svg.ipz-panning { cursor:grabbing !important; }
     const host = svg.parentElement;
     if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
     host.querySelectorAll(':scope > .zoom-hint').forEach(h => { h.style.display = 'none'; });
+    const members = opts.group ? (groups[opts.group] = groups[opts.group] || []) : null;
+    const hasBar = !members || members.length === 0;  // grouped: only the first gets buttons
     const bar = document.createElement('div');
     bar.className = 'ipz-controls';
     bar.innerHTML = '<button type="button" class="ipz-out" title="Zoom out" aria-label="Zoom out">−</button>'
       + '<button type="button" class="ipz-level" disabled aria-live="polite">100%</button>'
       + '<button type="button" class="ipz-in" title="Zoom in" aria-label="Zoom in">+</button>'
       + '<button type="button" class="ipz-reset" title="Reset zoom" aria-label="Reset zoom">⟲</button>';
-    host.appendChild(bar);
+    if (hasBar) host.appendChild(bar);
     // Keep button clicks away from the panel's own onclick (and from the page).
     bar.addEventListener('click', e => e.stopPropagation());
     bar.addEventListener('pointerdown', e => e.stopPropagation());
@@ -3473,22 +3492,23 @@ svg.ipz-panning { cursor:grabbing !important; }
           bReset = bar.querySelector('.ipz-reset'), bLevel = bar.querySelector('.ipz-level');
     if (opts.tapToZoom) svg.classList.add('ipz-tap');
 
-    function clamp() {
+    function clamp() {                           // zoomed out below 100%: keep it centred
       const w = base.w / scale, h = base.h / scale;
-      vx = Math.min(Math.max(vx, base.x), base.x + base.w - w);
-      vy = Math.min(Math.max(vy, base.y), base.y + base.h - h);
+      vx = w >= base.w ? base.x - (w - base.w) / 2 : Math.min(Math.max(vx, base.x), base.x + base.w - w);
+      vy = h >= base.h ? base.y - (h - base.h) / 2 : Math.min(Math.max(vy, base.y), base.y + base.h - h);
     }
     function apply() {
       clamp();
       const w = base.w / scale, h = base.h / scale;
-      lastSet = scale === 1 ? `${base.x} ${base.y} ${base.w} ${base.h}`
+      lastSet = Math.abs(scale - 1) < 0.001 ? `${base.x} ${base.y} ${base.w} ${base.h}`
                             : `${+vx.toFixed(3)} ${+vy.toFixed(3)} ${+w.toFixed(3)} ${+h.toFixed(3)}`;
       svg.setAttribute('viewBox', lastSet);
       const zoomed = scale > 1.001;
       svg.classList.toggle('ipz-zoomed', zoomed);
       // Zoomed: one finger pans the diagram. Unzoomed: one finger scrolls the page.
       svg.style.touchAction = zoomed ? 'none' : 'pan-x pan-y';
-      bOut.disabled = bReset.disabled = !zoomed;
+      bOut.disabled = scale <= MIN + 0.001;
+      bReset.disabled = Math.abs(scale - 1) < 0.001;
       bIn.disabled = scale >= MAX - 0.001;
       bLevel.textContent = Math.round(scale * 100) + '%';
     }
@@ -3499,8 +3519,8 @@ svg.ipz-panning { cursor:grabbing !important; }
       const p = new DOMPoint(cx, cy).matrixTransform(m.inverse());
       return { x: p.x, y: p.y };
     }
-    function zoomAt(cx, cy, newScale) {
-      newScale = Math.min(MAX, Math.max(1, newScale));
+    function zoomAt(cx, cy, newScale, fromGroup) {
+      newScale = settle(newScale);
       if (cx == null) {                            // buttons: zoom about the middle of the view
         const r = svg.getBoundingClientRect(); cx = r.left + r.width / 2; cy = r.top + r.height / 2;
       }
@@ -3510,12 +3530,16 @@ svg.ipz-panning { cursor:grabbing !important; }
       vy = p.y - (p.y - vy) * (h1 / h0);
       scale = newScale;
       apply();
+      if (members && !fromGroup) members.forEach(m => { if (m !== ctrl) m._zoom(scale); });
     }
-    function reset() { scale = 1; vx = base.x; vy = base.y; apply(); }
+    function reset(fromGroup) {
+      scale = 1; vx = base.x; vy = base.y; apply();
+      if (members && fromGroup !== true) members.forEach(m => { if (m !== ctrl) m._reset(); });
+    }
 
-    bIn.addEventListener('click', () => zoomAt(null, null, scale * STEP));
-    bOut.addEventListener('click', () => zoomAt(null, null, scale / STEP));
-    bReset.addEventListener('click', reset);
+    bIn.addEventListener('click', () => zoomAt(null, null, stepScale(scale, +1)));
+    bOut.addEventListener('click', () => zoomAt(null, null, stepScale(scale, -1)));
+    bReset.addEventListener('click', () => reset());
 
     // ── someone else changed the viewBox → new full view ──
     new MutationObserver(() => {
@@ -3529,7 +3553,7 @@ svg.ipz-panning { cursor:grabbing !important; }
 
     // ── wheel ──
     svg.addEventListener('wheel', e => {
-      if (!e.ctrlKey && scale <= 1.001) return;    // unzoomed: let the page scroll
+      if (!e.ctrlKey && Math.abs(scale - 1) < 0.001) return;   // unzoomed: let the page scroll
       e.preventDefault();
       const f = Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0025));
       zoomAt(e.clientX, e.clientY, scale * f);
@@ -3581,15 +3605,128 @@ svg.ipz-panning { cursor:grabbing !important; }
       if (dragged) { e.stopPropagation(); e.preventDefault(); dragged = false; return; }
       if (opts.tapToZoom) {
         e.stopPropagation();
-        if (scale > 1.001) reset(); else zoomAt(e.clientX, e.clientY, TAP_SCALE);
+        if (Math.abs(scale - 1) >= 0.001) reset(); else zoomAt(e.clientX, e.clientY, TAP_SCALE);
       }
     }, true);
 
+    const ctrl = {
+      reset: () => reset(),
+      zoomAt: (s) => zoomAt(null, null, s),
+      get scale() { return scale; },
+      _zoom: (s) => zoomAt(null, null, s, true),  // from another group member
+      _reset: () => reset(true),
+    };
+    if (members) { members.push(ctrl); if (members.length > 1) zoomAt(null, null, members[0].scale, true); }
     apply();
-    return (svg._ipz = { reset, zoomAt: (s) => zoomAt(null, null, s), get scale() { return scale; } });
+    return (svg._ipz = ctrl);
   }
 
-  window.InPlaceZoom = { attach };
+  // ── a whole block as one unit (CSS transform on a stage inside el) ──
+  function attachUnit(el) {
+    if (!el || el._ipz) return el && el._ipz;
+    injectStyle();
+    const stage = document.createElement('div');
+    stage.className = 'ipz-stage';
+    stage.style.transformOrigin = '0 0';
+    while (el.firstChild) stage.appendChild(el.firstChild);
+    el.appendChild(stage);
+    if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
+    el.style.overflow = 'hidden';
+
+    const bar = document.createElement('div');
+    bar.className = 'ipz-controls';
+    bar.innerHTML = '<button type="button" class="ipz-out" title="Zoom out" aria-label="Zoom out">−</button>'
+      + '<button type="button" class="ipz-level" disabled aria-live="polite">100%</button>'
+      + '<button type="button" class="ipz-in" title="Zoom in" aria-label="Zoom in">+</button>'
+      + '<button type="button" class="ipz-reset" title="Reset zoom" aria-label="Reset zoom">⟲</button>';
+    el.appendChild(bar);
+    bar.addEventListener('click', e => e.stopPropagation());
+    bar.addEventListener('pointerdown', e => e.stopPropagation());
+    const bOut = bar.querySelector('.ipz-out'), bIn = bar.querySelector('.ipz-in'),
+          bReset = bar.querySelector('.ipz-reset'), bLevel = bar.querySelector('.ipz-level');
+
+    let scale = 1, tx = 0, ty = 0;
+    const W = () => stage.offsetWidth, H = () => stage.offsetHeight;  // unscaled size (transforms don't change layout)
+    function clamp() {
+      const w = W() * scale, h = H() * scale;
+      tx = w <= W() ? (W() - w) / 2 : Math.min(0, Math.max(W() - w, tx));
+      ty = h <= H() ? (H() - h) / 2 : Math.min(0, Math.max(H() - h, ty));
+    }
+    function apply() {
+      clamp();
+      const one = Math.abs(scale - 1) < 0.001;
+      stage.style.transform = one ? '' : `translate(${tx}px, ${ty}px) scale(${scale})`;
+      const zoomed = scale > 1.001;
+      stage.classList.toggle('ipz-zoomed', zoomed);
+      stage.style.touchAction = zoomed ? 'none' : 'pan-x pan-y';
+      bOut.disabled = scale <= MIN + 0.001;
+      bReset.disabled = one;
+      bIn.disabled = scale >= MAX - 0.001;
+      bLevel.textContent = Math.round(scale * 100) + '%';
+    }
+    // client point → position inside the stage's unscaled box
+    function local(cx, cy) {
+      const r = stage.getBoundingClientRect();     // includes the transform
+      return { x: (cx - r.left) / scale, y: (cy - r.top) / scale };
+    }
+    function zoomAt(cx, cy, newScale) {
+      newScale = settle(newScale);
+      const box = el.getBoundingClientRect();
+      if (cx == null) { cx = box.left + box.width / 2; cy = box.top + box.height / 2; }
+      const p = local(cx, cy), sr = stage.getBoundingClientRect();
+      const ox = sr.left - tx, oy = sr.top - ty;   // stage origin with no transform
+      tx = (cx - ox) - p.x * newScale;
+      ty = (cy - oy) - p.y * newScale;
+      scale = newScale;
+      apply();
+    }
+    function reset() { scale = 1; tx = ty = 0; apply(); }
+    bIn.addEventListener('click', () => zoomAt(null, null, stepScale(scale, +1)));
+    bOut.addEventListener('click', () => zoomAt(null, null, stepScale(scale, -1)));
+    bReset.addEventListener('click', reset);
+
+    stage.addEventListener('wheel', e => {
+      if (!e.ctrlKey && Math.abs(scale - 1) < 0.001) return;
+      e.preventDefault();
+      zoomAt(e.clientX, e.clientY, scale * Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0025)));
+    }, { passive: false });
+
+    const pts = new Map();
+    let dragged = false, sx = 0, sy = 0, pinch = null;
+    stage.addEventListener('pointerdown', e => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pts.size === 1) { dragged = false; sx = e.clientX; sy = e.clientY; }
+      if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, s: scale }; dragged = true; }
+    });
+    stage.addEventListener('pointermove', e => {
+      const prev = pts.get(e.pointerId);
+      if (!prev) return;
+      const cur = { x: e.clientX, y: e.clientY };
+      pts.set(e.pointerId, cur);
+      if (pts.size >= 2 && pinch) {
+        const [a, b] = [...pts.values()];
+        zoomAt((a.x + b.x) / 2, (a.y + b.y) / 2, pinch.s * Math.hypot(a.x - b.x, a.y - b.y) / pinch.d);
+        return;
+      }
+      if (scale <= 1.001) return;
+      if (!dragged && Math.hypot(cur.x - sx, cur.y - sy) < DRAG_PX) return;
+      if (!dragged) { dragged = true; try { stage.setPointerCapture(e.pointerId); } catch (_) {} stage.classList.add('ipz-panning'); }
+      tx += cur.x - prev.x; ty += cur.y - prev.y;
+      apply();
+    });
+    function up(e) { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; if (!pts.size) stage.classList.remove('ipz-panning'); }
+    stage.addEventListener('pointerup', up);
+    stage.addEventListener('pointercancel', up);
+    stage.addEventListener('click', e => {
+      if (dragged) { e.stopPropagation(); e.preventDefault(); dragged = false; }
+    }, true);
+
+    apply();
+    return (el._ipz = { reset, zoomAt: s => zoomAt(null, null, s), get scale() { return scale; } });
+  }
+
+  window.InPlaceZoom = { attach, attachUnit };
 })();
 
 </script>
