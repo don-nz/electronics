@@ -635,7 +635,8 @@ header p {
        edge, and when the svg's parent holds other content too).
      - barIn / barBefore: put the buttons inside barIn (before barBefore) — a
        toolbar the page already has — instead of on the diagram.
-     - Drags that start on a slider, button, link or other form control are
+     - Drags that start on a slider, button, link, other form control or an
+       element with role="button" (e.g. a push button drawn in the svg) are
        left to it (never pan) — e.g. a range input laid over a drawing.
      - onChange(scale): called after every zoom/pan/reset (e.g. to re-place
        pop-ups that are positioned from the drawing).
@@ -820,7 +821,7 @@ svg.ipz-panning, .ipz-stage.ipz-panning { cursor:grabbing !important; }
     let dragged = false, startX = 0, startY = 0, pinch = null;
     svg.addEventListener('pointerdown', e => {
       if (e.pointerType === 'mouse' && e.button !== 0) return;
-      if (e.target.closest && e.target.closest('input, select, textarea, button, a, label')) return;
+      if (e.target.closest && e.target.closest('input, select, textarea, button, a, label, [role="button"]')) return;
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (pts.size === 1) { dragged = false; startX = e.clientX; startY = e.clientY; }
       if (pts.size === 2) {
@@ -913,12 +914,15 @@ svg.ipz-panning, .ipz-stage.ipz-panning { cursor:grabbing !important; }
     function clamp() {
       const w = W() * scale, h = H() * scale;
       tx = w <= W() ? (W() - w) / 2 : Math.min(0, Math.max(W() - w, tx));
-      ty = h <= H() ? (H() - h) / 2 : Math.min(0, Math.max(H() - h, ty));
+      ty = h <= H() ? 0 : Math.min(0, Math.max(H() - h, ty));          // zoomed out: stay at the top
     }
     function apply() {
       clamp();
       const one = Math.abs(scale - 1) < 0.001;
       stage.style.transform = one ? '' : `translate(${tx}px, ${ty}px) scale(${scale})`;
+      // zoomed out: give back the space the shrunk block no longer fills, so the page below moves up
+      // (a negative margin changes layout where the transform doesn't; a fixed-height el just ignores it)
+      stage.style.marginBottom = scale < 1 ? `${-H() * (1 - scale)}px` : '';
       const zoomed = scale > 1.001;
       stage.classList.toggle('ipz-zoomed', zoomed);
       stage.style.touchAction = zoomed ? 'none' : 'pan-x pan-y';
@@ -958,7 +962,7 @@ svg.ipz-panning, .ipz-stage.ipz-panning { cursor:grabbing !important; }
     let dragged = false, sx = 0, sy = 0, pinch = null;
     stage.addEventListener('pointerdown', e => {
       if (e.pointerType === 'mouse' && e.button !== 0) return;
-      if (e.target.closest && e.target.closest('input, select, textarea, button, a, label')) return;
+      if (e.target.closest && e.target.closest('input, select, textarea, button, a, label, [role="button"]')) return;
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (pts.size === 1) { dragged = false; sx = e.clientX; sy = e.clientY; }
       if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, s: scale }; dragged = true; }
@@ -1014,9 +1018,11 @@ svg.ipz-panning, .ipz-stage.ipz-panning { cursor:grabbing !important; }
         <div>A <b>monostable</b> has <b>one stable state</b> (Q = 0). A rising edge on its Trigger input kicks Q HIGH for a set time,
           the <b>pulse width t<sub>w</sub></b>, and then Q drops back on its own. The timing resistor <b style="color:var(--mv-resistor-labels)">R<sub>x</sub></b>
           and capacitor <b style="color:var(--mv-capacitor-labels)">C<sub>x</sub></b> set t<sub>w</sub>. Press and <b>hold</b> TRIGGER (or tap the push button in the
-          circuit) and watch the Q LED: it stays lit for t<sub>w</sub> no matter how long you hold the button. Change R<sub>x</sub> or C<sub>x</sub> and try again.</div>
-      </div>
+          circuit) and watch the Q LED: it stays lit for t<sub>w</sub> no matter how long you hold the button. Change R<sub>x</sub> or C<sub>x</sub> and try again.
+  </div>
 
+      <!-- the three cards with inputs, zoomed together as one unit (inplace-zoom.js attachUnit) -->
+      <div id="simUnit">
       <div class="card">
         <div class="sim-row"><span class="lbl">IC</span>
           <button type="button" class="sim-btn active" id="ic-221" onclick="setIC('221')">74LS221 · t<sub>w</sub> = 0.7 R C · non-retriggerable</button>
@@ -1045,6 +1051,8 @@ svg.ipz-panning, .ipz-stage.ipz-panning { cursor:grabbing !important; }
         <svg id="scopeSvg" viewBox="0 0 640 250" xmlns="http://www.w3.org/2000/svg" font-family="'Share Tech Mono', monospace" role="img" aria-label="Scrolling scope traces of Trigger, Q and Q-bar"></svg>
       </div>
 
+      </div>
+
       <div class="card">
         <div class="card-title">Working out the pulse width</div>
         <div class="work" id="work"></div>
@@ -1057,12 +1065,13 @@ svg.ipz-panning, .ipz-stage.ipz-panning { cursor:grabbing !important; }
           <a class="sim-btn" href="./digital_bistable_simulator.html">Bistable — two stable states</a>
         </div>
       </div>
+    </div>
   </div>
 
-  <!-- zoom the circuit in place: −/+/⟲ buttons above it, wheel or pinch to zoom, drag to move around -->
+  <!-- zoom the pickers, circuit and scope in place as one unit: −/+/⟲ buttons above them, wheel or pinch to zoom, drag to move around -->
   <script>
     addEventListener('DOMContentLoaded', () => {
-      InPlaceZoom.attach(document.getElementById('simSvg'), { wrap: true });
+      InPlaceZoom.attachUnit(document.getElementById('simUnit'), { barAbove: true });
     });
   </script>
   <script>

@@ -743,7 +743,8 @@ header p {
        edge, and when the svg's parent holds other content too).
      - barIn / barBefore: put the buttons inside barIn (before barBefore) — a
        toolbar the page already has — instead of on the diagram.
-     - Drags that start on a slider, button, link or other form control are
+     - Drags that start on a slider, button, link, other form control or an
+       element with role="button" (e.g. a push button drawn in the svg) are
        left to it (never pan) — e.g. a range input laid over a drawing.
      - onChange(scale): called after every zoom/pan/reset (e.g. to re-place
        pop-ups that are positioned from the drawing).
@@ -928,7 +929,7 @@ svg.ipz-panning, .ipz-stage.ipz-panning { cursor:grabbing !important; }
     let dragged = false, startX = 0, startY = 0, pinch = null;
     svg.addEventListener('pointerdown', e => {
       if (e.pointerType === 'mouse' && e.button !== 0) return;
-      if (e.target.closest && e.target.closest('input, select, textarea, button, a, label')) return;
+      if (e.target.closest && e.target.closest('input, select, textarea, button, a, label, [role="button"]')) return;
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (pts.size === 1) { dragged = false; startX = e.clientX; startY = e.clientY; }
       if (pts.size === 2) {
@@ -1021,12 +1022,15 @@ svg.ipz-panning, .ipz-stage.ipz-panning { cursor:grabbing !important; }
     function clamp() {
       const w = W() * scale, h = H() * scale;
       tx = w <= W() ? (W() - w) / 2 : Math.min(0, Math.max(W() - w, tx));
-      ty = h <= H() ? (H() - h) / 2 : Math.min(0, Math.max(H() - h, ty));
+      ty = h <= H() ? 0 : Math.min(0, Math.max(H() - h, ty));          // zoomed out: stay at the top
     }
     function apply() {
       clamp();
       const one = Math.abs(scale - 1) < 0.001;
       stage.style.transform = one ? '' : `translate(${tx}px, ${ty}px) scale(${scale})`;
+      // zoomed out: give back the space the shrunk block no longer fills, so the page below moves up
+      // (a negative margin changes layout where the transform doesn't; a fixed-height el just ignores it)
+      stage.style.marginBottom = scale < 1 ? `${-H() * (1 - scale)}px` : '';
       const zoomed = scale > 1.001;
       stage.classList.toggle('ipz-zoomed', zoomed);
       stage.style.touchAction = zoomed ? 'none' : 'pan-x pan-y';
@@ -1066,7 +1070,7 @@ svg.ipz-panning, .ipz-stage.ipz-panning { cursor:grabbing !important; }
     let dragged = false, sx = 0, sy = 0, pinch = null;
     stage.addEventListener('pointerdown', e => {
       if (e.pointerType === 'mouse' && e.button !== 0) return;
-      if (e.target.closest && e.target.closest('input, select, textarea, button, a, label')) return;
+      if (e.target.closest && e.target.closest('input, select, textarea, button, a, label, [role="button"]')) return;
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (pts.size === 1) { dragged = false; sx = e.clientX; sy = e.clientY; }
       if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, s: scale }; dragged = true; }
