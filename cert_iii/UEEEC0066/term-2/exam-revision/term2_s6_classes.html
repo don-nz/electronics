@@ -141,7 +141,15 @@
       const layer = document.getElementById('hlLayer');
       layer.innerHTML = '';
       (data.focus || []).forEach(n => svg.querySelectorAll(`[data-part="${n}"]`).forEach(el => {
-        const b = el.getBBox(), p = 7;
+        // bbox in the svg's own coordinates (components carry their own translate)
+        const bb = el.getBBox(), p = 7, M = el.getCTM && svg.getCTM() ? svg.getCTM().inverse().multiply(el.getCTM()) : null;
+        let b = bb;
+        if (M) {
+          const xs = [], ys = [];
+          [[bb.x, bb.y], [bb.x + bb.width, bb.y], [bb.x, bb.y + bb.height], [bb.x + bb.width, bb.y + bb.height]].forEach(([x, y]) => {
+            xs.push(M.a * x + M.c * y + M.e); ys.push(M.b * x + M.d * y + M.f); });
+          b = { x: Math.min(...xs), y: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) };
+        }
         const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
         r.setAttribute('class', 'hl-box');
         r.setAttribute('x', b.x - p); r.setAttribute('y', b.y - p);
